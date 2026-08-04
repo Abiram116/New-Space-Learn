@@ -7,7 +7,7 @@ import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useSpaces } from './SpacesProvider'
 
-export function SpaceTree() {
+export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { spaceId, subspaceId } = useParams()
   const { spaces, addSubspace, deleteSpace, deleteSubspace } = useSpaces()
   const { show } = useToast()
@@ -108,6 +108,7 @@ export function SpaceTree() {
                   <div key={sub.id} className="group/sub flex items-center">
                     <NavLink
                       to={`/s/${space.id}/${sub.id}`}
+                      onClick={onNavigate}
                       className={({ isActive }) =>
                         cn(
                           'flex-1 rounded-[9px] px-2.5 py-1.5 truncate transition-colors',

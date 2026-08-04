@@ -141,7 +141,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         {mode.kind === 'decks' && (
           <DecksGrid
             decks={decks.data}

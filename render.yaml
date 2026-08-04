@@ -25,6 +25,10 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: llama-3.3-70b-versatile
+      - key: GROQ_MODEL_FAST
+        value: llama-3.1-8b-instant
+      - key: GROQ_MODEL_VISION
+        value: qwen/qwen3.6-27b
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
       - key: USE_STUB_EMBEDDINGS

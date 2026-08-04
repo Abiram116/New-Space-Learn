@@ -113,7 +113,14 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
 
   return (
     <div className="flex min-h-0 flex-1">
-      <aside className="flex w-[260px] shrink-0 flex-col border-r-[1.5px] border-line bg-surface">
+      {/* Master/detail. One pane at a time on phones: the list until you pick a
+          note, then the editor (which offers its own way back). */}
+      <aside
+        className={cn(
+          'w-full shrink-0 flex-col border-r-[1.5px] border-line bg-surface md:flex md:w-[260px]',
+          current ? 'hidden' : 'flex',
+        )}
+      >
         <div className="flex flex-col gap-2.5 border-b-[1.5px] border-line p-4">
           <div className="flex items-center gap-2">
             <h1 className="font-display text-base font-semibold flex-1">
@@ -201,7 +208,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
           <PageSpinner label="Loading notes…" />
         </div>
       ) : !current ? (
-        <div className="flex min-w-0 flex-1 items-center justify-center p-6">
+        <div className="hidden min-w-0 flex-1 items-center justify-center p-6 md:flex">
           <EmptyState
             icon="✍️"
             title="Pick a note to read"
@@ -215,6 +222,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
           note={current}
           onPatch={(patch) => applyPatch(current.id, patch)}
           onDelete={() => setConfirmDelete(current.id)}
+          onBack={() => setSelectedId(null)}
         />
       )}
 
@@ -234,10 +242,12 @@ function NoteEditor({
   note,
   onPatch,
   onDelete,
+  onBack,
 }: {
   note: Note
   onPatch: (patch: Partial<Note>) => void
   onDelete: () => void
+  onBack: () => void
 }) {
   const [title, setTitle] = useState(note.title)
   const [body, setBody] = useState(note.body_md)
@@ -269,7 +279,14 @@ function NoteEditor({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-line bg-surface px-6 py-3 text-[12.5px] text-muted">
+      <div className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-line bg-surface px-4 py-3 text-[12.5px] text-muted sm:px-6">
+        <button
+          type="button"
+          onClick={onBack}
+          className="-ml-1 rounded-[9px] px-1.5 py-1 text-ink-3 transition-colors hover:bg-line-soft md:hidden"
+        >
+          ← All notes
+        </button>
         <Chip active={note.origin !== 'user'} className={note.origin === 'user' ? 'bg-line-soft' : ''}>
           {originLabel(note.origin)}
         </Chip>
@@ -286,7 +303,7 @@ function NoteEditor({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-8">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-8">
         <div className="mx-auto flex max-w-2xl flex-col gap-4">
           <Input
             value={title}

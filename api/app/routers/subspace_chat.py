@@ -17,16 +17,17 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from ..deps import CurrentUser, get_current_user
-from ..errors import ApiError, NotFound, UpstreamUnavailable
+from ..errors import ApiError
+from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
-from ..services import rag, supabase
+from ..services import activity, rag, supabase
 from ..services.llm import get_llm
+from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.chat")
 router = APIRouter()
@@ -40,7 +41,7 @@ async def list_messages(
     user: CurrentUser = Depends(get_current_user),
     limit: int = 100,
 ) -> list[ChatMessageOut]:
-    await _assert_owned(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     rows = await supabase.db_select(
         "chat_messages",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -65,7 +66,9 @@ async def send_chat(
     body: ChatSend,
     user: CurrentUser = Depends(get_current_user),
 ) -> StreamingResponse:
-    subspace = await _assert_owned(user.id, subspace_id)
+    subspace = await assert_subspace(user.id, subspace_id)
+    # Bounce over-eager callers before we do any DB or LLM work.
+    await consume_llm_quota(user.id)
     settings_row = await _fetch_settings(user.id)
     prior = await _recent_history(user.id, subspace_id)
     retrieved = await rag.retrieve(subspace_id, body.text)
@@ -116,7 +119,8 @@ async def send_chat(
                 },
             )
             saved_id = saved[0]["id"] if saved else None
-            await _bump_activity(user.id, subspace_id)
+            await activity.touch_subspace(subspace_id)
+            await activity.bump(user.id, chat_messages=1, study_seconds=60)
             yield _sse(
                 "done",
                 {
@@ -154,16 +158,6 @@ def _sse(event: str, data: dict) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n".encode()
 
 
-async def _assert_owned(user_id: str, subspace_id: str) -> dict:
-    rows = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise NotFound("Subspace not found.")
-    return rows[0]
-
 
 async def _recent_history(user_id: str, subspace_id: str) -> list[dict[str, str]]:
     rows = await supabase.db_select(
@@ -184,7 +178,9 @@ async def _fetch_settings(user_id: str) -> dict:
 
 
 async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
-    _ = user_id  # RLS already scopes; explicit param for readability.
+    # Safe without a user filter only because the caller already proved this
+    # subspace belongs to `user_id` — the service-role key ignores RLS.
+    _ = user_id
     links = await supabase.db_select(
         "subspace_skills",
         filters={"subspace_id": f"eq.{subspace_id}"},
@@ -197,40 +193,3 @@ async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
         "skills", filters={"id": f"in.({ids})"}
     )
 
-
-async def _bump_activity(user_id: str, subspace_id: str) -> None:
-    try:
-        await supabase.db_update(
-            "subspaces",
-            filters={"id": f"eq.{subspace_id}"},
-            patch={"last_activity_at": datetime.now(UTC).isoformat()},
-        )
-        # Upsert today's activity row (increment chat count).
-        today = date.today().isoformat()
-        existing = await supabase.db_select(
-            "daily_activity",
-            filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-            limit=1,
-        )
-        if existing:
-            await supabase.db_update(
-                "daily_activity",
-                filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-                patch={
-                    "chat_messages": int(existing[0].get("chat_messages", 0)) + 1,
-                    "study_seconds": int(existing[0].get("study_seconds", 0)) + 60,
-                },
-            )
-        else:
-            await supabase.db_insert(
-                "daily_activity",
-                {
-                    "user_id": user_id,
-                    "day": today,
-                    "chat_messages": 1,
-                    "study_seconds": 60,
-                },
-            )
-    except UpstreamUnavailable:
-        # Activity tracking is nice-to-have; never fail the chat over it.
-        log.warning("activity bump failed, continuing")

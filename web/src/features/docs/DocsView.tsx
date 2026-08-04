@@ -168,7 +168,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {loading && <PageSpinner label="Loading documents…" />}
 

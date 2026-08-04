@@ -44,13 +44,15 @@ export function Home() {
   const firstSubspaceLink = firstSubspace(spaces)
 
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto px-7 py-6">
+    <div className="flex flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <h1 className="font-display text-[26px] font-semibold">
             {greeting}, {displayName}
           </h1>
-          <p className="text-[13.5px] text-muted">{tagline(stats.data)}</p>
+          <p className="text-[13.5px] text-muted">
+            {tagline(stats.data, stats.loading, stats.error)}
+          </p>
         </div>
         {anySubspaces && firstSubspaceLink ? (
           <Link
@@ -255,8 +257,10 @@ function getGreeting(): string {
   return 'Good evening'
 }
 
-function tagline(stats: Stats | null): string {
-  if (!stats) return 'Loading your progress…'
+function tagline(stats: Stats | null, loading: boolean, error: string | null): string {
+  if (loading) return 'Loading your progress…'
+  // A failed load previously kept saying "Loading…" forever. Say what happened.
+  if (error || !stats) return "Your progress didn't load. Refresh to try again."
   const bits: string[] = []
   if (stats.cards_due > 0) bits.push(`${stats.cards_due} cards due`)
   if (stats.study_minutes_this_week > 0)

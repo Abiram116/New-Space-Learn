@@ -53,7 +53,7 @@ export function Profile() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex max-w-lg flex-col">
         {/* Identity header */}
-        <header className="flex items-center gap-3.5 bg-brand-soft px-6 pt-6 pb-5">
+        <header className="flex items-center gap-3.5 bg-brand-soft px-4 pt-6 pb-5 sm:px-6">
           <div className="flex h-15 w-15 items-center justify-center rounded-[20px] bg-surface font-display text-[22px] font-semibold text-brand">
             {initials}
           </div>
@@ -76,7 +76,7 @@ export function Profile() {
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 px-6 py-5">
+        <div className="flex flex-col gap-4 px-4 py-5 sm:px-6">
           {stats.loading && <PageSpinner label="Loading your stats…" />}
 
           {stats.error && !stats.loading && (

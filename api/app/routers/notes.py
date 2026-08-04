@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound
+from ..guards import assert_subspace
 from ..schemas import NoteCreate, NoteOut, NoteUpdate, OkOut
 from ..services import supabase
 
@@ -29,6 +30,7 @@ def _to_note(row: dict) -> NoteOut:
 async def list_notes(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[NoteOut]:
+    await assert_subspace(user.id, subspace_id)
     rows = await supabase.db_select(
         "notes",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -45,6 +47,7 @@ async def create_note(
     body: NoteCreate,
     user: CurrentUser = Depends(get_current_user),
 ) -> NoteOut:
+    await assert_subspace(user.id, subspace_id)
     now = datetime.now(UTC).isoformat()
     inserted = await supabase.db_insert(
         "notes",

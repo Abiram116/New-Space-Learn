@@ -105,7 +105,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           </Button>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         <QuizList
           quizzes={quizzes.data}
           loading={quizzes.loading}
@@ -245,7 +245,7 @@ function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) 
 
   const q = quiz.questions[index]
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <div className="flex items-center gap-2 text-xs text-muted">
         Question {index + 1} of {quiz.questions.length}
         <div className="h-1 flex-1 rounded-full bg-line-soft">
@@ -329,7 +329,7 @@ function QuizResults({
   }, [result.score])
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8">
       <Card className="flex items-center gap-4 p-4">
         <div className={cn('font-display text-4xl font-semibold', scoreClass)}>
           {result.score}%

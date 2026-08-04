@@ -68,6 +68,30 @@ The free tier spins down after 15 min of inactivity. The backend is written to t
 - `USE_STUB_EMBEDDINGS=true` — inserts deterministic zero-vectors instead of calling a real embedding provider. Keeps document upload + RAG queries end-to-end runnable without an embedding key. Flip to `false` once you wire a real provider in `api/app/services/embeddings.py`.
 - `GROQ_API_KEY` — when unset, the chat streams a friendly "AI not configured yet" placeholder so the UI is fully clickable.
 
+One `.env` at the repo root serves both apps: the API points Pydantic Settings at it, and `web/vite.config.ts` sets `envDir: '..'`. Without that `envDir`, Vite would only look inside `web/` and every `VITE_*` var would silently come back undefined.
+
+## Model tiering
+
+One Groq key, three models — the model is chosen per request, so cheap work doesn't pay 70B latency or quota:
+
+| Setting | Default | Used for |
+|---|---|---|
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | RAG chat, quiz generation |
+| `GROQ_MODEL_FAST` | `llama-3.1-8b-instant` | short, low-stakes prompts |
+| `GROQ_MODEL_VISION` | `qwen/qwen3.6-27b` | image input (only vision-capable model on the account) |
+
+Groq retires model ids periodically — confirm against `GET /openai/v1/models` before changing these.
+
+## Quota protection
+
+- **Per-user token bucket** (`api/app/services/ratelimit.py`) guards every LLM endpoint: 20 burst, refilling 20/min, chat costs 1 and quiz generation costs 2. In-process because Render's free tier runs a single worker; swap the storage there if that ever changes.
+- **Groq 429 → `rate_limited`**, not a generic outage, so the UI tells the user to wait rather than implying the service is broken. A 401/403 from Groq maps to `not_configured` — our key is wrong, and the user can't fix that.
+- Provider error bodies are logged, never surfaced: they can carry account and quota details.
+
+## Security note
+
+The backend uses the Supabase **service role key**, which bypasses RLS. RLS is therefore a second line of defence, not the primary one — every handler that takes a caller-supplied id must prove ownership first via `api/app/guards.py`. Adding a route that accepts a `subspace_id` or `deck_id` without an `assert_*` call reintroduces cross-user reads.
+
 ## What's not shipped in v1 (intentional)
 
 - Billing / "Space Learn Plus" upgrade card — removed per the UX audit.

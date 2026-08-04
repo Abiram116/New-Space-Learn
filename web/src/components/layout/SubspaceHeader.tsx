@@ -30,7 +30,9 @@ export function SubspaceHeader({
   ]
 
   return (
-    <header className="flex shrink-0 items-center gap-2.5 border-b-[1.5px] border-line bg-surface px-6 py-3">
+    // Below `sm` the title and the tab strip stack: five tabs plus a breadcrumb
+    // cannot share 375px without one of them truncating to uselessness.
+    <header className="flex shrink-0 flex-col gap-2 border-b-[1.5px] border-line bg-surface px-4 py-3 sm:flex-row sm:items-center sm:gap-2.5 sm:px-6">
       <div className="min-w-0">
         <div className="truncate text-[11.5px] text-faint">
           {title ? `${spaceName} › ${subspaceName}` : spaceName}
@@ -39,9 +41,9 @@ export function SubspaceHeader({
       </div>
 
       {actions ? (
-        <div className="ml-auto flex items-center gap-2">{actions}</div>
+        <div className="flex items-center gap-2 sm:ml-auto">{actions}</div>
       ) : (
-        <nav className="ml-auto flex gap-1.5 text-[12.5px]">
+        <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 text-[12.5px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:ml-auto sm:overflow-visible sm:px-0">
           {tabs.map((tab) => (
             <NavLink
               key={tab.label}
@@ -49,7 +51,7 @@ export function SubspaceHeader({
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  'rounded-[9px] px-2.5 py-1.5 transition-colors',
+                  'shrink-0 rounded-[9px] px-2.5 py-1.5 transition-colors',
                   isActive
                     ? 'bg-brand-soft font-semibold text-brand'
                     : 'text-ink-3 hover:bg-line-soft',

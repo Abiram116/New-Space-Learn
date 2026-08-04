@@ -15,7 +15,13 @@ const navItemClass = ({ isActive }: { isActive: boolean }) =>
     isActive ? 'bg-brand-soft font-semibold text-brand' : 'text-ink-3 hover:bg-line-soft',
   )
 
-export function Sidebar() {
+/**
+ * The space navigator. On desktop it's a persistent rail; below `md` the same
+ * markup is rendered inside a drawer (see AppShell), so every nav target calls
+ * `onNavigate` to dismiss it — otherwise tapping a space leaves the panel
+ * covering the page you just asked for.
+ */
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth()
   const { loading } = useSpaces()
   const { base, hasAny } = useFallbackSubspace()
@@ -31,18 +37,19 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="flex w-[238px] shrink-0 flex-col gap-4 border-r-[1.5px] border-line bg-surface p-4">
-        <Link to="/" className="flex items-center gap-2.5">
+      <aside className="flex h-full w-full min-h-0 flex-col gap-4 bg-surface p-4">
+        <Link to="/" onClick={onNavigate} className="flex items-center gap-2.5">
           <span className="h-[26px] w-[26px] rounded-lg bg-brand" />
           <span className="font-display font-semibold">Space Learn</span>
         </Link>
 
         <nav className="flex flex-col gap-0.5 text-[13.5px]">
-          <NavLink to="/" end className={navItemClass}>
+          <NavLink to="/" end onClick={onNavigate} className={navItemClass}>
             🏠 Home
           </NavLink>
           <NavLink
             to={hasAny ? `${base}/notes` : '#'}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(navItemClass({ isActive: isActive && hasAny }), !hasAny && disabledNav)
             }
@@ -51,6 +58,7 @@ export function Sidebar() {
           </NavLink>
           <NavLink
             to={hasAny ? `${base}/flashcards` : '#'}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(navItemClass({ isActive: isActive && hasAny }), !hasAny && disabledNav)
             }
@@ -59,6 +67,7 @@ export function Sidebar() {
           </NavLink>
           <NavLink
             to={hasAny ? `${base}/quizzes` : '#'}
+            onClick={onNavigate}
             className={({ isActive }) =>
               cn(navItemClass({ isActive: isActive && hasAny }), !hasAny && disabledNav)
             }
@@ -86,13 +95,14 @@ export function Sidebar() {
               <Skeleton className="h-7" />
             </div>
           ) : (
-            <SpaceTree />
+            <SpaceTree onNavigate={onNavigate} />
           )}
         </div>
 
         {hasAny && (
           <Link
             to={`${base}/skills`}
+            onClick={onNavigate}
             className="rounded-xl bg-brand-soft p-2.5 text-xs text-brand-deep transition-colors hover:bg-brand-200/60"
           >
             <b>Skills for this space</b>
@@ -101,7 +111,7 @@ export function Sidebar() {
         )}
 
         <div className="flex items-center gap-2.5 border-t-[1.5px] border-line pt-3">
-          <Link to="/profile" className="flex items-center gap-2.5 transition-colors hover:text-brand">
+          <Link to="/profile" onClick={onNavigate} className="flex items-center gap-2.5 transition-colors hover:text-brand">
             <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-coral-soft text-[11px] font-semibold text-coral-deep">
               {initials}
             </span>
@@ -114,6 +124,7 @@ export function Sidebar() {
           </Link>
           <Link
             to="/settings"
+            onClick={onNavigate}
             className="ml-auto text-faint hover:text-brand"
             aria-label="Settings"
           >

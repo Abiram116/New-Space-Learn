@@ -16,7 +16,7 @@ from typing import Any, Protocol
 import httpx
 
 from ..config import settings
-from ..errors import UpstreamUnavailable
+from ..errors import ApiError, NotConfigured, RateLimited, UpstreamUnavailable
 
 log = logging.getLogger("space_learn.llm")
 
@@ -48,7 +48,7 @@ class GroqLLM:
                     "Authorization": f"Bearer {settings.groq_api_key}",
                     "Content-Type": "application/json",
                 },
-                timeout=httpx.Timeout(60.0, connect=5.0),
+                timeout=httpx.Timeout(settings.groq_timeout_s, connect=5.0),
             )
         return self._client
 
@@ -70,8 +70,10 @@ class GroqLLM:
             async with client.stream("POST", "/chat/completions", json=payload) as r:
                 if r.status_code >= 400:
                     body = await r.aread()
-                    log.warning("groq %s: %s", r.status_code, body[:200])
-                    raise UpstreamUnavailable("The AI service is unavailable.")
+                    # Log the provider's text; never surface it — it can carry
+                    # account and quota details the user shouldn't see.
+                    log.warning("groq %s: %s", r.status_code, body[:300])
+                    raise _upstream_error(r.status_code)
                 async for line in r.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
@@ -89,8 +91,26 @@ class GroqLLM:
                     )
                     if delta:
                         yield delta
+        except httpx.TimeoutException as e:
+            raise UpstreamUnavailable("The AI took too long to respond. Try again.") from e
         except httpx.HTTPError as e:
             raise UpstreamUnavailable("The AI service didn't respond.") from e
+
+
+def _upstream_error(status: int) -> ApiError:
+    """Translate a provider status into our own typed error.
+
+    429 matters most: 'you're rate limited, wait' is a different instruction to
+    the user than 'the service is down', and the UI toasts them differently.
+    """
+    if status == 429:
+        return RateLimited("The AI is at capacity right now. Try again in a moment.")
+    if status in (401, 403):
+        # Our key is bad — the user can't fix this, so don't imply they can.
+        return NotConfigured("The AI provider rejected our credentials.")
+    if status == 400:
+        return UpstreamUnavailable("The AI couldn't handle that request.")
+    return UpstreamUnavailable("The AI service is unavailable.")
 
 
 class StubLLM:

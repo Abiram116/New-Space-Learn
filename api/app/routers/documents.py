@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from ..deps import CurrentUser, get_current_user
-from ..errors import NotFound, ValidationFailed
+from ..errors import NotFound, UpstreamUnavailable, ValidationFailed
+from ..guards import assert_subspace
 from ..schemas import DocumentOut, OkOut
 from ..services import supabase
 from ..services.embeddings import chunk_text, embed_texts, extract_pdf_text
@@ -25,7 +26,7 @@ PROCESSING_BUDGET_S = 25       # cap the inline embed so requests don't hang for
 async def list_documents(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[DocumentOut]:
-    await _assert_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     rows = await supabase.db_select(
         "documents",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -44,7 +45,7 @@ async def upload_document(
     file: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> DocumentOut:
-    await _assert_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
 
     if not file.filename:
         raise ValidationFailed("Choose a file to upload.")
@@ -87,7 +88,9 @@ async def upload_document(
             filters={"id": f"eq.{row['id']}"},
             patch={"status": "failed", "error": "Upload failed."},
         )
-        raise e
+        # Re-raise as a typed error so the client gets our envelope rather than
+        # a bare 500 carrying whatever the storage layer threw.
+        raise UpstreamUnavailable("We couldn't store that file. Try again.") from e
 
     processed = await _process_inline(row, data, file.content_type or "")
     return _to_doc(processed)
@@ -109,7 +112,7 @@ async def reprocess(
         raise ValidationFailed("Document has no stored file to reprocess.")
 
     chunks_bytes = bytearray()
-    async for chunk in supabase.storage_download(doc["storage_path"].split("/", 1)[1]):
+    async for chunk in supabase.storage_download(doc["storage_path"]):
         chunks_bytes.extend(chunk)
 
     processed = await _process_inline(doc, bytes(chunks_bytes), doc.get("mime_type") or "")
@@ -129,10 +132,10 @@ async def delete_document(
         raise NotFound("Document not found.")
     doc = rows[0]
     if doc.get("storage_path"):
-        # storage_path is "bucket/path"; the storage helper wants the path only.
-        _bucket, _, path = doc["storage_path"].partition("/")
+        # storage_path is the in-bucket key ("<user>/<doc>/<name>"); the storage
+        # helper adds the bucket itself.
         try:
-            await supabase.storage_delete(path)
+            await supabase.storage_delete(doc["storage_path"])
         except Exception:  # noqa: BLE001 — deletion is best-effort
             log.warning("storage delete failed for %s", doc["id"])
     await supabase.db_delete(
@@ -185,6 +188,11 @@ async def _process_inline(doc: dict, data: bytes, mime_type: str) -> dict:
             }
             for c, emb in zip(chunks, embeddings, strict=True)
         ]
+        # Reprocess re-runs this path, so clear prior chunks first — otherwise
+        # the same passage is retrieved twice and cited twice.
+        await supabase.db_delete(
+            "document_chunks", filters={"document_id": f"eq.{doc['id']}"}
+        )
         await supabase.db_insert("document_chunks", rows)
 
         return (
@@ -203,22 +211,18 @@ async def _process_inline(doc: dict, data: bytes, mime_type: str) -> dict:
                 patch={"status": "processing", "error": "Still processing — tap reprocess to continue."},
             )
         )[0]
-    except Exception as e:
+    except Exception:
+        # The real exception goes to the log; the row gets copy a user can act
+        # on. Never persist str(e) here — `documents.error` renders in the UI.
         log.exception("processing failed for %s", doc["id"])
-        return (
-            await supabase.db_update(
-                "documents",
-                filters={"id": f"eq.{doc['id']}"},
-                patch={"status": "failed", "error": "Could not process this file."},
-            )
-        )[0] if False else _fail(doc["id"], str(e))
+        return await _fail(doc["id"], "We couldn't read this file. Try re-uploading it.")
 
 
-async def _fail(doc_id: str, msg: str) -> dict:
+async def _fail(doc_id: str, message: str) -> dict:
     updated = await supabase.db_update(
         "documents",
         filters={"id": f"eq.{doc_id}"},
-        patch={"status": "failed", "error": msg[:200]},
+        patch={"status": "failed", "error": message[:200]},
     )
     return updated[0]
 
@@ -245,12 +249,3 @@ def _to_doc(row: dict) -> DocumentOut:
         ready_at=row.get("ready_at"),
     )
 
-
-async def _assert_subspace(user_id: str, subspace_id: str) -> None:
-    rows = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise NotFound("Subspace not found.")

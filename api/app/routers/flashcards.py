@@ -6,12 +6,13 @@ optimistic update. Keep the two in sync.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound
+from ..guards import assert_deck, assert_subspace
 from ..schemas import (
     DeckCreate,
     DeckOut,
@@ -20,7 +21,7 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import supabase
+from ..services import activity, supabase
 
 router = APIRouter()
 
@@ -32,6 +33,7 @@ router = APIRouter()
 async def list_decks(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[DeckOut]:
+    await assert_subspace(user.id, subspace_id)
     decks = await supabase.db_select(
         "decks",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -78,6 +80,7 @@ async def create_deck(
     body: DeckCreate,
     user: CurrentUser = Depends(get_current_user),
 ) -> DeckOut:
+    await assert_subspace(user.id, subspace_id)
     inserted = await supabase.db_insert(
         "decks",
         {"user_id": user.id, "subspace_id": subspace_id, "name": body.name},
@@ -121,6 +124,7 @@ async def create_card(
     body: FlashcardCreate,
     user: CurrentUser = Depends(get_current_user),
 ) -> FlashcardOut:
+    await assert_deck(user.id, deck_id)
     inserted = await supabase.db_insert(
         "flashcards",
         {
@@ -180,7 +184,7 @@ async def grade_card(
             "due_at": due_at.isoformat(),
         },
     )
-    await _bump_review_activity(user.id)
+    await activity.bump(user.id, cards_reviewed=1, study_seconds=20)
     r = updated[0]
     return FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
 
@@ -192,31 +196,3 @@ def _to_dt(v: str | datetime) -> datetime:
     if isinstance(v, datetime):
         return v.astimezone(UTC) if v.tzinfo else v.replace(tzinfo=UTC)
     return datetime.fromisoformat(v.replace("Z", "+00:00"))
-
-
-async def _bump_review_activity(user_id: str) -> None:
-    today = date.today().isoformat()
-    existing = await supabase.db_select(
-        "daily_activity",
-        filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-        limit=1,
-    )
-    if existing:
-        await supabase.db_update(
-            "daily_activity",
-            filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-            patch={
-                "cards_reviewed": int(existing[0].get("cards_reviewed", 0)) + 1,
-                "study_seconds": int(existing[0].get("study_seconds", 0)) + 20,
-            },
-        )
-    else:
-        await supabase.db_insert(
-            "daily_activity",
-            {
-                "user_id": user_id,
-                "day": today,
-                "cards_reviewed": 1,
-                "study_seconds": 20,
-            },
-        )

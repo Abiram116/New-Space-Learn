@@ -165,6 +165,8 @@ async def db_rpc(fn: str, args: dict[str, Any]) -> Any:
 
 
 async def storage_upload(path: str, data: bytes, *, content_type: str) -> str:
+    """Upload to the configured bucket. `path` is the in-bucket key, and is what
+    we return + persist — callers never store the bucket name alongside it."""
     client = await get_client()
     bucket = settings.supabase_storage_bucket
     r = await client.post(
@@ -173,7 +175,7 @@ async def storage_upload(path: str, data: bytes, *, content_type: str) -> str:
         headers={"Content-Type": content_type, "x-upsert": "true"},
     )
     _raise_if_bad(r)
-    return f"{bucket}/{path}"
+    return path
 
 
 async def storage_delete(path: str) -> None:

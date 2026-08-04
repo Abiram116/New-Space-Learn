@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends
 
+from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import NotFound, UpstreamUnavailable
+from ..errors import ApiError, NotFound, UpstreamUnavailable
+from ..guards import assert_subspace
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
-from ..services import rag, supabase
+from ..services import activity, rag, supabase
 from ..services.llm import get_llm
+from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.quiz")
 router = APIRouter()
@@ -22,6 +24,7 @@ router = APIRouter()
 async def list_quizzes(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[QuizOut]:
+    await assert_subspace(user.id, subspace_id)
     rows = await supabase.db_select(
         "quizzes",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -54,6 +57,11 @@ async def generate_quiz(
     body: QuizGenerate,
     user: CurrentUser = Depends(get_current_user),
 ) -> QuizOut:
+    # Must come first: rag.retrieve() runs under the service-role key, so an
+    # unvalidated subspace_id would read another user's document chunks.
+    await assert_subspace(user.id, subspace_id)
+    await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
+
     retrieved = await rag.retrieve(subspace_id, body.topic or "core concepts", k=6)
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
 
@@ -67,25 +75,39 @@ async def generate_quiz(
         "Return only the JSON array — no prose, no code fences."
     )
 
-    try:
-        raw_parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {"role": "system", "content": "You write concise, unambiguous MCQ quiz questions."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.3,
-        ):
-            raw_parts.append(delta)
-        raw = "".join(raw_parts).strip()
-        questions = _safe_parse_questions(raw, want=body.count)
-    except Exception:
-        log.exception("quiz generation failed")
-        # Fall through to a stub quiz so the UI is still exercisable.
+    if not settings.llm_configured:
+        # No key yet — hand back a placeholder set so the take/submit flow is
+        # still clickable. This is the ONLY path that may fabricate questions.
         questions = _stub_questions(body.topic, body.count)
+    else:
+        try:
+            raw_parts: list[str] = []
+            async for delta in get_llm().stream_chat(
+                [
+                    {
+                        "role": "system",
+                        "content": "You write concise, unambiguous MCQ quiz questions.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                model=settings.groq_model,
+                temperature=0.3,
+            ):
+                raw_parts.append(delta)
+            questions = _safe_parse_questions("".join(raw_parts).strip(), want=body.count)
+        except ApiError:
+            # Already a friendly, typed error (rate limit, upstream down) — let
+            # it surface so the user knows to retry rather than being handed
+            # silent placeholder questions and told they're real.
+            raise
+        except Exception as e:
+            log.exception("quiz generation failed")
+            raise UpstreamUnavailable("Couldn't generate a quiz just now.") from e
 
-    if not questions:
-        raise UpstreamUnavailable("Quiz generation returned nothing usable.")
+        if not questions:
+            raise UpstreamUnavailable(
+                "The quiz came back in an unexpected format. Try again."
+            )
 
     inserted = await supabase.db_insert(
         "quizzes",
@@ -130,7 +152,7 @@ async def submit_quiz(
             "score": score,
         },
     )
-    await _bump_quiz_activity(user.id)
+    await activity.bump(user.id, quizzes_taken=1, study_seconds=180)
     return QuizResultOut(score=score, correct=correct)
 
 
@@ -175,33 +197,3 @@ def _stub_questions(topic: str | None, count: int) -> list[QuizQuestion]:
         )
         for i in range(count)
     ]
-
-
-async def _bump_quiz_activity(user_id: str) -> None:
-    today = date.today().isoformat()
-    existing = await supabase.db_select(
-        "daily_activity",
-        filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-        limit=1,
-    )
-    now = datetime.now(UTC).isoformat()
-    _ = now
-    if existing:
-        await supabase.db_update(
-            "daily_activity",
-            filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-            patch={
-                "quizzes_taken": int(existing[0].get("quizzes_taken", 0)) + 1,
-                "study_seconds": int(existing[0].get("study_seconds", 0)) + 180,
-            },
-        )
-    else:
-        await supabase.db_insert(
-            "daily_activity",
-            {
-                "user_id": user_id,
-                "day": today,
-                "quizzes_taken": 1,
-                "study_seconds": 180,
-            },
-        )

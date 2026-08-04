@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
 from ..errors import Forbidden, NotFound
+from ..guards import assert_subspace
 from ..schemas import OkOut, SkillCreate, SkillOut, SkillUpdate
 from ..services import supabase
 
@@ -109,7 +110,7 @@ async def delete_skill(
 async def list_active_skills(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[SkillOut]:
-    await _assert_own_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     links = await supabase.db_select(
         "subspace_skills",
         filters={"subspace_id": f"eq.{subspace_id}"},
@@ -132,7 +133,7 @@ async def activate_skill(
     skill_id: str,
     user: CurrentUser = Depends(get_current_user),
 ) -> OkOut:
-    await _assert_own_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     await _assert_can_use_skill(user.id, skill_id)
     try:
         await supabase.db_insert(
@@ -152,7 +153,7 @@ async def deactivate_skill(
     skill_id: str,
     user: CurrentUser = Depends(get_current_user),
 ) -> OkOut:
-    await _assert_own_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     await supabase.db_delete(
         "subspace_skills",
         filters={
@@ -165,15 +166,6 @@ async def deactivate_skill(
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-
-async def _assert_own_subspace(user_id: str, subspace_id: str) -> None:
-    rows = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise NotFound("Subspace not found.")
 
 
 async def _assert_can_use_skill(user_id: str, skill_id: str) -> None:

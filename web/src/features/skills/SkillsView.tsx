@@ -225,7 +225,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
           <p className="text-[13px] text-muted">
             Skills are reusable instructions the AI applies inside this space —
             think of them as tutor personas with their own rules and tools.
