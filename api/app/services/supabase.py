@@ -63,8 +63,12 @@ async def close_client() -> None:
 async def verify_access_token(token: str) -> dict[str, Any]:
     """Return the decoded JWT claims for a Supabase access token.
 
-    Prefers local HS256 verification if `SUPABASE_JWT_SECRET` is set (no network
-    hop). Falls back to `/auth/v1/user` which lets Supabase do the work.
+    Tries local HS256 verification first if `SUPABASE_JWT_SECRET` is set (no
+    network hop). Projects created under Supabase's newer asymmetric signing
+    keys won't validate against that shared secret at all — rather than treat
+    every local failure as "your session expired" (which is wrong and
+    confusing when the token is actually fine), we fall back to
+    `/auth/v1/user` and let Supabase be the final word.
     """
 
     if settings.supabase_jwt_secret:
@@ -76,11 +80,14 @@ async def verify_access_token(token: str) -> dict[str, Any]:
                 audience="authenticated",
                 options={"verify_aud": False},
             )
-        except JWTError as e:
-            raise Unauthorized("Your session has expired.") from e
-        return claims
+            return claims
+        except JWTError:
+            log.info("local JWT verify failed, falling back to network verify")
 
-    # Network verify fallback — costs a request but is always correct.
+    return await _verify_via_network(token)
+
+
+async def _verify_via_network(token: str) -> dict[str, Any]:
     try:
         client = await get_client()
         r = await client.get(

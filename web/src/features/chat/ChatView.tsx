@@ -170,7 +170,11 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     [base, history.data, onNavigate, subspaceId, show, showError],
   )
 
-  const messages = history.data ?? []
+  // Belt-and-suspenders: two adjacent bubbles with identical role+content are
+  // never meaningful to show twice, whatever produced them (a retried
+  // request, a dev-only HMR remount mid-stream). Collapse rather than trust
+  // every upstream path to be perfectly exactly-once.
+  const messages = dedupeAdjacent(history.data ?? [])
   const isEmpty = !history.loading && messages.length === 0 && !pending
 
   return (
@@ -268,6 +272,16 @@ function dedupeCitations(cs: Citation[]): Citation[] {
     if (seen.has(c.marker)) continue
     seen.add(c.marker)
     out.push(c)
+  }
+  return out
+}
+
+function dedupeAdjacent(messages: Message[]): Message[] {
+  const out: Message[] = []
+  for (const m of messages) {
+    const prev = out[out.length - 1]
+    if (prev && prev.role === m.role && prev.content === m.content) continue
+    out.push(m)
   }
   return out
 }

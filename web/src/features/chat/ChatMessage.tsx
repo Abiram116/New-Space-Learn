@@ -1,6 +1,6 @@
-import { Fragment } from 'react'
 import type { ChatMessage as Message } from '../../api/types'
 import { OutlinePill } from '../../components/ui/Bits'
+import { MarkdownMessage } from './MarkdownMessage'
 
 export function ChatMessage({
   message,
@@ -34,9 +34,7 @@ export function ChatMessage({
         </div>
       )}
 
-      <p className="whitespace-pre-wrap">
-        <CitedText content={message.content} />
-      </p>
+      <MarkdownMessage content={message.content} />
 
       {citations.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -65,26 +63,5 @@ export function ChatMessage({
         </div>
       )}
     </div>
-  )
-}
-
-/** Split `text[[n]]more` into prose + inline citation markers. */
-function CitedText({ content }: { content: string }) {
-  const parts = content.split(/\[\[(\d+)\]\]/g)
-  return (
-    <>
-      {parts.map((part, i) =>
-        i % 2 === 1 ? (
-          <span
-            key={i}
-            className="ml-1 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-bold text-brand-deep"
-          >
-            {part}
-          </span>
-        ) : (
-          <Fragment key={i}>{part}</Fragment>
-        ),
-      )}
-    </>
   )
 }

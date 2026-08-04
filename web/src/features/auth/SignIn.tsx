@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  resendConfirmation,
   sendPasswordReset,
   signInWithGoogle,
   signInWithPassword,
 } from '../../api/auth'
+import { ApiError } from '../../api/errors'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -20,6 +22,8 @@ export function SignIn() {
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({})
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [resendBusy, setResendBusy] = useState(false)
 
   const next = params.get('next') || '/'
 
@@ -31,13 +35,35 @@ export function SignIn() {
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) return
     setBusy(true)
+    setUnconfirmed(false)
     try {
       await signInWithPassword(email, password)
       navigate(next, { replace: true })
     } catch (err) {
       setErrors({ form: friendlyMessage(err) })
+      // "Confirm your email" is dead-end advice without a way to re-send —
+      // most people who reach it already lost or never saw the first email.
+      if (err instanceof ApiError && err.message.toLowerCase().includes('confirm your email')) {
+        setUnconfirmed(true)
+      }
     } finally {
       setBusy(false)
+    }
+  }
+
+  const resend = async () => {
+    if (!isEmail(email)) {
+      setErrors({ email: 'Enter your email above first.' })
+      return
+    }
+    setResendBusy(true)
+    try {
+      await resendConfirmation(email)
+      show('Sent — check your inbox.', 'success')
+    } catch (err) {
+      show(friendlyMessage(err), 'error')
+    } finally {
+      setResendBusy(false)
     }
   }
 
@@ -115,8 +141,18 @@ export function SignIn() {
           </button>
         </div>
         {errors.form && (
-          <div className="rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
-            {errors.form}
+          <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
+            <span>{errors.form}</span>
+            {unconfirmed && (
+              <button
+                type="button"
+                onClick={resend}
+                disabled={resendBusy}
+                className="self-start text-xs font-semibold underline underline-offset-2 cursor-pointer"
+              >
+                {resendBusy ? 'Sending…' : 'Resend confirmation email'}
+              </button>
+            )}
           </div>
         )}
         <Button type="submit" disabled={busy} className="py-3.5">

@@ -36,6 +36,9 @@ supabase/.temp
 test-results/
 playwright-report/
 
+# Local Claude Code tooling (personal skill installs, machine-local settings)
+.claude/
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

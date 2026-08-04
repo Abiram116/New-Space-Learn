@@ -1,0 +1,8 @@
+{
+  "name": "space-learn",
+  "private": true,
+  "description": "Orchestration only — web/ and api/ are the real projects. Run `npm run dev` from here to start both.",
+  "scripts": {
+    "dev": "bash scripts/dev.sh"
+  }
+}

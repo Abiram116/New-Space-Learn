@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { signInWithGoogle, signUpWithPassword } from '../../api/auth'
+import { resendConfirmation, signInWithGoogle, signUpWithPassword } from '../../api/auth'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -21,6 +21,11 @@ export function SignUp() {
   }>({})
   const [busy, setBusy] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
+  // A toast disappears in a few seconds and is easy to miss entirely if the
+  // tab isn't focused. Signup succeeding-but-needing-confirmation is a state
+  // the user must see, so it gets its own screen instead.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+  const [resendBusy, setResendBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -35,11 +40,7 @@ export function SignUp() {
     try {
       const result = await signUpWithPassword(email, password, name)
       if (result.requiresConfirmation) {
-        show(
-          "Check your inbox to confirm your email before signing in.",
-          'success',
-        )
-        navigate('/signin', { replace: true })
+        setPendingEmail(email)
       } else {
         navigate('/', { replace: true })
       }
@@ -47,6 +48,19 @@ export function SignUp() {
       setErrors({ form: friendlyMessage(err) })
     } finally {
       setBusy(false)
+    }
+  }
+
+  const resend = async () => {
+    if (!pendingEmail) return
+    setResendBusy(true)
+    try {
+      await resendConfirmation(pendingEmail)
+      show('Sent — check your inbox again.', 'success')
+    } catch (err) {
+      show(friendlyMessage(err), 'error')
+    } finally {
+      setResendBusy(false)
     }
   }
 
@@ -58,6 +72,49 @@ export function SignUp() {
       show(friendlyMessage(err), 'error')
       setGoogleBusy(false)
     }
+  }
+
+  if (pendingEmail) {
+    return (
+      <AuthShell
+        title={
+          <>
+            Check your inbox.
+            <br />
+            One more step.
+          </>
+        }
+        subtitle={`We sent a confirmation link to ${pendingEmail}.`}
+        footer={
+          <>
+            Wrong email?{' '}
+            <button
+              type="button"
+              onClick={() => setPendingEmail(null)}
+              className="font-semibold text-brand cursor-pointer"
+            >
+              Start over
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="rounded-xl border-[1.5px] border-brand-200 bg-brand-tint px-4 py-3.5 text-sm text-ink-2">
+            Open the email from Space Learn and follow the link — it'll bring
+            you straight back here, signed in.
+          </div>
+          <Button type="button" variant="secondary" disabled={resendBusy} onClick={resend}>
+            {resendBusy ? 'Sending…' : "Didn't get it? Resend"}
+          </Button>
+          <Link
+            to="/signin"
+            className="text-center text-sm font-semibold text-brand"
+          >
+            Already confirmed — sign in
+          </Link>
+        </div>
+      </AuthShell>
+    )
   }
 
   return (

@@ -59,6 +59,15 @@ export async function sendPasswordReset(email: string): Promise<void> {
   if (error) throw fromSupabaseError(error.message)
 }
 
+export async function resendConfirmation(email: string): Promise<void> {
+  const { error } = await getSupabase().auth.resend({
+    type: 'signup',
+    email,
+    options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+  })
+  if (error) throw fromSupabaseError(error.message)
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await getSupabase().auth.signOut()
   if (error) throw new ApiError('internal_error', error.message)
