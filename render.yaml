@@ -1,0 +1,35 @@
+# Render deploy manifest — one FastAPI web service, free tier.
+# Env vars are set from the Render dashboard (mark them "sync: false" so a
+# repo push can't accidentally overwrite them).
+
+services:
+  - type: web
+    name: space-learn-api
+    env: python
+    plan: free
+    rootDir: api
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: documents
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: USE_STUB_EMBEDDINGS
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: info

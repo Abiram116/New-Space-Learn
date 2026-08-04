@@ -1,0 +1,23 @@
+# Space Learn — Supabase project config.
+# This file is what `supabase link` reads; the dashboard-linked GitHub
+# integration watches migrations/*.sql regardless of this file.
+
+project_id = "space-learn"
+
+[db]
+major_version = 15
+
+[auth]
+enable_signup = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = [
+  "http://localhost:5173/auth/callback",
+]
+
+[auth.external.google]
+enabled = true
+# Set client_id + secret in the Supabase dashboard, not here.
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"

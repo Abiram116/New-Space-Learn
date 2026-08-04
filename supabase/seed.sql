@@ -1,0 +1,3 @@
+-- Seed data is inserted after migrations run, per user.
+-- We rely on the library-skill inserts inside 20260803120200_rag_functions.sql
+-- and don't auto-populate per-user rows here.

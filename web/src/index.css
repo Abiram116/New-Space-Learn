@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: 'Outfit', system-ui, sans-serif;
+
+  --color-canvas: #fbfaf7;
+  --color-surface: #ffffff;
+
+  --color-ink: #23212e;
+  --color-ink-2: #3a3648;
+  --color-ink-3: #4a465a;
+  --color-muted: #6e6a7c;
+  --color-faint: #a9a5b6;
+
+  --color-line: #ece9f5;
+  --color-line-soft: #f4f2fa;
+  --color-line-dash: #cfc9e8;
+
+  --color-brand: #6c5ce7;
+  --color-brand-tint: #f7f5ff;
+  --color-brand-soft: #efecfe;
+  --color-brand-200: #dad3fb;
+  --color-brand-300: #b7acf5;
+  --color-brand-deep: #4a3fa8;
+
+  --color-mint: #34c79a;
+  --color-mint-soft: #e4f7f0;
+
+  --color-sky: #5aa9f8;
+  --color-sky-soft: #e8f2fe;
+  --color-sky-deep: #25608f;
+
+  --color-sun: #f7c948;
+  --color-sun-soft: #fef6e0;
+  --color-sun-deep: #8a6d1f;
+
+  --color-coral: #ff9f6e;
+  --color-coral-soft: #ffefe6;
+  --color-coral-deep: #c4553b;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+}
