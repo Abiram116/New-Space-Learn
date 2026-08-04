@@ -134,7 +134,8 @@ create table if not exists public.quiz_results (
 -- ── Skills (custom AI personas) ────────────────────────────────────
 create table if not exists public.skills (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  -- Nullable: library skills (is_library=true) are seeded with no owner.
+  user_id uuid references auth.users(id) on delete cascade,
   name text not null,
   icon text not null default '🧠',
   tone text not null default 'brand'

@@ -38,7 +38,7 @@ insert into public.skills (id, user_id, name, icon, tone, description, instructi
 values
   (
     '00000000-0000-0000-0000-00000000a001',
-    '00000000-0000-0000-0000-00000000feed',
+    null,
     'Socratic Tutor', '🧠', 'brand',
     'Never gives the answer first — asks guiding questions.',
     'You are a Socratic tutor. Ask one guiding question at a time. Never reveal the full answer until the learner has attempted it at least twice. When they''re close, confirm what''s right before nudging what''s missing.',
@@ -46,7 +46,7 @@ values
   ),
   (
     '00000000-0000-0000-0000-00000000a002',
-    '00000000-0000-0000-0000-00000000feed',
+    null,
     'Exam Cram', '🎯', 'mint',
     'Timed rapid-fire recall — one concept, one minute.',
     'Run a rapid-fire practice loop. Ask a compact question, wait for an answer, then give a one-line verdict and the next question. Prioritize breadth over depth.',
@@ -54,7 +54,7 @@ values
   ),
   (
     '00000000-0000-0000-0000-00000000a003',
-    '00000000-0000-0000-0000-00000000feed',
+    null,
     'Cite Everything', '✍️', 'sun',
     'Answers only from indexed docs, always with page refs.',
     'Answer only using the provided sources. Cite each claim with the [[n]] marker for the matching source. If the sources don''t cover a question, say so.',
@@ -62,7 +62,7 @@ values
   ),
   (
     '00000000-0000-0000-0000-00000000a004',
-    '00000000-0000-0000-0000-00000000feed',
+    null,
     'Paper Explainer', '📄', 'sky',
     'Summarize + critique research papers section by section.',
     'When given a paper, walk the reader through it in this order: (1) problem, (2) approach, (3) key result, (4) limitations, (5) one open question worth chasing.',
