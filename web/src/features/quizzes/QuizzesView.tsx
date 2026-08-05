@@ -11,6 +11,7 @@ import { useSearchParams } from 'react-router-dom'
 import { generateQuiz, getQuiz, listQuizzes, submitQuiz } from '../../api/quizzes'
 import type { Quiz, QuizResult } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
+import { clearStatsCache } from '../../lib/briefCache'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
@@ -248,6 +249,8 @@ function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) 
     setBusy(true)
     try {
       const r = await submitQuiz(quiz.id, answers)
+      // The quiz average and streak just changed — see clearStatsCache.
+      clearStatsCache()
       setResult(r)
       onDone()
     } catch (err) {
@@ -272,70 +275,95 @@ function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) 
 
   const q = quiz.questions[index]
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
-      <div className="flex items-center gap-2 text-xs text-muted">
-        Question {index + 1} of {quiz.questions.length}
-        <div className="h-1 flex-1 rounded-full bg-line-soft">
-          <div
-            className="h-1 rounded-full bg-brand transition-all"
-            style={{ width: `${((index + 1) / quiz.questions.length) * 100}%` }}
-          />
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-8">
+      <div className="flex w-full max-w-2xl flex-col gap-6">
+        <div className="flex items-center gap-2 text-xs text-muted">
+          Question {index + 1} of {quiz.questions.length}
+          <div className="h-1 flex-1 rounded-full bg-line-soft">
+            <div
+              className="h-1 rounded-full bg-brand transition-all"
+              style={{ width: `${((index + 1) / quiz.questions.length) * 100}%` }}
+            />
+          </div>
         </div>
-      </div>
-      <div className="rounded-2xl border-[1.5px] border-line bg-surface p-6">
-        <div className="text-[15px] font-medium leading-relaxed">{q.q}</div>
-        <div className="mt-4 flex flex-col gap-2">
-          {q.choices.map((choice, i) => (
-            <button
-              key={i}
-              onClick={() =>
-                setAnswers((prev) => {
-                  const next = [...prev]
-                  next[index] = i
-                  return next
-                })
-              }
-              className={cn(
-                'flex items-center gap-3 rounded-xl border-[1.5px] px-3.5 py-3 text-left text-sm transition-colors cursor-pointer',
-                answers[index] === i
-                  ? 'border-brand bg-brand-soft'
-                  : 'border-line bg-surface hover:border-brand-200',
-              )}
-            >
-              <span
+        <div className="rounded-2xl border-[1.5px] border-line bg-surface p-6">
+          <div className="text-[15px] font-medium leading-relaxed">{q.q}</div>
+          <div className="mt-4 flex flex-col gap-2">
+            {q.choices.map((choice, i) => (
+              <button
+                key={i}
+                onClick={() =>
+                  setAnswers((prev) => {
+                    const next = [...prev]
+                    next[index] = i
+                    return next
+                  })
+                }
                 className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
-                  answers[index] === i ? 'bg-brand text-white' : 'bg-line-soft text-muted',
+                  'flex items-center gap-3 rounded-xl border-[1.5px] px-3.5 py-3 text-left text-sm transition-colors cursor-pointer',
+                  answers[index] === i
+                    ? 'border-brand bg-brand-soft'
+                    : 'border-line bg-surface hover:border-brand-200',
                 )}
               >
-                {String.fromCharCode(65 + i)}
-              </span>
-              {choice}
+                <span
+                  className={cn(
+                    'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
+                    answers[index] === i ? 'bg-brand text-white' : 'bg-line-soft text-muted',
+                  )}
+                >
+                  {String.fromCharCode(65 + i)}
+                </span>
+                {choice}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-between">
+          <Button
+            variant="secondary"
+            onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            disabled={index === 0}
+          >
+            Back
+          </Button>
+          {isLast ? (
+            <Button onClick={submit} disabled={!canAdvance || busy}>
+              {busy ? 'Submitting…' : 'Submit quiz'}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => setIndex((i) => Math.min(quiz.questions.length - 1, i + 1))}
+              disabled={!canAdvance}
+            >
+              Next
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Jump to any question directly — real use of the extra width, not decoration. */}
+      <aside className="hidden w-full shrink-0 flex-col gap-2 lg:sticky lg:top-6 lg:flex lg:w-48">
+        <span className="setcode px-0.5">Questions</span>
+        <div className="grid grid-cols-6 gap-1.5 lg:grid-cols-4">
+          {quiz.questions.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              className={cn(
+                'flex h-9 items-center justify-center rounded-lg text-xs font-bold transition-colors cursor-pointer',
+                i === index
+                  ? 'bg-brand text-white'
+                  : answers[i] !== -1
+                    ? 'bg-brand-soft text-brand-deep'
+                    : 'border border-line text-faint hover:border-brand/40',
+              )}
+            >
+              {i + 1}
             </button>
           ))}
         </div>
-      </div>
-      <div className="flex justify-between">
-        <Button
-          variant="secondary"
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          disabled={index === 0}
-        >
-          Back
-        </Button>
-        {isLast ? (
-          <Button onClick={submit} disabled={!canAdvance || busy}>
-            {busy ? 'Submitting…' : 'Submit quiz'}
-          </Button>
-        ) : (
-          <Button
-            onClick={() => setIndex((i) => Math.min(quiz.questions.length - 1, i + 1))}
-            disabled={!canAdvance}
-          >
-            Next
-          </Button>
-        )}
-      </div>
+      </aside>
     </div>
   )
 }
@@ -356,9 +384,9 @@ function QuizResults({
   }, [result.score])
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8">
-      <Card className="flex items-center gap-4 p-4">
-        <div className={cn('font-display text-4xl font-semibold', scoreClass)}>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-6">
+      <Card className="flex shrink-0 flex-col gap-3 p-5 lg:sticky lg:top-6 lg:w-64">
+        <div className={cn('font-display text-5xl font-semibold', scoreClass)}>
           {result.score}%
         </div>
         <div className="text-sm text-muted">
@@ -366,6 +394,7 @@ function QuizResults({
         </div>
       </Card>
 
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
       {quiz.questions.map((q, i) => {
         const chose = answers[i]
         const correct = result.correct[i]
@@ -380,7 +409,12 @@ function QuizResults({
               >
                 {correct ? '✓' : '✗'}
               </span>
-              <div className="text-sm font-medium">{q.q}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium">{q.q}</div>
+                {q.subtopic && (
+                  <span className="setcode mt-0.5 inline-block text-sky-deep">{q.subtopic}</span>
+                )}
+              </div>
             </div>
             <div className="flex flex-col gap-1 pl-8 text-sm">
               {q.choices.map((choice, ci) => (
@@ -404,6 +438,7 @@ function QuizResults({
           </Card>
         )
       })}
+      </div>
     </div>
   )
 }

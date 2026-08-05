@@ -15,12 +15,21 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getSettings, getStudentModel, updateSettings, updateStudentModel } from '../../api/me'
+import {
+  deleteAccount,
+  getSettings,
+  getStudentModel,
+  updateSettings,
+  updateStudentModel,
+} from '../../api/me'
+import { getSupabase } from '../../api/supabase'
 import type { Settings as Prefs, StudentModel } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
+import { Input } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { SectionLabel, Toggle } from '../../components/ui/Bits'
 import { useToast } from '../../components/ui/Toast'
@@ -38,7 +47,7 @@ const PACE_LABEL: Record<Prefs['spaced_pace'], string> = {
 
 export function Settings() {
   const { user, signOut } = useAuth()
-  const { showError } = useToast()
+  const { show, showError } = useToast()
   const navigate = useNavigate()
   const { base, hasAny } = useFallbackSubspace()
 
@@ -104,6 +113,42 @@ export function Settings() {
     }
   }
 
+  const [newPassword, setNewPassword] = useState('')
+  const [passwordBusy, setPasswordBusy] = useState(false)
+
+  const changePassword = async () => {
+    if (newPassword.length < 8) {
+      show('Use at least 8 characters.', 'error')
+      return
+    }
+    setPasswordBusy(true)
+    try {
+      const { error } = await getSupabase().auth.updateUser({ password: newPassword })
+      if (error) throw error
+      setNewPassword('')
+      show('Password updated.', 'success')
+    } catch (err) {
+      showError(err)
+    } finally {
+      setPasswordBusy(false)
+    }
+  }
+
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
+
+  const doDeleteAccount = async () => {
+    setDeleteBusy(true)
+    try {
+      await deleteAccount()
+      navigate('/signin', { replace: true })
+    } catch (err) {
+      showError(err)
+      setDeleteBusy(false)
+    }
+  }
+
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
     user?.email?.split('@')[0] ||
@@ -159,11 +204,24 @@ export function Settings() {
                   <div className="truncate text-xs text-muted">{email}</div>
                 </div>
               </Card>
-              <p className="text-xs text-faint">
-                Change your email or password from your Supabase-hosted account
-                page — we don't proxy those flows to avoid stashing your
-                credentials.
-              </p>
+
+              <Card className="flex flex-col gap-3 p-4">
+                <div className="text-[13px] font-semibold text-ink">Change password</div>
+                <Input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  hint="At least 8 characters."
+                />
+                <Button
+                  onClick={changePassword}
+                  disabled={passwordBusy || newPassword.length === 0}
+                  className="self-start"
+                >
+                  {passwordBusy ? 'Updating…' : 'Update password'}
+                </Button>
+              </Card>
             </>
           )}
 
@@ -354,14 +412,68 @@ export function Settings() {
                   Sign out
                 </Button>
               </Card>
-              <p className="text-xs text-faint">
-                Account deletion isn't wired into the backend yet. Reach us to
-                remove everything permanently.
-              </p>
+
+              <SectionLabel className="mt-1">DANGER ZONE</SectionLabel>
+              <Card className="flex flex-col gap-2 p-4 text-sm">
+                <p className="text-muted">
+                  Permanently delete your account and everything in it — every
+                  subject, document, chat, note, deck, and quiz. This can't be
+                  undone.
+                </p>
+                <Button
+                  onClick={() => setDeleteOpen(true)}
+                  className="self-start bg-coral-deep hover:bg-coral-deep/90"
+                >
+                  Delete account
+                </Button>
+              </Card>
             </>
           )}
         </div>
       </div>
+
+      <Modal
+        open={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false)
+          setDeleteConfirmText('')
+        }}
+        title="Delete your account?"
+        width="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted">
+            This permanently deletes your account and every subject, document,
+            chat, note, deck, and quiz in it. There is no undo. Type{' '}
+            <b className="text-ink">delete</b> to confirm.
+          </p>
+          <Input
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="delete"
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteOpen(false)
+                setDeleteConfirmText('')
+              }}
+              disabled={deleteBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={doDeleteAccount}
+              disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
+              className="bg-coral-deep hover:bg-coral-deep/90"
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete my account'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

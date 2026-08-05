@@ -17,3 +17,11 @@ export const deleteNote = (id: string) =>
 
 export const generateNote = (subspaceId: string, input: { topic?: string }) =>
   apiFetch<Note>(`/subspaces/${subspaceId}/notes/generate`, { method: 'POST', body: input })
+
+/** Backs the `/ai <prompt>` inline command — returns a markdown fragment
+ *  to insert at the cursor, not a new note. */
+export const noteAiInline = (subspaceId: string, prompt: string) =>
+  apiFetch<{ content_md: string }>(`/subspaces/${subspaceId}/notes/ai-inline`, {
+    method: 'POST',
+    body: { prompt },
+  })

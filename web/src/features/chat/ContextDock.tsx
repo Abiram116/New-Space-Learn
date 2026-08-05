@@ -11,8 +11,9 @@
  *            and finish. Deliberately not card-shaped.
  */
 
+import { useCallback, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { listDocuments } from '../../api/documents'
+import { listDocuments, uploadDocument } from '../../api/documents'
 import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
@@ -21,6 +22,7 @@ import { SectionLabel } from '../../components/ui/Bits'
 import { DashedCard } from '../../components/ui/Card'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { useToast } from '../../components/ui/Toast'
 import { SourceItem } from '../docs/SourceItem'
 import { AGENT_ICON, AGENT_LABELS, AGENT_RESULT, AGENT_TONE, type AgentKey } from './agents'
 
@@ -37,9 +39,30 @@ export function ContextDock({
 }) {
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId])
   const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
+  const { showError } = useToast()
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const docList = docs.data ?? []
   const skillList = skills.data ?? []
+
+  const upload = useCallback(
+    async (files: FileList | File[]) => {
+      const file = Array.from(files)[0]
+      if (!file) return
+      setUploading(true)
+      try {
+        await uploadDocument(subspaceId, file, () => {})
+        docs.refresh()
+      } catch (err) {
+        showError(err)
+      } finally {
+        setUploading(false)
+      }
+    },
+    [subspaceId, docs, showError],
+  )
 
   return (
     <aside className="hidden w-[268px] shrink-0 flex-col gap-5 overflow-y-auto overflow-x-hidden border-l border-line bg-surface p-3.5 lg:flex">
@@ -160,16 +183,44 @@ export function ContextDock({
         ) : docs.error ? (
           <p className="text-[11.5px] text-muted">{docs.error}</p>
         ) : docList.length === 0 ? (
-          <DashedCard className="px-2.5 py-3.5 text-center">
+          <DashedCard
+            className={cn(
+              'cursor-pointer px-2.5 py-3.5 text-center transition-colors',
+              dragging && 'border-brand/60 bg-brand-soft',
+            )}
+            onClick={() => fileRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault()
+              setDragging(true)
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setDragging(false)
+              if (e.dataTransfer.files.length > 0) void upload(e.dataTransfer.files)
+            }}
+          >
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
+              className="hidden"
+              onChange={(e) => e.target.files && upload(e.target.files)}
+            />
             <p className="text-[11.5px] leading-snug text-muted">
-              Nothing indexed yet. Answers won't cite anything.
+              {uploading
+                ? 'Uploading…'
+                : 'Nothing indexed yet. Drop a file here, or'}
             </p>
-            <Link
-              to={`${base}/docs`}
-              className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-deep"
-            >
-              Add a document
-            </Link>
+            {!uploading && (
+              <Link
+                to={`${base}/docs`}
+                onClick={(e) => e.stopPropagation()}
+                className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-deep"
+              >
+                browse the Docs tab
+              </Link>
+            )}
           </DashedCard>
         ) : (
           <div className="flex flex-col gap-2">

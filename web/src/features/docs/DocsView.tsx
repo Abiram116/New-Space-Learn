@@ -161,7 +161,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.md,.txt"
+              accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
               multiple
               className="hidden"
               onChange={(e) => e.target.files && startUpload(e.target.files)}
@@ -190,7 +190,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
               className="w-full max-w-lg"
               icon="doc"
               title="No sources yet"
-              description="Add a PDF, markdown, or plain-text file. It gets chunked and embedded so answers in this topic can cite pages."
+              description="Add a PDF, markdown, plain-text, CSV, or image file. It gets chunked and embedded so answers in this topic can cite pages."
               action={
                 <Button size="lg" onClick={onPick}>
                   <Icon name="upload" size={15} /> Upload a file

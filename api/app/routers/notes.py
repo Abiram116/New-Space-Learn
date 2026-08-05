@@ -12,7 +12,15 @@ from ..config import settings
 from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
 from ..guards import assert_subspace, subspace_label
-from ..schemas import NoteCreate, NoteGenerate, NoteOut, NoteUpdate, OkOut
+from ..schemas import (
+    NoteAiInline,
+    NoteAiInlineOut,
+    NoteCreate,
+    NoteGenerate,
+    NoteOut,
+    NoteUpdate,
+    OkOut,
+)
 from ..services import activity, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm
@@ -163,6 +171,67 @@ async def generate_note(
     )
     await activity.touch_subspace(subspace_id)
     return _to_note(inserted[0])
+
+
+@router.post(
+    "/subspaces/{subspace_id}/notes/ai-inline", response_model=NoteAiInlineOut
+)
+async def note_ai_inline(
+    subspace_id: str,
+    body: NoteAiInline,
+    user: CurrentUser = Depends(get_current_user),
+) -> NoteAiInlineOut:
+    """Backs the `/ai <prompt>` command typed inline in the notes editor —
+    returns a markdown fragment to insert at the cursor, not a new note."""
+
+    await assert_subspace(user.id, subspace_id)
+    await consume_llm_quota(user.id)
+
+    if not settings.llm_configured:
+        raise UpstreamUnavailable("AI isn't configured yet.")
+
+    retrieved = await rag.retrieve(subspace_id, body.prompt, k=6)
+    context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
+    history = await recent_history(user.id, subspace_id)
+    recent = format_history(history) or "(no prior chat in this space)"
+    student_context = student_model.format_for_prompt(await student_model.get(user.id))
+
+    prompt = (
+        f"The student is writing a note and typed this inline request: "
+        f"'{body.prompt}'.\n\n"
+        f"Material:\n{context}\n\n"
+        f"Recent conversation in this space:\n{recent}\n\n"
+        "Write ONLY the markdown fragment to insert at their cursor — no "
+        "title, no preamble, no restating the request. Ground it in the "
+        "material and conversation above; do not invent facts not present "
+        "in either."
+    )
+
+    try:
+        parts: list[str] = []
+        async for delta in get_llm().stream_chat(
+            [
+                {
+                    "role": "system",
+                    "content": NOTES_AGENT_VOICE
+                    + (f"\n\n{student_context}" if student_context else ""),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            model=settings.groq_model,
+            temperature=0.4,
+        ):
+            parts.append(delta)
+        content = "".join(parts).strip()
+    except ApiError:
+        raise
+    except Exception as e:
+        log.exception("inline note AI failed")
+        raise UpstreamUnavailable("Couldn't reach the AI just now.") from e
+
+    if not content:
+        raise UpstreamUnavailable("Came back empty. Try rephrasing.")
+    return NoteAiInlineOut(content_md=content)
 
 
 @router.patch("/notes/{note_id}", response_model=NoteOut)

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import csv
+import io
 import logging
 from datetime import UTC, datetime
 
@@ -16,6 +19,7 @@ from ..schemas import DocumentOut, OkOut, SuggestSubspaceOut
 from ..services import supabase
 from ..services.embeddings import chunk_text, embed_texts, extract_pdf_text
 from ..services.llm import get_llm
+from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.docs")
 router = APIRouter()
@@ -35,6 +39,9 @@ async def suggest_subspace(
     pre-filled, editable suggestion beats asking them to name it blind."""
 
     await assert_space(user.id, space_id)
+    # This reaches the model, so it burns the same quota as any other AI call.
+    # Without this it was the one unmetered LLM endpoint in the API.
+    await consume_llm_quota(user.id)
 
     data = await file.read()
     if not data:
@@ -90,6 +97,10 @@ async def upload_document(
     user: CurrentUser = Depends(get_current_user),
 ) -> DocumentOut:
     await assert_subspace(user.id, subspace_id)
+    # Images are transcribed by the vision model during processing, so an
+    # image upload is an LLM call and is metered like one.
+    if "image" in (file.content_type or "").lower():
+        await consume_llm_quota(user.id, cost=2)
 
     if not file.filename:
         raise ValidationFailed("Choose a file to upload.")
@@ -195,7 +206,7 @@ async def _process_inline(doc: dict, data: bytes, mime_type: str) -> dict:
     """Extract, chunk, embed, insert. Bounded so the request stays alive."""
 
     try:
-        text = _extract_text(data, mime_type)
+        text = await _extract_text_async(data, mime_type)
         if not text.strip():
             return (
                 await supabase.db_update(
@@ -271,13 +282,75 @@ async def _fail(doc_id: str, message: str) -> dict:
     return updated[0]
 
 
+async def _extract_text_async(data: bytes, mime_type: str) -> str:
+    """Images need a model call (vision), everything else is synchronous —
+    kept as one entry point so `_process_inline` doesn't need to branch."""
+    if "image" in mime_type.lower():
+        return await _extract_image_text(data, mime_type)
+    return _extract_text(data, mime_type)
+
+
 def _extract_text(data: bytes, mime_type: str) -> str:
     if "pdf" in mime_type.lower():
         return extract_pdf_text(data)
+    if "csv" in mime_type.lower():
+        return _extract_csv_text(data)
     # Everything else: assume UTF-8 text (markdown, plain, source).
     try:
         return data.decode("utf-8", errors="ignore")
     except Exception:  # pragma: no cover
+        return ""
+
+
+def _extract_csv_text(data: bytes) -> str:
+    """Pipe-joined rows read fine as chunked text and still cite a row
+    range — no need for a separate tabular chunking strategy."""
+    try:
+        text = data.decode("utf-8", errors="ignore")
+    except Exception:  # pragma: no cover
+        return ""
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        return ""
+    # Cap so one huge export doesn't blow the inline processing budget.
+    return "\n".join(" | ".join(cell.strip() for cell in row) for row in rows[:2000])
+
+
+async def _extract_image_text(data: bytes, mime_type: str) -> str:
+    if not settings.llm_configured:
+        return ""
+    b64 = base64.b64encode(data).decode()
+    prompt = (
+        "Extract any visible text verbatim, then describe diagrams, charts, "
+        "or photos in enough detail to be useful as study material. Plain "
+        "text only, no markdown."
+    )
+    try:
+        parts: list[str] = []
+        async for delta in get_llm().stream_chat(
+            [
+                {
+                    "role": "system",
+                    "content": "You transcribe and describe images for a study document index.",
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime_type};base64,{b64}"},
+                        },
+                    ],
+                },
+            ],  # type: ignore[list-item]  — multimodal content, not the plain-str shape
+            model=settings.groq_model_vision,
+            temperature=0.2,
+        ):
+            parts.append(delta)
+        return "".join(parts).strip()
+    except Exception:
+        log.warning("image extraction failed", exc_info=True)
         return ""
 
 

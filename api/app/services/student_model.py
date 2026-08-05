@@ -7,6 +7,7 @@ stored.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, date, datetime
 
 from ..schemas import StudentModelOut, TopicSignal
@@ -15,12 +16,19 @@ from .streaks import compute_streak
 
 
 async def get(user_id: str) -> StudentModelOut:
-    settings_row = await _settings_row(user_id)
+    # Every chat turn and every generation call waits on this before the LLM
+    # even starts, so the three reads run concurrently rather than stacking
+    # three round trips onto the critical path.
+    settings_row, signals, days = await asyncio.gather(
+        _settings_row(user_id),
+        _quiz_signals(user_id),
+        _activity_days(user_id),
+    )
     explicit = dict(settings_row.get("student_model") or {})
-    signals = await _quiz_signals(user_id)
     weak = sorted(signals, key=lambda s: s.average)[:3]
     strong = sorted(signals, key=lambda s: -s.average)[:3]
-    streak_days = await _streak(user_id, settings_row)
+    freeze = bool(settings_row.get("streak_freeze_enabled", True))
+    streak_days = compute_streak([r["day"] for r in days], date.today(), freeze=freeze)
 
     return StudentModelOut(
         learning_style=explicit.get("learning_style"),
@@ -107,13 +115,11 @@ async def _quiz_signals(user_id: str) -> list[TopicSignal]:
     ]
 
 
-async def _streak(user_id: str, settings_row: dict) -> int:
-    days = await supabase.db_select(
+async def _activity_days(user_id: str) -> list[dict]:
+    return await supabase.db_select(
         "daily_activity",
         filters={"user_id": f"eq.{user_id}"},
         select="day",
         order="day.desc",
         limit=200,
     )
-    freeze = bool(settings_row.get("streak_freeze_enabled", True))
-    return compute_streak([r["day"] for r in days], date.today(), freeze=freeze)

@@ -33,8 +33,10 @@ import { Modal } from '../../components/ui/Modal'
 import { ProgressBar } from '../../components/ui/Bits'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
+import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
+import { estimateRetention } from '../../lib/retention'
 import { stripMarkdown } from '../../lib/text'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
@@ -426,6 +428,18 @@ function DeckDetail({
                         {stripMarkdown(card.back)}
                       </p>
                     </div>
+                    {(() => {
+                      const retention = estimateRetention(card)
+                      if (retention === null) return null
+                      return (
+                        <span
+                          className="setcode mt-0.5 shrink-0 tabular-nums text-faint"
+                          title="Estimated from time since last review and this card's ease/interval — not measured."
+                        >
+                          ~{retention}%
+                        </span>
+                      )
+                    })()}
                     <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                       <button
                         type="button"
@@ -563,6 +577,9 @@ function Review({
       const { mode: m, card: c } = stateRef.current
       if (!c) return
       void gradeCard(c.id, g).catch(showError)
+      // Due counts and the streak just moved; don't let Home serve the
+      // pre-review numbers from cache.
+      clearStatsCache()
       const grades = [...m.grades, g]
       if (m.index + 1 >= m.cards.length) {
         onFinish()
@@ -605,60 +622,108 @@ function Review({
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 px-4 py-6">
-        <div className="flex w-full max-w-xl items-center gap-3">
-          <span className="setcode tabular-nums">
-            {mode.index + 1} / {total}
-          </span>
-          <ProgressBar value={((mode.index) / total) * 100} className="flex-1" />
-        </div>
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-4 py-6 lg:flex-row lg:items-start lg:justify-center">
+        <div className="flex w-full max-w-xl flex-col items-center gap-6 lg:pt-6">
+          <div className="flex w-full items-center gap-3">
+            <span className="setcode tabular-nums">
+              {mode.index + 1} / {total}
+            </span>
+            <ProgressBar value={((mode.index) / total) * 100} className="flex-1" />
+          </div>
 
-        {/* The card. Real 3D — the back is a separate face, rotated behind. */}
-        <div
-          className="w-full max-w-xl [perspective:1600px]"
-          style={{ height: 'min(46vh, 340px)' }}
-        >
-          <button
-            type="button"
-            onClick={flip}
-            aria-label={mode.flipped ? 'Show question' : 'Show answer'}
-            className={cn(
-              'relative h-full w-full cursor-pointer text-left',
-              '[transform-style:preserve-3d] transition-transform duration-500',
-              'motion-reduce:transition-none',
-            )}
-            style={{ transform: mode.flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+          {/* The card. Real 3D — the back is a separate face, rotated behind. */}
+          <div
+            className="w-full [perspective:1600px]"
+            style={{ height: 'min(46vh, 340px)' }}
           >
-            <CardFace side="front" text={card.front} hint="Space to flip" />
-            <CardFace side="back" text={card.back} source={card.source} />
-          </button>
+            <button
+              type="button"
+              onClick={flip}
+              aria-label={mode.flipped ? 'Show question' : 'Show answer'}
+              className={cn(
+                'relative h-full w-full cursor-pointer text-left',
+                '[transform-style:preserve-3d] transition-transform duration-500',
+                'motion-reduce:transition-none',
+              )}
+              style={{ transform: mode.flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+            >
+              <CardFace side="front" text={card.front} hint="Space to flip" />
+              <CardFace side="back" text={card.back} source={card.source} />
+            </button>
+          </div>
+
+          <div className="flex w-full flex-col gap-2">
+            {mode.flipped ? (
+              <div className="grid grid-cols-4 gap-2">
+                {GRADES.map((g) => (
+                  <button
+                    key={g.key}
+                    type="button"
+                    onClick={() => grade(g.key)}
+                    className={cn(
+                      'flex flex-col items-center gap-0.5 rounded-[11px] border bg-raised py-2.5',
+                      'text-[12.5px] font-bold transition-colors cursor-pointer',
+                      g.tone,
+                    )}
+                  >
+                    {g.label}
+                    <span className="setcode">{g.hotkey}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Button size="lg" onClick={flip} className="w-full">
+                Show answer
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="flex w-full max-w-xl flex-col gap-2">
-          {mode.flipped ? (
-            <div className="grid grid-cols-4 gap-2">
-              {GRADES.map((g) => (
-                <button
-                  key={g.key}
-                  type="button"
-                  onClick={() => grade(g.key)}
-                  className={cn(
-                    'flex flex-col items-center gap-0.5 rounded-[11px] border bg-raised py-2.5',
-                    'text-[12.5px] font-bold transition-colors cursor-pointer',
-                    g.tone,
-                  )}
-                >
-                  {g.label}
-                  <span className="setcode">{g.hotkey}</span>
-                </button>
-              ))}
+        {/* Real use of the wide screen: what's coming, and how the session's going so far. */}
+        <aside className="hidden w-56 shrink-0 flex-col gap-4 lg:flex lg:pt-6">
+          {mode.grades.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="setcode px-0.5">So far</span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {GRADES.map((g) => {
+                  const count = mode.grades.filter((x) => x === g.key).length
+                  return (
+                    <div
+                      key={g.key}
+                      className="flex flex-col items-center gap-0.5 rounded-[10px] bg-well py-1.5"
+                    >
+                      <span className={cn('nameplate text-[16px] tabular-nums', g.tone.split(' ')[0])}>
+                        {count}
+                      </span>
+                      <span className="setcode text-[9px]">{g.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          ) : (
-            <Button size="lg" onClick={flip} className="w-full">
-              Show answer
-            </Button>
           )}
-        </div>
+          <div className="flex flex-col gap-2">
+            <span className="setcode px-0.5">Up next</span>
+            <div className="flex flex-col gap-1.5">
+              {mode.cards.slice(mode.index + 1, mode.index + 6).map((c) => (
+                <div
+                  key={c.id}
+                  className="truncate rounded-lg border border-line bg-well px-2.5 py-2 text-[12px] text-muted"
+                >
+                  {stripMarkdown(c.front)}
+                </div>
+              ))}
+              {mode.cards.length - mode.index - 1 > 5 && (
+                <div className="px-0.5 text-[11px] text-faint">
+                  +{mode.cards.length - mode.index - 6} more
+                </div>
+              )}
+              {mode.index + 1 >= mode.cards.length && (
+                <div className="px-0.5 text-[11px] text-faint">Last card in this session.</div>
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   )

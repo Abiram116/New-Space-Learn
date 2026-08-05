@@ -84,6 +84,7 @@ export type QuizQuestion = {
   choices: string[]
   answer_index: number
   source?: string | null
+  subtopic?: string | null
 }
 
 export type Quiz = {

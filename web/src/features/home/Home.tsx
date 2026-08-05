@@ -13,7 +13,6 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getStats } from '../../api/me'
 import type { Space, Stats, Subspace } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
@@ -21,7 +20,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
-import { getCachedBrief } from '../../lib/briefCache'
+import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
 import { toneDot, toneSoft, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
@@ -30,7 +29,7 @@ import { StreakLedger } from './StreakLedger'
 
 export function Home() {
   const { spaces, loading: spacesLoading } = useSpaces()
-  const stats = useAsync(() => getStats(), [])
+  const stats = useAsync(() => getCachedStats(), [])
   const brief = useAsync(() => getCachedBrief(), [])
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
 

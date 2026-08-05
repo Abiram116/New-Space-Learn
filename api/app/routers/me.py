@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from datetime import UTC, date, datetime, timedelta
@@ -27,6 +28,7 @@ from ..services import student_model as student_model_service
 from ..services import supabase
 from ..services.llm import get_llm
 from ..services.streaks import compute_max_streak, compute_streak, to_date
+from ..services.voice import COMPANION_VOICE
 
 log = logging.getLogger("space_learn.me")
 router = APIRouter()
@@ -35,6 +37,15 @@ router = APIRouter()
 @router.get("/me", response_model=Me)
 async def me(user: CurrentUser = Depends(get_current_user)) -> Me:
     return Me(id=user.id, email=user.email)
+
+
+@router.delete("/me")
+async def delete_me(user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Irreversible — the frontend must confirm before ever calling this.
+    Every table's `on delete cascade user_id → auth.users` FK does the
+    per-table cleanup; nothing else to do here."""
+    await supabase.delete_auth_user(user.id)
+    return {"ok": True}
 
 
 # ── Settings ───────────────────────────────────────────────────────────
@@ -112,22 +123,43 @@ async def patch_student_model(
 
 @router.get("/me/stats", response_model=StatsOut)
 async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
-    settings_row = await _ensure_settings_row(user.id)
-
+    # Home waits on this before it can render, and every one of these reads is
+    # a separate network round trip to PostgREST. Run sequentially they stacked
+    # to roughly two seconds; they're all independent, so they go concurrently.
+    today = date.today()
     # Half a year of activity, aligned so the grid starts on a Monday. Eight
     # weeks was too little to read as a trend — a student looking at their own
     # analytics wants to see a term, not a fortnight.
-    today = date.today()
     start = today - timedelta(days=181)
     since = start - timedelta(days=start.weekday())
-    days = await supabase.db_select(
-        "daily_activity",
-        filters={
-            "user_id": f"eq.{user.id}",
-            "day": f"gte.{since.isoformat()}",
-        },
-        order="day.asc",
+
+    (
+        settings_row,
+        days,
+        cards_due,
+        quiz_avg,
+        docs_indexed,
+        spaces_count,
+        max_reps,
+        has_perfect,
+    ) = await asyncio.gather(
+        _ensure_settings_row(user.id),
+        supabase.db_select(
+            "daily_activity",
+            filters={
+                "user_id": f"eq.{user.id}",
+                "day": f"gte.{since.isoformat()}",
+            },
+            order="day.asc",
+        ),
+        _count_cards_due(user.id),
+        _quiz_average(user.id),
+        _count(user.id, "documents", extra={"status": "eq.ready"}),
+        _count(user.id, "subjects"),
+        _cards_mastered(user.id),
+        _has_perfect_quiz(user.id),
     )
+
     by_day: dict[str, dict] = {row["day"]: row for row in days}
     heatmap: list[HeatmapCell] = []
     max_seconds = max((int(r.get("study_seconds", 0)) for r in days), default=1) or 1
@@ -154,13 +186,6 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         if to_date(r["day"]) >= week_start
     )
 
-    # Aggregates from other tables.
-    cards_due = await _count_cards_due(user.id)
-    quiz_avg = await _quiz_average(user.id)
-    docs_indexed = await _count(user.id, "documents", extra={"status": "eq.ready"})
-    spaces_count = await _count(user.id, "subjects")
-
-    max_reps = await _cards_mastered(user.id)
     badges = [
         Badge(
             id="first_steps", label="First card", icon="deck", tone="sky",
@@ -179,7 +204,7 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         ),
         Badge(
             id="perfect_quiz", label="Perfect score", icon="target", tone="coral",
-            tier="rare", earned=await _has_perfect_quiz(user.id),
+            tier="rare", earned=has_perfect,
             hint="Score 100% on any quiz.",
         ),
         Badge(
@@ -277,13 +302,18 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     with `generated=false` so the UI never implies a model wrote it.
     """
 
-    facts = await _brief_facts(user.id)
-    suggestion = await _compute_suggestion(user.id)
+    # Three independent read groups — gathered so the brief doesn't pay for
+    # them one after another before the model call even begins.
+    facts, suggestion, student_model_out = await asyncio.gather(
+        _brief_facts(user.id),
+        _compute_suggestion(user.id),
+        student_model_service.get(user.id),
+    )
 
     if not cfg.llm_configured:
         return _fallback_brief(facts, suggestion)
 
-    student = student_model_service.format_for_prompt(await student_model_service.get(user.id))
+    student = student_model_service.format_for_prompt(student_model_out)
     student_block = f"{student}\n\n" if student else ""
 
     prompt = (
@@ -310,7 +340,10 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         parts: list[str] = []
         async for delta in get_llm().stream_chat(
             [
-                {"role": "system", "content": "You write short, human, specific copy."},
+                {
+                    "role": "system",
+                    "content": COMPANION_VOICE + " You write short, specific copy.",
+                },
                 {"role": "user", "content": prompt},
             ],
             model=cfg.groq_model_fast,
@@ -381,27 +414,29 @@ def _desentence_case(text: str, topic: str | None) -> str:
 
 
 async def _brief_facts(user_id: str) -> dict:
-    subs = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}"},
-        select="id,name,last_activity_at",
-        order="last_activity_at.desc",
-        limit=3,
-    )
-    cards = await supabase.db_select(
-        "flashcards",
-        filters={
-            "user_id": f"eq.{user_id}",
-            "due_at": f"lte.{datetime.now(UTC).isoformat()}",
-        },
-        select="id",
-    )
-    recent = await supabase.db_select(
-        "daily_activity",
-        filters={"user_id": f"eq.{user_id}"},
-        select="day,chat_messages,cards_reviewed,quizzes_taken",
-        order="day.desc",
-        limit=7,
+    subs, cards, recent = await asyncio.gather(
+        supabase.db_select(
+            "subspaces",
+            filters={"user_id": f"eq.{user_id}"},
+            select="id,name,last_activity_at",
+            order="last_activity_at.desc",
+            limit=3,
+        ),
+        supabase.db_select(
+            "flashcards",
+            filters={
+                "user_id": f"eq.{user_id}",
+                "due_at": f"lte.{datetime.now(UTC).isoformat()}",
+            },
+            select="id",
+        ),
+        supabase.db_select(
+            "daily_activity",
+            filters={"user_id": f"eq.{user_id}"},
+            select="day,chat_messages,cards_reviewed,quizzes_taken",
+            order="day.desc",
+            limit=7,
+        ),
     )
     last_day = recent[0]["day"] if recent else None
     days_away = 0
@@ -478,10 +513,21 @@ async def _compute_suggestion(user_id: str) -> BriefSuggestion | None:
     retake. Both are gated (non-trivial overdue count / enough attempts to
     trust the average) so this never fires on noise.
     """
-    decks = await supabase.db_select(
-        "decks",
-        filters={"user_id": f"eq.{user_id}"},
-        select="id,name,subspace_id,subspaces(subject_id)",
+    # The deck branch wins when it fires, but the quiz read doesn't depend on
+    # it — fetching both up front costs one round trip instead of two.
+    decks, results = await asyncio.gather(
+        supabase.db_select(
+            "decks",
+            filters={"user_id": f"eq.{user_id}"},
+            select="id,name,subspace_id,subspaces(subject_id)",
+        ),
+        supabase.db_select(
+            "quiz_results",
+            filters={"user_id": f"eq.{user_id}"},
+            select="score,quizzes(subspace_id,topic,subspaces(subject_id))",
+            order="submitted_at.desc",
+            limit=30,
+        ),
     )
     if decks:
         deck_ids = ",".join(d["id"] for d in decks)
@@ -507,13 +553,6 @@ async def _compute_suggestion(user_id: str) -> BriefSuggestion | None:
                     route=f"/s/{subject_id}/{deck['subspace_id']}/flashcards",
                 )
 
-    results = await supabase.db_select(
-        "quiz_results",
-        filters={"user_id": f"eq.{user_id}"},
-        select="score,quizzes(subspace_id,topic,subspaces(subject_id))",
-        order="submitted_at.desc",
-        limit=30,
-    )
     groups: dict[str, dict] = {}
     for r in results:
         q = r.get("quizzes") or {}

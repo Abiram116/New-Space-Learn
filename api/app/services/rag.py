@@ -13,6 +13,7 @@ from typing import Any
 
 from . import supabase
 from .embeddings import embed_texts
+from .voice import COMPANION_VOICE
 
 
 @dataclass(slots=True)
@@ -114,8 +115,12 @@ def build_prompt(
             )
         sources_block = "Sources:\n" + "\n\n".join(lines)
 
+    # Chat is the surface a student spends the most time in, so it draws on
+    # the same shared voice as the agents rather than defining its own — the
+    # "sounds like one mentor everywhere" property has to be structural.
     system_parts = [
-        f"You are a study assistant for the topic '{subspace_name}'.",
+        COMPANION_VOICE,
+        f"You are working with the student on the topic '{subspace_name}'.",
         "Be direct, accurate, and concise. Prefer short paragraphs over long ones.",
     ]
     if always_show_citations and retrieved:

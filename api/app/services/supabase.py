@@ -168,6 +168,17 @@ async def db_rpc(fn: str, args: dict[str, Any]) -> Any:
     return r.json()
 
 
+# ── Auth admin ─────────────────────────────────────────────────────────
+
+
+async def delete_auth_user(user_id: str) -> None:
+    """Admin API delete — the on-delete-cascade FKs on every table (user_id
+    → auth.users) do the rest, no per-table cleanup needed here."""
+    client = await get_client()
+    r = await client.delete(f"/auth/v1/admin/users/{user_id}")
+    _raise_if_bad(r)
+
+
 # ── Storage ─────────────────────────────────────────────────────────────
 
 

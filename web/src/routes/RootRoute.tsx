@@ -1,7 +1,9 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { PageSpinner } from '../components/ui/PageSpinner'
-import { Landing } from '../features/landing/Landing'
+// Lazy — a static import here would pull Landing back into the main bundle
+// for signed-in users, who never see it. See routes/lazyRoutes.
+import { Landing, Lazy } from './lazyRoutes'
 
 /**
  * What lives at `/`.
@@ -23,5 +25,9 @@ export function RootRoute() {
   // Deciding before the session resolves would flash the wrong surface.
   if (loading) return <PageSpinner label="Loading…" />
   if (session) return <Navigate to="/home" replace />
-  return <Landing />
+  return (
+    <Lazy>
+      <Landing />
+    </Lazy>
+  )
 }

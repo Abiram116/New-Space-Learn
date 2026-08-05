@@ -16,3 +16,7 @@ export const getBrief = () => apiFetch<Brief>('/me/brief')
 export const getStudentModel = () => apiFetch<StudentModel>('/me/student-model')
 export const updateStudentModel = (patch: StudentModelPatch) =>
   apiFetch<StudentModel>('/me/student-model', { method: 'PATCH', body: patch })
+
+/** Irreversible. The caller must have its own confirmation step — this
+ *  function does not ask twice. */
+export const deleteAccount = () => apiFetch<{ ok: true }>('/me', { method: 'DELETE' })

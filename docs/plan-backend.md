@@ -1,9 +1,14 @@
 # Plan — Backend
 
-Planning only, nothing here is being built yet. Epics are numbered to match
+**Status: all backend epics here are built and shipped** (2026-08-05), plus
+the cross-cutting Responsiveness work below. Epics are numbered to match
 [plan-frontend.md](plan-frontend.md) — same number, same feature, backend
 half. Context for why this list looks the way it does:
 [v2-review.md](v2-review.md).
+
+Migrations added by this work, all applied:
+`20260805110000_student_model.sql`, `20260805120000_linked_subspaces.sql`,
+`20260805130000_skill_behavior.sql`.
 
 Every item below is additive to the existing schema/routers unless stated
 otherwise — no item here requires the knowledge-graph rearchitecture
@@ -22,7 +27,41 @@ the "sounds like the same mentor everywhere" property is structural, not
 dependent on remembering to copy-paste tone instructions into each new
 endpoint later.
 
-## Cross-cutting — Responsiveness
+## Cross-cutting — Responsiveness (done, with measurements)
+
+Applied 2026-08-05 after a "pages take ~2 seconds to load" report. The cause
+was not the frontend: `GET /me/stats` made **eight sequential PostgREST
+round trips** (settings, activity, cards-due, quiz average, docs, subjects,
+mastered-count, perfect-quiz), and Home blocks on it. Every one was
+independent, so they now run under a single `asyncio.gather`.
+
+Measured with a 150 ms simulated round trip, counting round-trip *depth*:
+
+| Path | Before | After |
+|---|---|---|
+| `GET /me/stats` | 8 deep (~1200 ms) | 1 deep (~150 ms) |
+| `student_model.get()` | 3 deep | 1 deep |
+| `_brief_facts()` | 3 deep | 1 deep |
+| `_compute_suggestion()` | up to 4 deep | 2 deep |
+
+`student_model.get()` mattered most in aggregate: it runs before *every*
+chat turn and *every* generation call, so three stacked round trips sat on
+the critical path of each one.
+
+Frontend side: Home refetched `/me/stats` on every mount, so navigating
+away and back re-paid the cost and re-flashed skeletons. It now goes
+through a shared TTL cache (`web/src/lib/sessionCache.ts`, 60 s for stats,
+30 min for the brief) with request de-duplication, cleared explicitly on
+card grading and quiz submission so counts never read stale. Route-level
+code splitting cut the first-load bundle from 451 KB to 245 KB gzipped by
+moving Tiptap, Landing, Flashcards, and Quizzes out of the main chunk.
+
+**The standing rule this leaves behind:** independent awaits in one handler
+are a latency bug, not a style preference. Reach for `asyncio.gather`
+whenever two reads don't depend on each other — especially in anything on
+the path to a first paint or an LLM call.
+
+## Cross-cutting — Responsiveness (original guidance)
 
 Not a feature, a standing bar every endpoint above should be held to: the
 app should feel instant, not clunky. Concretely, as each epic above touches

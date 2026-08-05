@@ -1,12 +1,26 @@
 # Plan — Frontend
 
-Planning only, nothing here is being built yet. Ordered by priority, not by
-size. Each epic notes its backend dependency (if any) — see
-[plan-backend.md](plan-backend.md) for the matching backend-side work,
-epics are named the same on both sides so they line up.
+**Status: §1–§13 are built and shipped** (2026-08-05). §14–§16 remain open.
+Ordered by priority, not by size. Each epic notes its backend dependency
+(if any) — see [plan-backend.md](plan-backend.md) for the matching
+backend-side work; epics are named the same on both sides so they line up.
 
 Context for why this list looks the way it does: [v2-review.md](v2-review.md).
 Read [vision.md](vision.md) first — everything below is judged against it.
+
+## What's still open
+
+| # | Item | Why it's still open |
+|---|---|---|
+| §14 | Toast contrast | Small CSS fix, not yet done. |
+| §15 | Landing hero font race + marquee loop gap | Diagnosed, not yet fixed. |
+| §16 | Cinematic Higgsfield pass | Deliberately its own session — asset generation, not code. |
+
+Also deferred inside otherwise-shipped epics: composer paste-as-attachment
+and paste-image-into-chat (§9 shipped CSV/image *document* ingestion and the
+dock drop zone, not the composer chip UI), and aggregate weak-topic
+analytics (§13 ships per-question `subtopic` tagging; the cross-attempt
+rollup waits until there's real tagged data to aggregate).
 
 ## Cross-cutting — Voice & Identity
 
@@ -171,14 +185,13 @@ scope above is in view, not just the inline-`/ai` part.
 **Backend dependency:** `plan-backend.md` §9 (note-referencing in chat) and
 §9b (note storage may need to change shape — see below).
 
-### 11. Sidebar simplification
-Collapse the global rail's Home/Notes/Cards/Quizzes shortcuts (which today
-point at "the first subspace's" tab, a slightly confusing implicit choice)
-toward Home/Workspace/Skills/Settings, with Notes/Cards/Quizzes staying as
-per-subspace tabs where they already make sense contextually. Moderate
-scope, not urgent — revisit after the P0/P1 items land and change how
-subspaces get entered.
-**Backend dependency:** none.
+### 11. Sidebar simplification — tried, reverted
+Built once (removing the global Home/Notes/Cards/Quizzes shortcuts down to
+just Home), then explicitly reverted per direct user feedback
+("out quiz and notes and memory cards buttons in the main left side bar
+like before") — the shortcuts are back in `Sidebar.tsx`. **Settled: keep
+them.** Don't re-propose this simplification later without this context —
+it was tried and rejected, not just theorized about.
 
 ## P3 — flagged, needs care before building
 

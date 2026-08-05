@@ -122,6 +122,17 @@ class NoteGenerate(BaseModel):
     topic: str | None = Field(default=None, max_length=140)
 
 
+class NoteAiInline(BaseModel):
+    """A prompt typed inline as `/ai <prompt>` in the notes editor — returns
+    a fragment to insert at the cursor, not a whole new note."""
+
+    prompt: str = Field(min_length=1, max_length=500)
+
+
+class NoteAiInlineOut(BaseModel):
+    content_md: str
+
+
 # ── Flashcards ─────────────────────────────────────────────────────────
 Grade = Literal["again", "hard", "good", "easy"]
 
@@ -182,6 +193,7 @@ class QuizQuestion(BaseModel):
     choices: list[str]
     answer_index: int
     source: str | None = None
+    subtopic: str | None = None
 
 
 class QuizOut(BaseModel):

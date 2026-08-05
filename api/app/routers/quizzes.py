@@ -83,7 +83,10 @@ async def generate_quiz(
         f"Recent conversation in this space (for context on what's actually "
         f"being studied — do not quote it directly):\n{recent}\n\n"
         "Return a JSON array; each item has fields: "
-        '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, "source": str}. '
+        '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, '
+        '"source": str, "subtopic": str}. subtopic is the specific concept '
+        "this question tests, narrower than the overall topic (e.g. "
+        "'Policy Iteration', not 'Reinforcement Learning'). "
         "Return only the JSON array — no prose, no code fences."
     )
 

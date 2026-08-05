@@ -8,10 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Editor, EditorContent, useEditor } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import Underline from '@tiptap/extension-underline'
+import { Markdown } from 'tiptap-markdown'
 import {
   createNote,
   deleteNote,
   listNotes,
+  noteAiInline,
   updateNote,
 } from '../../api/notes'
 import type { Note } from '../../api/types'
@@ -21,7 +26,7 @@ import { Chip } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Textarea } from '../../components/ui/Input'
+import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -223,6 +228,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
         <NoteEditor
           key={current.id}
           note={current}
+          subspaceId={subspaceId}
           onPatch={(patch) => applyPatch(current.id, patch)}
           onDelete={() => setConfirmDelete(current.id)}
           onBack={() => setSelectedId(null)}
@@ -241,32 +247,123 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
   )
 }
 
+const TOOLBAR: { key: string; label: string; run: (e: Editor) => void; active: (e: Editor) => boolean }[] = [
+  { key: 'bold', label: 'B', run: (e) => e.chain().focus().toggleBold().run(), active: (e) => e.isActive('bold') },
+  { key: 'italic', label: 'I', run: (e) => e.chain().focus().toggleItalic().run(), active: (e) => e.isActive('italic') },
+  { key: 'underline', label: 'U', run: (e) => e.chain().focus().toggleUnderline().run(), active: (e) => e.isActive('underline') },
+  { key: 'strike', label: 'S', run: (e) => e.chain().focus().toggleStrike().run(), active: (e) => e.isActive('strike') },
+  { key: 'bulletList', label: '•—', run: (e) => e.chain().focus().toggleBulletList().run(), active: (e) => e.isActive('bulletList') },
+  { key: 'orderedList', label: '1.', run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive('orderedList') },
+]
+
 function NoteEditor({
   note,
+  subspaceId,
   onPatch,
   onDelete,
   onBack,
 }: {
   note: Note
+  subspaceId: string
   onPatch: (patch: Partial<Note>) => void
   onDelete: () => void
   onBack: () => void
 }) {
   const [title, setTitle] = useState(note.title)
-  const [body, setBody] = useState(note.body_md)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [aiBusy, setAiBusy] = useState(false)
   const timerRef = useRef<number | null>(null)
   const { showError } = useToast()
+  const editorRef = useRef<Editor | null>(null)
+  const savedBodyRef = useRef(note.body_md)
 
-  // Debounce saves.
+  const saveBody = useCallback(
+    (markdown: string) => {
+      if (markdown === savedBodyRef.current) return
+      setStatus('saving')
+      if (timerRef.current) window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(async () => {
+        try {
+          const updated = await updateNote(note.id, { body_md: markdown })
+          savedBodyRef.current = markdown
+          onPatch({ body_md: updated.body_md, updated_at: updated.updated_at })
+          setStatus('saved')
+          window.setTimeout(() => setStatus('idle'), 1500)
+        } catch (err) {
+          setStatus('error')
+          showError(err)
+        }
+      }, 800)
+    },
+    [note.id, onPatch, showError],
+  )
+
+  const runInlineAi = useCallback(
+    async (prompt: string, from: number, to: number) => {
+      const editor = editorRef.current
+      if (!editor) return
+      setAiBusy(true)
+      editor.chain().deleteRange({ from, to }).insertContentAt(from, 'Thinking…').run()
+      try {
+        const { content_md } = await noteAiInline(subspaceId, prompt)
+        const placeholderLen = 'Thinking…'.length
+        // @ts-expect-error — the Markdown extension's storage isn't in @tiptap/core's base Storage type
+        const parsed = editor.storage.markdown.parser.parse(content_md)
+        editor
+          .chain()
+          .deleteRange({ from, to: from + placeholderLen })
+          .insertContentAt(from, parsed)
+          .run()
+      } catch (err) {
+        showError(err)
+      } finally {
+        setAiBusy(false)
+      }
+    },
+    [subspaceId, showError],
+  )
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      Markdown.configure({ html: false, transformPastedText: true }),
+    ],
+    content: note.body_md,
+    editorProps: {
+      attributes: {
+        class: 'chat-md min-h-full text-[15px] leading-[1.75] outline-none',
+      },
+      handleKeyDown(view, event) {
+        if (event.key !== 'Enter' || aiBusy) return false
+        const { $from } = view.state.selection
+        const text = $from.parent.textContent
+        if (!text.startsWith('/ai ')) return false
+        const prompt = text.slice(4).trim()
+        if (!prompt) return false
+        event.preventDefault()
+        void runInlineAi(prompt, $from.before(), $from.after())
+        return true
+      },
+    },
+    onUpdate: ({ editor }) => {
+      // @ts-expect-error — added by the Markdown extension's storage
+      saveBody(editor.storage.markdown.getMarkdown())
+    },
+  })
+
   useEffect(() => {
-    if (title === note.title && body === note.body_md) return
+    editorRef.current = editor
+  }, [editor])
+
+  useEffect(() => {
+    if (title === note.title) return
     setStatus('saving')
     if (timerRef.current) window.clearTimeout(timerRef.current)
     timerRef.current = window.setTimeout(async () => {
       try {
-        const updated = await updateNote(note.id, { title, body_md: body })
-        onPatch({ title: updated.title, body_md: updated.body_md, updated_at: updated.updated_at })
+        const updated = await updateNote(note.id, { title })
+        onPatch({ title: updated.title, updated_at: updated.updated_at })
         setStatus('saved')
         window.setTimeout(() => setStatus('idle'), 1500)
       } catch (err) {
@@ -274,11 +371,8 @@ function NoteEditor({
         showError(err)
       }
     }, 800)
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current)
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, body])
+  }, [title])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -294,23 +388,29 @@ function NoteEditor({
           {originLabel(note.origin)}
         </Chip>
         <span className="flex items-center gap-1.5 text-xs text-faint">
-          {status === 'saving' && (
+          {aiBusy && (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+              Writing…
+            </>
+          )}
+          {!aiBusy && status === 'saving' && (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
               Saving…
             </>
           )}
-          {status === 'saved' && (
+          {!aiBusy && status === 'saved' && (
             <span className="flex items-center gap-1 text-mint-deep">
               <Icon name="check" size={12} /> Saved
             </span>
           )}
-          {status === 'error' && (
+          {!aiBusy && status === 'error' && (
             <span className="flex items-center gap-1 text-coral-deep">
               <Icon name="alert" size={12} /> Save failed
             </span>
           )}
-          {status === 'idle' && `Edited ${relativeTime(note.updated_at)}`}
+          {!aiBusy && status === 'idle' && `Edited ${relativeTime(note.updated_at)}`}
         </span>
         <div className="ml-auto flex gap-2">
           <Button variant="secondary" size="sm" onClick={onDelete}>
@@ -319,20 +419,39 @@ function NoteEditor({
         </div>
       </div>
 
+      {/* Toolbar — always visible, applies to a user-typed note exactly the
+          same as an AI-written one. Type /ai <prompt> anywhere and press
+          Enter for inline generation grounded in this topic's material. */}
+      {editor && (
+        <div className="flex shrink-0 items-center gap-1 border-b border-line-soft bg-surface px-4 py-1.5 sm:px-6">
+          {TOOLBAR.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => t.run(editor)}
+              className={cn(
+                'flex h-7 w-8 items-center justify-center rounded-md font-mono text-[12px] font-bold transition-colors cursor-pointer',
+                t.active(editor) ? 'bg-brand-soft text-brand-deep' : 'text-ink-3 hover:bg-line-soft',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+          <span className="ml-3 text-[11px] text-faint">
+            Type <code className="rounded bg-well px-1 py-0.5">/ai your request</code> and press Enter
+          </span>
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="border-transparent bg-transparent px-0 text-2xl font-display font-semibold focus:border-transparent focus:ring-0"
             placeholder="Untitled note"
           />
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            className="min-h-96 border-transparent bg-transparent px-0 text-[15px] leading-[1.7] focus:border-transparent focus:ring-0"
-            placeholder="Write anything. Markdown is welcome."
-          />
+          <EditorContent editor={editor} className="min-h-0 flex-1" />
         </div>
       </div>
     </div>
