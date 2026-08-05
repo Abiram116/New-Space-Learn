@@ -5,7 +5,8 @@ import {
   reprocessDocument,
   uploadDocument,
 } from '../../api/documents'
-import type { Document } from '../../api/types'
+import { createSubspaceLink, deleteSubspaceLink, listSubspaceLinks } from '../../api/spaces'
+import type { Document, Subspace } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { Icon } from '../../components/ui/Icon'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
@@ -18,6 +19,7 @@ import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
 import { cn } from '../../lib/cn'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { useSpaces } from '../spaces/SpacesProvider'
 import { SourceItem } from './SourceItem'
 
 type LocalUpload = {
@@ -172,6 +174,8 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6">
+        <RelatedTopics subspaceId={subspaceId} />
+
         {loading && <PageSpinner label="Loading documents…" />}
 
         {error && !loading && (
@@ -251,6 +255,104 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
         onConfirm={del}
         destructive
       />
+    </div>
+  )
+}
+
+/**
+ * Explicit, opt-in links to other topics — never auto-inferred. When set,
+ * chat in this topic also draws a little context from the linked one.
+ */
+function RelatedTopics({ subspaceId }: { subspaceId: string }) {
+  const { spaces } = useSpaces()
+  const { showError, show } = useToast()
+  const [links, setLinks] = useState<Subspace[] | null>(null)
+  const [picking, setPicking] = useState(false)
+
+  useEffect(() => {
+    setLinks(null)
+    listSubspaceLinks(subspaceId)
+      .then(setLinks)
+      .catch((err) => showError(err))
+  }, [subspaceId, showError])
+
+  const candidates = spaces
+    .flatMap((sp) => sp.subspaces.map((sub) => ({ ...sub, spaceName: sp.name })))
+    .filter((sub) => sub.id !== subspaceId && !links?.some((l) => l.id === sub.id))
+
+  const add = useCallback(
+    async (linkedId: string) => {
+      setPicking(false)
+      try {
+        await createSubspaceLink(subspaceId, linkedId)
+        const updated = await listSubspaceLinks(subspaceId)
+        setLinks(updated)
+      } catch (err) {
+        showError(err)
+      }
+    },
+    [subspaceId, showError],
+  )
+
+  const remove = useCallback(
+    async (linkedId: string) => {
+      try {
+        await deleteSubspaceLink(subspaceId, linkedId)
+        setLinks((prev) => (prev ? prev.filter((l) => l.id !== linkedId) : prev))
+        show('Link removed.', 'success')
+      } catch (err) {
+        showError(err)
+      }
+    },
+    [subspaceId, show, showError],
+  )
+
+  if (links === null) return null
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <span className="text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+        Related topics
+      </span>
+      {links.map((l) => (
+        <span
+          key={l.id}
+          className="flex items-center gap-1.5 rounded-full border border-line bg-well px-2.5 py-1 text-[12.5px] text-ink-3"
+        >
+          {l.name}
+          <button
+            onClick={() => remove(l.id)}
+            className="text-faint transition-colors hover:text-coral-deep cursor-pointer"
+            aria-label={`Unlink ${l.name}`}
+          >
+            <Icon name="close" size={11} />
+          </button>
+        </span>
+      ))}
+      <div className="relative">
+        <button
+          onClick={() => setPicking((v) => !v)}
+          className="flex items-center gap-1 rounded-full border border-dashed border-line px-2.5 py-1 text-[12.5px] text-faint transition-colors hover:border-brand hover:text-brand-deep cursor-pointer"
+        >
+          <Icon name="plus" size={11} /> Link a topic
+        </button>
+        {picking && (
+          <div className="absolute left-0 top-[calc(100%+6px)] z-20 max-h-64 w-56 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-lg">
+            {candidates.length === 0 && (
+              <p className="px-2.5 py-2 text-[12.5px] text-faint">No other topics to link.</p>
+            )}
+            {candidates.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => add(c.id)}
+                className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink-3 transition-colors hover:bg-line-soft hover:text-ink cursor-pointer"
+              >
+                {c.name} <span className="text-faint">· {c.spaceName}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

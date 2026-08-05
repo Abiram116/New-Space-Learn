@@ -14,14 +14,19 @@ from ..errors import NotFound
 from ..schemas import (
     Badge,
     BriefOut,
+    BriefSuggestion,
     HeatmapCell,
     Me,
     SettingsOut,
     SettingsUpdate,
     StatsOut,
+    StudentModelIn,
+    StudentModelOut,
 )
+from ..services import student_model as student_model_service
 from ..services import supabase
 from ..services.llm import get_llm
+from ..services.streaks import compute_max_streak, compute_streak, to_date
 
 log = logging.getLogger("space_learn.me")
 router = APIRouter()
@@ -81,6 +86,27 @@ async def patch_settings(
     return SettingsOut(**{k: updated[0].get(k) for k in SettingsOut.model_fields})
 
 
+# ── Student Model ──────────────────────────────────────────────────────
+
+
+@router.get("/me/student-model", response_model=StudentModelOut)
+async def get_student_model(
+    user: CurrentUser = Depends(get_current_user),
+) -> StudentModelOut:
+    await _ensure_settings_row(user.id)
+    return await student_model_service.get(user.id)
+
+
+@router.patch("/me/student-model", response_model=StudentModelOut)
+async def patch_student_model(
+    body: StudentModelIn, user: CurrentUser = Depends(get_current_user)
+) -> StudentModelOut:
+    await _ensure_settings_row(user.id)
+    return await student_model_service.set_explicit(
+        user.id, body.model_dump(exclude_unset=True)
+    )
+
+
 # ── Stats ──────────────────────────────────────────────────────────────
 
 
@@ -118,14 +144,14 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
 
     # Streak: consecutive days ending today (or yesterday if streak-freeze on).
     freeze = bool(settings_row.get("streak_freeze_enabled", True))
-    streak_days = _compute_streak([r["day"] for r in days], today, freeze=freeze)
-    max_streak = _compute_max_streak([r["day"] for r in days])
+    streak_days = compute_streak([r["day"] for r in days], today, freeze=freeze)
+    max_streak = compute_max_streak([r["day"] for r in days])
 
     week_start = today - timedelta(days=6)
     week_seconds = sum(
         int(r.get("study_seconds", 0))
         for r in days
-        if _to_date(r["day"]) >= week_start
+        if to_date(r["day"]) >= week_start
     )
 
     # Aggregates from other tables.
@@ -182,42 +208,6 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
 
 
 # ── Internal helpers ───────────────────────────────────────────────────
-
-
-def _to_date(v: str | date) -> date:
-    return v if isinstance(v, date) else date.fromisoformat(v)
-
-
-def _compute_streak(day_strings: list[str], today: date, *, freeze: bool) -> int:
-    if not day_strings:
-        return 0
-    days_set = {_to_date(d) for d in day_strings}
-    cursor = today
-    if cursor not in days_set:
-        # Allow one grace day when streak freeze is on.
-        if freeze and (cursor - timedelta(days=1)) in days_set:
-            cursor = cursor - timedelta(days=1)
-        else:
-            return 0
-    streak = 0
-    while cursor in days_set:
-        streak += 1
-        cursor = cursor - timedelta(days=1)
-    return streak
-
-
-def _compute_max_streak(day_strings: list[str]) -> int:
-    if not day_strings:
-        return 0
-    days = sorted({_to_date(d) for d in day_strings})
-    longest = current = 1
-    for i in range(1, len(days)):
-        if (days[i] - days[i - 1]).days == 1:
-            current += 1
-            longest = max(longest, current)
-        else:
-            current = 1
-    return longest
 
 
 async def _count_cards_due(user_id: str) -> int:
@@ -288,13 +278,18 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     """
 
     facts = await _brief_facts(user.id)
+    suggestion = await _compute_suggestion(user.id)
 
     if not cfg.llm_configured:
-        return _fallback_brief(facts)
+        return _fallback_brief(facts, suggestion)
+
+    student = student_model_service.format_for_prompt(await student_model_service.get(user.id))
+    student_block = f"{student}\n\n" if student else ""
 
     prompt = (
         "You are greeting a student returning to their study app. "
         "Write a two-part response, no more than 40 words total.\n\n"
+        f"{student_block}"
         f"Facts:\n{_format_facts(facts)}\n\n"
         "Line 1 (headline): 3-6 words. Sentence case — capitalise only the "
         "first word and proper nouns. Never Title Case. No greeting words.\n"
@@ -326,15 +321,15 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     except Exception:
         # The home page must render regardless.
         log.warning("brief generation failed; using fallback", exc_info=True)
-        return _fallback_brief(facts)
+        return _fallback_brief(facts, suggestion)
 
     if len(lines) < 2:
-        return _fallback_brief(facts)
+        return _fallback_brief(facts, suggestion)
 
     headline = _desentence_case(_strip_markup(lines[0])[:70], facts.get("topic"))
     body = _strip_markup(" ".join(lines[1:]))[:180]
     if not headline or not body:
-        return _fallback_brief(facts)
+        return _fallback_brief(facts, suggestion)
 
     # The headline sits in condensed display caps in the UI, but the body does
     # not, and a Title Cased body reads like a press release. Models drift into
@@ -345,9 +340,9 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     # verify than to trust: any quantity at all sends us to deterministic copy.
     if _mentions_quantity(headline) or _mentions_quantity(body):
         log.info("brief mentioned a quantity; using fallback")
-        return _fallback_brief(facts)
+        return _fallback_brief(facts, suggestion)
 
-    return BriefOut(headline=headline, body=body, generated=True)
+    return BriefOut(headline=headline, body=body, generated=True, suggestion=suggestion)
 
 
 _NUMBER_WORDS = frozenset(
@@ -435,7 +430,7 @@ def _format_facts(f: dict) -> str:
     return "\n".join(lines)
 
 
-def _fallback_brief(f: dict) -> BriefOut:
+def _fallback_brief(f: dict, suggestion: BriefSuggestion | None) -> BriefOut:
     """Deterministic copy. Still specific — just not model-written."""
     topic, due, away = f["topic"], f["cards_due"], f["days_away"]
 
@@ -444,30 +439,108 @@ def _fallback_brief(f: dict) -> BriefOut:
             headline="Nothing here yet",
             body="Make a space for a subject you're studying, then drop in a PDF and ask it anything.",
             generated=False,
+            suggestion=suggestion,
         )
     if due > 0 and topic:
         return BriefOut(
             headline=f"{due} card{'s' if due != 1 else ''} waiting",
             body=f"Clear your {topic} review while it's still fresh, then push into new material.",
             generated=False,
+            suggestion=suggestion,
         )
     if away >= 3 and topic:
         return BriefOut(
             headline="Been a few days",
             body=f"Pick {topic} back up — a short session now costs less than relearning it later.",
             generated=False,
+            suggestion=suggestion,
         )
     if topic:
         return BriefOut(
             headline="All caught up",
             body=f"Nothing due on {topic}. Good time to add material or test yourself on something new.",
             generated=False,
+            suggestion=suggestion,
         )
     return BriefOut(
         headline="Ready when you are",
         body="Add a topic to your space and start asking questions about your own material.",
         generated=False,
+        suggestion=suggestion,
     )
+
+
+async def _compute_suggestion(user_id: str) -> BriefSuggestion | None:
+    """One concrete next action, derived from real stored data only.
+
+    Priority: a deck with overdue cards beats a weak quiz topic, since
+    reviewing something already learned is lower-friction than a full
+    retake. Both are gated (non-trivial overdue count / enough attempts to
+    trust the average) so this never fires on noise.
+    """
+    decks = await supabase.db_select(
+        "decks",
+        filters={"user_id": f"eq.{user_id}"},
+        select="id,name,subspace_id,subspaces(subject_id)",
+    )
+    if decks:
+        deck_ids = ",".join(d["id"] for d in decks)
+        overdue = await supabase.db_select(
+            "flashcards",
+            filters={
+                "user_id": f"eq.{user_id}",
+                "deck_id": f"in.({deck_ids})",
+                "due_at": f"lte.{datetime.now(UTC).isoformat()}",
+            },
+            select="deck_id",
+        )
+        if overdue:
+            counts: dict[str, int] = {}
+            for row in overdue:
+                counts[row["deck_id"]] = counts.get(row["deck_id"], 0) + 1
+            top_deck_id = max(counts, key=lambda k: counts[k])
+            deck = next((d for d in decks if d["id"] == top_deck_id), None)
+            subject_id = ((deck or {}).get("subspaces") or {}).get("subject_id")
+            if deck and subject_id and counts[top_deck_id] >= 3:
+                return BriefSuggestion(
+                    label=f"Review {deck['name']}",
+                    route=f"/s/{subject_id}/{deck['subspace_id']}/flashcards",
+                )
+
+    results = await supabase.db_select(
+        "quiz_results",
+        filters={"user_id": f"eq.{user_id}"},
+        select="score,quizzes(subspace_id,topic,subspaces(subject_id))",
+        order="submitted_at.desc",
+        limit=30,
+    )
+    groups: dict[str, dict] = {}
+    for r in results:
+        q = r.get("quizzes") or {}
+        subspace_id = q.get("subspace_id")
+        if not subspace_id:
+            continue
+        g = groups.setdefault(
+            subspace_id,
+            {"scores": [], "topic": q.get("topic"), "subject_id": (q.get("subspaces") or {}).get("subject_id")},
+        )
+        g["scores"].append(int(r["score"]))
+
+    candidates = [
+        (sid, sum(g["scores"]) / len(g["scores"]), g)
+        for sid, g in groups.items()
+        if len(g["scores"]) >= 2 and g["subject_id"]
+    ]
+    if candidates:
+        sid, avg, g = min(candidates, key=lambda c: c[1])
+        if avg < 75:
+            topic = g["topic"] or "this topic"
+            return BriefSuggestion(
+                label=f"Retake the {topic} quiz",
+                route=f"/s/{g['subject_id']}/{sid}/quizzes",
+            )
+
+    return None
 
 
 def _strip_markup(text: str) -> str:

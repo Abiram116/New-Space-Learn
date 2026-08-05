@@ -121,15 +121,12 @@ function Hero() {
         <div className="flex flex-col gap-6">
           <h1 className="nameplate text-[clamp(46px,9vw,104px)] leading-[0.86] text-ink">
             <DealText as="span" className="block">
-              Your notes
-            </DealText>
-            <DealText as="span" className="block" delay={90}>
-              are a
+              It remembers
             </DealText>
             <span className="relative inline-block text-brand">
               <FoilText>
-                <DealText as="span" delay={220}>
-                  deck
+                <DealText as="span" delay={140}>
+                  what you forgot
                 </DealText>
               </FoilText>
               <svg
@@ -148,15 +145,16 @@ function Hero() {
               </svg>
             </span>
             <DealText as="span" className="block" delay={300}>
-              you never built.
+              and picks up right there.
             </DealText>
           </h1>
 
           <Rise delay={520}>
             <p className="max-w-md text-[15px] leading-relaxed text-ink-3">
-              Drop in your lecture PDFs. Ask anything and get an answer that points
-              at the page it came from. Keep what mattered as cards, notes and
-              quizzes — without writing a single one yourself.
+              Drop in your lecture PDFs. It reads them, remembers what you've
+              actually covered, and tells you what to study next — with cards,
+              notes and quizzes it writes for you, each one still pointing back
+              at the page it came from.
             </p>
           </Rise>
 
@@ -357,7 +355,7 @@ const SPILL: SpillCard[] = [
   {
     icon: 'deck',
     kind: 'Flashcard',
-    title: 'What does γ control?',
+    title: 'What does the discount factor do?',
     body: 'How much future reward counts against reward you could take right now.',
     code: 'deck · Bellman',
     tone: 'sun',
@@ -392,9 +390,11 @@ const SPILL: SpillCard[] = [
 function PackScene() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>()
 
-  // Three beats inside the pin: tear, spill, settle.
-  const tear = mapRange(progress, 0, 0.28, 0, 1)
-  const spill = mapRange(progress, 0.2, 0.75, 0, 1)
+  // Three beats inside the pin: tear, spill, settle. The tear window is
+  // short on purpose — it used to hold a bare, textureless rectangle on
+  // screen for nearly a third of the pin before anything happened.
+  const tear = mapRange(progress, 0, 0.16, 0, 1)
+  const spill = mapRange(progress, 0.14, 0.7, 0, 1)
   const headline = mapRange(progress, 0.55, 0.9, 0, 1)
 
   return (
@@ -403,25 +403,51 @@ function PackScene() {
         <TableLight />
 
         <div className="relative mx-auto w-full max-w-6xl px-5">
-          {/* Torn pack halves retreat off both edges. */}
+          {/* The same pack from the hero, now mid-tear rather than a bare box. */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 flex items-center justify-center"
             style={{ opacity: 1 - tear }}
           >
             <div
-              className="h-[300px] w-[240px] rounded-[18px] border border-line"
+              className="relative h-[300px] w-[240px] overflow-hidden rounded-[18px] border border-line"
               style={{
                 background:
-                  'linear-gradient(150deg,#3a2620,#2b1e1a 40%,#41291f 60%,#2a1d19)',
+                  'linear-gradient(150deg,#3a2620 0%,#2b1e1a 30%,#41291f 55%,#2a1d19 78%,#3c2721 100%)',
+                boxShadow:
+                  'inset 0 2px 0 rgba(255,237,220,0.14), inset 0 -20px 40px rgba(0,0,0,0.5), 0 30px 60px -20px rgba(0,0,0,0.9)',
                 transform: `scale(${1 - tear * 0.25})`,
-                boxShadow: '0 30px 60px -20px rgba(0,0,0,0.9)',
               }}
-            />
+            >
+              <div
+                aria-hidden
+                className="absolute inset-[-30%]"
+                style={{
+                  background:
+                    'linear-gradient(115deg,transparent 40%,rgba(255,197,61,0.22) 46%,rgba(46,230,214,0.26) 51%,rgba(255,61,139,0.22) 56%,transparent 62%)',
+                  transform: `translateX(${-55 + tear * 110}%)`,
+                }}
+              />
+              <div
+                aria-hidden
+                className="absolute inset-x-0 top-0 h-5 opacity-70"
+                style={{
+                  backgroundImage:
+                    'repeating-linear-gradient(90deg,#4a3c32 0 3px,transparent 3px 7px)',
+                }}
+              />
+              <div className="relative flex h-full flex-col items-center justify-center gap-2.5 px-6 text-center">
+                <LogoMark size={40} />
+                <span className="nameplate text-[22px] leading-[0.9] text-ink">
+                  Space Learn
+                </span>
+                <span className="setcode">Starter pack</span>
+              </div>
+            </div>
           </div>
 
           {/* The stage the cards land on. */}
-          <div className="relative mx-auto h-[68svh] w-full max-w-4xl">
+          <div className="relative mx-auto h-[68svh] w-full">
             {SPILL.map((card, i) => {
               const stagger = mapRange(spill, i * 0.12, 0.55 + i * 0.12, 0, 1)
               const eased = 1 - Math.pow(1 - stagger, 3)
@@ -479,7 +505,7 @@ function PackScene() {
               <h2 className="nameplate max-w-lg text-center text-[clamp(28px,4.5vw,52px)] leading-[0.92] text-ink">
                 One conversation.
                 <br />
-                <span className="text-brand">Four things to study from.</span>
+                <span className="text-brand">Everything it becomes.</span>
               </h2>
             </div>
           </div>

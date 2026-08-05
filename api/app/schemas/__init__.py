@@ -50,6 +50,17 @@ class SubspaceUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+class SubspaceLinkCreate(BaseModel):
+    linked_subspace_id: str
+
+
+class SuggestSubspaceOut(BaseModel):
+    """None when the model isn't configured or couldn't read the file —
+    the frontend falls back to an empty, student-typed name either way."""
+
+    name: str | None
+
+
 # ── Chat ───────────────────────────────────────────────────────────────
 class Citation(BaseModel):
     marker: int
@@ -105,6 +116,10 @@ class NoteCreate(BaseModel):
 class NoteUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=140)
     body_md: str | None = None
+
+
+class NoteGenerate(BaseModel):
+    topic: str | None = Field(default=None, max_length=140)
 
 
 # ── Flashcards ─────────────────────────────────────────────────────────
@@ -191,6 +206,14 @@ class QuizResultOut(BaseModel):
 
 
 # ── Skills ─────────────────────────────────────────────────────────────
+# A Skill is a behavior package, not just a system-prompt string:
+#   reasoning style  → `instructions` (unrenamed — no data loss on migration)
+#   memory scope     → `memory_scope`: how much chat history it draws on
+#   output format    → `output_format`: a formatting instruction, optional
+#   allowed tools    → `capabilities`: which agents/context it may use
+MemoryScope = Literal["session", "topic", "all"]
+
+
 class SkillOut(BaseModel):
     id: str
     name: str
@@ -199,6 +222,8 @@ class SkillOut(BaseModel):
     description: str | None
     instructions: str
     capabilities: list[str]
+    memory_scope: MemoryScope
+    output_format: str | None
     is_library: bool
 
 
@@ -209,6 +234,8 @@ class SkillCreate(BaseModel):
     description: str | None = None
     instructions: str = Field(min_length=1, max_length=4000)
     capabilities: list[str] = Field(default_factory=lambda: ["docs", "quiz"])
+    memory_scope: MemoryScope = "session"
+    output_format: str | None = Field(default=None, max_length=300)
 
 
 class SkillUpdate(BaseModel):
@@ -218,6 +245,8 @@ class SkillUpdate(BaseModel):
     description: str | None = None
     instructions: str | None = Field(default=None, min_length=1, max_length=4000)
     capabilities: list[str] | None = None
+    memory_scope: MemoryScope | None = None
+    output_format: str | None = Field(default=None, max_length=300)
 
 
 # ── Stats / settings ───────────────────────────────────────────────────
@@ -239,6 +268,40 @@ class Badge(BaseModel):
     hint: str
 
 
+class StudentModelIn(BaseModel):
+    """Explicit, student-set fields only — computed fields (weak/strong
+    areas, streak) are never accepted from the client."""
+
+    learning_style: str | None = Field(default=None, max_length=60)
+    session_length_minutes: int | None = Field(default=None, ge=5, le=180)
+    exam_context: str | None = Field(default=None, max_length=140)
+    teaching_preference: str | None = Field(default=None, max_length=400)
+
+
+class TopicSignal(BaseModel):
+    subspace_id: str
+    topic: str
+    average: int
+
+
+class StudentModelOut(BaseModel):
+    learning_style: str | None
+    session_length_minutes: int | None
+    exam_context: str | None
+    teaching_preference: str | None
+    weak_areas: list[TopicSignal]
+    strong_areas: list[TopicSignal]
+    streak_days: int
+
+
+class BriefSuggestion(BaseModel):
+    """A concrete next action computed from real stored data — never model
+    output, so it can't drift from what `route` actually leads to."""
+
+    label: str
+    route: str
+
+
 class BriefOut(BaseModel):
     """The personal re-entry line on Home. `generated` is false when it fell
     back to deterministic copy, so the UI can avoid implying an AI wrote it."""
@@ -246,6 +309,7 @@ class BriefOut(BaseModel):
     headline: str
     body: str
     generated: bool
+    suggestion: BriefSuggestion | None = None
 
 
 class StatsOut(BaseModel):

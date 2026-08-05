@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { Skill, Tone } from './types'
+import type { MemoryScope, Skill, Tone } from './types'
 
 export type SkillInput = {
   name: string
@@ -8,6 +8,8 @@ export type SkillInput = {
   description?: string | null
   instructions: string
   capabilities?: string[]
+  memory_scope?: MemoryScope
+  output_format?: string | null
 }
 
 export const listSkills = () => apiFetch<Skill[]>('/skills')

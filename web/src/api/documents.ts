@@ -3,6 +3,18 @@ import { apiFetch } from './client'
 import { ApiError } from './errors'
 import type { Document } from './types'
 
+/** One cheap model call over a file's own text — used only when a student
+ *  drops material into a subject before naming a topic to hold it. */
+export const suggestSubspaceName = (spaceId: string, file: File) => {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  return apiFetch<{ name: string | null }>(`/spaces/${spaceId}/suggest-subspace`, {
+    method: 'POST',
+    body: form,
+    formData: true,
+  })
+}
+
 let tokenProvider: () => string | null = () => null
 export function setUploadTokenProvider(fn: () => string | null): void {
   tokenProvider = fn

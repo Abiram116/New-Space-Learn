@@ -62,6 +62,28 @@ async def retrieve(subspace_id: str, question: str, *, k: int = 4) -> list[Retri
     ]
 
 
+async def retrieve_with_links(
+    subspace_id: str,
+    question: str,
+    linked_subspace_ids: list[str],
+    *,
+    k: int = 4,
+    link_k: int = 2,
+) -> list[Retrieved]:
+    """The subspace actually being asked about, plus a smaller pull from
+    explicitly linked subspaces (see Linked Subspaces in docs/v2-review.md).
+    Always additive — a link only adds sources, never replaces the primary
+    subspace's own material."""
+
+    primary = await retrieve(subspace_id, question, k=k)
+    if not linked_subspace_ids:
+        return primary
+    extra: list[Retrieved] = []
+    for linked_id in linked_subspace_ids:
+        extra.extend(await retrieve(linked_id, question, k=link_k))
+    return primary + extra
+
+
 def build_prompt(
     *,
     subspace_name: str,
@@ -71,6 +93,7 @@ def build_prompt(
     retrieved: list[Retrieved],
     answer_only_from_docs: bool,
     always_show_citations: bool,
+    student_context: str = "",
 ) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     """Return (messages_for_llm, citations_metadata_for_frontend)."""
 
@@ -113,6 +136,8 @@ def build_prompt(
     for extra in active_skill_instructions:
         if extra.strip():
             system_parts.append(extra.strip())
+    if student_context:
+        system_parts.append(student_context)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(system_parts)}]
     if sources_block:

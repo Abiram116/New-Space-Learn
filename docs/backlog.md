@@ -7,6 +7,14 @@ than building straight from these notes. See [retrospective.md](retrospective.md
 for the standing checklist every scoped item should pass before it's called
 done.
 
+**A prioritized, scoped version of this list exists now:** see
+[plan-frontend.md](plan-frontend.md) and [plan-backend.md](plan-backend.md),
+written after the review in [v2-review.md](v2-review.md). The "Cross-context
+knowledge" and "Personalization" items below were superseded by that
+review's more concrete "Linked Subspaces" and "Student Model" epics — kept
+here for history, but scope new work from the plan docs, not from this raw
+list.
+
 ## Layout / space usage
 
 The quiz-taking screen, quiz results, the quiz list (also reported as not

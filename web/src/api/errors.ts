@@ -14,6 +14,7 @@ export type ErrorCode =
   | 'rate_limited'
   | 'upstream_unavailable'
   | 'not_configured'
+  | 'nothing_indexed'
   | 'internal_error'
   | 'network'
   | 'config'
@@ -57,6 +58,7 @@ const DEFAULTS: Record<ErrorCode, string> = {
   rate_limited: 'Slow down for a moment and try again.',
   upstream_unavailable: 'A service we depend on is offline. Try again shortly.',
   not_configured: 'This feature is not connected yet.',
+  nothing_indexed: 'Nothing indexed on this topic yet. Upload a document first.',
   internal_error: 'Something went wrong on our side.',
   network: "Can't reach the server. Check your connection and try again.",
   config: 'The app is missing a required setting.',

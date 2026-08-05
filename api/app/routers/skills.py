@@ -23,6 +23,8 @@ def _to_skill(row: dict) -> SkillOut:
         description=row.get("description"),
         instructions=row.get("instructions", ""),
         capabilities=row.get("capabilities") or [],
+        memory_scope=row.get("memory_scope") or "session",
+        output_format=row.get("output_format"),
         is_library=bool(row.get("is_library")),
     )
 

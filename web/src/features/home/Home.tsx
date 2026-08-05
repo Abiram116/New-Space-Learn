@@ -67,12 +67,21 @@ export function Home() {
 
           {anySubspaces && first && (
             <div className="flex flex-wrap items-center gap-2.5">
-              <Link to={due > 0 ? `${first.link}/flashcards` : first.link}>
-                <Button size="lg">
-                  {due > 0 ? `Review ${due} card${due === 1 ? '' : 's'}` : 'Pick up where you left off'}
-                  <Icon name="arrowRight" size={15} />
-                </Button>
-              </Link>
+              {brief.data?.suggestion ? (
+                <Link to={brief.data.suggestion.route}>
+                  <Button size="lg">
+                    {brief.data.suggestion.label}
+                    <Icon name="arrowRight" size={15} />
+                  </Button>
+                </Link>
+              ) : (
+                <Link to={due > 0 ? `${first.link}/flashcards` : first.link}>
+                  <Button size="lg">
+                    {due > 0 ? `Review ${due} card${due === 1 ? '' : 's'}` : 'Pick up where you left off'}
+                    <Icon name="arrowRight" size={15} />
+                  </Button>
+                </Link>
+              )}
               {due > 0 && (
                 <Link to={first.link}>
                   <Button variant="secondary" size="lg">

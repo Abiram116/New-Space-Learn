@@ -21,7 +21,7 @@ import {
   updateSkill,
   type SkillInput,
 } from '../../api/skills'
-import type { Skill } from '../../api/types'
+import type { MemoryScope, Skill } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
@@ -46,6 +46,12 @@ const CAPABILITY_OPTIONS = [
   { value: 'flashcards', label: 'Flashcards' },
 ]
 
+const MEMORY_SCOPE_OPTIONS: { value: MemoryScope; label: string; hint: string }[] = [
+  { value: 'session', label: 'This session', hint: 'Last ~8 messages.' },
+  { value: 'topic', label: 'This topic', hint: 'A longer window of this topic’s history.' },
+  { value: 'all', label: 'Everything', hint: 'The widest history window this topic has.' },
+]
+
 const emptyForm = (): SkillInput => ({
   name: '',
   icon: 'skill',
@@ -53,6 +59,8 @@ const emptyForm = (): SkillInput => ({
   description: '',
   instructions: '',
   capabilities: ['docs', 'quiz'],
+  memory_scope: 'session',
+  output_format: '',
 })
 
 export function SkillsView() {
@@ -109,6 +117,8 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         description: editingExisting.description ?? '',
         instructions: editingExisting.instructions,
         capabilities: editingExisting.capabilities,
+        memory_scope: editingExisting.memory_scope,
+        output_format: editingExisting.output_format ?? '',
       })
     } else {
       setForm(emptyForm())
@@ -149,6 +159,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         name,
         description: form.description?.trim() || null,
         instructions,
+        output_format: form.output_format?.trim() || null,
       }
       if (editingExisting) {
         const updated = await updateSkill(editingExisting.id, payload)
@@ -194,6 +205,8 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         description: lib.description ?? '',
         instructions: lib.instructions,
         capabilities: lib.capabilities,
+        memory_scope: lib.memory_scope,
+        output_format: lib.output_format,
       })
       setOwn((prev) => (prev ? [created, ...prev] : [created]))
       setSelectedId(created.id)
@@ -285,6 +298,10 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         </p>
                       )}
                       <div className="flex items-center gap-3 text-[11px] text-faint">
+                        <span>
+                          Remembers {MEMORY_SCOPE_OPTIONS.find((o) => o.value === skill.memory_scope)?.label.toLowerCase() ?? 'this session'}
+                        </span>
+                        <span>·</span>
                         <span>
                           {skill.capabilities.length} capabilit
                           {skill.capabilities.length === 1 ? 'y' : 'ies'}
@@ -432,6 +449,36 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               })}
             </div>
           </div>
+
+          <div className="flex flex-col gap-1.5 text-xs">
+            <span className="font-semibold text-muted">Remembers</span>
+            <div className="flex flex-wrap gap-1.5">
+              {MEMORY_SCOPE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  title={opt.hint}
+                  onClick={() => setForm({ ...form, memory_scope: opt.value })}
+                  className={cn(
+                    'rounded-full px-2.5 py-1.5 cursor-pointer',
+                    form.memory_scope === opt.value
+                      ? 'bg-line-soft text-ink'
+                      : 'border-[1.5px] border-line bg-canvas text-faint',
+                  )}
+                >
+                  {form.memory_scope === opt.value ? '✓ ' : ''}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Input
+            label="Output format"
+            value={form.output_format ?? ''}
+            onChange={(e) => setForm({ ...form, output_format: e.target.value })}
+            placeholder="e.g. bullet points only, or one short paragraph"
+            hint="Optional — a formatting rule added on top of the instructions above."
+          />
 
           <div className="mt-auto flex gap-2 pt-3">
             <Button onClick={save} disabled={busy} className="flex-1">

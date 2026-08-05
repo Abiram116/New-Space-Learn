@@ -75,6 +75,17 @@ class NotConfigured(UpstreamUnavailable):
     message = "This feature isn't configured yet."
 
 
+class NothingIndexed(ApiError):
+    """RAG retrieval found zero chunks for a generation request. Distinct
+    from a failure: the request is fine, there's just nothing to ground it
+    on yet, and the model must not be left to free-associate on a bare
+    topic string instead."""
+
+    code = "nothing_indexed"
+    status = 422
+    message = "Nothing indexed on this topic yet. Upload a document first."
+
+
 def _envelope(code: str, message: str, status: int, extra: Any = None) -> JSONResponse:
     body: dict[str, Any] = {"error": {"code": code, "message": message}}
     if extra is not None:

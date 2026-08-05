@@ -14,8 +14,8 @@ from fastapi import APIRouter, Depends
 
 from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import ApiError, NotFound, UpstreamUnavailable
-from ..guards import assert_deck, assert_subspace
+from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
+from ..guards import assert_deck, assert_subspace, subspace_label
 from ..schemas import (
     CardsGenerate,
     DeckCreate,
@@ -26,9 +26,11 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import activity, rag, supabase
+from ..services import activity, rag, student_model, supabase
+from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
+from ..services.voice import CARDS_AGENT_VOICE
 
 log = logging.getLogger("space_learn.cards")
 router = APIRouter()
@@ -200,17 +202,22 @@ async def generate_cards(
     pairs grounded in the subspace's own indexed material.
     """
 
-    await assert_subspace(user.id, subspace_id)
+    subspace = await assert_subspace(user.id, subspace_id)
     await consume_llm_quota(user.id, cost=2)
 
     topic = body.topic or "the key concepts in this material"
+    label = subspace_label(subspace)
     context = body.source_text or ""
     if not context:
         retrieved = await rag.retrieve(subspace_id, topic, k=6)
+        if not retrieved:
+            raise NothingIndexed()
         context = "\n\n".join(f"- {r.content}" for r in retrieved)
+    history = await recent_history(user.id, subspace_id)
+    student_context = student_model.format_for_prompt(await student_model.get(user.id))
 
     if settings.llm_configured:
-        pairs = await _generate_pairs(topic, context, body.count)
+        pairs = await _generate_pairs(topic, label, context, history, student_context, body.count)
     else:
         pairs = []
 
@@ -310,27 +317,37 @@ def _deck_name(topic: str) -> str:
     return (clean[:1].upper() + clean[1:])[:80] or 'New deck'
 
 
-async def _generate_pairs(topic: str, context: str, count: int) -> list[dict]:
+async def _generate_pairs(
+    topic: str,
+    label: str,
+    context: str,
+    history: list[dict[str, str]],
+    student_context: str,
+    count: int,
+) -> list[dict]:
     """Ask for `count` Q/A pairs as JSON. Returns [] rather than raising on a
     malformed reply, so the caller owns the user-facing message."""
 
-    material = context.strip() or "(no indexed material — use general knowledge of the topic)"
+    material = context.strip()
+    recent = format_history(history) or "(no prior chat in this space)"
     prompt = (
-        f"Write {count} flashcards about '{topic}'.\n\n"
+        f"Write {count} flashcards about '{topic}', within the subject "
+        f"'{label}' — resolve any ambiguity in the topic name using that "
+        f"subject, not a generic reading of the words.\n\n"
+        f"Recent conversation in this space (for context on what's actually "
+        f"being studied — do not quote it directly):\n{recent}\n\n"
         f"Material:\n{material}\n\n"
         'Return ONLY a JSON array. Each item: {"front": str, "back": str}. '
         "front is a single question. back is a complete but compact answer, "
         "2-3 sentences at most. Plain sentences only — no markdown, no "
         "asterisks, no headings, no numbering. No prose outside the array."
     )
+    system = CARDS_AGENT_VOICE + (f"\n\n{student_context}" if student_context else "")
     try:
         parts: list[str] = []
         async for delta in get_llm().stream_chat(
             [
-                {
-                    "role": "system",
-                    "content": "You write precise study flashcards. You output only JSON.",
-                },
+                {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
             model=settings.groq_model,

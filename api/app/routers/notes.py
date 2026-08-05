@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 
+from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import NotFound
-from ..guards import assert_subspace
-from ..schemas import NoteCreate, NoteOut, NoteUpdate, OkOut
-from ..services import supabase
+from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
+from ..guards import assert_subspace, subspace_label
+from ..schemas import NoteCreate, NoteGenerate, NoteOut, NoteUpdate, OkOut
+from ..services import activity, rag, student_model, supabase
+from ..services.chat_context import format_history, recent_history
+from ..services.llm import get_llm
+from ..services.ratelimit import consume_llm_quota
+from ..services.voice import NOTES_AGENT_VOICE
 
+log = logging.getLogger("space_learn.notes")
 router = APIRouter()
 
 
@@ -60,6 +68,100 @@ async def create_note(
             "updated_at": now,
         },
     )
+    return _to_note(inserted[0])
+
+
+@router.post(
+    "/subspaces/{subspace_id}/notes/generate", response_model=NoteOut, status_code=201
+)
+async def generate_note(
+    subspace_id: str,
+    body: NoteGenerate,
+    user: CurrentUser = Depends(get_current_user),
+) -> NoteOut:
+    """Write a real study note from this space's material and recent chat,
+    rather than just copying the last chat reply verbatim into a note row."""
+
+    subspace = await assert_subspace(user.id, subspace_id)
+    await consume_llm_quota(user.id, cost=2)
+
+    topic = body.topic or "the key concepts in this material"
+    label = subspace_label(subspace)
+    retrieved = await rag.retrieve(subspace_id, topic, k=6)
+    history = await recent_history(user.id, subspace_id)
+    if not retrieved and not history:
+        raise NothingIndexed()
+    context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
+    recent = format_history(history) or "(no prior chat in this space)"
+    student_context = student_model.format_for_prompt(await student_model.get(user.id))
+
+    if not settings.llm_configured:
+        raise UpstreamUnavailable("Note generation isn't configured yet.")
+
+    prompt = (
+        f"Write a study note on '{topic}', within the subject '{label}' — "
+        f"resolve any ambiguity in the topic name using that subject, not a "
+        f"generic reading of the words.\n\n"
+        f"Recent conversation in this space:\n{recent}\n\n"
+        f"Material:\n{context}\n\n"
+        'Return ONLY a JSON object: {"title": str, "body_md": str}. '
+        "title is under 8 words, no punctuation at the end. body_md is the "
+        "note itself in markdown — headings, bullets, bold where it earns "
+        "its place. Ground every claim in the material and conversation "
+        "above; do not invent facts not present in either. No prose outside "
+        "the JSON object."
+    )
+
+    try:
+        parts: list[str] = []
+        async for delta in get_llm().stream_chat(
+            [
+                {
+                    "role": "system",
+                    "content": NOTES_AGENT_VOICE
+                    + (f"\n\n{student_context}" if student_context else ""),
+                },
+                {"role": "user", "content": prompt},
+            ],
+            model=settings.groq_model,
+            temperature=0.4,
+        ):
+            parts.append(delta)
+        raw = "".join(parts)
+    except ApiError:
+        raise
+    except Exception as e:
+        log.exception("note generation failed")
+        raise UpstreamUnavailable("Couldn't write a note just now.") from e
+
+    start, end = raw.find("{"), raw.rfind("}")
+    title, note_body = None, None
+    if start != -1 and end > start:
+        try:
+            data = json.loads(raw[start : end + 1])
+            title = str(data.get("title", "")).strip()[:140] or None
+            note_body = str(data.get("body_md", "")).strip() or None
+        except json.JSONDecodeError:
+            pass
+
+    if not title or not note_body:
+        raise UpstreamUnavailable(
+            "The note came back in an unexpected format. Try again."
+        )
+
+    now = datetime.now(UTC).isoformat()
+    inserted = await supabase.db_insert(
+        "notes",
+        {
+            "user_id": user.id,
+            "subspace_id": subspace_id,
+            "title": title,
+            "body_md": note_body,
+            "origin": "agent",
+            "updated_at": now,
+        },
+    )
+    await activity.touch_subspace(subspace_id)
     return _to_note(inserted[0])
 
 

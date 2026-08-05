@@ -9,12 +9,14 @@ from fastapi import APIRouter, Depends
 
 from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import ApiError, NotFound, UpstreamUnavailable
-from ..guards import assert_subspace
+from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
+from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
-from ..services import activity, rag, supabase
+from ..services import activity, rag, student_model, supabase
+from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
+from ..services.voice import QUIZ_AGENT_VOICE
 
 log = logging.getLogger("space_learn.quiz")
 router = APIRouter()
@@ -59,17 +61,27 @@ async def generate_quiz(
 ) -> QuizOut:
     # Must come first: rag.retrieve() runs under the service-role key, so an
     # unvalidated subspace_id would read another user's document chunks.
-    await assert_subspace(user.id, subspace_id)
+    subspace = await assert_subspace(user.id, subspace_id)
     await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
 
     retrieved = await rag.retrieve(subspace_id, body.topic or "core concepts", k=6)
+    if not retrieved and settings.llm_configured:
+        raise NothingIndexed()
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
+    label = subspace_label(subspace)
+    history = await recent_history(user.id, subspace_id)
+    recent = format_history(history) or "(no prior chat in this space)"
+    student_context = student_model.format_for_prompt(await student_model.get(user.id))
 
     prompt = (
         f"Write {body.count} multiple-choice questions about "
-        f"'{body.topic or 'the key concepts in this material'}'. "
+        f"'{body.topic or 'the key concepts in this material'}', within the "
+        f"subject '{label}' — resolve any ambiguity in the topic name using "
+        f"that subject, not a generic reading of the words. "
         "Use ONLY this material:\n\n"
         f"{context}\n\n"
+        f"Recent conversation in this space (for context on what's actually "
+        f"being studied — do not quote it directly):\n{recent}\n\n"
         "Return a JSON array; each item has fields: "
         '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, "source": str}. '
         "Return only the JSON array — no prose, no code fences."
@@ -86,7 +98,8 @@ async def generate_quiz(
                 [
                     {
                         "role": "system",
-                        "content": "You write concise, unambiguous MCQ quiz questions.",
+                        "content": QUIZ_AGENT_VOICE
+                        + (f"\n\n{student_context}" if student_context else ""),
                     },
                     {"role": "user", "content": prompt},
                 ],

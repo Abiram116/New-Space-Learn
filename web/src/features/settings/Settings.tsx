@@ -15,8 +15,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings } from '../../api/me'
-import type { Settings as Prefs } from '../../api/types'
+import { getSettings, getStudentModel, updateSettings, updateStudentModel } from '../../api/me'
+import type { Settings as Prefs, StudentModel } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
@@ -27,7 +27,7 @@ import { useToast } from '../../components/ui/Toast'
 import { useFallbackSubspace } from '../../lib/nav'
 import { cn } from '../../lib/cn'
 
-const SECTIONS = ['Account', 'Study', 'AI & sources', 'Skills', 'Privacy'] as const
+const SECTIONS = ['Account', 'Study', 'Student model', 'AI & sources', 'Skills', 'Privacy'] as const
 type Section = (typeof SECTIONS)[number]
 
 const PACE_LABEL: Record<Prefs['spaced_pace'], string> = {
@@ -44,12 +44,16 @@ export function Settings() {
 
   const [active, setActive] = useState<Section>('Account')
   const [prefs, setPrefs] = useState<Prefs | null>(null)
+  const [student, setStudent] = useState<StudentModel | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
 
   useEffect(() => {
     getSettings()
       .then(setPrefs)
+      .catch((err) => setError(friendlyMessage(err)))
+    getStudentModel()
+      .then(setStudent)
       .catch((err) => setError(friendlyMessage(err)))
   }, [])
 
@@ -70,6 +74,25 @@ export function Settings() {
       }
     },
     [prefs, showError],
+  )
+
+  const patchStudent = useCallback(
+    async (fieldKey: string, updates: Partial<StudentModel>) => {
+      if (!student) return
+      const optimistic = { ...student, ...updates }
+      setStudent(optimistic)
+      setSavingKey(fieldKey)
+      try {
+        const updated = await updateStudentModel(updates)
+        setStudent(updated)
+      } catch (err) {
+        setStudent(student)
+        showError(err)
+      } finally {
+        setSavingKey(null)
+      }
+    },
+    [student, showError],
   )
 
   const doSignOut = async () => {
@@ -187,6 +210,83 @@ export function Settings() {
                 Reminders will resume when the notifier is live — your time is
                 saved either way.
               </p>
+            </>
+          )}
+
+          {student && active === 'Student model' && (
+            <>
+              <SectionLabel>STUDENT MODEL</SectionLabel>
+              <p className="text-xs text-faint">
+                What the AI knows about how you study — the fields below feed
+                every chat reply and generated card, quiz, and note. Weak and
+                strong areas are computed from your real quiz scores, not
+                something you set.
+              </p>
+              <Card className="overflow-hidden text-[13px]">
+                <RowWithText
+                  label="Learning style"
+                  placeholder="e.g. visual, worked examples, analogies"
+                  value={student.learning_style}
+                  onChange={(v) => patchStudent('learning_style', { learning_style: v })}
+                  saving={savingKey === 'learning_style'}
+                />
+                <RowWithNumber
+                  label="Session length"
+                  suffix="min"
+                  value={student.session_length_minutes ?? 20}
+                  onChange={(n) =>
+                    patchStudent('session_length_minutes', { session_length_minutes: n })
+                  }
+                  saving={savingKey === 'session_length_minutes'}
+                  min={5}
+                  max={180}
+                />
+                <RowWithText
+                  label="Studying for"
+                  placeholder="e.g. Amazon OA next week"
+                  value={student.exam_context}
+                  onChange={(v) => patchStudent('exam_context', { exam_context: v })}
+                  saving={savingKey === 'exam_context'}
+                  last
+                />
+              </Card>
+              <Card className="p-3.5 text-[13px]">
+                <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
+                <textarea
+                  value={student.teaching_preference ?? ''}
+                  onChange={(e) =>
+                    patchStudent('teaching_preference', { teaching_preference: e.target.value || null })
+                  }
+                  placeholder="Optional — free text the AI reads before every reply."
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-line bg-well px-2.5 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+                />
+                {savingKey === 'teaching_preference' && (
+                  <div className="mt-1.5">
+                    <SavingDot />
+                  </div>
+                )}
+              </Card>
+
+              {(student.weak_areas.length > 0 || student.strong_areas.length > 0) && (
+                <Card className="p-3.5 text-[13px]">
+                  <div className="mb-2 text-ink-3">From your quiz history</div>
+                  <div className="flex flex-col gap-1.5">
+                    {student.weak_areas.map((a) => (
+                      <div key={a.subspace_id} className="flex items-center justify-between">
+                        <span className="text-ink">{a.topic}</span>
+                        <span className="text-coral-deep">{a.average}% avg</span>
+                      </div>
+                    ))}
+                    {student.strong_areas.map((a) => (
+                      <div key={a.subspace_id} className="flex items-center justify-between">
+                        <span className="text-ink">{a.topic}</span>
+                        <span className="text-mint-deep">{a.average}% avg</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              )}
             </>
           )}
 
@@ -382,6 +482,35 @@ function RowWithTime({
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
         className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
+      />
+      {saving && <SavingDot />}
+    </RowShell>
+  )
+}
+
+function RowWithText({
+  label,
+  value,
+  placeholder,
+  onChange,
+  saving,
+  last,
+}: {
+  label: string
+  value: string | null
+  placeholder?: string
+  onChange: (next: string | null) => void
+  saving?: boolean
+  last?: boolean
+}) {
+  return (
+    <RowShell label={label} last={last}>
+      <input
+        type="text"
+        value={value ?? ''}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="w-52 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
       />
       {saving && <SavingDot />}
     </RowShell>

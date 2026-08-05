@@ -14,3 +14,6 @@ export const updateNote = (id: string, input: { title?: string; body_md?: string
 
 export const deleteNote = (id: string) =>
   apiFetch<{ ok: true }>(`/notes/${id}`, { method: 'DELETE' })
+
+export const generateNote = (subspaceId: string, input: { topic?: string }) =>
+  apiFetch<Note>(`/subspaces/${subspaceId}/notes/generate`, { method: 'POST', body: input })

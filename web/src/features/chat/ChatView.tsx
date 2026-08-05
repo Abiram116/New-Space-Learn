@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
 import { generateCards } from '../../api/flashcards'
-import { createNote } from '../../api/notes'
+import { generateNote } from '../../api/notes'
 import { generateQuiz } from '../../api/quizzes'
 import type { ChatMessage as Message, Citation } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
@@ -128,17 +128,8 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           return
         }
         if (agent === 'notes') {
-          const summary = lastAssistant(history.data ?? [])
-          if (!summary) {
-            show('Ask the AI something first, then run /notes.', 'info')
-            return
-          }
-          const note = await createNote(subspaceId, {
-            title: argument || firstSentence(summary.content, 60) || 'Note from chat',
-            body_md: summary.content,
-            origin: 'agent',
-          })
-          show('Note saved.', 'success')
+          const note = await generateNote(subspaceId, { topic: argument })
+          show('Note written.', 'success')
           onNavigate(`${base}/notes?n=${note.id}`)
           return
         }

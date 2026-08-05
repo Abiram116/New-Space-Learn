@@ -95,10 +95,16 @@ should already know, the way a real tutor would.
 
 ## What this does not mean
 
-Not a persona costume — no forced catchphrases, no chattiness for its own
-sake. The mechanism is **real memory of real data plus a clear next-step
-opinion**, not a tone of voice. A companion that's specific and useful reads
-as a mentor; a companion that's just friendly-sounding reads as a gimmick.
+Not a persona costume **as a substitute** for the real thing — forced
+catchphrases or chattiness papering over a companion that doesn't actually
+remember anything reads as a gimmick, not a mentor. The mechanism has to be
+**real memory of real data plus a clear next-step opinion**.
+
+Personality on top of that mechanism is fine, and worth doing — a mentor
+with some character is more engaging than a neutral data-reporting voice,
+as long as the personality is texture on real substance, not a cover for
+its absence. Confirmed explicitly: it's fine to lean into character/voice
+once the underlying data-grounding is real.
 
 ## Status
 

@@ -98,6 +98,8 @@ export type QuizResult = {
   correct: boolean[]
 }
 
+export type MemoryScope = 'session' | 'topic' | 'all'
+
 export type Skill = {
   id: string
   name: string
@@ -106,6 +108,8 @@ export type Skill = {
   description: string | null
   instructions: string
   capabilities: string[]
+  memory_scope: MemoryScope
+  output_format: string | null
   is_library: boolean
 }
 
@@ -123,11 +127,40 @@ export type Badge = {
   hint: string
 }
 
+export type BriefSuggestion = {
+  label: string
+  /** In-app route, e.g. "/s/:spaceId/:subspaceId/flashcards". */
+  route: string
+}
+
+export type TopicSignal = {
+  subspace_id: string
+  topic: string
+  average: number
+}
+
+export type StudentModel = {
+  learning_style: string | null
+  session_length_minutes: number | null
+  exam_context: string | null
+  teaching_preference: string | null
+  /** Computed from real quiz averages — never sent on PATCH. */
+  weak_areas: TopicSignal[]
+  strong_areas: TopicSignal[]
+  streak_days: number
+}
+
+export type StudentModelPatch = Partial<
+  Pick<StudentModel, 'learning_style' | 'session_length_minutes' | 'exam_context' | 'teaching_preference'>
+>
+
 export type Brief = {
   headline: string
   body: string
   /** false when the backend used deterministic copy instead of the model. */
   generated: boolean
+  /** A concrete next action computed from real data, or null if nothing stands out. */
+  suggestion: BriefSuggestion | null
 }
 
 export type HeatmapCell = { day: string; intensity: number }
