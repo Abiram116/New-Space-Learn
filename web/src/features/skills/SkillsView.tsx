@@ -21,7 +21,7 @@ import {
   updateSkill,
   type SkillInput,
 } from '../../api/skills'
-import type { Skill, Tone } from '../../api/types'
+import type { Skill } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
@@ -30,20 +30,15 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
 import { SectionLabel, Toggle } from '../../components/ui/Bits'
+import { Icon } from '../../components/ui/Icon'
+import { SKILL_ICON_CHOICES, resolveSkillIcon } from './skillIcon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
-import { toneSoft } from '../../lib/tone'
+import { toneSoft, toneText } from '../../lib/tone'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
-const ICON_CHOICES: { icon: string; tone: Tone }[] = [
-  { icon: '🧠', tone: 'brand' },
-  { icon: '🎯', tone: 'mint' },
-  { icon: '✍️', tone: 'sun' },
-  { icon: '📘', tone: 'sky' },
-  { icon: '🔬', tone: 'coral' },
-]
 
 const CAPABILITY_OPTIONS = [
   { value: 'docs', label: 'Indexed docs' },
@@ -53,7 +48,7 @@ const CAPABILITY_OPTIONS = [
 
 const emptyForm = (): SkillInput => ({
   name: '',
-  icon: '🧠',
+  icon: 'skill',
   tone: 'brand',
   description: '',
   instructions: '',
@@ -251,27 +246,28 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             <>
               {own.length === 0 ? (
                 <EmptyState
-                  icon="🎯"
+                  icon="skill"
                   title="No skills yet"
                   description="Write one on the right, or add a template from the library below."
                 />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {own.map((skill) => (
-                    <Card key={skill.id} className="group flex flex-col gap-2 p-3.5">
+                    <Card key={skill.id} className="group flex flex-col gap-2 p-3.5 transition-transform duration-200 hover:-translate-y-0.5">
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
-                            'flex h-7.5 w-7.5 items-center justify-center rounded-[10px]',
+                            'grid h-8 w-8 shrink-0 place-items-center rounded-[10px]',
                             toneSoft[skill.tone],
+                            toneText[skill.tone],
                           )}
                         >
-                          {skill.icon}
+                          <Icon name={resolveSkillIcon(skill.icon)} size={16} />
                         </span>
                         <button
                           onClick={() => setSelectedId(skill.id)}
                           className={cn(
-                            'flex-1 text-left text-sm font-bold cursor-pointer',
+                            'flex-1 text-left text-[15px] font-bold cursor-pointer',
                             selectedId === skill.id && 'text-brand',
                           )}
                         >
@@ -307,9 +303,9 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                       setSelectedId(null)
                       setForm(emptyForm())
                     }}
-                    className="flex flex-col items-center justify-center gap-1 p-3.5 text-[13px] cursor-pointer hover:border-brand"
+                    className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 p-3.5 text-[13px] text-muted transition-colors cursor-pointer hover:border-brand/50 hover:text-brand-deep"
                   >
-                    <span className="text-xl text-brand">+</span>
+                    <Icon name="plus" size={18} />
                     Write your own skill
                   </DashedCard>
                 </div>
@@ -329,15 +325,16 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           ) : (
             <div className="flex flex-wrap gap-2.5 text-xs">
               {library.map((lib) => (
-                <Card key={lib.id} className="min-w-56 flex-1 p-3">
+                <Card key={lib.id} className="min-w-56 flex-1 p-3 transition-transform duration-200 hover:-translate-y-0.5">
                   <div className="flex items-center gap-2">
                     <span
                       className={cn(
-                        'flex h-6 w-6 items-center justify-center rounded-md',
+                        'grid h-7 w-7 shrink-0 place-items-center rounded-md',
                         toneSoft[lib.tone],
+                        toneText[lib.tone],
                       )}
                     >
-                      {lib.icon}
+                      <Icon name={resolveSkillIcon(lib.icon)} size={14} />
                     </span>
                     <b>{lib.name}</b>
                   </div>
@@ -372,7 +369,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           <div className="flex flex-col gap-1.5 text-xs">
             <span className="font-semibold text-muted">Icon &amp; colour</span>
             <div className="flex gap-1.5">
-              {ICON_CHOICES.map((choice) => {
+              {SKILL_ICON_CHOICES.map((choice) => {
                 const active = form.icon === choice.icon && form.tone === choice.tone
                 return (
                   <button
@@ -380,13 +377,16 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                     onClick={() =>
                       setForm({ ...form, icon: choice.icon, tone: choice.tone })
                     }
+                    title={choice.label}
+                    aria-label={choice.label}
                     className={cn(
-                      'flex h-8 w-8 items-center justify-center rounded-[10px] border-[1.5px] cursor-pointer',
+                      'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
                       toneSoft[choice.tone],
-                      active ? 'border-brand' : 'border-transparent',
+                      toneText[choice.tone],
+                      active ? 'border-brand' : 'border-transparent hover:border-line-dash',
                     )}
                   >
-                    {choice.icon}
+                    <Icon name={choice.icon} size={16} />
                   </button>
                 )
               })}

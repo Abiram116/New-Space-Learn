@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
+import { cn } from '../../lib/cn'
 import { SpacesProvider } from '../../features/spaces/SpacesProvider'
 import { Sidebar } from './Sidebar'
 import { MobileBar } from './MobileBar'
@@ -13,9 +14,22 @@ import { OfflineBanner } from './OfflineBanner'
  * off-canvas drawer opened from a compact top bar. Same component either way —
  * only the container changes.
  */
+const COLLAPSE_KEY = 'sl:rail-collapsed'
+
 export function AppShell() {
   const [navOpen, setNavOpen] = useState(false)
+  // Persisted: a rail you collapsed should stay collapsed tomorrow.
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(COLLAPSE_KEY) === '1',
+  )
   const { pathname } = useLocation()
+
+  const toggleCollapse = () => {
+    setCollapsed((prev) => {
+      localStorage.setItem(COLLAPSE_KEY, prev ? '0' : '1')
+      return !prev
+    })
+  }
 
   // Route changes can also come from inside the page (a card link, a redirect),
   // not just the drawer's own links — close on any of them.
@@ -46,8 +60,13 @@ export function AppShell() {
 
         <div className="flex min-h-0 flex-1">
           {/* Desktop rail */}
-          <div className="hidden w-[238px] shrink-0 border-r-[1.5px] border-line md:block">
-            <Sidebar />
+          <div
+            className={cn(
+              'hidden h-full min-h-0 shrink-0 border-r border-line transition-[width] duration-200 ease-out md:block',
+              collapsed ? 'w-[60px]' : 'w-[238px]',
+            )}
+          >
+            <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />
           </div>
 
           {/* Mobile drawer */}
@@ -62,12 +81,12 @@ export function AppShell() {
               type="button"
               aria-label="Close navigation"
               onClick={() => setNavOpen(false)}
-              className={`absolute inset-0 bg-ink/25 transition-opacity duration-200 motion-reduce:transition-none ${
+              className={`absolute inset-0 bg-well/80 backdrop-blur-[2px] transition-opacity duration-200 motion-reduce:transition-none ${
                 navOpen ? 'opacity-100' : 'opacity-0'
               }`}
             />
             <div
-              className={`absolute inset-y-0 left-0 w-[270px] max-w-[85vw] rounded-r-2xl border-r-[1.5px] border-line shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none ${
+              className={`absolute inset-y-0 left-0 w-[270px] max-w-[85vw] overflow-hidden rounded-r-2xl border-r border-line shadow-[0_0_60px_rgba(0,0,0,0.7)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
                 navOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
             >
@@ -75,7 +94,15 @@ export function AppShell() {
             </div>
           </div>
 
-          <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <main
+            className="relative flex min-w-0 flex-1 flex-col overflow-hidden"
+            style={{
+              backgroundImage:
+                'radial-gradient(90ch 60ch at 14% -6%, #2a211b 0%, transparent 58%),' +
+                'radial-gradient(70ch 52ch at 100% 8%, #2c1a18 0%, transparent 55%),' +
+                'radial-gradient(60ch 46ch at 60% 100%, #241a17 0%, transparent 56%)',
+            }}
+          >
             <Outlet />
           </main>
         </div>

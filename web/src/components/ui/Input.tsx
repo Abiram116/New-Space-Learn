@@ -21,7 +21,7 @@ export function Input({
   return (
     <div className={cn('flex flex-col gap-1.5', containerClassName)}>
       {label && (
-        <label htmlFor={inputId} className="text-xs font-semibold text-muted">
+        <label htmlFor={inputId} className="setcode">
           {label}
         </label>
       )}
@@ -29,17 +29,18 @@ export function Input({
         id={inputId}
         {...rest}
         className={cn(
-          'rounded-xl border-[1.5px] bg-surface px-3.5 py-3 text-sm outline-none placeholder:text-faint',
+          'rounded-[11px] border bg-well px-3.5 py-3 text-sm text-ink outline-none transition-colors placeholder:text-faint',
+          'focus:outline-none',
           error
-            ? 'border-coral-deep focus:ring-4 focus:ring-coral-soft'
-            : 'border-line focus:border-brand focus:ring-4 focus:ring-brand-soft',
+            ? 'border-coral focus:border-coral focus:ring-2 focus:ring-coral/25'
+            : 'border-line focus:border-brand focus:ring-2 focus:ring-brand/25',
           className,
         )}
         aria-invalid={Boolean(error) || undefined}
         aria-describedby={error && inputId ? `${inputId}-err` : undefined}
       />
       {error ? (
-        <p id={inputId ? `${inputId}-err` : undefined} className="text-xs text-coral-deep">
+        <p id={inputId ? `${inputId}-err` : undefined} className="text-xs font-semibold text-coral-deep">
           {error}
         </p>
       ) : hint ? (
@@ -62,7 +63,7 @@ export function Textarea({
   return (
     <div className={cn('flex flex-col gap-1.5', containerClassName)}>
       {label && (
-        <label htmlFor={inputId} className="text-xs font-semibold text-muted">
+        <label htmlFor={inputId} className="setcode">
           {label}
         </label>
       )}
@@ -70,16 +71,17 @@ export function Textarea({
         id={inputId}
         {...rest}
         className={cn(
-          'resize-y rounded-xl border-[1.5px] bg-surface px-3.5 py-3 text-sm leading-relaxed outline-none placeholder:text-faint',
+          'resize-y rounded-[11px] border bg-well px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition-colors placeholder:text-faint',
+          'focus:outline-none',
           error
-            ? 'border-coral-deep focus:ring-4 focus:ring-coral-soft'
-            : 'border-line focus:border-brand focus:ring-4 focus:ring-brand-soft',
+            ? 'border-coral focus:border-coral focus:ring-2 focus:ring-coral/25'
+            : 'border-line focus:border-brand focus:ring-2 focus:ring-brand/25',
           className,
         )}
         aria-invalid={Boolean(error) || undefined}
       />
       {error ? (
-        <p className="text-xs text-coral-deep">{error}</p>
+        <p className="text-xs font-semibold text-coral-deep">{error}</p>
       ) : hint ? (
         <p className="text-xs text-faint">{hint}</p>
       ) : null}

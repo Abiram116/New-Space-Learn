@@ -1,15 +1,19 @@
-"""Current-user endpoints: identity, stats, settings."""
+"""Current-user endpoints: identity, stats, settings, re-entry brief."""
 
 from __future__ import annotations
 
+import logging
+import re
 from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 
+from ..config import settings as cfg
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound
 from ..schemas import (
     Badge,
+    BriefOut,
     HeatmapCell,
     Me,
     SettingsOut,
@@ -17,7 +21,9 @@ from ..schemas import (
     StatsOut,
 )
 from ..services import supabase
+from ..services.llm import get_llm
 
+log = logging.getLogger("space_learn.me")
 router = APIRouter()
 
 
@@ -82,9 +88,12 @@ async def patch_settings(
 async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
     settings_row = await _ensure_settings_row(user.id)
 
-    # 8 weeks of activity → 56 cells (or 8 rows of 14 for the profile grid).
+    # Half a year of activity, aligned so the grid starts on a Monday. Eight
+    # weeks was too little to read as a trend — a student looking at their own
+    # analytics wants to see a term, not a fortnight.
     today = date.today()
-    since = today - timedelta(days=55)
+    start = today - timedelta(days=181)
+    since = start - timedelta(days=start.weekday())
     days = await supabase.db_select(
         "daily_activity",
         filters={
@@ -125,22 +134,37 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
     docs_indexed = await _count(user.id, "documents", extra={"status": "eq.ready"})
     spaces_count = await _count(user.id, "subjects")
 
+    max_reps = await _cards_mastered(user.id)
     badges = [
         Badge(
-            id="streak_10", label="10-day streak", icon="🔥", tone="sun",
-            earned=max_streak >= 10,
+            id="first_steps", label="First card", icon="deck", tone="sky",
+            tier="common", earned=max_reps >= 1,
+            hint="Review a single flashcard.",
         ),
         Badge(
-            id="streak_30", label="30-day streak", icon="🔒", tone="brand",
-            earned=max_streak >= 30,
+            id="streak_10", label="10-day streak", icon="flame", tone="sun",
+            tier="common", earned=max_streak >= 10,
+            hint="Study ten days in a row.",
         ),
         Badge(
-            id="perfect_quiz", label="Perfect quiz", icon="🎯", tone="mint",
-            earned=await _has_perfect_quiz(user.id),
+            id="ten_docs", label="Well read", icon="doc", tone="mint",
+            tier="rare", earned=docs_indexed >= 10,
+            hint="Index ten documents.",
         ),
         Badge(
-            id="ten_docs", label="10 docs", icon="📄", tone="sky",
-            earned=docs_indexed >= 10,
+            id="perfect_quiz", label="Perfect score", icon="target", tone="coral",
+            tier="rare", earned=await _has_perfect_quiz(user.id),
+            hint="Score 100% on any quiz.",
+        ),
+        Badge(
+            id="fifty_known", label="Fifty known", icon="seal", tone="mint",
+            tier="rare", earned=max_reps >= 50,
+            hint="Get fifty cards to a known state.",
+        ),
+        Badge(
+            id="streak_30", label="30-day streak", icon="flame", tone="brand",
+            tier="elite", earned=max_streak >= 30,
+            hint="Study thirty days in a row.",
         ),
     ]
 
@@ -219,6 +243,16 @@ async def _quiz_average(user_id: str) -> int | None:
     return round(sum(int(r["score"]) for r in rows) / len(rows))
 
 
+async def _cards_mastered(user_id: str) -> int:
+    """Cards seen at least once — the honest denominator for "known"."""
+    rows = await supabase.db_select(
+        "flashcards",
+        filters={"user_id": f"eq.{user_id}", "reps": "gte.1"},
+        select="id",
+    )
+    return len(rows)
+
+
 async def _has_perfect_quiz(user_id: str) -> bool:
     rows = await supabase.db_select(
         "quiz_results",
@@ -235,3 +269,214 @@ async def _count(user_id: str, table: str, *, extra: dict[str, str] | None = Non
         filters.update(extra)
     rows = await supabase.db_select(table, filters=filters, select="id")
     return len(rows)
+
+
+# ── Re-entry brief ─────────────────────────────────────────────────────
+
+
+@router.get("/me/brief", response_model=BriefOut)
+async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
+    """One personal line for Home, in the student's own material's terms.
+
+    Replaces "Good evening, Abiram" — a greeting tells you nothing you didn't
+    already know. This says where you stood and what to play next.
+
+    Runs on the fast model: it is a 40-word answer over facts we already have,
+    and paying 70B latency on every home render would make the app feel slow
+    for no gain. Falls back to deterministic copy rather than failing the page,
+    with `generated=false` so the UI never implies a model wrote it.
+    """
+
+    facts = await _brief_facts(user.id)
+
+    if not cfg.llm_configured:
+        return _fallback_brief(facts)
+
+    prompt = (
+        "You are greeting a student returning to their study app. "
+        "Write a two-part response, no more than 40 words total.\n\n"
+        f"Facts:\n{_format_facts(facts)}\n\n"
+        "Line 1 (headline): 3-6 words. Sentence case — capitalise only the "
+        "first word and proper nouns. Never Title Case. No greeting words.\n"
+        "Line 2 (body): ONE sentence, 18 words maximum, saying what to do next "
+        "and why. Name the actual topic.\n\n"
+        "Warm, direct, a peer not a coach. No emoji, no markdown, no asterisks, "
+        "no exclamation marks.\n"
+        "NEVER state a quantity, digit, or number-word. The interface already "
+        "shows the counts next to your text; repeating them risks contradicting "
+        "it. Say 'your backlog', not 'seven cards'.\n"
+        "Return exactly two lines separated by a newline. No labels.\n\n"
+        "Shape to follow (do NOT reuse these words or any topic from them):\n"
+        "<short state-of-play phrase>\n"
+        "<what to do next, naming the topic from the Facts above, and why>"
+    )
+
+    try:
+        parts: list[str] = []
+        async for delta in get_llm().stream_chat(
+            [
+                {"role": "system", "content": "You write short, human, specific copy."},
+                {"role": "user", "content": prompt},
+            ],
+            model=cfg.groq_model_fast,
+            temperature=0.7,
+        ):
+            parts.append(delta)
+        lines = [ln.strip() for ln in "".join(parts).strip().split("\n") if ln.strip()]
+    except Exception:
+        # The home page must render regardless.
+        log.warning("brief generation failed; using fallback", exc_info=True)
+        return _fallback_brief(facts)
+
+    if len(lines) < 2:
+        return _fallback_brief(facts)
+
+    headline = _desentence_case(_strip_markup(lines[0])[:70], facts.get("topic"))
+    body = _strip_markup(" ".join(lines[1:]))[:180]
+    if not headline or not body:
+        return _fallback_brief(facts)
+
+    # The headline sits in condensed display caps in the UI, but the body does
+    # not, and a Title Cased body reads like a press release. Models drift into
+    # it regardless of instruction, so normalise rather than re-prompt.
+
+    # The prompt forbids quantities, but a model that ignores it would print a
+    # number contradicting the real count rendered inches away. Cheaper to
+    # verify than to trust: any quantity at all sends us to deterministic copy.
+    if _mentions_quantity(headline) or _mentions_quantity(body):
+        log.info("brief mentioned a quantity; using fallback")
+        return _fallback_brief(facts)
+
+    return BriefOut(headline=headline, body=body, generated=True)
+
+
+_NUMBER_WORDS = frozenset(
+    "one two three four five six seven eight nine ten eleven twelve "
+    "dozen couple few several".split()
+)
+
+
+def _mentions_quantity(text: str) -> bool:
+    if any(ch.isdigit() for ch in text):
+        return True
+    # Split on non-letters so compounds like "nine-day" are caught too.
+    return any(w in _NUMBER_WORDS for w in re.split(r"[^a-z]+", text.lower()) if w)
+
+
+def _desentence_case(text: str, topic: str | None) -> str:
+    """Undo Title Case while protecting proper nouns from the topic name.
+
+    Only fires when most words are capitalised — a headline that is already
+    sentence case, or one whose capitals are all real proper nouns, is left
+    exactly as written.
+    """
+    words = text.split()
+    if len(words) < 3:
+        return text
+    capitalised = [w for w in words if w[:1].isupper()]
+    if len(capitalised) <= len(words) / 2:
+        return text
+
+    # Words the topic itself capitalises stay capitalised.
+    protected = {w.lower() for w in (topic or "").split() if w[:1].isupper()}
+    out = [words[0]]
+    for w in words[1:]:
+        out.append(w if w.lower() in protected or w.isupper() else w.lower())
+    return " ".join(out)
+
+
+async def _brief_facts(user_id: str) -> dict:
+    subs = await supabase.db_select(
+        "subspaces",
+        filters={"user_id": f"eq.{user_id}"},
+        select="id,name,last_activity_at",
+        order="last_activity_at.desc",
+        limit=3,
+    )
+    cards = await supabase.db_select(
+        "flashcards",
+        filters={
+            "user_id": f"eq.{user_id}",
+            "due_at": f"lte.{datetime.now(UTC).isoformat()}",
+        },
+        select="id",
+    )
+    recent = await supabase.db_select(
+        "daily_activity",
+        filters={"user_id": f"eq.{user_id}"},
+        select="day,chat_messages,cards_reviewed,quizzes_taken",
+        order="day.desc",
+        limit=7,
+    )
+    last_day = recent[0]["day"] if recent else None
+    days_away = 0
+    if last_day:
+        try:
+            days_away = (date.today() - date.fromisoformat(str(last_day))).days
+        except ValueError:
+            days_away = 0
+
+    return {
+        "topic": subs[0]["name"] if subs else None,
+        "topic_count": len(subs),
+        "cards_due": len(cards),
+        "days_away": days_away,
+        "has_history": bool(recent),
+    }
+
+
+def _format_facts(f: dict) -> str:
+    lines = []
+    lines.append(f"- Most recent topic: {f['topic'] or 'none yet'}")
+    lines.append(f"- Cards due for review: {f['cards_due']}")
+    lines.append(f"- Days since last study session: {f['days_away']}")
+    if not f["has_history"]:
+        lines.append("- This is their first session; nothing studied yet.")
+    return "\n".join(lines)
+
+
+def _fallback_brief(f: dict) -> BriefOut:
+    """Deterministic copy. Still specific — just not model-written."""
+    topic, due, away = f["topic"], f["cards_due"], f["days_away"]
+
+    if not f["has_history"] and not topic:
+        return BriefOut(
+            headline="Nothing here yet",
+            body="Make a space for a subject you're studying, then drop in a PDF and ask it anything.",
+            generated=False,
+        )
+    if due > 0 and topic:
+        return BriefOut(
+            headline=f"{due} card{'s' if due != 1 else ''} waiting",
+            body=f"Clear your {topic} review while it's still fresh, then push into new material.",
+            generated=False,
+        )
+    if away >= 3 and topic:
+        return BriefOut(
+            headline="Been a few days",
+            body=f"Pick {topic} back up — a short session now costs less than relearning it later.",
+            generated=False,
+        )
+    if topic:
+        return BriefOut(
+            headline="All caught up",
+            body=f"Nothing due on {topic}. Good time to add material or test yourself on something new.",
+            generated=False,
+        )
+    return BriefOut(
+        headline="Ready when you are",
+        body="Add a topic to your space and start asking questions about your own material.",
+        generated=False,
+    )
+
+
+def _strip_markup(text: str) -> str:
+    """The model occasionally returns bold or a leading label despite the ask.
+    This copy renders as plain text, so any stray markup must not reach it."""
+    out = text.strip()
+    for token in ("**", "__", "##", "#", "`"):
+        out = out.replace(token, "")
+    for label in ("Headline:", "Body:", "Line 1:", "Line 2:", "-", "*"):
+        if out.startswith(label):
+            out = out[len(label):].strip()
+    return out.strip().strip('"')

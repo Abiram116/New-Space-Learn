@@ -6,23 +6,31 @@ optimistic update. Keep the two in sync.
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 
+from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import NotFound
+from ..errors import ApiError, NotFound, UpstreamUnavailable
 from ..guards import assert_deck, assert_subspace
 from ..schemas import (
+    CardsGenerate,
     DeckCreate,
     DeckOut,
     FlashcardCreate,
     FlashcardOut,
+    FlashcardUpdate,
     GradeIn,
     OkOut,
 )
-from ..services import activity, supabase
+from ..services import activity, rag, supabase
+from ..services.llm import get_llm
+from ..services.ratelimit import consume_llm_quota
 
+log = logging.getLogger("space_learn.cards")
 router = APIRouter()
 
 
@@ -139,6 +147,107 @@ async def create_card(
     return FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
 
 
+@router.patch("/cards/{card_id}", response_model=FlashcardOut)
+async def update_card(
+    card_id: str,
+    body: FlashcardUpdate,
+    user: CurrentUser = Depends(get_current_user),
+) -> FlashcardOut:
+    patch = body.model_dump(exclude_unset=True)
+    if not patch:
+        rows = await supabase.db_select(
+            "flashcards",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
+            limit=1,
+        )
+        if not rows:
+            raise NotFound("Card not found.")
+        return _to_card(rows[0])
+    updated = await supabase.db_update(
+        "flashcards",
+        filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
+        patch=patch,
+    )
+    if not updated:
+        raise NotFound("Card not found.")
+    return _to_card(updated[0])
+
+
+@router.delete("/cards/{card_id}", response_model=OkOut)
+async def delete_card(
+    card_id: str, user: CurrentUser = Depends(get_current_user)
+) -> OkOut:
+    await supabase.db_delete(
+        "flashcards", filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"}
+    )
+    return OkOut()
+
+
+@router.post(
+    "/subspaces/{subspace_id}/cards/generate",
+    response_model=list[FlashcardOut],
+    status_code=201,
+)
+async def generate_cards(
+    subspace_id: str,
+    body: CardsGenerate,
+    user: CurrentUser = Depends(get_current_user),
+) -> list[FlashcardOut]:
+    """Build a whole deck in one call.
+
+    The previous flow split one chat reply into a single card, which is not a
+    deck by any definition. Here the model is asked for `count` question/answer
+    pairs grounded in the subspace's own indexed material.
+    """
+
+    await assert_subspace(user.id, subspace_id)
+    await consume_llm_quota(user.id, cost=2)
+
+    topic = body.topic or "the key concepts in this material"
+    context = body.source_text or ""
+    if not context:
+        retrieved = await rag.retrieve(subspace_id, topic, k=6)
+        context = "\n\n".join(f"- {r.content}" for r in retrieved)
+
+    if settings.llm_configured:
+        pairs = await _generate_pairs(topic, context, body.count)
+    else:
+        pairs = []
+
+    if not pairs:
+        raise UpstreamUnavailable(
+            "Couldn't write cards from this material yet. Upload a document or "
+            "add a card yourself."
+        )
+
+    deck = (
+        await supabase.db_insert(
+            "decks",
+            {
+                "user_id": user.id,
+                "subspace_id": subspace_id,
+                "name": body.deck_name or _deck_name(topic),
+            },
+        )
+    )[0]
+
+    rows = await supabase.db_insert(
+        "flashcards",
+        [
+            {
+                "user_id": user.id,
+                "deck_id": deck["id"],
+                "front": p["front"][:500],
+                "back": p["back"][:2000],
+                "source": p.get("source"),
+            }
+            for p in pairs
+        ],
+    )
+    await activity.touch_subspace(subspace_id)
+    return [_to_card(r) for r in rows]
+
+
 @router.post("/cards/{card_id}/grade", response_model=FlashcardOut)
 async def grade_card(
     card_id: str,
@@ -190,6 +299,67 @@ async def grade_card(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
+
+
+def _to_card(row: dict) -> FlashcardOut:
+    return FlashcardOut(**{k: row.get(k) for k in FlashcardOut.model_fields})
+
+
+def _deck_name(topic: str) -> str:
+    clean = topic.strip().rstrip('.')
+    return (clean[:1].upper() + clean[1:])[:80] or 'New deck'
+
+
+async def _generate_pairs(topic: str, context: str, count: int) -> list[dict]:
+    """Ask for `count` Q/A pairs as JSON. Returns [] rather than raising on a
+    malformed reply, so the caller owns the user-facing message."""
+
+    material = context.strip() or "(no indexed material — use general knowledge of the topic)"
+    prompt = (
+        f"Write {count} flashcards about '{topic}'.\n\n"
+        f"Material:\n{material}\n\n"
+        'Return ONLY a JSON array. Each item: {"front": str, "back": str}. '
+        "front is a single question. back is a complete but compact answer, "
+        "2-3 sentences at most. Plain sentences only — no markdown, no "
+        "asterisks, no headings, no numbering. No prose outside the array."
+    )
+    try:
+        parts: list[str] = []
+        async for delta in get_llm().stream_chat(
+            [
+                {
+                    "role": "system",
+                    "content": "You write precise study flashcards. You output only JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            model=settings.groq_model,
+            temperature=0.3,
+        ):
+            parts.append(delta)
+        raw = "".join(parts)
+    except ApiError:
+        raise
+    except Exception as e:
+        log.exception("card generation failed")
+        raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
+
+    start, end = raw.find("["), raw.rfind("]")
+    if start == -1 or end <= start:
+        return []
+    try:
+        data = json.loads(raw[start : end + 1])
+    except json.JSONDecodeError:
+        return []
+
+    out: list[dict] = []
+    for item in data[:count]:
+        if not isinstance(item, dict):
+            continue
+        front, back = str(item.get("front", "")).strip(), str(item.get("back", "")).strip()
+        if front and back:
+            out.append({"front": front, "back": back, "source": item.get("source")})
+    return out
 
 
 def _to_dt(v: str | datetime) -> datetime:

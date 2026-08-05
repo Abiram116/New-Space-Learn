@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-Tone = Literal["brand", "sky", "mint", "sun", "coral"]
+Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
 
 class Me(BaseModel):
@@ -145,6 +145,22 @@ class GradeIn(BaseModel):
     grade: Grade
 
 
+class FlashcardUpdate(BaseModel):
+    front: str | None = Field(default=None, min_length=1, max_length=500)
+    back: str | None = Field(default=None, min_length=1, max_length=2000)
+    source: str | None = None
+
+
+class CardsGenerate(BaseModel):
+    """Ask the model for a whole deck, not the single card the old flow made."""
+
+    topic: str | None = Field(default=None, max_length=120)
+    count: int = Field(default=8, ge=3, le=20)
+    deck_name: str | None = Field(default=None, max_length=80)
+    # Optional seed text (e.g. the assistant reply the user just read).
+    source_text: str | None = Field(default=None, max_length=8000)
+
+
 # ── Quizzes ────────────────────────────────────────────────────────────
 class QuizQuestion(BaseModel):
     q: str
@@ -211,11 +227,25 @@ class HeatmapCell(BaseModel):
 
 
 class Badge(BaseModel):
+    """A foil seal. `tier` drives how precious it looks; `hint` tells an
+    unearned badge how to be earned, so a locked slot is never a dead end."""
+
     id: str
     label: str
-    icon: str
+    icon: str  # an Icon name in the frontend set, never an emoji
     tone: Tone
+    tier: Literal["common", "rare", "elite"]
     earned: bool
+    hint: str
+
+
+class BriefOut(BaseModel):
+    """The personal re-entry line on Home. `generated` is false when it fell
+    back to deterministic copy, so the UI can avoid implying an AI wrote it."""
+
+    headline: str
+    body: str
+    generated: bool
 
 
 class StatsOut(BaseModel):

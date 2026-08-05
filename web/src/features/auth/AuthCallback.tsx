@@ -18,7 +18,7 @@ export function AuthCallback() {
 
   useEffect(() => {
     if (loading) return
-    const dest = params.get('next') || '/'
+    const dest = params.get('next') || '/home'
     navigate(session ? dest : '/signin', { replace: true })
   }, [loading, session, navigate, params])
 

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
+import { LogoMark } from '../ui/Logo'
 
 /**
  * Phone-only top bar. Carries the three things you always need at hand — get
@@ -29,9 +30,9 @@ export function MobileBar({ onOpenNav }: { onOpenNav: () => void }) {
         </span>
       </button>
 
-      <Link to="/" className="flex min-w-0 items-center gap-2">
-        <span className="h-[22px] w-[22px] shrink-0 rounded-md bg-brand" />
-        <span className="truncate font-display text-[15px] font-semibold">Space Learn</span>
+      <Link to="/home" className="flex min-w-0 items-center gap-2">
+        <LogoMark size={22} />
+        <span className="nameplate truncate text-[16px]">Space Learn</span>
       </Link>
 
       <Link

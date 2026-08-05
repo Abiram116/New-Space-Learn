@@ -1,6 +1,6 @@
 /** Response shapes shared across resource modules. */
 
-export type Tone = 'brand' | 'sky' | 'mint' | 'sun' | 'coral'
+export type Tone = 'brand' | 'sky' | 'mint' | 'sun' | 'coral' | 'azure' | 'jade'
 
 export type Me = { id: string; email: string | null }
 
@@ -109,12 +109,25 @@ export type Skill = {
   is_library: boolean
 }
 
+export type BadgeTier = 'common' | 'rare' | 'elite'
+
 export type Badge = {
   id: string
   label: string
+  /** An Icon name from the drawn set — never an emoji. */
   icon: string
   tone: Tone
+  tier: BadgeTier
   earned: boolean
+  /** How to earn it. Shown on locked badges so they aren't dead ends. */
+  hint: string
+}
+
+export type Brief = {
+  headline: string
+  body: string
+  /** false when the backend used deterministic copy instead of the model. */
+  generated: boolean
 }
 
 export type HeatmapCell = { day: string; intensity: number }

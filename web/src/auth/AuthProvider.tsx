@@ -7,6 +7,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { clearBriefCache } from '../lib/briefCache'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { getSession, onAuthChange, signOut, type Session } from '../api/auth'
 import { setAuthTokenProvider } from '../api/client'
@@ -74,6 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ready: !loading,
       supabaseConfigured: SUPABASE_CONFIGURED,
       signOut: async () => {
+        // The next person to sign in on this browser must not inherit the
+        // previous user's personalised brief.
+        clearBriefCache()
         await signOut()
         setSession(null)
         tokenRef.current = null

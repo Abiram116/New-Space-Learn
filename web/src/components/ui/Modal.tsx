@@ -40,7 +40,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-well/80 p-4 backdrop-blur-[2px]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -48,7 +48,7 @@ export function Modal({
     >
       <div
         className={cn(
-          'w-full rounded-2xl border-[1.5px] border-line bg-surface shadow-2xl',
+          'cardstock w-full rounded-2xl shadow-[0_24px_60px_-20px_rgba(0,0,0,0.85)]',
           width === 'sm' && 'max-w-sm',
           width === 'md' && 'max-w-md',
           width === 'lg' && 'max-w-lg',
@@ -56,8 +56,8 @@ export function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         {title && (
-          <div className="border-b border-line-soft px-5 py-3.5">
-            <h2 className="font-display text-base font-semibold">{title}</h2>
+          <div className="border-b border-line px-5 py-3.5">
+            <h2 className="nameplate text-[19px] text-ink">{title}</h2>
           </div>
         )}
         <div className="p-5">{children}</div>

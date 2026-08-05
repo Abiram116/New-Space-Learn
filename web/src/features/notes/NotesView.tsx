@@ -18,6 +18,7 @@ import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Chip } from '../../components/ui/Bits'
+import { Icon } from '../../components/ui/Icon'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
@@ -128,10 +129,10 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
             </h1>
             <button
               onClick={newBlank}
-              className="rounded-full bg-brand-soft px-2 text-brand text-sm font-semibold cursor-pointer"
+              className="grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-brand-deep transition-colors hover:bg-brand-200/60 cursor-pointer"
               aria-label="New note"
             >
-              +
+              <Icon name="plus" size={14} />
             </button>
           </div>
           <input
@@ -172,7 +173,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
           {!loading && !error && totalNotes === 0 && (
             <div className="p-4">
               <EmptyState
-                icon="📝"
+                icon="note"
                 title="No notes yet"
                 description="Save a note from chat, or start a blank one."
                 action={<Button onClick={newBlank}>New note</Button>}
@@ -187,8 +188,10 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
                   key={item.id}
                   onClick={() => setSelectedId(item.id)}
                   className={cn(
-                    'block w-full border-b border-line-soft px-4 py-3 text-left transition-colors cursor-pointer',
-                    active ? 'border-l-[3px] border-l-brand bg-brand-tint' : 'hover:bg-line-soft',
+                    'block w-full border-b border-line-soft px-4 py-3 text-left transition-all duration-150 cursor-pointer',
+                    active
+                      ? 'border-l-[3px] border-l-brand bg-brand-tint'
+                      : 'border-l-[3px] border-l-transparent hover:bg-line-soft',
                   )}
                 >
                   <div className={cn('truncate', active ? 'font-bold' : 'font-semibold')}>
@@ -210,7 +213,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
       ) : !current ? (
         <div className="hidden min-w-0 flex-1 items-center justify-center p-6 md:flex">
           <EmptyState
-            icon="✍️"
+            icon="note"
             title="Pick a note to read"
             description="Or create one — the editor autosaves as you type."
             action={<Button onClick={newBlank}>New note</Button>}
@@ -283,17 +286,30 @@ function NoteEditor({
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1 rounded-[9px] px-1.5 py-1 text-ink-3 transition-colors hover:bg-line-soft md:hidden"
+          className="-ml-1 flex items-center gap-1 rounded-[9px] px-1.5 py-1 text-ink-3 transition-colors hover:bg-line-soft md:hidden"
         >
-          ← All notes
+          <Icon name="arrowLeft" size={13} /> All notes
         </button>
         <Chip active={note.origin !== 'user'} className={note.origin === 'user' ? 'bg-line-soft' : ''}>
           {originLabel(note.origin)}
         </Chip>
-        <span className="text-xs text-faint">
-          {status === 'saving' && 'Saving…'}
-          {status === 'saved' && 'Saved'}
-          {status === 'error' && 'Save failed'}
+        <span className="flex items-center gap-1.5 text-xs text-faint">
+          {status === 'saving' && (
+            <>
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
+              Saving…
+            </>
+          )}
+          {status === 'saved' && (
+            <span className="flex items-center gap-1 text-mint-deep">
+              <Icon name="check" size={12} /> Saved
+            </span>
+          )}
+          {status === 'error' && (
+            <span className="flex items-center gap-1 text-coral-deep">
+              <Icon name="alert" size={12} /> Save failed
+            </span>
+          )}
           {status === 'idle' && `Edited ${relativeTime(note.updated_at)}`}
         </span>
         <div className="ml-auto flex gap-2">
@@ -326,18 +342,18 @@ function NoteEditor({
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function labelFor(f: Filter, notes: Note[] | null): string {
-  if (!notes) return f === 'all' ? 'All' : f === 'ai' ? '✦ AI' : 'Mine'
+  if (!notes) return f === 'all' ? 'All' : f === 'ai' ? 'AI' : 'Mine'
   const all = notes.length
   const mine = notes.filter((n) => n.origin === 'user').length
   const ai = all - mine
   if (f === 'all') return `All ${all}`
-  if (f === 'ai') return `✦ AI ${ai}`
+  if (f === 'ai') return `AI ${ai}`
   return `Mine ${mine}`
 }
 
 function originLabel(origin: Note['origin']): string {
-  if (origin === 'user') return '✍️ Me'
-  if (origin === 'doc') return '✦ from doc'
+  if (origin === 'user') return 'Written by me'
+  if (origin === 'doc') return 'From a document'
   return '✦ Notes agent'
 }
 

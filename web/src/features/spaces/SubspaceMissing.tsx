@@ -7,12 +7,12 @@ export function SubspaceMissing() {
   return (
     <div className="p-6">
       <EmptyState
-        icon="🧭"
+        icon="target"
         title="This topic isn't here"
         description="It may have been renamed or deleted. Pick another space from the sidebar."
         action={
           <Link
-            to="/"
+            to="/home"
             className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white"
           >
             Back home

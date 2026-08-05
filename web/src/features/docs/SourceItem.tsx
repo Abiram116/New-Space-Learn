@@ -1,14 +1,17 @@
 import { cn } from '../../lib/cn'
 import type { DocStatus, Document } from '../../api/types'
+import { Icon, type IconName } from '../../components/ui/Icon'
+import { toneSoft, toneText } from '../../lib/tone'
+import type { Tone } from '../../api/types'
 
 const statusMeta: Record<
   DocStatus,
-  { note: string; badge: string; badgeClass: string; barClass: string }
+  { note: string; icon: IconName; tone: Tone; barClass: string }
 > = {
-  uploading: { note: 'Uploading', badge: '↑', badgeClass: 'text-sky', barClass: 'bg-sky' },
-  processing: { note: 'Embedding chunks', badge: '…', badgeClass: 'text-sun-deep', barClass: 'bg-sun' },
-  ready: { note: 'Indexed for citations', badge: '✓', badgeClass: 'text-mint', barClass: 'bg-mint' },
-  failed: { note: 'Failed', badge: '!', badgeClass: 'text-coral-deep', barClass: 'bg-coral-deep' },
+  uploading: { note: 'Uploading', icon: 'upload', tone: 'sky', barClass: 'bg-sky' },
+  processing: { note: 'Embedding chunks', icon: 'clock', tone: 'sun', barClass: 'bg-sun' },
+  ready: { note: 'Indexed for citations', icon: 'check', tone: 'mint', barClass: 'bg-mint' },
+  failed: { note: 'Failed', icon: 'alert', tone: 'coral', barClass: 'bg-coral' },
 }
 
 export function SourceItem({
@@ -29,24 +32,43 @@ export function SourceItem({
   const value = typeof progress === 'number' ? progress : doc.status === 'ready' ? 100 : 40
 
   return (
-    <div className="rounded-xl border-[1.5px] border-line bg-surface px-2.5 py-2.5 text-xs">
-      <div className="flex items-center gap-2">
-        <span>{iconFor(doc.mime_type)}</span>
-        <span className={cn('truncate flex-1', pending && 'text-muted')} title={doc.name}>
+    <div
+      className={cn(
+        'cardstock group relative flex flex-col gap-2.5 rounded-xl p-3.5',
+        doc.status === 'failed' && 'ring-1 ring-coral/25',
+      )}
+    >
+      <div className="flex items-center gap-2.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-line-soft text-ink-3">
+          <Icon name={fileIcon(doc.mime_type)} size={15} />
+        </span>
+        <span
+          className={cn('min-w-0 flex-1 truncate text-[14px] font-bold', pending ? 'text-ink-3' : 'text-ink')}
+          title={doc.name}
+        >
           {doc.name}
         </span>
-        <span className={cn('shrink-0 font-bold', meta.badgeClass)}>{meta.badge}</span>
+        <span
+          className={cn(
+            'grid h-6 w-6 shrink-0 place-items-center rounded-md',
+            toneSoft[meta.tone],
+            toneText[meta.tone],
+          )}
+          title={doc.error || meta.note}
+        >
+          <Icon name={meta.icon} size={12} filled={doc.status === 'ready'} />
+        </span>
       </div>
 
       {(pending || detailed) && (
-        <div className="mt-1.5 flex flex-col gap-1">
-          <div className={cn('text-[11px]', doc.status === 'failed' ? 'text-coral-deep' : 'text-faint')}>
+        <div className="flex flex-col gap-1.5">
+          <div className={cn('setcode', doc.status === 'failed' && 'text-coral-deep')}>
             {doc.error || meta.note}
           </div>
           {pending && (
-            <div className="h-1 rounded-full bg-line-soft">
+            <div className="h-1 overflow-hidden rounded-full bg-line-soft">
               <div
-                className={cn('h-1 rounded-full transition-all', meta.barClass)}
+                className={cn('h-1 rounded-full transition-all duration-300', meta.barClass)}
                 style={{ width: `${value}%` }}
               />
             </div>
@@ -55,21 +77,24 @@ export function SourceItem({
       )}
 
       {detailed && (onReprocess || onDelete) && (
-        <div className="mt-2 flex gap-2 text-[11.5px]">
+        <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-2.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           {onReprocess && (doc.status === 'processing' || doc.status === 'failed') && (
             <button
+              type="button"
               onClick={onReprocess}
-              className="rounded-md bg-brand-soft px-2 py-1 font-semibold text-brand cursor-pointer"
+              className="flex items-center gap-1 rounded-md bg-brand-soft px-2 py-1 text-[11.5px] font-bold text-brand-deep cursor-pointer"
             >
-              Reprocess
+              <Icon name="refresh" size={11} /> Reprocess
             </button>
           )}
           {onDelete && (
             <button
+              type="button"
               onClick={onDelete}
-              className="ml-auto rounded-md px-2 py-1 text-coral-deep hover:bg-coral-soft cursor-pointer"
+              aria-label={`Delete ${doc.name}`}
+              className="ml-auto rounded-md p-1.5 text-faint transition-colors hover:text-coral cursor-pointer"
             >
-              Delete
+              <Icon name="trash" size={13} />
             </button>
           )}
         </div>
@@ -78,9 +103,8 @@ export function SourceItem({
   )
 }
 
-function iconFor(mime: string | null): string {
-  if (!mime) return '📄'
-  if (mime.includes('pdf')) return '📄'
-  if (mime.includes('markdown') || mime.includes('text')) return '📝'
-  return '📎'
+function fileIcon(mime: string | null): IconName {
+  if (!mime) return 'doc'
+  if (mime.includes('markdown') || mime.includes('text')) return 'note'
+  return 'doc'
 }

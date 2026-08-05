@@ -22,6 +22,6 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   const { loading, session, supabaseConfigured } = useAuth()
   if (!supabaseConfigured) return <>{children}</>
   if (loading) return <PageSpinner />
-  if (session) return <Navigate to="/" replace />
+  if (session) return <Navigate to="/home" replace />
   return <>{children}</>
 }

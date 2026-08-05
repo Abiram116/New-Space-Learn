@@ -1,5 +1,6 @@
 import type { ChatMessage as Message } from '../../api/types'
 import { OutlinePill } from '../../components/ui/Bits'
+import { Icon } from '../../components/ui/Icon'
 import { MarkdownMessage } from './MarkdownMessage'
 
 export function ChatMessage({
@@ -26,15 +27,19 @@ export function ChatMessage({
   return (
     <div className="flex max-w-[88%] flex-col gap-2.5 rounded-[16px_16px_16px_4px] border-[1.5px] border-line bg-surface p-3.5 text-[13.5px] leading-[1.55]">
       {citations.length > 0 && (
-        <div className="flex items-center gap-2 text-[11.5px] font-semibold text-muted">
-          <span className="flex h-4.5 w-4.5 items-center justify-center rounded-md bg-brand-soft text-[10px]">
-            ✦
+        <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
+          <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
+            <Icon name="sparkle" size={11} filled />
           </span>
           Answered from {citations.length} source{citations.length === 1 ? '' : 's'}
         </div>
       )}
 
-      <MarkdownMessage content={message.content} />
+      {message.content === '\u2026' ? (
+        <Thinking />
+      ) : (
+        <MarkdownMessage content={message.content} />
+      )}
 
       {citations.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -57,11 +62,41 @@ export function ChatMessage({
 
       {(onSaveNote || onMakeCards || onQuiz) && (
         <div className="flex gap-2 pt-0.5">
-          {onSaveNote && <OutlinePill onClick={onSaveNote}>📝 Save as note</OutlinePill>}
-          {onMakeCards && <OutlinePill onClick={onMakeCards}>🗂 Make cards</OutlinePill>}
-          {onQuiz && <OutlinePill onClick={onQuiz}>❓ Quiz me</OutlinePill>}
+          {onSaveNote && <OutlinePill onClick={onSaveNote}><Icon name="note" size={13} /> Save as note</OutlinePill>}
+          {onMakeCards && <OutlinePill onClick={onMakeCards}><Icon name="deck" size={13} /> Make cards</OutlinePill>}
+          {onQuiz && <OutlinePill onClick={onQuiz}><Icon name="quiz" size={13} /> Quiz me</OutlinePill>}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The gap between sending and the first token.
+ *
+ * Three dots rising in sequence — the same beat as a card being dealt, so the
+ * wait belongs to this world rather than borrowing a generic chat spinner. It
+ * holds a fixed height so the bubble doesn't jump when real text replaces it.
+ */
+function Thinking() {
+  return (
+    <div className="flex h-5 items-center gap-1.5" role="status" aria-label="Thinking">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-brand"
+          style={{ animation: `thinkPulse 1.15s ${i * 0.16}s ease-in-out infinite` }}
+        />
+      ))}
+      <style>{`
+        @keyframes thinkPulse {
+          0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.85); }
+          40%      { opacity: 1;    transform: translateY(-3px) scale(1); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="thinkPulse"] { animation: none !important; opacity: 0.7; }
+        }
+      `}</style>
     </div>
   )
 }

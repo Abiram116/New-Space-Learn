@@ -1,284 +1,284 @@
 /**
- * Home dashboard — real data via `/me/stats` + the spaces list.
+ * Home — the re-entry surface.
  *
- * We deliberately don't fabricate a "recent activity" feed because there's no
- * unified events endpoint yet. Instead we show real signals we already have:
- * streak, cards-due, quiz average, and the last few subspaces the user
- * touched.
+ * The old version opened with "Good evening, Abiram", which tells a student
+ * nothing they didn't already know. This opens with where they actually stand,
+ * written from their own material, and puts the one thing worth doing next
+ * directly under it.
+ *
+ * Everything shown is real: the brief comes from `/me/brief` (with honest
+ * deterministic copy behind it), counts come from `/me/stats`, and the topics
+ * come from the spaces list. Nothing here is invented for decoration.
  */
 
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getStats } from '../../api/me'
 import type { Space, Stats, Subspace } from '../../api/types'
-import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
+import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { ProgressBar } from '../../components/ui/Bits'
+import { Icon, type IconName } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
+import { getCachedBrief } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
-import { toneDot, toneSoft } from '../../lib/tone'
+import { toneDot, toneSoft, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
 import { useSpaces } from '../spaces/SpacesProvider'
-import { useState } from 'react'
-
-const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+import { StreakLedger } from './StreakLedger'
 
 export function Home() {
-  const { user } = useAuth()
   const { spaces, loading: spacesLoading } = useSpaces()
   const stats = useAsync(() => getStats(), [])
+  const brief = useAsync(() => getCachedBrief(), [])
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
 
-  const displayName =
-    (user?.user_metadata?.display_name as string | undefined)?.split(' ')[0] ||
-    user?.email?.split('@')[0] ||
-    'there'
-
-  const greeting = useMemo(getGreeting, [])
-
   const anySpaces = spaces.length > 0
-  const anySubspaces = spaces.some((s) => s.subspaces.length > 0)
-  const firstSubspaceLink = firstSubspace(spaces)
+  const entries = activeSubspaces(spaces)
+  const anySubspaces = entries.length > 0
+  const first = entries[0]
+  // Subjects that exist but hold nothing yet — shown as empty binder slots.
+  const emptySubjects = spaces.filter((sp) => sp.subspaces.length === 0).slice(0, 3)
+
+  const due = stats.data?.cards_due ?? 0
 
   return (
-    <div className="flex flex-col gap-5 overflow-y-auto px-4 py-5 sm:px-7 sm:py-6">
-      <div className="flex flex-wrap items-end gap-3">
-        <div>
-          <h1 className="font-display text-[26px] font-semibold">
-            {greeting}, {displayName}
-          </h1>
-          <p className="text-[13.5px] text-muted">
-            {tagline(stats.data, stats.loading, stats.error)}
-          </p>
-        </div>
-        {anySubspaces && firstSubspaceLink ? (
-          <Link
-            to={firstSubspaceLink}
-            className="ml-auto rounded-[11px] bg-ink px-4 py-2.5 text-[13px] font-semibold text-white"
-          >
-            ✦ Jump into a chat
-          </Link>
-        ) : anySpaces ? null : (
-          <Button className="ml-auto" onClick={() => setNewSpaceOpen(true)}>
-            + New space
-          </Button>
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-7 sm:px-7 sm:py-9">
+        {/* ── The brief ── */}
+        <header className="flex flex-col gap-4">
+          {brief.loading ? (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-11 w-2/3 rounded-lg" />
+              <Skeleton className="h-4 w-1/2 rounded" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
+                {brief.data?.headline ?? 'Ready when you are'}
+              </h1>
+              <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
+                {brief.data?.body ??
+                  'Add a topic to your space and start asking questions about your own material.'}
+              </p>
+            </div>
+          )}
+
+          {anySubspaces && first && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Link to={due > 0 ? `${first.link}/flashcards` : first.link}>
+                <Button size="lg">
+                  {due > 0 ? `Review ${due} card${due === 1 ? '' : 's'}` : 'Pick up where you left off'}
+                  <Icon name="arrowRight" size={15} />
+                </Button>
+              </Link>
+              {due > 0 && (
+                <Link to={first.link}>
+                  <Button variant="secondary" size="lg">
+                    Or open {first.subspace.name}
+                  </Button>
+                </Link>
+              )}
+            </div>
+          )}
+        </header>
+
+        {/* ── First run ── */}
+        {!spacesLoading && !anySpaces && (
+          <EmptyState
+            icon="sparkle"
+            title="Nothing in the binder yet"
+            description="Make a subject for something you're studying, add a topic inside it, then drop in a PDF and start asking."
+            action={<Button onClick={() => setNewSpaceOpen(true)}>Create your first subject</Button>}
+          />
+        )}
+
+        {/* ── Standing: the ledger leads, the two live counts flank it ── */}
+        {anySpaces && (
+          <section className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
+            <StreakLedger stats={stats.data} loading={stats.loading} />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <StandingCard
+                icon="deck"
+                label="Cards due"
+                value={stats.loading ? null : `${due}`}
+                unit={due === 1 ? 'card' : 'cards'}
+                tone="sun"
+                lit={due > 0}
+                detail={due > 0 ? 'Ready to review now.' : 'Nothing waiting. Nice.'}
+                to={first && due > 0 ? `${first.link}/flashcards` : undefined}
+              />
+              <StandingCard
+                icon="target"
+                label="Quiz average"
+                value={
+                  stats.loading
+                    ? null
+                    : stats.data?.quiz_average != null
+                      ? `${stats.data.quiz_average}`
+                      : '—'
+                }
+                unit={stats.data?.quiz_average != null ? '%' : ''}
+                tone="sky"
+                lit={(stats.data?.quiz_average ?? 0) >= 80}
+                detail={
+                  stats.data?.quiz_average != null
+                    ? 'Across your last five.'
+                    : 'Take one to find out.'
+                }
+                to={first ? `${first.link}/quizzes` : undefined}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ── Topics as face-up cards ── */}
+        {anySubspaces && (
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline gap-3">
+              <h2 className="nameplate text-[22px] text-ink">Your topics</h2>
+              <span className="setcode">{entries.length} in play</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {entries.slice(0, 6).map((entry) => (
+                <TopicCard key={entry.subspace.id} entry={entry} />
+              ))}
+              {emptySubjects.map((space) => (
+                <DashedCard
+                  key={space.id}
+                  className="flex min-h-[132px] flex-col justify-between gap-2 p-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
+                    <span className="setcode truncate">{space.name}</span>
+                  </div>
+                  <div>
+                    <p className="text-[13px] leading-snug text-muted">
+                      No topics yet. Add one from the rail to start collecting.
+                    </p>
+                  </div>
+                </DashedCard>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {anySpaces && !anySubspaces && (
+          <EmptyState
+            icon="target"
+            title="Your subject has no topics yet"
+            description="Open it in the rail and add a topic — that's where documents, chat, and cards live."
+          />
         )}
       </div>
-
-      {/* First-time empty state */}
-      {!spacesLoading && !anySpaces && (
-        <EmptyState
-          icon="✨"
-          title="Start with your first subject"
-          description="Create a space for a subject you're learning, then add a topic and drop in a PDF."
-          action={<Button onClick={() => setNewSpaceOpen(true)}>Create a space</Button>}
-        />
-      )}
-
-      {/* Tiles */}
-      {anySpaces && (
-        <div className="grid gap-3.5 lg:grid-cols-[1.4fr_1fr_1fr]">
-          <StreakTile stats={stats.data} loading={stats.loading} />
-          <SoftTile
-            tone="sun"
-            label="CARDS DUE"
-            labelClass="text-sun-deep"
-            loading={stats.loading}
-            value={stats.data ? String(stats.data.cards_due) : null}
-            detail={
-              stats.data && firstSubspaceLink
-                ? stats.data.cards_due > 0
-                  ? 'ready to review'
-                  : 'all caught up'
-                : '—'
-            }
-            action="Review"
-            to={firstSubspaceLink ? `${firstSubspaceLink}/flashcards` : '#'}
-            disabled={!firstSubspaceLink}
-          />
-          <SoftTile
-            tone="sky"
-            label="QUIZ AVG"
-            labelClass="text-sky-deep"
-            loading={stats.loading}
-            value={
-              stats.data?.quiz_average != null ? `${stats.data.quiz_average}%` : '—'
-            }
-            detail={
-              stats.data?.quiz_average != null ? 'last 5 quizzes' : 'take a quiz to seed'
-            }
-            action="See quizzes"
-            to={firstSubspaceLink ? `${firstSubspaceLink}/quizzes` : '#'}
-            disabled={!firstSubspaceLink}
-          />
-        </div>
-      )}
-
-      {anySubspaces && (
-        <section>
-          <div className="mb-2.5 flex items-baseline">
-            <h2 className="font-display text-base font-semibold">Continue learning</h2>
-            <span className="ml-auto text-[12.5px] font-semibold text-brand">
-              {activeSubspaces(spaces).length} active
-            </span>
-          </div>
-          <div className="grid gap-3.5 md:grid-cols-3">
-            {topActive(spaces, 3).map((entry) => (
-              <Link
-                key={entry.subspace.id}
-                to={`/s/${entry.space.id}/${entry.subspace.id}`}
-              >
-                <Card className="flex h-full flex-col gap-2 p-3.5 transition-colors hover:border-brand-200">
-                  <div className="flex items-center gap-2 text-[11.5px] text-muted">
-                    <span className={cn('h-1.5 w-1.5 rounded-[2px]', toneDot[entry.space.tone])} />
-                    {entry.space.name}
-                  </div>
-                  <div className="text-[14.5px] font-bold">{entry.subspace.name}</div>
-                  <div className="text-xs text-muted">
-                    {relativeShort(entry.subspace.last_activity_at)}
-                  </div>
-                  <ProgressBar
-                    value={progressFrom(entry.subspace)}
-                    tone={entry.space.tone}
-                    className="mt-auto"
-                  />
-                </Card>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {anySpaces && !anySubspaces && (
-        <EmptyState
-          icon="🧭"
-          title="Add a topic to your space"
-          description="Open a space in the sidebar and click '+ add topic' — that's where docs and chat live."
-        />
-      )}
 
       <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
     </div>
   )
 }
 
-// ── Subcomponents ──────────────────────────────────────────────────────
+// ── Pieces ─────────────────────────────────────────────────────────────
 
-function StreakTile({ stats, loading }: { stats: Stats | null; loading: boolean }) {
-  if (loading) return <Skeleton className="h-32 rounded-2xl" />
-  if (!stats) return null
-  const week = stats.heatmap.slice(-7)
-  const maxCell = Math.max(1, ...week.map((c) => c.intensity))
-  return (
-    <Card className="flex flex-col gap-3 p-4">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-muted">
-        🔥 Streak
-        <span className="ml-auto font-display text-xl font-semibold text-ink">
-          {stats.streak_days} {stats.streak_days === 1 ? 'day' : 'days'}
+function StandingCard({
+  icon,
+  label,
+  value,
+  unit,
+  tone,
+  lit,
+  detail,
+  to,
+}: {
+  icon: IconName
+  label: string
+  value: string | null
+  unit: string
+  tone: 'sun' | 'sky'
+  lit: boolean
+  detail: string
+  to?: string
+}) {
+  const body = (
+    <Card
+      foil={lit}
+      className={cn(
+        'flex h-full flex-col gap-2.5 p-4 transition-transform duration-200',
+        to && 'hover:-translate-y-0.5',
+        lit && 'ring-1',
+        lit && { sun: 'ring-sun/30', sky: 'ring-sky/30' }[tone],
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={cn(
+            'grid h-6 w-6 place-items-center rounded-md',
+            toneSoft[tone],
+            lit ? toneText[tone] : 'text-faint',
+          )}
+        >
+          <Icon name={icon} size={13} filled={lit} />
         </span>
+        <span className="setcode">{label}</span>
       </div>
-      <div className="flex h-14 items-end gap-1">
-        {week.map((cell, i) => {
-          const isToday = i === week.length - 1
-          const height = 20 + (cell.intensity / maxCell) * 80
-          return (
-            <div
-              key={cell.day}
-              className={cn(
-                'flex-1 rounded-md',
-                isToday ? 'bg-brand' : cell.intensity >= 2 ? 'bg-mint' : 'bg-mint-soft',
-              )}
-              style={{ height: `${height}%` }}
-            />
-          )
-        })}
-      </div>
-      <div className="flex justify-between text-[10.5px] text-faint">
-        {DAY_LABELS.map((d, i) => (
-          <span key={i}>{d}</span>
-        ))}
-      </div>
+
+      {value === null ? (
+        <Skeleton className="h-9 w-16 rounded" />
+      ) : (
+        <div className="flex items-baseline gap-1.5">
+          <span
+            className={cn(
+              'nameplate text-[40px] leading-none tabular-nums',
+              lit ? toneText[tone] : 'text-ink-3',
+            )}
+          >
+            {value}
+          </span>
+          {unit && <span className="setcode">{unit}</span>}
+        </div>
+      )}
+
+      <p className="mt-auto text-[12px] leading-snug text-muted">{detail}</p>
     </Card>
   )
+  return to ? <Link to={to} className="contents">{body}</Link> : body
 }
 
-function SoftTile({
-  tone,
-  label,
-  labelClass,
-  loading,
-  value,
-  detail,
-  action,
-  to,
-  disabled,
-}: {
-  tone: 'sun' | 'sky'
-  label: string
-  labelClass: string
-  loading: boolean
-  value: string | null
-  detail: string
-  action: string
-  to: string
-  disabled?: boolean
-}) {
-  if (loading) return <Skeleton className="h-32 rounded-2xl" />
-  const actionClass = cn(
-    'mt-auto rounded-[10px] bg-surface py-2 text-center text-[12.5px] font-semibold',
-    disabled && 'opacity-50 pointer-events-none',
-  )
+function TopicCard({ entry }: { entry: ActiveEntry }) {
+  const { space, subspace } = entry
+  const counts = subspace.counts ?? {}
+  const bits: string[] = []
+  if (counts.docs) bits.push(`${counts.docs} doc${counts.docs === 1 ? '' : 's'}`)
+  if (counts.cards) bits.push(`${counts.cards} card${counts.cards === 1 ? '' : 's'}`)
+  if (counts.notes) bits.push(`${counts.notes} note${counts.notes === 1 ? '' : 's'}`)
+
   return (
-    <div className={cn('flex flex-col gap-1.5 rounded-2xl p-4', toneSoft[tone])}>
-      <div className={cn('text-xs font-bold', labelClass)}>{label}</div>
-      <div className="font-display text-3xl font-semibold">{value ?? '—'}</div>
-      <div className="text-xs text-muted">{detail}</div>
-      {disabled ? (
-        <div className={actionClass}>{action}</div>
-      ) : (
-        <Link to={to} className={actionClass}>
-          {action}
-        </Link>
-      )}
-    </div>
+    <Link to={entry.link}>
+      <Card
+        className={cn(
+          'flex h-full flex-col gap-3 p-4 transition-transform duration-200 hover:-translate-y-0.5',
+          'ring-1 ring-transparent hover:ring-brand/25',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
+          <span className="setcode truncate">{space.name}</span>
+        </div>
+
+        <div className="nameplate text-[21px] leading-tight text-ink">{subspace.name}</div>
+
+        <div className="mt-auto flex flex-col gap-1.5">
+          <span className="setcode">{bits.length ? bits.join(' · ') : 'Nothing added yet'}</span>
+          <span className="setcode">{relativeShort(subspace.last_activity_at)}</span>
+        </div>
+      </Card>
+    </Link>
   )
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
-function getGreeting(): string {
-  const h = new Date().getHours()
-  if (h < 5) return 'Good night'
-  if (h < 12) return 'Good morning'
-  if (h < 18) return 'Good afternoon'
-  return 'Good evening'
-}
-
-function tagline(stats: Stats | null, loading: boolean, error: string | null): string {
-  if (loading) return 'Loading your progress…'
-  // A failed load previously kept saying "Loading…" forever. Say what happened.
-  if (error || !stats) return "Your progress didn't load. Refresh to try again."
-  const bits: string[] = []
-  if (stats.cards_due > 0) bits.push(`${stats.cards_due} cards due`)
-  if (stats.study_minutes_this_week > 0)
-    bits.push(`${stats.study_minutes_this_week}m studied this week`)
-  if (!bits.length) return 'Nothing queued — a good time to start.'
-  return bits.join(' · ')
-}
-
-function firstSubspace(spaces: Space[]): string | null {
-  for (const s of spaces) {
-    for (const sub of s.subspaces) {
-      return `/s/${s.id}/${sub.id}`
-    }
-  }
-  return null
-}
-
-type ActiveEntry = { space: Space; subspace: Subspace; sortKey: number }
+type ActiveEntry = { space: Space; subspace: Subspace; link: string; sortKey: number }
 
 function activeSubspaces(spaces: Space[]): ActiveEntry[] {
   const out: ActiveEntry[] = []
@@ -287,6 +287,7 @@ function activeSubspaces(spaces: Space[]): ActiveEntry[] {
       out.push({
         space: s,
         subspace: sub,
+        link: `/s/${s.id}/${sub.id}`,
         sortKey: sub.last_activity_at ? Date.parse(sub.last_activity_at) : 0,
       })
     }
@@ -294,19 +295,9 @@ function activeSubspaces(spaces: Space[]): ActiveEntry[] {
   return out.sort((a, b) => b.sortKey - a.sortKey)
 }
 
-function topActive(spaces: Space[], n: number): ActiveEntry[] {
-  return activeSubspaces(spaces).slice(0, n)
-}
-
-function progressFrom(sub: Subspace): number {
-  // Rough "how full is this topic" indicator using counts (0..100).
-  const c = sub.counts
-  const total = (c.docs ?? 0) * 15 + (c.notes ?? 0) * 8 + (c.cards ?? 0) * 3 + (c.quizzes ?? 0) * 10
-  return Math.max(6, Math.min(100, total))
-}
 
 function relativeShort(iso: string | null): string {
-  if (!iso) return 'Untouched'
+  if (!iso) return 'Not opened yet'
   const diff = Date.now() - Date.parse(iso)
   const min = Math.floor(diff / 60_000)
   if (min < 1) return 'Just now'
@@ -316,3 +307,6 @@ function relativeShort(iso: string | null): string {
   const day = Math.floor(hr / 24)
   return `${day}d ago`
 }
+
+// `Stats` is referenced by the async hook's generic inference above.
+export type { Stats }

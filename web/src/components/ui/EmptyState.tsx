@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
+import { Icon, type IconName } from './Icon'
 
+/**
+ * An empty binder slot. The dashed frame says "a card goes here", so the copy's
+ * job is only to say which card and how to get it.
+ */
 export function EmptyState({
   icon,
   title,
@@ -8,7 +13,7 @@ export function EmptyState({
   action,
   className,
 }: {
-  icon: string
+  icon: IconName
   title: string
   description?: string
   action?: ReactNode
@@ -17,16 +22,16 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        'flex flex-col items-center gap-3 rounded-2xl border-[1.5px] border-dashed border-line-dash bg-surface px-6 py-12 text-center',
+        'flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-dash bg-well/40 px-6 py-14 text-center',
         className,
       )}
     >
-      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-soft text-2xl">
-        {icon}
+      <span className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-line bg-raised text-brand">
+        <Icon name={icon} size={20} />
       </span>
-      <div>
-        <h3 className="font-display text-base font-semibold text-ink">{title}</h3>
-        {description && <p className="mt-1 text-sm text-muted">{description}</p>}
+      <div className="max-w-sm">
+        <h3 className="nameplate text-[19px] text-ink">{title}</h3>
+        {description && <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{description}</p>}
       </div>
       {action}
     </div>

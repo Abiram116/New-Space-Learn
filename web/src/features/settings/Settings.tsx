@@ -90,15 +90,17 @@ export function Settings() {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <nav className="flex w-[170px] shrink-0 flex-col gap-1 border-r-[1.5px] border-line bg-surface p-4 text-[13px] text-ink-3">
+      <nav className="hidden w-[180px] shrink-0 flex-col gap-1 border-r border-line bg-surface p-3 sm:flex">
         <h1 className="mb-2 font-display text-[15px] font-semibold text-ink">Settings</h1>
         {SECTIONS.map((name) => (
           <button
             key={name}
             onClick={() => setActive(name)}
             className={cn(
-              'rounded-[10px] px-2.5 py-2 text-left transition-colors cursor-pointer',
-              active === name ? 'bg-brand-soft font-semibold text-brand' : 'hover:bg-line-soft',
+              'rounded-[9px] px-2.5 py-2 text-left text-[13px] transition-colors cursor-pointer',
+              active === name
+                ? 'bg-brand-soft font-bold text-brand-deep'
+                : 'text-ink-3 hover:bg-line-soft hover:text-ink',
             )}
           >
             {name}
@@ -106,16 +108,16 @@ export function Settings() {
         ))}
         <button
           onClick={doSignOut}
-          className="mt-auto rounded-[10px] px-2.5 py-2 text-left text-coral-deep cursor-pointer hover:bg-coral-soft"
+          className="mt-auto rounded-[9px] px-2.5 py-2 text-left text-[13px] font-bold text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
         >
           Sign out
         </button>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-lg flex-col gap-4 p-5">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-7">
           {error && (
-            <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
               {error}
             </div>
           )}
@@ -125,7 +127,7 @@ export function Settings() {
           {prefs && active === 'Account' && (
             <>
               <SectionLabel>ACCOUNT</SectionLabel>
-              <Card className="flex items-center gap-3 rounded-[14px] p-3.5">
+              <Card className="flex items-center gap-3 p-4">
                 <span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-coral-soft text-xs font-semibold text-coral-deep">
                   {initials}
                 </span>
@@ -145,7 +147,7 @@ export function Settings() {
           {prefs && active === 'Study' && (
             <>
               <SectionLabel>STUDY</SectionLabel>
-              <Card className="overflow-hidden rounded-[14px] text-[13px]">
+              <Card className="overflow-hidden text-[13px]">
                 <RowWithNumber
                   label="Daily goal"
                   suffix="cards"
@@ -191,7 +193,7 @@ export function Settings() {
           {prefs && active === 'AI & sources' && (
             <>
               <SectionLabel>AI &amp; SOURCES</SectionLabel>
-              <Card className="overflow-hidden rounded-[14px] text-[13px]">
+              <Card className="overflow-hidden text-[13px]">
                 <RowWithToggle
                   label="Answer only from my docs"
                   hint="Refuses to guess when the sources don't cover a question."
@@ -293,6 +295,15 @@ function RowShell({
   )
 }
 
+function SavingDot() {
+  return (
+    <span className="flex items-center gap-1 text-[10px] text-sun-deep">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
+      saving…
+    </span>
+  )
+}
+
 function RowWithToggle({
   label,
   hint,
@@ -343,10 +354,10 @@ function RowWithNumber({
           const n = Number(e.target.value)
           if (Number.isFinite(n)) onChange(n)
         }}
-        className="w-16 rounded-md border-[1.5px] border-line bg-surface px-2 py-1 text-right text-sm outline-none focus:border-brand"
+        className="w-16 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
       />
       {suffix && <span className="text-xs text-muted">{suffix}</span>}
-      {saving && <span className="text-[10px] text-faint">saving…</span>}
+      {saving && <SavingDot />}
     </RowShell>
   )
 }
@@ -370,9 +381,9 @@ function RowWithTime({
         type="time"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
-        className="rounded-md border-[1.5px] border-line bg-surface px-2 py-1 text-sm outline-none focus:border-brand"
+        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
       />
-      {saving && <span className="text-[10px] text-faint">saving…</span>}
+      {saving && <SavingDot />}
     </RowShell>
   )
 }
@@ -397,7 +408,7 @@ function RowWithSelect<T extends string>({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border-[1.5px] border-line bg-surface px-2 py-1 text-sm outline-none focus:border-brand"
+        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -405,7 +416,7 @@ function RowWithSelect<T extends string>({
           </option>
         ))}
       </select>
-      {saving && <span className="text-[10px] text-faint">saving…</span>}
+      {saving && <SavingDot />}
     </RowShell>
   )
 }

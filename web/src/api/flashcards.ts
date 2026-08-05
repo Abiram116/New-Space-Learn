@@ -22,3 +22,21 @@ export const createCard = (
 
 export const gradeCard = (id: string, grade: Grade) =>
   apiFetch<Flashcard>(`/cards/${id}/grade`, { method: 'POST', body: { grade } })
+
+export const updateCard = (
+  id: string,
+  input: { front?: string; back?: string; source?: string | null },
+) => apiFetch<Flashcard>(`/cards/${id}`, { method: 'PATCH', body: input })
+
+export const deleteCard = (id: string) =>
+  apiFetch<{ ok: true }>(`/cards/${id}`, { method: 'DELETE' })
+
+/** Ask the model for a whole deck at once. Returns the created cards. */
+export const generateCards = (
+  subspaceId: string,
+  input: { topic?: string; count?: number; deck_name?: string; source_text?: string },
+) =>
+  apiFetch<Flashcard[]>(`/subspaces/${subspaceId}/cards/generate`, {
+    method: 'POST',
+    body: input,
+  })

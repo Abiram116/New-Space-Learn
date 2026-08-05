@@ -6,7 +6,6 @@ const slashCommands: { command: string; agent: AgentKey; label: string }[] = [
   { command: '/notes', agent: 'notes', label: 'Save notes' },
   { command: '/quiz', agent: 'quiz', label: 'Generate a quiz' },
   { command: '/flashcards', agent: 'flashcards', label: 'Make cards' },
-  { command: '/skills', agent: 'skills', label: 'Pick a skill' },
 ]
 
 export function Composer({

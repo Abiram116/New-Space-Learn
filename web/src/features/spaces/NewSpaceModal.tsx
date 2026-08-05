@@ -8,7 +8,7 @@ import { cn } from '../../lib/cn'
 import { toneDot } from '../../lib/tone'
 import { useSpaces } from './SpacesProvider'
 
-const tones: Tone[] = ['brand', 'sky', 'mint', 'sun', 'coral']
+const tones: Tone[] = ['brand', 'sky', 'mint', 'sun', 'coral', 'azure', 'jade']
 
 export function NewSpaceModal({
   open,

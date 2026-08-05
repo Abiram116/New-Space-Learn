@@ -13,8 +13,9 @@ import type { Quiz, QuizResult } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
+import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Icon } from '../../components/ui/Icon'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { PageSpinner } from '../../components/ui/PageSpinner'
@@ -101,11 +102,12 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         title="Quizzes"
         actions={
           <Button onClick={() => setGenOpen(true)} disabled={generating}>
-            {generating ? 'Generating…' : '+ Generate quiz'}
+            <Icon name="sparkle" size={14} />
+            {generating ? 'Generating…' : 'Generate quiz'}
           </Button>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6">
         <QuizList
           quizzes={quizzes.data}
           loading={quizzes.loading}
@@ -156,36 +158,61 @@ function QuizList({
   }
   if (!quizzes || quizzes.length === 0) {
     return (
-      <div className="mx-auto max-w-lg">
+      <div className="flex flex-1 items-center justify-center py-6">
         <EmptyState
-          icon="❓"
+          className="w-full max-w-lg"
+          icon="quiz"
           title="No quizzes yet"
-          description="Generate one from your uploaded docs, then knock out five questions."
-          action={<Button onClick={onGenerate}>Generate a quiz</Button>}
+          description="Draw questions from what you've indexed in this topic, then find out what actually stuck."
+          action={
+            <Button size="lg" onClick={onGenerate}>
+              <Icon name="sparkle" size={15} /> Generate a quiz
+            </Button>
+          }
         />
       </div>
     )
   }
   return (
-    <div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">
+    <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {quizzes.map((q) => (
         <button
           key={q.id}
           onClick={() => onOpen(q.id)}
           className="text-left cursor-pointer"
         >
-          <Card className="flex h-full flex-col gap-2 p-4 transition-colors hover:border-brand-200">
-            <div className="text-[11px] font-bold tracking-[0.09em] text-faint">QUIZ</div>
-            <div className="font-display text-base font-semibold">
+          <Card className="flex h-full flex-col gap-2.5 p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:ring-1 hover:ring-sky/30">
+            <div className="flex items-center gap-2">
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-sky-soft text-sky-deep">
+                <Icon name="quiz" size={13} />
+              </span>
+              <span className="setcode">Quiz</span>
+            </div>
+            <div className="nameplate text-[19px] leading-tight text-ink">
               {q.topic || 'Untitled topic'}
             </div>
-            <div className="text-xs text-muted">
-              {q.questions.length} question{q.questions.length === 1 ? '' : 's'} ·{' '}
-              {new Date(q.created_at).toLocaleDateString()}
+            <div className="mt-auto flex items-baseline gap-1.5 border-t border-line pt-2">
+              <span className="nameplate text-[22px] leading-none tabular-nums text-sky">
+                {q.questions.length}
+              </span>
+              <span className="setcode">
+                question{q.questions.length === 1 ? '' : 's'} ·{' '}
+                {new Date(q.created_at).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </span>
             </div>
           </Card>
         </button>
       ))}
+      <DashedCard
+        onClick={onGenerate}
+        className="flex min-h-[132px] cursor-pointer flex-col items-center justify-center gap-2 text-[13px] transition-colors hover:border-sky/50 hover:text-sky-deep"
+      >
+        <Icon name="sparkle" size={20} />
+        Generate another
+      </DashedCard>
     </div>
   )
 }

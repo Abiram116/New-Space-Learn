@@ -1,43 +1,68 @@
 @import 'tailwindcss';
 
+/* ── Foil Binder ────────────────────────────────────────────────────────
+   Warm card-table ground, foil accents, no violet, dark-only by design.
+   Semantic names are kept from the previous system so every surface moves
+   into the new world at once; their VALUES are wholly replaced. `ink` still
+   means "text", `canvas` still means "ground" — on a dark table those simply
+   trade ends of the scale.
+   ──────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-sans: 'Manrope', system-ui, sans-serif;
+  --font-display: 'Big Shoulders Display', 'Manrope', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --color-canvas: #fbfaf7;
-  --color-surface: #ffffff;
+  /* Ground: warm, mid-dark. Never black — this is felt under a lamp. */
+  --color-canvas: #1e1815;
+  --color-well: #151110;
+  --color-surface: #262019;
+  --color-raised: #2e251f;
 
-  --color-ink: #23212e;
-  --color-ink-2: #3a3648;
-  --color-ink-3: #4a465a;
-  --color-muted: #6e6a7c;
-  --color-faint: #a9a5b6;
+  /* Text: warm off-white, never pure #fff. */
+  --color-ink: #f5ede4;
+  --color-ink-2: #e0d3c8;
+  --color-ink-3: #d3c5b9;
+  --color-muted: #c4b5aa;
+  --color-faint: #9c8b80;
 
-  --color-line: #ece9f5;
-  --color-line-soft: #f4f2fa;
-  --color-line-dash: #cfc9e8;
+  --color-line: #3b3028;
+  --color-line-soft: #2e251f;
+  --color-line-dash: #4a3c32;
 
-  --color-brand: #6c5ce7;
-  --color-brand-tint: #f7f5ff;
-  --color-brand-soft: #efecfe;
-  --color-brand-200: #dad3fb;
-  --color-brand-300: #b7acf5;
-  --color-brand-deep: #4a3fa8;
+  /* Foil. Five tones double as subject-set identity and badge rarity. */
+  --color-brand: #ff5a3c; /* flare — primary action, streak */
+  --color-brand-tint: #241713;
+  --color-brand-soft: #37201a;
+  --color-brand-200: #5c3325;
+  --color-brand-300: #ff8b76;
+  --color-brand-deep: #ffb3a0;
 
-  --color-mint: #34c79a;
-  --color-mint-soft: #e4f7f0;
+  --color-sky: #2ee6d6; /* holo */
+  --color-sky-soft: #10312f;
+  --color-sky-deep: #8ff3ea;
 
-  --color-sky: #5aa9f8;
-  --color-sky-soft: #e8f2fe;
-  --color-sky-deep: #25608f;
+  --color-mint: #b8ff3c; /* lime */
+  --color-mint-soft: #22320f;
+  --color-mint-deep: #d8ff92;
 
-  --color-sun: #f7c948;
-  --color-sun-soft: #fef6e0;
-  --color-sun-deep: #8a6d1f;
+  --color-sun: #ffc53d; /* gold */
+  --color-sun-soft: #34260c;
+  --color-sun-deep: #ffdd8f;
 
-  --color-coral: #ff9f6e;
-  --color-coral-soft: #ffefe6;
-  --color-coral-deep: #c4553b;
+  --color-coral: #ff3d8b; /* rare */
+  --color-coral-soft: #351122;
+  --color-coral-deep: #ff9ac1;
+
+  --color-azure: #4d8dff; /* deep foil */
+  --color-azure-soft: #131f38;
+  --color-azure-deep: #9fc2ff;
+
+  --color-jade: #22d3a0; /* patina */
+  --color-jade-soft: #0f2c25;
+  --color-jade-deep: #86e9c9;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
@@ -49,93 +74,254 @@
 
   body {
     @apply bg-canvas text-ink font-sans antialiased;
+    /* Lamp on a table: light pools where the work is, falls off at the edges. */
+    background-image:
+      radial-gradient(120ch 80ch at 18% -10%, #2a211b 0%, transparent 60%),
+      radial-gradient(90ch 60ch at 100% 0%, #2b1a18 0%, transparent 55%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: #1a120f;
+  }
+
+  /* One visible focus ring for the whole app, on the foil accent. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Scrollbars read as part of the table, not the OS. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-line-dash);
+    background-clip: content-box;
   }
 }
 
-/* Chat markdown — sized down from prose defaults to fit a 13.5px bubble, and
-   tokens borrowed from @theme above instead of a stock highlight.js theme so
-   code reads as part of this app, not a pasted-in library default. */
+@layer components {
+  /* Nameplate: the condensed caps band across the top of a card. */
+  .nameplate {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    line-height: 0.92;
+    text-transform: uppercase;
+  }
+
+  /* Set code / citation small print. Trading cards print this bottom-left. */
+  .setcode {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  /* Same small print, but carrying the accent — for labels that should lead. */
+  .setcode-hot {
+    color: var(--color-brand-300);
+  }
+
+  /* Structural labels ("SUBJECTS") are wayfinding, not footnotes, so they sit
+     a full step brighter than card small-print. */
+  .setcode-strong {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--color-ink-3);
+  }
+
+  /* Foil sweep — the angled iridescence across a card face. Used sparingly:
+     earned states only (a due card, an unlocked badge, the streak). */
+  .foil {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .foil::after {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      110deg,
+      transparent 38%,
+      rgba(255, 197, 61, 0.16) 46%,
+      rgba(46, 230, 214, 0.2) 52%,
+      rgba(255, 61, 139, 0.16) 58%,
+      transparent 66%
+    );
+    transform: translateX(-60%);
+    transition: transform 900ms var(--ease-out-expo);
+  }
+  .foil:hover::after {
+    transform: translateX(60%);
+  }
+
+  /* Card edge: a printed card has a light top edge and sits on its own shadow. */
+  .cardstock {
+    background: linear-gradient(180deg, var(--color-raised), var(--color-surface));
+    border: 1px solid var(--color-line);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 237, 220, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .foil::after {
+    display: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Chat markdown ───────────────────────────────────────────────────────
+   Assistant prose. Sized for a 13.5px column and themed on the tokens above,
+   so code reads as part of this table rather than a pasted-in library theme. */
 .chat-md {
   font-family: var(--font-sans);
 }
 .chat-md :is(h1, h2, h3) {
   font-family: var(--font-display);
-  font-weight: 600;
-  margin: 0.6em 0 0.25em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  color: var(--color-ink);
+  margin: 0.7em 0 0.3em;
 }
-.chat-md h1 { font-size: 1.15em; }
-.chat-md h2 { font-size: 1.08em; }
-.chat-md h3 { font-size: 1.02em; }
-.chat-md p { margin: 0.4em 0; }
+.chat-md h1 { font-size: 1.35em; }
+.chat-md h2 { font-size: 1.2em; }
+.chat-md h3 { font-size: 1.08em; }
+.chat-md p { margin: 0.45em 0; }
 .chat-md p:first-child { margin-top: 0; }
 .chat-md p:last-child { margin-bottom: 0; }
-.chat-md ul, .chat-md ol {
-  margin: 0.4em 0;
-  padding-left: 1.3em;
+.chat-md ul,
+.chat-md ol { margin: 0.45em 0; padding-left: 1.25em; }
+.chat-md ul { list-style: none; }
+.chat-md ul > li { position: relative; }
+/* Marker as a small foil tick rather than a bullet dot. */
+.chat-md ul > li::before {
+  content: '';
+  position: absolute;
+  left: -0.95em;
+  top: 0.62em;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: var(--color-brand);
 }
-.chat-md ul { list-style: disc; }
 .chat-md ol { list-style: decimal; }
-.chat-md li { margin: 0.15em 0; }
+.chat-md ol::marker { font-family: var(--font-mono); }
+.chat-md li { margin: 0.18em 0; }
 .chat-md li > p { margin: 0; display: inline; }
-.chat-md strong { font-weight: 700; color: var(--color-ink); }
+.chat-md strong { font-weight: 700; color: #fff6ec; }
 .chat-md em { font-style: italic; }
-.chat-md a { color: var(--color-brand); text-decoration: underline; text-underline-offset: 2px; }
+.chat-md a {
+  color: var(--color-sky);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .chat-md blockquote {
-  margin: 0.5em 0;
+  margin: 0.55em 0;
   padding: 0.1em 0.9em;
-  border-left: 2.5px solid var(--color-brand-200);
+  border-left: 1px solid var(--color-brand);
   color: var(--color-muted);
 }
 .chat-md table {
-  margin: 0.5em 0;
+  margin: 0.6em 0;
   border-collapse: collapse;
   font-size: 0.92em;
+  width: 100%;
 }
-.chat-md th, .chat-md td {
+.chat-md th,
+.chat-md td {
   border: 1px solid var(--color-line);
-  padding: 0.3em 0.6em;
+  padding: 0.35em 0.65em;
   text-align: left;
 }
-.chat-md th { background: var(--color-line-soft); font-weight: 600; }
+.chat-md th {
+  background: var(--color-line-soft);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-3);
+}
 
 .chat-md code {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 0.88em;
+  font-family: var(--font-mono);
+  font-size: 0.87em;
 }
-/* Inline code: `like this`. */
 .chat-md :not(pre) > code {
-  background: var(--color-line-soft);
-  color: var(--color-brand-deep);
+  background: var(--color-well);
+  color: var(--color-sun-deep);
+  border: 1px solid var(--color-line);
   border-radius: 5px;
-  padding: 0.15em 0.4em;
+  padding: 0.1em 0.38em;
 }
 .chat-md pre {
-  margin: 0.5em 0;
-  padding: 0.85em 1em;
-  border-radius: 12px;
-  background: var(--color-ink);
-  color: #ece9f5;
+  margin: 0.6em 0;
+  padding: 0.9em 1em;
+  border-radius: 10px;
+  background: var(--color-well);
+  border: 1px solid var(--color-line);
+  color: var(--color-ink-2);
   overflow-x: auto;
-  line-height: 1.5;
+  line-height: 1.55;
 }
-.chat-md pre code { background: none; padding: 0; color: inherit; }
+.chat-md pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+}
 
-/* highlight.js token classes, mapped onto the app palette. */
+/* highlight.js tokens on the foil palette. */
 .chat-md .hljs-comment,
-.chat-md .hljs-quote { color: #8b87a3; font-style: italic; }
+.chat-md .hljs-quote { color: #7c6e67; font-style: italic; }
 .chat-md .hljs-keyword,
 .chat-md .hljs-selector-tag,
 .chat-md .hljs-literal,
-.chat-md .hljs-type { color: #b7acf5; }
+.chat-md .hljs-type { color: var(--color-coral); }
 .chat-md .hljs-string,
 .chat-md .hljs-attr,
-.chat-md .hljs-template-tag { color: #7fe0c4; }
+.chat-md .hljs-template-tag { color: var(--color-mint); }
 .chat-md .hljs-number,
-.chat-md .hljs-symbol { color: #f7c948; }
+.chat-md .hljs-symbol { color: var(--color-sun); }
 .chat-md .hljs-title,
 .chat-md .hljs-title.function_,
-.chat-md .hljs-built_in { color: #8ec7ff; }
+.chat-md .hljs-built_in { color: var(--color-sky); }
 .chat-md .hljs-variable,
-.chat-md .hljs-attribute { color: #ffb187; }
+.chat-md .hljs-attribute { color: var(--color-brand-300); }
 .chat-md .hljs-punctuation,
-.chat-md .hljs-operator { color: #c9c5da; }
+.chat-md .hljs-operator { color: var(--color-ink-3); }

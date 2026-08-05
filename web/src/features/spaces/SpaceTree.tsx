@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
-import { toneDot } from '../../lib/tone'
+import { Icon } from '../../components/ui/Icon'
+import { toneDot, toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -71,39 +72,44 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   return (
-    <div className="flex flex-col gap-0.5 text-[13.5px]">
+    <div className="flex min-w-0 flex-col gap-0.5 text-[14.5px]">
       {spaces.map((space) => {
         const open = isOpen(space.id)
         return (
-          <div key={space.id} className="group/space flex flex-col gap-0.5">
+          <div key={space.id} className="group/space flex min-w-0 flex-col gap-0.5">
             <div className="flex items-center">
               <button
                 onClick={() => toggle(space.id)}
                 className={cn(
                   'flex flex-1 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors cursor-pointer',
                   space.id === spaceId
-                    ? 'bg-brand-tint font-semibold text-ink'
-                    : 'text-ink-3 hover:bg-line-soft',
+                    ? 'bg-brand-tint font-bold text-ink'
+                    : cn('font-semibold hover:bg-line-soft', toneText[space.tone]),
                 )}
               >
-                <span className={cn('text-[11px]', open ? 'text-brand' : 'text-faint')}>
-                  {open ? '▾' : '▸'}
+                <span
+                  className={cn(
+                    'shrink-0 transition-transform duration-150',
+                    open ? 'rotate-90 text-brand' : 'text-faint',
+                  )}
+                >
+                  <Icon name="chevronRight" size={13} />
                 </span>
-                <span className={cn('h-2 w-2 rounded-[3px]', toneDot[space.tone])} />
+                <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
                 <span className="truncate">{space.name}</span>
               </button>
               <button
                 onClick={() => setConfirmDeleteSpace(space.id)}
                 title="Delete space"
                 aria-label={`Delete space ${space.name}`}
-                className="opacity-0 group-hover/space:opacity-100 rounded-md px-1 text-xs text-faint hover:text-coral-deep transition-opacity cursor-pointer"
+                className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity hover:text-coral focus-visible:opacity-100 group-hover/space:opacity-100 cursor-pointer"
               >
-                ⋯
+                <Icon name="trash" size={13} />
               </button>
             </div>
 
             {open && (
-              <div className="ml-5 flex flex-col gap-0.5 border-l-[1.5px] border-line pl-2.5">
+              <div className="ml-4 flex min-w-0 flex-col gap-0.5 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
                   <div key={sub.id} className="group/sub flex items-center">
                     <NavLink
@@ -111,10 +117,10 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         cn(
-                          'flex-1 rounded-[9px] px-2.5 py-1.5 truncate transition-colors',
+                          'min-w-0 flex-1 truncate rounded-[9px] px-2.5 py-1.5 transition-colors',
                           isActive
-                            ? 'bg-brand-soft font-semibold text-brand'
-                            : 'text-ink-3 hover:bg-line-soft',
+                            ? 'bg-brand-soft font-bold text-brand-deep'
+                            : 'font-medium text-ink-2 hover:bg-line-soft hover:text-ink',
                         )
                       }
                     >
@@ -123,9 +129,9 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     <button
                       onClick={() => setConfirmDeleteSubspace(sub.id)}
                       aria-label={`Delete topic ${sub.name}`}
-                      className="opacity-0 group-hover/sub:opacity-100 rounded-md px-1 text-xs text-faint hover:text-coral-deep transition-opacity cursor-pointer"
+                      className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity hover:text-coral focus-visible:opacity-100 group-hover/sub:opacity-100 cursor-pointer"
                     >
-                      ⋯
+                      <Icon name="trash" size={12} />
                     </button>
                   </div>
                 ))}
@@ -144,7 +150,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       }
                     }}
                     placeholder="New topic"
-                    className="rounded-[9px] border-[1.5px] border-brand-200 bg-surface px-2.5 py-1 text-[13px] outline-none"
+                    className="min-w-0 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
                   />
                 ) : (
                   <button
@@ -152,9 +158,9 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       setAddingIn(space.id)
                       setNewTopic('')
                     }}
-                    className="rounded-[9px] px-2.5 py-1.5 text-left text-faint transition-colors hover:text-brand cursor-pointer"
+                    className="flex items-center gap-1.5 rounded-[9px] px-2.5 py-1.5 text-left text-faint transition-colors hover:text-brand cursor-pointer"
                   >
-                    + add topic
+                    <Icon name="plus" size={13} /> add topic
                   </button>
                 )}
               </div>

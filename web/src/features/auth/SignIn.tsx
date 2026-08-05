@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { AuthShell } from './AuthShell'
+import { GoogleGlyph } from './GoogleGlyph'
 
 export function SignIn() {
   const navigate = useNavigate()
@@ -25,7 +26,7 @@ export function SignIn() {
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendBusy, setResendBusy] = useState(false)
 
-  const next = params.get('next') || '/'
+  const next = params.get('next') || '/home'
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -155,7 +156,7 @@ export function SignIn() {
             )}
           </div>
         )}
-        <Button type="submit" disabled={busy} className="py-3.5">
+        <Button type="submit" variant="solid3d" size="xl" disabled={busy} className="mt-1 w-full">
           {busy ? 'Signing in…' : 'Sign in'}
         </Button>
 
@@ -167,11 +168,13 @@ export function SignIn() {
 
         <Button
           type="button"
-          variant="secondary"
+          variant="outline3d"
+          size="xl"
           onClick={signInGoogle}
           disabled={googleBusy}
-          className="py-3"
+          className="w-full"
         >
+          <GoogleGlyph />
           {googleBusy ? 'Redirecting…' : 'Continue with Google'}
         </Button>
       </form>

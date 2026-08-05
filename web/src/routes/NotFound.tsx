@@ -15,7 +15,7 @@ export function NotFound() {
       </p>
       <div className="flex gap-2">
         <Link
-          to="/"
+          to="/home"
           className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white"
         >
           Go home

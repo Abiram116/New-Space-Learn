@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
-import { createDeck, createCard } from '../../api/flashcards'
+import { generateCards } from '../../api/flashcards'
 import { createNote } from '../../api/notes'
 import { generateQuiz } from '../../api/quizzes'
 import type { ChatMessage as Message, Citation } from '../../api/types'
@@ -22,6 +22,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
+import { firstSentence } from '../../lib/text'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatMessage } from './ChatMessage'
@@ -120,10 +121,6 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   const runAgent = useCallback(
     async (agent: AgentKey, argument?: string) => {
       try {
-        if (agent === 'skills') {
-          onNavigate(`${base}/skills`)
-          return
-        }
         if (agent === 'quiz') {
           const quiz = await generateQuiz(subspaceId, { topic: argument, count: 5 })
           show('Quiz ready.', 'success')
@@ -137,7 +134,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             return
           }
           const note = await createNote(subspaceId, {
-            title: argument || derivedTitle(summary.content) || 'Note from chat',
+            title: argument || firstSentence(summary.content, 60) || 'Note from chat',
             body_md: summary.content,
             origin: 'agent',
           })
@@ -146,20 +143,15 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           return
         }
         if (agent === 'flashcards') {
+          // Seed from the last answer when there is one; otherwise let the
+          // generator draw on whatever this topic has indexed.
           const summary = lastAssistant(history.data ?? [])
-          if (!summary) {
-            show('Ask the AI something first, then run /flashcards.', 'info')
-            return
-          }
-          const deck = await createDeck(subspaceId, {
-            name: argument || derivedTitle(summary.content) || 'From chat',
+          const cards = await generateCards(subspaceId, {
+            topic: argument || (summary ? firstSentence(summary.content, 60) : undefined),
+            source_text: summary?.content,
+            count: 8,
           })
-          const [front, ...rest] = summary.content.split(/\n\s*\n/, 2)
-          await createCard(deck.id, {
-            front: front.slice(0, 200),
-            back: rest.join('\n\n') || summary.content,
-          })
-          show('Deck created with 1 card. Add more from the deck view.', 'success')
+          show(`Wrote ${cards.length} cards.`, 'success')
           onNavigate(`${base}/flashcards`)
           return
         }
@@ -194,7 +186,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           )}
           {isEmpty && (
             <EmptyState
-              icon="💬"
+              icon="chat"
               title={`Start learning ${subspaceName}`}
               description="Upload a PDF in the Docs tab, then ask a question. Answers cite the pages they came from."
             />
@@ -293,7 +285,3 @@ function lastAssistant(messages: Message[]): Message | null {
   return null
 }
 
-function derivedTitle(body: string): string {
-  const firstLine = body.split(/\n/, 1)[0] ?? ''
-  return firstLine.slice(0, 60).trim()
-}

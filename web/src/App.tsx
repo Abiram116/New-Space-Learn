@@ -8,16 +8,23 @@ import { ChatView } from './features/chat/ChatView'
 import { DocsView } from './features/docs/DocsView'
 import { FlashcardsView } from './features/flashcards/FlashcardsView'
 import { Home } from './features/home/Home'
+import { Landing } from './features/landing/Landing'
 import { NotesView } from './features/notes/NotesView'
 import { Profile } from './features/profile/Profile'
 import { QuizzesView } from './features/quizzes/QuizzesView'
 import { Settings } from './features/settings/Settings'
 import { SkillsView } from './features/skills/SkillsView'
 import { NotFound } from './routes/NotFound'
+import { RootRoute } from './routes/RootRoute'
 
 export default function App() {
   return (
     <Routes>
+      {/* `/` decides: signed in → the app, signed out → the pitch. */}
+      <Route path="/" element={<RootRoute />} />
+      {/* Always the pitch, so it stays linkable while signed in. */}
+      <Route path="/welcome" element={<Landing />} />
+
       <Route
         path="/signin"
         element={
@@ -35,6 +42,7 @@ export default function App() {
         }
       />
       <Route path="/auth/callback" element={<AuthCallback />} />
+
       <Route
         element={
           <RequireAuth>
@@ -42,7 +50,7 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<Home />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/s/:spaceId/:subspaceId">
@@ -54,6 +62,7 @@ export default function App() {
           <Route path="skills" element={<SkillsView />} />
         </Route>
       </Route>
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   )

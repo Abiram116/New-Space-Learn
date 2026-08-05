@@ -29,7 +29,7 @@ export function ErrorRoute() {
       <h1 className="font-display text-2xl font-semibold">{title}</h1>
       <p className="text-sm text-muted">{message}</p>
       <Link
-        to="/"
+        to="/home"
         className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white"
       >
         Go home

@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { AuthShell } from './AuthShell'
+import { GoogleGlyph } from './GoogleGlyph'
 
 export function SignUp() {
   const navigate = useNavigate()
@@ -42,7 +43,7 @@ export function SignUp() {
       if (result.requiresConfirmation) {
         setPendingEmail(email)
       } else {
-        navigate('/', { replace: true })
+        navigate('/home', { replace: true })
       }
     } catch (err) {
       setErrors({ form: friendlyMessage(err) })
@@ -103,7 +104,7 @@ export function SignUp() {
             Open the email from Space Learn and follow the link — it'll bring
             you straight back here, signed in.
           </div>
-          <Button type="button" variant="secondary" disabled={resendBusy} onClick={resend}>
+          <Button type="button" variant="outline3d" size="lg" disabled={resendBusy} onClick={resend}>
             {resendBusy ? 'Sending…' : "Didn't get it? Resend"}
           </Button>
           <Link
@@ -171,7 +172,7 @@ export function SignUp() {
             {errors.form}
           </div>
         )}
-        <Button type="submit" disabled={busy} className="py-3.5">
+        <Button type="submit" variant="solid3d" size="xl" disabled={busy} className="mt-1 w-full">
           {busy ? 'Creating account…' : 'Create account'}
         </Button>
 
@@ -183,11 +184,13 @@ export function SignUp() {
 
         <Button
           type="button"
-          variant="secondary"
+          variant="outline3d"
+          size="xl"
           onClick={signUpGoogle}
           disabled={googleBusy}
-          className="py-3"
+          className="w-full"
         >
+          <GoogleGlyph />
           {googleBusy ? 'Redirecting…' : 'Continue with Google'}
         </Button>
 
