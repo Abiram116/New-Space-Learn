@@ -150,55 +150,6 @@ export function FoilText({
  * Duplicated once and translated by exactly -50%, so the loop is seamless
  * without measuring anything at runtime.
  */
-export function CodeMarquee({ items, className }: { items: string[]; className?: string }) {
-  const doubled = [...items, ...items]
-  return (
-    <div
-      className={cn(
-        'relative flex overflow-hidden border-y border-line bg-well/60 py-2.5',
-        className,
-      )}
-      aria-hidden
-    >
-      <div
-        className="flex shrink-0 gap-8 pr-8"
-        style={{ animation: 'marquee 34s linear infinite' }}
-      >
-        {doubled.map((item, i) => (
-          <span key={i} className="setcode whitespace-nowrap">
-            {item}
-          </span>
-        ))}
-      </div>
-      {/* Edges fade so the strip reads as continuous, not clipped. */}
-      <div
-        className="pointer-events-none absolute inset-y-0 left-0 w-24"
-        style={{ background: 'linear-gradient(90deg, var(--color-canvas), transparent)' }}
-      />
-      <div
-        className="pointer-events-none absolute inset-y-0 right-0 w-24"
-        style={{ background: 'linear-gradient(270deg, var(--color-canvas), transparent)' }}
-      />
-      <style>{`
-        @keyframes marquee {
-          from { transform: translateX(0); }
-          to   { transform: translateX(-50%); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          [style*="marquee"] { animation: none !important; }
-        }
-      `}</style>
-    </div>
-  )
-}
-
-/**
- * Pointer parallax for a 3D stage.
- *
- * Returns a normalised -1..1 pair from the pointer's position over the
- * element, rAF-throttled. Disabled entirely for coarse pointers: on a phone
- * there is no hover, and running this on touch just costs battery.
- */
 export function usePointerParallax<T extends HTMLElement>() {
   const ref = useRef<T>(null)
   // `pos` is -1..1 for parallax offsets; `light` is 0-100% for placing the
