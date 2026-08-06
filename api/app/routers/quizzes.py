@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -26,11 +27,15 @@ router = APIRouter()
 async def list_quizzes(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[QuizOut]:
-    await assert_subspace(user.id, subspace_id)
-    rows = await supabase.db_select(
-        "quizzes",
-        filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
-        order="created_at.desc",
+    # Guard and read run together — see the note in notes.list_notes for why
+    # that's safe (the read is already user-scoped) and what it saves.
+    _, rows = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "quizzes",
+            filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
+            order="created_at.desc",
+        ),
     )
     return [_to_quiz(r) for r in rows]
 
@@ -168,7 +173,7 @@ async def submit_quiz(
             "score": score,
         },
     )
-    await activity.bump(user.id, quizzes_taken=1, study_seconds=180)
+    await activity.bump(user.id, quizzes_taken=1, study_seconds=activity.SECONDS_PER_QUIZ)
     return QuizResultOut(score=score, correct=correct)
 
 

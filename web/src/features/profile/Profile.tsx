@@ -11,15 +11,16 @@
  */
 
 import { useNavigate } from 'react-router-dom'
-import { getStats } from '../../api/me'
 import type { Badge, Stats } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon, type IconName } from '../../components/ui/Icon'
 
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
+import { getCachedStats } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
@@ -31,7 +32,9 @@ export function Profile() {
   const { user, signOut } = useAuth()
   const { showError } = useToast()
   const navigate = useNavigate()
-  const stats = useAsync(() => getStats(), [])
+  // Shared cache with Home — Profile was refetching the same payload on
+  // every visit, which is the exact back-navigation cost fixed elsewhere.
+  const stats = useAsync(() => getCachedStats(), [])
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -88,6 +91,18 @@ export function Profile() {
           <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
             {stats.error}
           </div>
+        )}
+
+        {/* A brand-new account used to land on a wall of zeroes and empty
+            charts with nothing explaining them. Say what this page will
+            become instead of rendering a blank ledger. */}
+        {d && !stats.loading && d.spaces_count === 0 && d.docs_indexed === 0 && (
+          <EmptyState
+            icon="seal"
+            title="Nothing on the record yet"
+            description="This is where your streak, badges and study history collect. Make a subject, add a topic, and the ledger starts filling itself in."
+            action={<Button onClick={() => navigate('/home')}>Go to Home</Button>}
+          />
         )}
 
         {/* Standing */}

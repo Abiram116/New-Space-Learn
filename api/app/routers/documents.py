@@ -77,11 +77,14 @@ async def suggest_subspace(
 async def list_documents(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[DocumentOut]:
-    await assert_subspace(user.id, subspace_id)
-    rows = await supabase.db_select(
-        "documents",
-        filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
-        order="created_at.desc",
+    # Guard and read run together — see the note in notes.list_notes.
+    _, rows = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "documents",
+            filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
+            order="created_at.desc",
+        ),
     )
     return [_to_doc(r) for r in rows]
 

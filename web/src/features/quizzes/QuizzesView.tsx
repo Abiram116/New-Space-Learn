@@ -19,6 +19,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
+import { CountUp, Stagger } from '../../components/ui/motion'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -386,15 +387,19 @@ function QuizResults({
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-6">
       <Card className="flex shrink-0 flex-col gap-3 p-5 lg:sticky lg:top-6 lg:w-64">
+        {/* The score is the moment this screen exists for — it counts up. */}
         <div className={cn('font-display text-5xl font-semibold', scoreClass)}>
-          {result.score}%
+          <CountUp value={result.score} />%
         </div>
         <div className="text-sm text-muted">
           {result.correct.filter(Boolean).length} of {quiz.questions.length} correct
         </div>
       </Card>
 
+      {/* Reviewed questions arrive in order rather than all at once, so the
+          eye has somewhere to start. Capped stagger — see ui/motion. */}
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+      <Stagger step={45}>
       {quiz.questions.map((q, i) => {
         const chose = answers[i]
         const correct = result.correct[i]
@@ -403,11 +408,11 @@ function QuizResults({
             <div className="flex items-center gap-2">
               <span
                 className={cn(
-                  'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
                   correct ? 'bg-mint text-white' : 'bg-coral-deep text-white',
                 )}
               >
-                {correct ? '✓' : '✗'}
+                <Icon name={correct ? 'check' : 'close'} size={13} />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium">{q.q}</div>
@@ -438,6 +443,7 @@ function QuizResults({
           </Card>
         )
       })}
+      </Stagger>
       </div>
     </div>
   )

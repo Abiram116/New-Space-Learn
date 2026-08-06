@@ -164,7 +164,12 @@ export type Brief = {
   suggestion: BriefSuggestion | null
 }
 
-export type HeatmapCell = { day: string; intensity: number }
+export type HeatmapCell = {
+  day: string
+  /** 0..3 — relative shading only. Use `minutes` for anything a user reads. */
+  intensity: number
+  minutes: number
+}
 
 export type Stats = {
   streak_days: number

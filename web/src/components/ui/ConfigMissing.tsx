@@ -1,8 +1,10 @@
+import { Icon } from './Icon'
+
 export function ConfigMissing() {
   return (
     <div className="mx-auto flex min-h-full max-w-lg flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-2xl">
-        🔌
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand-deep">
+        <Icon name="settings" size={24} />
       </span>
       <h1 className="font-display text-2xl font-semibold">Almost there</h1>
       <p className="text-sm text-muted">

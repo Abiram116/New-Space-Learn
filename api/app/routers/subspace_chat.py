@@ -14,6 +14,7 @@ one row when the stream ends so history stays consistent.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -42,12 +43,15 @@ async def list_messages(
     user: CurrentUser = Depends(get_current_user),
     limit: int = 100,
 ) -> list[ChatMessageOut]:
-    await assert_subspace(user.id, subspace_id)
-    rows = await supabase.db_select(
-        "chat_messages",
-        filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
-        order="created_at.asc",
-        limit=min(limit, 500),
+    # Guard and history read run together — see the note in notes.list_notes.
+    _, rows = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "chat_messages",
+            filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
+            order="created_at.asc",
+            limit=min(limit, 500),
+        ),
     )
     return [
         ChatMessageOut(
@@ -132,7 +136,11 @@ async def send_chat(
             )
             saved_id = saved[0]["id"] if saved else None
             await activity.touch_subspace(subspace_id)
-            await activity.bump(user.id, chat_messages=1, study_seconds=60)
+            await activity.bump(
+                user.id,
+                chat_messages=1,
+                study_seconds=activity.SECONDS_PER_CHAT_MESSAGE,
+            )
             yield _sse(
                 "done",
                 {

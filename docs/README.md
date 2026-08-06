@@ -12,7 +12,8 @@ them front to back.
 | [retrospective.md](retrospective.md) | What went wrong during the redesign, the pattern behind each mistake, and the standing checklist we now hold every new feature to. |
 | [backlog.md](backlog.md) | The open, not-yet-scheduled list of product problems and ideas — organized by area, not by priority. |
 | [v2-review.md](v2-review.md) | An external product review, and my own point-by-point response — including a real disagreement (and its resolution) over whether to replace Subjects/Subspaces with a knowledge graph. Read before scoping anything graph- or personalization-shaped. |
-| [plan-frontend.md](plan-frontend.md) / [plan-backend.md](plan-backend.md) | The prioritized, scoped plan that came out of that review — frontend and backend halves kept separate but cross-referenced by epic number. Planning only; nothing in them is scheduled or being built yet. |
+| [plan-frontend.md](plan-frontend.md) / [plan-backend.md](plan-backend.md) | The prioritized, scoped plan of functional epics — frontend and backend halves kept separate but cross-referenced by epic number. §1–§13 are shipped; §14–§16 are open. |
+| [design-plan.md](design-plan.md) | How every surface should look and move, page by page, plus the Higgsfield asset briefs (with real prompts) and the sequencing to produce them. Read with `vision.md`. |
 
 ## The one-paragraph version
 

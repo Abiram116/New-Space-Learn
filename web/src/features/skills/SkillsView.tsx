@@ -436,13 +436,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                       })
                     }
                     className={cn(
-                      'rounded-full px-2.5 py-1.5 cursor-pointer',
+                      'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
                       on
                         ? 'bg-line-soft text-ink'
                         : 'border-[1.5px] border-line bg-canvas text-faint',
                     )}
                   >
-                    {on ? '✓ ' : ''}
+                    {on && <Icon name="check" size={11} />}
                     {cap.label}
                   </button>
                 )
@@ -459,13 +459,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                   title={opt.hint}
                   onClick={() => setForm({ ...form, memory_scope: opt.value })}
                   className={cn(
-                    'rounded-full px-2.5 py-1.5 cursor-pointer',
+                    'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
                     form.memory_scope === opt.value
                       ? 'bg-line-soft text-ink'
                       : 'border-[1.5px] border-line bg-canvas text-faint',
                   )}
                 >
-                  {form.memory_scope === opt.value ? '✓ ' : ''}
+                  {form.memory_scope === opt.value && <Icon name="check" size={11} />}
                   {opt.label}
                 </button>
               ))}

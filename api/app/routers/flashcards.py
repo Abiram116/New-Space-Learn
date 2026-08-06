@@ -6,6 +6,7 @@ optimistic update. Keep the two in sync.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -43,11 +44,16 @@ router = APIRouter()
 async def list_decks(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[DeckOut]:
-    await assert_subspace(user.id, subspace_id)
-    decks = await supabase.db_select(
-        "decks",
-        filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
-        order="created_at.asc",
+    # Guard and deck read run together — see the note in notes.list_notes.
+    # The card read below genuinely depends on the deck ids, so it stays
+    # sequential: three round trips become two.
+    _, decks = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "decks",
+            filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
+            order="created_at.asc",
+        ),
     )
     if not decks:
         return []
@@ -300,7 +306,9 @@ async def grade_card(
             "due_at": due_at.isoformat(),
         },
     )
-    await activity.bump(user.id, cards_reviewed=1, study_seconds=20)
+    await activity.bump(
+        user.id, cards_reviewed=1, study_seconds=activity.SECONDS_PER_CARD_REVIEW
+    )
     r = updated[0]
     return FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
 

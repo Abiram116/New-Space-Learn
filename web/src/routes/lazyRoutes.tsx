@@ -36,3 +36,31 @@ export const QuizzesView = lazy(() =>
 export function Lazy({ children }: { children: ReactNode }) {
   return <Suspense fallback={<PageSpinner />}>{children}</Suspense>
 }
+
+/**
+ * Warm the split chunks once the app is idle.
+ *
+ * Splitting these out made the first paint much cheaper, but it moves the
+ * cost to whenever a tab is first opened — which is exactly when the user
+ * is waiting on it. Fetching during idle time gets both: a small entry
+ * bundle *and* an instant first open, because the chunk is already in the
+ * browser cache by the time it's asked for.
+ *
+ * Deliberately fire-and-forget: a failed prefetch is not an error, it just
+ * means the chunk loads normally on demand.
+ */
+type IdleWindow = Window & {
+  requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void
+}
+
+export function prefetchRouteChunks(): void {
+  const warm = () => {
+    void import('../features/flashcards/FlashcardsView')
+    void import('../features/quizzes/QuizzesView')
+    void import('../features/notes/NotesView')
+  }
+  const idle = (window as IdleWindow).requestIdleCallback
+  // Safari has no requestIdleCallback; a short timer is a fine stand-in.
+  if (idle) idle(warm, { timeout: 4000 })
+  else window.setTimeout(warm, 2000)
+}

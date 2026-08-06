@@ -264,7 +264,10 @@ class SkillUpdate(BaseModel):
 # ── Stats / settings ───────────────────────────────────────────────────
 class HeatmapCell(BaseModel):
     day: date
-    intensity: int  # 0..3
+    intensity: int  # 0..3, relative shading only
+    # The real figure behind the shading. Without this the UI can only draw an
+    # abstract bar and had nothing concrete to show when a day is inspected.
+    minutes: int
 
 
 class Badge(BaseModel):

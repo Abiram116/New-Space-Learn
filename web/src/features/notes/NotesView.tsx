@@ -473,7 +473,7 @@ function labelFor(f: Filter, notes: Note[] | null): string {
 function originLabel(origin: Note['origin']): string {
   if (origin === 'user') return 'Written by me'
   if (origin === 'doc') return 'From a document'
-  return '✦ Notes agent'
+  return 'Notes agent'
 }
 
 function relativeTime(iso: string): string {

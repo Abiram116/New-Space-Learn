@@ -19,6 +19,30 @@ from . import supabase
 log = logging.getLogger("space_learn.activity")
 
 
+# ── Study-time model ───────────────────────────────────────────────────
+#
+# We do not measure wall-clock time. There is no session timer, no focus
+# tracking, and adding one would mean deciding what counts as "studying"
+# while a tab sits open in the background — a worse kind of wrong.
+#
+# Instead each completed action credits a fixed, deliberately conservative
+# estimate of the time it takes to do properly. These lived as bare numbers
+# in three different routers, which made the model impossible to reason
+# about or change coherently; they belong in one place with their reasoning.
+#
+# Because it is an estimate, the UI must never present it as a measurement:
+# it is rendered with a "~" and labelled as approximate. Changing a number
+# here changes history's meaning, so treat it as a data-model decision, not
+# a tuning knob.
+
+#: Reading an answer and forming a follow-up. The dominant cost is reading.
+SECONDS_PER_CHAT_MESSAGE = 60
+#: Recall, self-grade, move on. Short by design — cards are meant to be fast.
+SECONDS_PER_CARD_REVIEW = 20
+#: A multi-question quiz plus reviewing what came back wrong.
+SECONDS_PER_QUIZ = 180
+
+
 async def bump(
     user_id: str,
     *,

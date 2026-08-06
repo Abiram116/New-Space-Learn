@@ -14,6 +14,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Stats } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
+import { CountUp } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
 
@@ -81,29 +82,38 @@ export function StreakLedger({
             <span className="setcode">Current streak</span>
           </div>
           <div className="mt-1 flex items-baseline gap-2">
-            <span
+            {/* The streak is the one figure on Home worth a beat of its
+                own — it counts up rather than snapping. Everything else
+                stays still; a page of animating numbers reads as a slot
+                machine, not a study app. */}
+            <CountUp
+              value={streak}
               className={cn(
                 'nameplate text-[56px] leading-none tabular-nums',
                 streak > 0 ? 'text-brand' : 'text-ink-3',
               )}
-            >
-              {streak}
-            </span>
+            />
             <span className="setcode">{streak === 1 ? 'day' : 'days'}</span>
           </div>
         </div>
 
-        {/* Hovering a bar swaps this readout; otherwise it shows the week. */}
+        {/* Hovering a bar swaps this readout; otherwise it shows the week.
+            This used to repeat a '▮' glyph per intensity step — a character
+            the display face doesn't carry, so it rendered as empty boxes,
+            and even correct it told you nothing. It shows the real figure
+            now. The '~' is honest: see the study-time model in
+            api/app/services/activity.py — these are estimates from completed
+            actions, not measured wall-clock time. */}
         <div className="ml-auto text-right">
           <span className="setcode">
             {active ? formatDay(active.day) : 'This week'}
           </span>
           <div className="mt-1 nameplate text-[26px] leading-none tabular-nums text-ink">
             {active
-              ? active.intensity > 0
-                ? `${'▮'.repeat(active.intensity)}`
+              ? active.minutes > 0
+                ? `~${active.minutes}m`
                 : 'Nothing'
-              : `${stats.study_minutes_this_week}m`}
+              : `~${stats.study_minutes_this_week}m`}
           </div>
         </div>
       </div>
@@ -125,7 +135,7 @@ export function StreakLedger({
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
               aria-label={`${formatDay(cell.day)}: ${
-                cell.intensity > 0 ? 'studied' : 'nothing logged'
+                cell.minutes > 0 ? `about ${cell.minutes} minutes` : 'nothing logged'
               }`}
               className="group relative flex h-full flex-1 cursor-pointer items-end"
             >

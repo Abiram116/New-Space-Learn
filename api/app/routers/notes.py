@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import UTC, datetime
@@ -46,11 +47,18 @@ def _to_note(row: dict) -> NoteOut:
 async def list_notes(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[NoteOut]:
-    await assert_subspace(user.id, subspace_id)
-    rows = await supabase.db_select(
-        "notes",
-        filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
-        order="updated_at.desc",
+    # The guard and the read are independent: the read is already scoped to
+    # `user_id`, so it cannot return another user's rows even if the guard
+    # were to fail. Running them together saves a round trip on a request
+    # the notes page blocks on. The guard's result is still awaited, so an
+    # unowned subspace raises 404 before anything is returned.
+    _, rows = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "notes",
+            filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
+            order="updated_at.desc",
+        ),
     )
     return [_to_note(r) for r in rows]
 

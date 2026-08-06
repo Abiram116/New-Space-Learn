@@ -1,6 +1,7 @@
 import type { ChatMessage as Message } from '../../api/types'
 import { OutlinePill } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
+import { Rise } from '../../components/ui/motion'
 import { MarkdownMessage } from './MarkdownMessage'
 
 export function ChatMessage({
@@ -14,18 +15,23 @@ export function ChatMessage({
   onMakeCards?: () => void
   onQuiz?: () => void
 }) {
+  // Bubbles lift in rather than appearing. Short and small — a chat log is
+  // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
     return (
-      <div className="max-w-[70%] self-end rounded-[16px_16px_4px_16px] bg-brand px-3.5 py-3 text-[13.5px] text-white whitespace-pre-wrap">
-        {message.content}
-      </div>
+      <Rise distance={6} className="max-w-[70%] self-end">
+        <div className="rounded-[16px_16px_4px_16px] bg-brand px-3.5 py-3 text-[13.5px] text-white whitespace-pre-wrap">
+          {message.content}
+        </div>
+      </Rise>
     )
   }
 
   const citations = message.citations ?? []
 
   return (
-    <div className="flex max-w-[88%] flex-col gap-2.5 rounded-[16px_16px_16px_4px] border-[1.5px] border-line bg-surface p-3.5 text-[13.5px] leading-[1.55]">
+    <Rise distance={6} className="max-w-[88%]">
+    <div className="flex flex-col gap-2.5 rounded-[16px_16px_16px_4px] border-[1.5px] border-line bg-surface p-3.5 text-[13.5px] leading-[1.55]">
       {citations.length > 0 && (
         <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
           <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
@@ -68,6 +74,7 @@ export function ChatMessage({
         </div>
       )}
     </div>
+    </Rise>
   )
 }
 

@@ -18,6 +18,7 @@ import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon, type IconName } from '../../components/ui/Icon'
+import { Stagger } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
@@ -67,8 +68,15 @@ export function Home() {
           {anySubspaces && first && (
             <div className="flex flex-wrap items-center gap-2.5">
               {brief.data?.suggestion ? (
+                /* This is the one action the product is actually
+                   recommending, computed from real weak-signal data — it
+                   shouldn't look identical to a generic "open something"
+                   button. The foil ring marks it as the considered pick. */
                 <Link to={brief.data.suggestion.route}>
-                  <Button size="lg">
+                  <Button
+                    size="lg"
+                    className="ring-2 ring-brand/30 ring-offset-2 ring-offset-canvas transition-shadow hover:ring-brand/60"
+                  >
                     {brief.data.suggestion.label}
                     <Icon name="arrowRight" size={15} />
                   </Button>
@@ -94,10 +102,13 @@ export function Home() {
 
         {/* ── First run ── */}
         {!spacesLoading && !anySpaces && (
+          /* First words the product ever says. It should sound like the
+             companion introducing itself and what it will do, not a
+             database reporting zero rows. */
           <EmptyState
             icon="sparkle"
-            title="Nothing in the binder yet"
-            description="Make a subject for something you're studying, add a topic inside it, then drop in a PDF and start asking."
+            title="Let's start with what you're studying"
+            description="Give me a subject and a topic inside it, then drop in your lecture notes or a PDF. From there I'll answer from your own material, and turn what you cover into cards, notes and quizzes."
             action={<Button onClick={() => setNewSpaceOpen(true)}>Create your first subject</Button>}
           />
         )}
@@ -148,10 +159,14 @@ export function Home() {
               <h2 className="nameplate text-[22px] text-ink">Your topics</h2>
               <span className="setcode">{entries.length} in play</span>
             </div>
+            {/* Topic cards deal themselves in left-to-right, in keeping with
+                the card-table world. Capped stagger — see ui/motion. */}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {entries.slice(0, 6).map((entry) => (
-                <TopicCard key={entry.subspace.id} entry={entry} />
-              ))}
+              <Stagger>
+                {entries.slice(0, 6).map((entry) => (
+                  <TopicCard key={entry.subspace.id} entry={entry} />
+                ))}
+              </Stagger>
               {emptySubjects.map((space) => (
                 <DashedCard
                   key={space.id}

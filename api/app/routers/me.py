@@ -171,7 +171,9 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         if seconds > 0:
             ratio = seconds / max_seconds
             intensity = 1 + min(2, int(ratio * 3))
-        heatmap.append(HeatmapCell(day=d, intensity=intensity))
+        # Round up, so a day with any logged activity never reads as "0m".
+        minutes = -(-seconds // 60) if seconds else 0
+        heatmap.append(HeatmapCell(day=d, intensity=intensity, minutes=minutes))
         d += timedelta(days=1)
 
     # Streak: consecutive days ending today (or yesterday if streak-freeze on).
@@ -321,12 +323,17 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         "Write a two-part response, no more than 40 words total.\n\n"
         f"{student_block}"
         f"Facts:\n{_format_facts(facts)}\n\n"
-        "Line 1 (headline): 3-6 words. Sentence case — capitalise only the "
-        "first word and proper nouns. Never Title Case. No greeting words.\n"
-        "Line 2 (body): ONE sentence, 18 words maximum, saying what to do next "
-        "and why. Name the actual topic.\n\n"
+        "Line 1 (headline): 3-6 words naming the topic. Sentence case — "
+        "capitalise only the first word and proper nouns. Never Title Case. "
+        "No greeting words.\n"
+        "Line 2 (body): ONE sentence, 18 words maximum, saying what to do "
+        "next and why it's worth doing. The headline already names the topic, "
+        "so do NOT repeat it here — write as if continuing that sentence.\n\n"
         "Warm, direct, a peer not a coach. No emoji, no markdown, no asterisks, "
         "no exclamation marks.\n"
+        "Cut anything that could be said about any topic. 'to reinforce your "
+        "understanding' and 'to deepen your knowledge' are filler — say the "
+        "concrete thing instead, or say less.\n"
         "NEVER state a quantity, digit, or number-word. The interface already "
         "shows the counts next to your text; repeating them risks contradicting "
         "it. Say 'your backlog', not 'seven cards'.\n"

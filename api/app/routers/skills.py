@@ -3,6 +3,8 @@ apply per subspace so the chat prompt reflects them."""
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
@@ -112,11 +114,16 @@ async def delete_skill(
 async def list_active_skills(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[SkillOut]:
-    await assert_subspace(user.id, subspace_id)
-    links = await supabase.db_select(
-        "subspace_skills",
-        filters={"subspace_id": f"eq.{subspace_id}"},
-        select="skill_id",
+    # Guard and link read run together; the skills read depends on the link
+    # ids so it stays sequential. Three round trips become two, on a request
+    # the chat dock makes every time a topic is opened.
+    _, links = await asyncio.gather(
+        assert_subspace(user.id, subspace_id),
+        supabase.db_select(
+            "subspace_skills",
+            filters={"subspace_id": f"eq.{subspace_id}"},
+            select="skill_id",
+        ),
     )
     if not links:
         return []

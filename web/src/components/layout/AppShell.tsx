@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { cn } from '../../lib/cn'
+import { PageTransition } from '../ui/motion'
+import { prefetchRouteChunks } from '../../routes/lazyRoutes'
 import { SpacesProvider } from '../../features/spaces/SpacesProvider'
 import { Sidebar } from './Sidebar'
 import { MobileBar } from './MobileBar'
@@ -34,6 +36,10 @@ export function AppShell() {
   // Route changes can also come from inside the page (a card link, a redirect),
   // not just the drawer's own links — close on any of them.
   useEffect(() => setNavOpen(false), [pathname])
+
+  // Warm the split route chunks once we're idle, so the first visit to Cards,
+  // Quizzes or Notes doesn't pay a download the user has to wait through.
+  useEffect(() => prefetchRouteChunks(), [])
 
   // A drawer that scrolls the page behind it feels broken on touch.
   useEffect(() => {
@@ -103,7 +109,11 @@ export function AppShell() {
                 'radial-gradient(60ch 46ch at 60% 100%, #241a17 0%, transparent 56%)',
             }}
           >
-            <Outlet />
+            {/* Keyed on the path so each page cross-fades in rather than
+                snapping — see components/ui/motion. */}
+            <PageTransition routeKey={pathname}>
+              <Outlet />
+            </PageTransition>
           </main>
         </div>
       </div>
