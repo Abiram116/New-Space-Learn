@@ -12,6 +12,7 @@ browser.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -59,6 +60,14 @@ async def close_client() -> None:
 
 # ── Auth helpers ────────────────────────────────────────────────────────
 
+# Verified-token cache. Only used when local HS256 verification is impossible
+# (asymmetric signing keys), which is exactly when every request would
+# otherwise cost a round trip to /auth/v1/user before doing anything useful.
+_TOKEN_CACHE_TTL_S = 60.0
+_TOKEN_CACHE_MAX = 512
+_token_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_warned_local_verify = False
+
 
 async def verify_access_token(token: str) -> dict[str, Any]:
     """Return the decoded JWT claims for a Supabase access token.
@@ -82,9 +91,33 @@ async def verify_access_token(token: str) -> dict[str, Any]:
             )
             return claims
         except JWTError:
-            log.info("local JWT verify failed, falling back to network verify")
+            # Logged once per process, not once per request. This fires on
+            # every call for projects on asymmetric signing keys, and at ~250ms
+            # a hop it was the single largest cost in the app — 81 of these in
+            # one page load, each one blocking real work behind it.
+            global _warned_local_verify
+            if not _warned_local_verify:
+                _warned_local_verify = True
+                log.info(
+                    "local JWT verify failed — using network verify with a "
+                    "short-lived cache. Set SUPABASE_JWT_SECRET to this "
+                    "project's legacy HS256 secret to skip the hop entirely."
+                )
 
-    return await _verify_via_network(token)
+    cached = _token_cache.get(token)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+
+    claims = await _verify_via_network(token)
+
+    # Cache briefly, keyed by the token itself. A Supabase access token is
+    # already short-lived and is re-verified the moment this window lapses, so
+    # the exposure is bounded — while a single page load stops paying for the
+    # same verification a dozen times over.
+    if len(_token_cache) > _TOKEN_CACHE_MAX:
+        _token_cache.clear()
+    _token_cache[token] = (time.monotonic() + _TOKEN_CACHE_TTL_S, claims)
+    return claims
 
 
 async def _verify_via_network(token: str) -> dict[str, Any]:

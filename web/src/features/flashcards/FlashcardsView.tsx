@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   createCard,
   createDeck,
@@ -23,7 +24,7 @@ import {
 } from '../../api/flashcards'
 import type { Deck, Flashcard, Grade } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
-import { Button } from '../../components/ui/Button'
+import { Button, bevel3d } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -37,16 +38,30 @@ import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
 import { estimateRetention } from '../../lib/retention'
+import { Tip } from '../../components/ui/Tip'
+import { nextIntervalLabel } from '../../lib/schedule'
 import { stripMarkdown } from '../../lib/text'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
-/** Grades read as a difficulty ramp, cold → hot, so the row is scannable. */
-const GRADES: { key: Grade; label: string; hotkey: string; tone: string }[] = [
-  { key: 'again', label: 'Again', hotkey: '1', tone: 'text-coral border-coral/40 hover:bg-coral/15' },
-  { key: 'hard', label: 'Hard', hotkey: '2', tone: 'text-sun border-sun/40 hover:bg-sun/15' },
-  { key: 'good', label: 'Good', hotkey: '3', tone: 'text-sky border-sky/40 hover:bg-sky/15' },
-  { key: 'easy', label: 'Easy', hotkey: '4', tone: 'text-mint border-mint/40 hover:bg-mint/15' },
+/**
+ * Grades read as a difficulty ramp, cold → hot, so the row is scannable.
+ *
+ * `text` is always the `-deep` ink and `bg` its matching `-soft` well — the
+ * pure hue on the dark ground doesn't clear contrast. See lib/tone.
+ */
+const GRADES: {
+  key: Grade
+  label: string
+  hotkey: string
+  text: string
+  bg: string
+  border: string
+}[] = [
+  { key: 'again', label: 'Again', hotkey: '1', text: 'text-coral-deep', bg: 'bg-coral-soft', border: 'border-coral/30' },
+  { key: 'hard', label: 'Hard', hotkey: '2', text: 'text-sun-deep', bg: 'bg-sun-soft', border: 'border-sun/30' },
+  { key: 'good', label: 'Good', hotkey: '3', text: 'text-sky-deep', bg: 'bg-sky-soft', border: 'border-sky/30' },
+  { key: 'easy', label: 'Easy', hotkey: '4', text: 'text-mint-deep', bg: 'bg-mint-soft', border: 'border-mint/30' },
 ]
 
 type Mode =
@@ -56,12 +71,27 @@ type Mode =
   | { kind: 'summary'; deckId: string; grades: Grade[] }
 
 export function FlashcardsView() {
-  const { space, subspace } = useActiveSubspace()
+  const { space, subspace, base } = useActiveSubspace()
   if (!space || !subspace) return <SubspaceMissing />
-  return <Inner key={subspace.id} subspaceId={subspace.id} subspaceName={subspace.name} />
+  return (
+    <Inner
+      key={subspace.id}
+      subspaceId={subspace.id}
+      subspaceName={subspace.name}
+      base={base}
+    />
+  )
 }
 
-function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName: string }) {
+function Inner({
+  subspaceId,
+  subspaceName,
+  base,
+}: {
+  subspaceId: string
+  subspaceName: string
+  base: string
+}) {
   const { show, showError } = useToast()
   const decks = useAsync(() => listDecks(subspaceId), [subspaceId])
   const [mode, setMode] = useState<Mode>({ kind: 'decks' })
@@ -112,12 +142,18 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
 
   if (mode.kind === 'summary') {
     const deck = decks.data?.find((d) => d.id === mode.deckId)
+    // You just emptied this deck, so "review again" would only ever fire the
+    // "nothing due" toast. Offer the next deck that actually has cards ready,
+    // and when nothing does, the other way to use what you just reviewed.
+    const nextDeck = (decks.data ?? []).find((d) => d.id !== mode.deckId && d.due > 0) ?? null
     return (
       <Summary
         grades={mode.grades}
         deckName={deck?.name ?? 'Deck'}
         onDone={() => setMode({ kind: 'decks' })}
-        onAgain={() => beginReview(mode.deckId)}
+        nextDeck={nextDeck}
+        onReviewNext={beginReview}
+        quizHref={`${base}/quizzes`}
       />
     )
   }
@@ -145,14 +181,12 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
       <SubspaceHeader
         title="Cards"
         actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setNewDeckOpen(true)}>
-              <Icon name="plus" size={14} /> New deck
-            </Button>
-            <Button size="sm" onClick={() => setGenOpen(true)}>
-              <Icon name="sparkle" size={14} /> Generate
-            </Button>
-          </>
+          /* Manual deck creation belongs to the dashed slot in the grid — the
+             one empty binder pocket. The header keeps the one action the grid
+             can't express. */
+          <Button size="sm" onClick={() => setGenOpen(true)}>
+            <Icon name="sparkle" size={14} /> Generate
+          </Button>
         }
       />
 
@@ -307,12 +341,11 @@ function DeckTile({
         </div>
       </button>
 
+      {/* One button. The tile body above already opens the deck, so a "Cards"
+          button on the same tile was a second door to the same room. */}
       <div className="mt-auto flex gap-2 pt-1">
         <Button size="sm" variant={due ? 'primary' : 'secondary'} onClick={onReview} className="flex-1">
           Review
-        </Button>
-        <Button size="sm" variant="secondary" onClick={onOpen}>
-          Cards
         </Button>
       </div>
     </Card>
@@ -524,7 +557,7 @@ function CardEditor({
           value={front}
           onChange={(e) => setFront(e.target.value)}
           rows={2}
-          placeholder="What does the discount factor control?"
+          placeholder="What does one turn of the Krebs cycle yield?"
         />
         <Textarea
           name="back"
@@ -566,6 +599,15 @@ function Review({
   // Keep the handler in a ref so the key listener never goes stale.
   const stateRef = useRef({ mode, card })
   stateRef.current = { mode, card }
+
+  /* What each grade costs, computed from this card's own ease/interval/reps
+     with the same arithmetic the server runs. Shown on the button so the
+     choice is informed rather than a guess about a hidden algorithm. */
+  const previews = useMemo(() => {
+    const out = {} as Record<Grade, string>
+    for (const g of GRADES) out[g.key] = card ? nextIntervalLabel(card, g.key) : ''
+    return out
+  }, [card])
 
   const flip = useCallback(() => {
     const m = stateRef.current.mode
@@ -652,30 +694,51 @@ function Review({
             </button>
           </div>
 
-          <div className="flex w-full flex-col gap-2">
-            {mode.flipped ? (
-              <div className="grid grid-cols-4 gap-2">
-                {GRADES.map((g) => (
-                  <button
-                    key={g.key}
-                    type="button"
-                    onClick={() => grade(g.key)}
-                    className={cn(
-                      'flex flex-col items-center gap-0.5 rounded-[11px] border bg-raised py-2.5',
-                      'text-[12.5px] font-bold transition-colors cursor-pointer',
-                      g.tone,
-                    )}
-                  >
-                    {g.label}
-                    <span className="setcode">{g.hotkey}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <Button size="lg" onClick={flip} className="w-full">
-                Show answer
-              </Button>
-            )}
+          {/* The grade row is always here — dimmed and out of the tab order
+              until the card is flipped — so the card never jumps a row's
+              height at the moment you're reading the answer. */}
+          <div className="flex w-full flex-col gap-3 pb-[5px]">
+            <div className="grid grid-cols-4 gap-2" aria-hidden={!mode.flipped}>
+              {GRADES.map((g) => (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => mode.flipped && grade(g.key)}
+                  aria-disabled={!mode.flipped}
+                  tabIndex={mode.flipped ? 0 : -1}
+                  aria-label={`${g.label} — next in ${previews[g.key]}`}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 rounded-[11px] border py-2.5',
+                    'text-[12.5px] font-bold transition-all duration-100 cursor-pointer',
+                    bevel3d,
+                    g.bg,
+                    g.text,
+                    g.border,
+                    !mode.flipped && 'pointer-events-none opacity-30',
+                  )}
+                >
+                  {g.label}
+                  <span className="setcode tabular-nums">{previews[g.key]}</span>
+                </button>
+              ))}
+            </div>
+            {/* Held at height whether or not it says anything — the card face
+                carries the "Space to flip" hint on the other side of the flip. */}
+            <div className="flex h-4 justify-center">
+              <span className={cn('setcode', !mode.flipped && 'invisible')}>
+                keys 1–4
+              </span>
+            </div>
+
+            {/* The number under each grade is the single least obvious thing
+                on this screen, and it is the whole mechanic. */}
+            <Tip id="cards-grades-v1" icon="clock" className="mt-4">
+              The number under each grade is when you'll see this card next.
+              <strong className="font-semibold text-ink-3"> Again</strong> resets
+              it to one day; <strong className="font-semibold text-ink-3">Easy</strong>{' '}
+              pushes it furthest out. Answer honestly — the schedule only works
+              if the grades are true.
+            </Tip>
           </div>
         </div>
 
@@ -692,7 +755,7 @@ function Review({
                       key={g.key}
                       className="flex flex-col items-center gap-0.5 rounded-[10px] bg-well py-1.5"
                     >
-                      <span className={cn('nameplate text-[16px] tabular-nums', g.tone.split(' ')[0])}>
+                      <span className={cn('nameplate text-[16px] tabular-nums', g.text)}>
                         {count}
                       </span>
                       <span className="setcode text-[9px]">{g.label}</span>
@@ -777,12 +840,16 @@ function Summary({
   grades,
   deckName,
   onDone,
-  onAgain,
+  nextDeck,
+  onReviewNext,
+  quizHref,
 }: {
   grades: Grade[]
   deckName: string
   onDone: () => void
-  onAgain: () => void
+  nextDeck: Deck | null
+  onReviewNext: (deckId: string) => void
+  quizHref: string
 }) {
   const tally = useMemo(() => {
     const counts: Record<Grade, number> = { again: 0, hard: 0, good: 0, easy: 0 }
@@ -805,7 +872,7 @@ function Summary({
           <div className="grid grid-cols-4 gap-2">
             {GRADES.map((g) => (
               <div key={g.key} className="flex flex-col gap-0.5 rounded-[10px] bg-well py-2">
-                <span className={cn('nameplate text-[22px] tabular-nums', g.tone.split(' ')[0])}>
+                <span className={cn('nameplate text-[22px] tabular-nums', g.text)}>
                   {tally[g.key]}
                 </span>
                 <span className="setcode">{g.label}</span>
@@ -823,9 +890,17 @@ function Summary({
             <Button variant="secondary" onClick={onDone} className="flex-1">
               Done
             </Button>
-            <Button onClick={onAgain} className="flex-1">
-              Review again
-            </Button>
+            {nextDeck ? (
+              <Button onClick={() => onReviewNext(nextDeck.id)} className="min-w-0 flex-1">
+                <span className="truncate">
+                  Review {nextDeck.due} more in {nextDeck.name}
+                </span>
+              </Button>
+            ) : (
+              <Link to={quizHref} className="min-w-0 flex-1">
+                <Button className="w-full">Take a quiz on this</Button>
+              </Link>
+            )}
           </div>
         </Card>
       </div>
@@ -873,7 +948,7 @@ function NewDeckModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
-          placeholder="Bellman equations"
+          placeholder="Photosynthesis"
           autoFocus
         />
         <div className="flex justify-end gap-2">

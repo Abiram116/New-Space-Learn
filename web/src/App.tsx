@@ -4,13 +4,19 @@ import { AppShell } from './components/layout/AppShell'
 import { AuthCallback } from './features/auth/AuthCallback'
 import { SignIn } from './features/auth/SignIn'
 import { SignUp } from './features/auth/SignUp'
-import { ChatView } from './features/chat/ChatView'
-import { DocsView } from './features/docs/DocsView'
 import { Home } from './features/home/Home'
-import { Profile } from './features/profile/Profile'
-import { Settings } from './features/settings/Settings'
-import { SkillsView } from './features/skills/SkillsView'
-import { FlashcardsView, Landing, Lazy, NotesView, QuizzesView } from './routes/lazyRoutes'
+import {
+  ChatView,
+  DocsView,
+  FlashcardsView,
+  Landing,
+  Lazy,
+  NotesView,
+  Profile,
+  QuizzesView,
+  Settings,
+  SkillsView,
+} from './routes/lazyRoutes'
 import { NotFound } from './routes/NotFound'
 import { RootRoute } from './routes/RootRoute'
 
@@ -55,11 +61,48 @@ export default function App() {
         }
       >
         <Route path="/home" element={<Home />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/profile"
+          element={
+            <Lazy>
+              <Profile />
+            </Lazy>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <Lazy>
+              <Settings />
+            </Lazy>
+          }
+        />
+        {/* The `/s/` prefix is REQUIRED and must match `subspacePath()` in
+            `lib/nav.ts`, which is the only place subspace URLs are built.
+
+            It was briefly dropped so slugs could read
+            `/reinforcement-learning/transformers/notes`. That broke every
+            subspace route: links kept emitting four segments (`/s/a/b/notes`)
+            while the pattern matched three, so nothing matched and every
+            topic, note, deck and quiz fell through to the 404 catch-all.
+            Change these two together or not at all. */}
         <Route path="/s/:spaceId/:subspaceId">
-          <Route index element={<ChatView />} />
-          <Route path="docs" element={<DocsView />} />
+          <Route
+            index
+            element={
+              <Lazy>
+                <ChatView />
+              </Lazy>
+            }
+          />
+          <Route
+            path="docs"
+            element={
+              <Lazy>
+                <DocsView />
+              </Lazy>
+            }
+          />
           <Route
             path="notes"
             element={
@@ -84,7 +127,14 @@ export default function App() {
               </Lazy>
             }
           />
-          <Route path="skills" element={<SkillsView />} />
+          <Route
+            path="skills"
+            element={
+              <Lazy>
+                <SkillsView />
+              </Lazy>
+            }
+          />
         </Route>
       </Route>
 

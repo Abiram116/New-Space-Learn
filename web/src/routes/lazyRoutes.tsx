@@ -15,10 +15,17 @@ import { PageSpinner } from '../components/ui/PageSpinner'
  *     signed-out, yet shipped to signed-in users on every load.
  *   - Flashcards and Quizzes are self-contained screens with their own
  *     review/runner state machines.
+ *   - Chat carries react-markdown + remark-gfm + rehype-highlight — the
+ *     heaviest dependency chain outside Notes — and was previously imported
+ *     eagerly in App.tsx. That shipped chat's whole markdown stack to a
+ *     signed-OUT visitor on /signin, who cannot reach chat until after
+ *     signing in and picking a subspace. Docs, Profile, Settings and Skills
+ *     were eager for no reason at all: none of them is where a signed-in
+ *     session actually lands.
  *
- * Everything on the critical path to a signed-in first paint (shell, Home,
- * chat) stays eagerly imported — lazily loading those would trade one
- * download for two round trips.
+ * Only `/home` is the true first paint for a signed-in session (see
+ * RootRoute) — that one stays eager. Everything reached by a click FROM home
+ * is split, same tier as Notes/Flashcards/Quizzes.
  */
 export const Landing = lazy(() =>
   import('../features/landing/Landing').then((m) => ({ default: m.Landing })),
@@ -31,6 +38,21 @@ export const FlashcardsView = lazy(() =>
 )
 export const QuizzesView = lazy(() =>
   import('../features/quizzes/QuizzesView').then((m) => ({ default: m.QuizzesView })),
+)
+export const ChatView = lazy(() =>
+  import('../features/chat/ChatView').then((m) => ({ default: m.ChatView })),
+)
+export const DocsView = lazy(() =>
+  import('../features/docs/DocsView').then((m) => ({ default: m.DocsView })),
+)
+export const Profile = lazy(() =>
+  import('../features/profile/Profile').then((m) => ({ default: m.Profile })),
+)
+export const Settings = lazy(() =>
+  import('../features/settings/Settings').then((m) => ({ default: m.Settings })),
+)
+export const SkillsView = lazy(() =>
+  import('../features/skills/SkillsView').then((m) => ({ default: m.SkillsView })),
 )
 
 export function Lazy({ children }: { children: ReactNode }) {
@@ -58,6 +80,10 @@ export function prefetchRouteChunks(): void {
     void import('../features/flashcards/FlashcardsView')
     void import('../features/quizzes/QuizzesView')
     void import('../features/notes/NotesView')
+    // Chat is the index route of every subspace — the single most likely
+    // click from Home — so it is warmed first among the newly-split chunks.
+    void import('../features/chat/ChatView')
+    void import('../features/docs/DocsView')
   }
   const idle = (window as IdleWindow).requestIdleCallback
   // Safari has no requestIdleCallback; a short timer is a fine stand-in.

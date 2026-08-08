@@ -20,6 +20,7 @@ import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
 import { SectionLabel } from '../../components/ui/Bits'
 import { DashedCard } from '../../components/ui/Card'
+import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -27,6 +28,58 @@ import { SourceItem } from '../docs/SourceItem'
 import { AGENT_ICON, AGENT_LABELS, AGENT_RESULT, AGENT_TONE, type AgentKey } from './agents'
 
 const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
+
+/**
+ * The dock is `lg:`-only, and below that breakpoint nothing said which Skill
+ * was rewriting every answer — the tutor's voice changed with no visible
+ * cause. This strip is that one missing fact, sat directly above the composer.
+ *
+ * Deliberately skills only: agents are already one tap away on the composer's
+ * slash pills at every width, and duplicating them here would just be the dock
+ * again in a worse shape.
+ */
+export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; base: string }) {
+  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
+
+  if (skills.loading || skills.error) return null
+  const list = skills.data ?? []
+
+  return (
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
+      {list.length === 0 ? (
+        <>
+          <span className="setcode shrink-0">No skill on</span>
+          <Link
+            to={`${base}/skills`}
+            className="setcode ml-auto shrink-0 font-bold text-brand-deep"
+          >
+            Pick one
+          </Link>
+        </>
+      ) : (
+        <>
+          <span className="setcode shrink-0">Skills on</span>
+          {list.map((skill) => (
+            <span
+              key={skill.id}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold',
+                toneSoft[skill.tone],
+                toneText[skill.tone],
+              )}
+            >
+              <Icon name="skill" size={12} />
+              {skill.name}
+            </span>
+          ))}
+          <Link to={`${base}/skills`} className="setcode ml-auto shrink-0">
+            Manage
+          </Link>
+        </>
+      )}
+    </div>
+  )
+}
 
 export function ContextDock({
   subspaceId,
@@ -84,7 +137,7 @@ export function ContextDock({
                   toneText[AGENT_TONE[key]],
                 )}
               >
-                <Icon name={AGENT_ICON[key]} size={14} />
+                <Icon3D name={AGENT_ICON[key]} size={15} />
               </span>
               <span className="min-w-0">
                 <span className="flex items-center gap-1 text-[12.5px] font-bold text-ink">

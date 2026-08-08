@@ -7,6 +7,7 @@ import { NewSpaceModal } from '../../features/spaces/NewSpaceModal'
 import { SpaceTree } from '../../features/spaces/SpaceTree'
 import { useSpaces } from '../../features/spaces/SpacesProvider'
 import { Icon, type IconName } from '../ui/Icon'
+import { Icon3D } from '../ui/Icon3D'
 import { LogoMark } from '../ui/Logo'
 import { SectionLabel } from '../ui/Bits'
 import { Skeleton } from '../ui/Skeleton'
@@ -63,7 +64,18 @@ export function Sidebar({
           >
             <LogoMark size={26} />
             {!collapsed && (
-              <span className="nameplate truncate text-[18px] text-ink">Space Learn</span>
+              /* Sized to FIT the rail rather than be clipped by it. The display
+                 face is now Archivo at a 112% width axis, which is materially
+                 wider than the condensed face it replaced, so "Space Learn" no
+                 longer cleared the 238px rail beside the mark and the truncate
+                 rendered it "SPACE LEA…". Normal width and 16px fit with room;
+                 `truncate` stays as a backstop for long display names. */
+              <span
+                className="nameplate truncate text-[16px] text-ink"
+                style={{ fontStretch: '100%' }}
+              >
+                Space Learn
+              </span>
             )}
           </Link>
           {onToggleCollapse && (
@@ -101,8 +113,19 @@ export function Sidebar({
                 )
               }
             >
-              <Icon name={item.icon} size={16} />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {({ isActive }) => (
+                <>
+                  {/* Extruded rather than flat, and the active item is lifted
+                      further off the surface so "where I am" is legible from
+                      the shape alone, not only from the colour. */}
+                  <Icon3D
+                    name={item.icon}
+                    size={17}
+                    lifted={isActive && item.enabled}
+                  />
+                  {!collapsed && <span className="truncate">{item.label}</span>}
+                </>
+              )}
             </NavLink>
           ))}
         </nav>

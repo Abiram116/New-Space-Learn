@@ -24,10 +24,20 @@ const briefCache = createSessionCache<Brief>({
  * outright via `clearStatsCache`.
  */
 const statsCache = createSessionCache<Stats>({
-  key: 'sl:stats:v1',
+  // BUMP THIS WHENEVER `StatsOut` GAINS A FIELD. This cache persists in
+  // sessionStorage across reloads, so after the API grew `due_forecast`,
+  // `composition` and `daily_goal`, every existing session kept being served
+  // the OLD shape — and Home crashed reading `.map` off an absent array.
+  // The version in the key is the only thing that invalidates it.
+  key: 'sl:stats:v3',
   ttlMs: 60 * 1000,
   fetcher: getStats,
-  isValid: (s) => Array.isArray(s?.badges),
+  // Validate the fields the UI actually depends on, not just any one of them.
+  // `badges` alone happily accepted a payload from a previous deploy.
+  isValid: (s) =>
+    Array.isArray(s?.badges) &&
+    Array.isArray(s?.due_forecast) &&
+    Boolean(s?.composition),
 })
 
 export const getCachedBrief = briefCache.get

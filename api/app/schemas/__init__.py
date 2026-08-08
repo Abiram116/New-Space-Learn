@@ -270,6 +270,30 @@ class HeatmapCell(BaseModel):
     minutes: int
 
 
+class ForecastDay(BaseModel):
+    """Cards falling due on one upcoming day.
+
+    `day` 0 is today and includes anything already overdue, because a card
+    that was due last Tuesday is work you have *now*, not history.
+    """
+
+    day: date
+    count: int
+
+
+class StudyComposition(BaseModel):
+    """What the last seven days were actually spent on.
+
+    `daily_activity` has counted these three since the app shipped and nothing
+    ever read them — the app could report how long you studied but not what you
+    did. They cost no extra query: the row is already selected in full.
+    """
+
+    chat_messages: int
+    cards_reviewed: int
+    quizzes_taken: int
+
+
 class Badge(BaseModel):
     """A foil seal. `tier` drives how precious it looks; `hint` tells an
     unearned badge how to be earned, so a locked slot is never a dead end."""
@@ -337,6 +361,13 @@ class StatsOut(BaseModel):
     spaces_count: int
     heatmap: list[HeatmapCell]
     badges: list[Badge]
+    # Everything below rides on this one response deliberately. Home blocks on
+    # /me/stats before it can render, and on Render's free tier the first call
+    # of the day already pays a cold start — a second blocking request for the
+    # dashboard would double that wait. None of these cost an extra query.
+    daily_goal: int
+    composition: StudyComposition
+    due_forecast: list[ForecastDay]
 
 
 class SettingsOut(BaseModel):

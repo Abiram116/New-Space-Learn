@@ -16,6 +16,7 @@ from ..schemas import (
     Badge,
     BriefOut,
     BriefSuggestion,
+    ForecastDay,
     HeatmapCell,
     Me,
     SettingsOut,
@@ -23,6 +24,7 @@ from ..schemas import (
     StatsOut,
     StudentModelIn,
     StudentModelOut,
+    StudyComposition,
 )
 from ..services import student_model as student_model_service
 from ..services import supabase
@@ -136,7 +138,7 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
     (
         settings_row,
         days,
-        cards_due,
+        due_pair,
         quiz_avg,
         docs_indexed,
         spaces_count,
@@ -152,7 +154,7 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
             },
             order="day.asc",
         ),
-        _count_cards_due(user.id),
+        _cards_due_and_forecast(user.id),
         _quiz_average(user.id),
         _count(user.id, "documents", extra={"status": "eq.ready"}),
         _count(user.id, "subjects"),
@@ -182,10 +184,22 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
     max_streak = compute_max_streak([r["day"] for r in days])
 
     week_start = today - timedelta(days=6)
-    week_seconds = sum(
-        int(r.get("study_seconds", 0))
-        for r in days
-        if to_date(r["day"]) >= week_start
+    week_rows = [r for r in days if to_date(r["day"]) >= week_start]
+    week_seconds = sum(int(r.get("study_seconds", 0)) for r in week_rows)
+
+    cards_due, due_forecast = due_pair
+
+    # These three counters have been written on every chat message, card grade
+    # and quiz submission since the app shipped, and no endpoint had ever read
+    # them — the app could say how LONG you studied but not WHAT you did. The
+    # row is already selected in full, so this is arithmetic, not I/O.
+    def _sum(field: str) -> int:
+        return sum(int(r.get(field) or 0) for r in week_rows)
+
+    composition = StudyComposition(
+        chat_messages=_sum("chat_messages"),
+        cards_reviewed=_sum("cards_reviewed"),
+        quizzes_taken=_sum("quizzes_taken"),
     )
 
     badges = [
@@ -231,20 +245,80 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         spaces_count=spaces_count,
         heatmap=heatmap,
         badges=badges,
+        # Already on `settings_row`, which was fetched for `streak_freeze_enabled`
+        # and otherwise thrown away. Without it the streak bars have no reference
+        # line, and a bar with nothing to be measured against is decoration.
+        daily_goal=int(settings_row.get("daily_goal") or 20),
+        composition=composition,
+        due_forecast=due_forecast,
     )
 
 
 # ── Internal helpers ───────────────────────────────────────────────────
 
 
-async def _count_cards_due(user_id: str) -> int:
-    now = datetime.now(UTC).isoformat()
+def _short(name: str, limit: int = 34) -> str:
+    """Trim a name to something a button can hold, at a word boundary.
+
+    Decks generated from a chat reply take their name from the topic, and the
+    chat agent passes the first sentence of the answer — so a deck can be
+    called "The transformer is a neural network architecture used for natural
+    language processing". Dropped into "Review {name}" that produced a CTA
+    that ran off the end of the button and got clipped mid-word by the
+    browser. Cutting on a space keeps it readable instead of truncating to
+    "...used for na".
+    """
+    clean = " ".join((name or "").split())
+    if len(clean) <= limit:
+        return clean
+    cut = clean[:limit].rsplit(" ", 1)[0]
+    return f"{cut or clean[:limit]}…"
+
+
+async def _cards_due_and_forecast(user_id: str) -> tuple[int, list[ForecastDay]]:
+    """How many cards are due now, and how many land on each of the next 7 days.
+
+    One query for both. The previous version asked for `due_at <= now` and
+    returned a bare count; widening the filter to `now + 7d` hits the same
+    table on the same column and the bucketing happens in Python, so the
+    forecast is genuinely free — no extra round trip on the request Home is
+    already waiting for.
+
+    Overdue cards are folded into day 0. A card that went due last week is
+    work you have *today*, not a separate historical category.
+    """
+    now = datetime.now(UTC)
+    horizon = now + timedelta(days=7)
     rows = await supabase.db_select(
         "flashcards",
-        filters={"user_id": f"eq.{user_id}", "due_at": f"lte.{now}"},
-        select="id",
+        filters={"user_id": f"eq.{user_id}", "due_at": f"lte.{horizon.isoformat()}"},
+        select="due_at",
     )
-    return len(rows)
+
+    today = now.date()
+    counts: dict[date, int] = {today + timedelta(days=i): 0 for i in range(7)}
+    due_now = 0
+
+    for row in rows:
+        raw = row.get("due_at")
+        if not raw:
+            continue
+        try:
+            when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        if when <= now:
+            due_now += 1
+            counts[today] += 1
+        else:
+            bucket = when.date()
+            if bucket in counts:
+                counts[bucket] += 1
+
+    forecast = [ForecastDay(day=d, count=counts[d]) for d in sorted(counts)]
+    return due_now, forecast
 
 
 async def _quiz_average(user_id: str) -> int | None:
@@ -556,7 +630,11 @@ async def _compute_suggestion(user_id: str) -> BriefSuggestion | None:
             subject_id = ((deck or {}).get("subspaces") or {}).get("subject_id")
             if deck and subject_id and counts[top_deck_id] >= 3:
                 return BriefSuggestion(
-                    label=f"Review {deck['name']}",
+                    label=f"Review {_short(deck['name'])}",
+                    # MUST carry the `/s/` prefix — it is the live route
+                    # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
+                    # comment here used to justify dropping it, which meant
+                    # every suggested-review link silently 404'd.
                     route=f"/s/{subject_id}/{deck['subspace_id']}/flashcards",
                 )
 

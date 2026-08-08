@@ -9,6 +9,19 @@ type Size = 'sm' | 'md' | 'lg' | 'xl'
  * shadow, and loses ~1px of both on :active so the press is felt rather than
  * just colored.
  */
+/**
+ * The `outline3d` press physics with no background of its own: a lit top bevel,
+ * a 5px base edge, and real travel on :active. Exported so a tone-tinted
+ * control (the flashcard grade row) can be the same object under the finger
+ * without re-deriving the shadow stack or fighting the variant's gradient.
+ */
+export const bevel3d = [
+  'shadow-[inset_0_1.5px_0_rgba(255,237,220,0.12),0_5px_0_#191411,0_10px_20px_-8px_rgba(0,0,0,0.8)]',
+  'hover:brightness-110',
+  'active:translate-y-[5px]',
+  'active:shadow-[inset_0_1.5px_0_rgba(255,237,220,0.08),0_0_0_#191411]',
+].join(' ')
+
 const variants: Record<Variant, string> = {
   primary:
     'bg-brand text-[#1a120f] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_2px_0_#a8331d,0_6px_14px_-6px_rgba(255,90,60,0.6)] hover:bg-brand-300 active:translate-y-[2px] active:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_0_#a8331d]',
@@ -36,10 +49,8 @@ const variants: Record<Variant, string> = {
   outline3d: [
     'text-ink border border-line',
     'bg-[linear-gradient(180deg,#352b24_0%,#2b231d_100%)]',
-    'shadow-[inset_0_1.5px_0_rgba(255,237,220,0.12),0_5px_0_#191411,0_10px_20px_-8px_rgba(0,0,0,0.8)]',
-    'hover:border-line-dash hover:brightness-110',
-    'active:translate-y-[5px]',
-    'active:shadow-[inset_0_1.5px_0_rgba(255,237,220,0.08),0_0_0_#191411]',
+    'hover:border-line-dash',
+    bevel3d,
   ].join(' '),
 }
 

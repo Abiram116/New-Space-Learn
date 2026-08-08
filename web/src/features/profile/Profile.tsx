@@ -16,6 +16,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon, type IconName } from '../../components/ui/Icon'
 
 import { Skeleton } from '../../components/ui/Skeleton'
@@ -221,7 +222,10 @@ function StatTile({
           lit ? toneText[tone] : 'text-faint',
         )}
       >
-        <Icon name={icon} size={14} filled={lit} />
+        {/* Badges are the one thing on Profile that genuinely IS an owned
+            object, so they get real relief — earned ones lift, locked ones sit
+            flat against the seal. */}
+        <Icon3D name={icon} size={15} lifted={lit} />
       </span>
       {loading ? (
         <Skeleton className="h-8 w-14 rounded" />

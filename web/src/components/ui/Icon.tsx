@@ -135,11 +135,16 @@ function paths(name: IconName, filled: boolean) {
     // Agent: a bolt — a one-shot action, deliberately not card-shaped.
     case 'agent':
       return <path d="M13.4 3 6.5 13h4.6l-1.5 8 7.4-10.4h-4.7Z" fill={filled ? 'currentColor' : 'none'} />
+    // Settings: a gear, with actual TEETH. It used to be a hub with eight
+    // straight rays radiating off it, which is the universal glyph for
+    // brightness — a sun — not for settings. The difference between the two
+    // icons is entirely whether the spokes are rays (light) or notches
+    // (machinery), so the outline steps in and out rather than spiking.
     case 'settings':
       return (
         <>
-          <circle cx="12" cy="12" r="2.8" />
-          <path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12H3.5M18 6l-1.6 1.6M7.6 16.4 6 18M18 18l-1.6-1.6M7.6 7.6 6 6" />
+          <circle cx="12" cy="12" r="3.1" />
+          <path d="M19.3 13.5a7.7 7.7 0 0 0 0-3l2-1.5-1.9-3.3-2.3 1a7.7 7.7 0 0 0-2.6-1.5L14.2 2.7h-3.8l-.3 2.5a7.7 7.7 0 0 0-2.6 1.5l-2.3-1L3.3 9l2 1.5a7.7 7.7 0 0 0 0 3l-2 1.5L5.2 18l2.3-1a7.7 7.7 0 0 0 2.6 1.5l.3 2.5h3.8l.3-2.5a7.7 7.7 0 0 0 2.6-1.5l2.3 1 1.9-3.3Z" />
         </>
       )
     case 'user':
@@ -180,13 +185,23 @@ function paths(name: IconName, filled: boolean) {
       )
     case 'check':
       return <path d="m5 12.5 4.5 4.5L19 7.5" />
-    // Flame: the streak mark.
+    // Flame: the streak mark. Two shapes rather than one — an outer body and
+    // an inner tongue. The old single path tried to describe the whole flame
+    // including its licks in one outline, which at 14px collapsed into an
+    // indistinct blob. A clean silhouette plus a separate core reads as fire
+    // at any size, and the core gives the earned/filled state somewhere to go.
     case 'flame':
       return (
-        <path
-          d="M12 3.2c2.6 3 3.4 4.9 2.6 6.6 1-.4 1.7-1.2 2.1-2.4 1.6 2 2.3 4 2.3 5.9a7 7 0 1 1-14 0c0-2.6 1.3-5 3.9-7.2-.2 1.7.3 2.9 1.5 3.6.6-2.4 1.1-4.4-.4-6.5Z"
-          fill={filled ? 'currentColor' : 'none'}
-        />
+        <>
+          <path
+            d="M12.5 2.6c.4 2.6 1.8 3.9 3.1 5.4 1.3 1.6 2 3.2 2 5.1a5.6 5.6 0 0 1-11.2 0c0-2.3 1-4.3 3-6.1-.1 1.4.3 2.4 1.3 3 .5-2.6.9-4.8 1.8-7.4Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
+          <path
+            d="M12 13.4c1 1.1 1.5 2 1.5 2.8a1.5 1.5 0 0 1-3 0c0-.8.5-1.7 1.5-2.8Z"
+            fill={filled ? 'var(--color-canvas)' : 'none'}
+          />
+        </>
       )
     case 'lock':
       return (

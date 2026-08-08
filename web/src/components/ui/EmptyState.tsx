@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
-import { Icon, type IconName } from './Icon'
+import { type IconName } from './Icon'
+import { Icon3D } from './Icon3D'
 
 /**
  * An empty binder slot. The dashed frame says "a card goes here", so the copy's
@@ -27,7 +28,9 @@ export function EmptyState({
       )}
     >
       <span className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-line bg-raised text-brand">
-        <Icon name={icon} size={20} />
+        {/* The largest icon in the product, and the only thing on an empty
+            screen — worth the depth. */}
+        <Icon3D name={icon} size={20} lifted />
       </span>
       <div className="max-w-sm">
         <h3 className="nameplate text-[19px] text-ink">{title}</h3>

@@ -13,15 +13,24 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Space, Stats, Subspace } from '../../api/types'
+import type {
+  ForecastDay,
+  Space,
+  Stats,
+  StudyComposition,
+  Subspace,
+} from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Tip } from '../../components/ui/Tip'
+import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Stagger } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
+import { subspacePath } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
 import { toneDot, toneSoft, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
@@ -89,13 +98,6 @@ export function Home() {
                   </Button>
                 </Link>
               )}
-              {due > 0 && (
-                <Link to={first.link}>
-                  <Button variant="secondary" size="lg">
-                    Or open {first.subspace.name}
-                  </Button>
-                </Link>
-              )}
             </div>
           )}
         </header>
@@ -149,6 +151,26 @@ export function Home() {
                 to={first ? `${first.link}/quizzes` : undefined}
               />
             </div>
+          </section>
+        )}
+
+        {/* ── What's coming, and what you actually did ──
+            Both read from the same `/me/stats` payload Home already waits on,
+            so neither costs a request. */}
+        {anySpaces && !stats.loading && stats.data && (
+          <section className="grid gap-3 lg:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <Tip id="home-forecast-v1" icon="clock">
+                Cards return on a schedule, not all at once. Today's column is
+                what's actually waiting — the rest is what's coming, so you can
+                see a heavy day before it lands.
+              </Tip>
+              <DueForecast days={stats.data.due_forecast} />
+            </div>
+            <Composition
+              data={stats.data.composition}
+              dailyGoal={stats.data.daily_goal}
+            />
           </section>
         )}
 
@@ -240,7 +262,7 @@ function StandingCard({
             lit ? toneText[tone] : 'text-faint',
           )}
         >
-          <Icon name={icon} size={13} filled={lit} />
+          <Icon3D name={icon} size={14} lifted={lit} />
         </span>
         <span className="setcode">{label}</span>
       </div>
@@ -310,7 +332,7 @@ function activeSubspaces(spaces: Space[]): ActiveEntry[] {
       out.push({
         space: s,
         subspace: sub,
-        link: `/s/${s.id}/${sub.id}`,
+        link: subspacePath(s, sub),
         sortKey: sub.last_activity_at ? Date.parse(sub.last_activity_at) : 0,
       })
     }
@@ -329,6 +351,160 @@ function relativeShort(iso: string | null): string {
   if (hr < 24) return `${hr}h ago`
   const day = Math.floor(hr / 24)
   return `${day}d ago`
+}
+
+/**
+ * Cards falling due over the next seven days.
+ *
+ * This is the single strongest piece of evidence that the spaced repetition is
+ * real rather than a label: the schedule is visible, and today's column is the
+ * work in front of you. The data has always existed on every card as `due_at`
+ * — it was simply never asked for beyond "how many are due right now".
+ */
+function DueForecast({ days }: { days?: ForecastDay[] }) {
+  // Defensive by design, not by superstition. This renders from a cached API
+  // payload, and a cache written by an older deploy will not have this field —
+  // that exact case took the whole of Home down behind the error boundary.
+  // A dashboard panel with missing data should show nothing; it should never
+  // be able to destroy the page around it.
+  const safe = Array.isArray(days) ? days : []
+  const peak = Math.max(1, ...safe.map((d) => d.count))
+  const total = safe.reduce((n, d) => n + d.count, 0)
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-baseline justify-between">
+        <span className="setcode-strong">Coming due</span>
+        <span className="setcode">next 7 days · {total} total</span>
+      </div>
+
+      {total === 0 ? (
+        <p className="text-[13.5px] text-muted">
+          Nothing scheduled yet. Cards appear here the moment you grade one.
+        </p>
+      ) : (
+        <div className="flex h-[104px] items-end gap-2">
+          {safe.map((d, i) => (
+            <div key={d.day} className="flex flex-1 flex-col items-center gap-1.5">
+              <span
+                className={cn(
+                  'text-[11px] font-bold tabular-nums',
+                  i === 0 ? 'text-brand' : 'text-faint',
+                )}
+              >
+                {d.count || ''}
+              </span>
+              <span
+                className={cn(
+                  'w-full rounded-[3px] transition-[height]',
+                  i === 0 ? 'bg-brand' : 'bg-line-dash',
+                )}
+                style={{ height: `${Math.max(d.count ? 6 : 2, (d.count / peak) * 72)}px` }}
+              />
+              <span className={cn('setcode', i === 0 && 'text-brand')}>
+                {i === 0 ? 'today' : dayLabel(d.day)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * Where the last seven days actually went.
+ *
+ * Study *time* was already shown; study *shape* never was, even though the
+ * three counters behind this have been written on every chat message, card
+ * grade and quiz submission since the app shipped. One stacked bar rather than
+ * three numbers, because the useful question is proportion — "am I only ever
+ * chatting and never testing myself" — not absolute counts.
+ */
+function Composition({
+  data,
+  dailyGoal,
+}: {
+  data?: StudyComposition
+  dailyGoal?: number
+}) {
+  // Same reasoning as DueForecast: a stale cached payload has no `composition`,
+  // and reading `.chat_messages` off undefined would throw during render.
+  const parts = [
+    { key: 'Asked', n: data?.chat_messages ?? 0, cls: 'bg-sky', text: 'text-sky-deep' },
+    { key: 'Reviewed', n: data?.cards_reviewed ?? 0, cls: 'bg-sun', text: 'text-sun-deep' },
+    { key: 'Tested', n: data?.quizzes_taken ?? 0, cls: 'bg-coral', text: 'text-coral-deep' },
+  ]
+  const total = parts.reduce((n, p) => n + p.n, 0)
+
+  return (
+    <Card className="flex flex-col gap-4 p-5">
+      <div className="flex items-baseline justify-between">
+        <span className="setcode-strong">This week</span>
+        <span className="setcode">what you did</span>
+      </div>
+
+      {total === 0 ? (
+        <p className="text-[13.5px] text-muted">
+          Nothing logged in the last seven days. Ask something, grade a card, or
+          take a quiz and it shows up here.
+        </p>
+      ) : (
+        <>
+          <div className="flex h-2.5 overflow-hidden rounded-full bg-line-soft">
+            {parts.map(
+              (p) =>
+                p.n > 0 && (
+                  <span
+                    key={p.key}
+                    className={p.cls}
+                    style={{ width: `${(p.n / total) * 100}%` }}
+                  />
+                ),
+            )}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {parts.map((p) => (
+              <div key={p.key} className="flex items-baseline justify-between">
+                <span className={cn('setcode', p.n > 0 && p.text)}>{p.key}</span>
+                <span className="text-[13px] font-bold tabular-nums text-ink-3">
+                  {p.n}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* The goal, measured in the SAME unit it is set in. `daily_goal` is
+              cards per day (see Settings), so the honest comparison is against
+              cards reviewed over seven days — not against study minutes, which
+              is a different axis entirely. */}
+          {dailyGoal ? (
+            <div className="ruled-datum flex items-baseline justify-between pt-2.5">
+              <span className="setcode">Goal · {dailyGoal} cards/day</span>
+              <span
+                className={cn(
+                  'text-[12px] font-bold tabular-nums',
+                  data && data.cards_reviewed >= dailyGoal * 7
+                    ? 'text-mint-deep'
+                    : 'text-faint',
+                )}
+              >
+                {data?.cards_reviewed ?? 0} / {dailyGoal * 7}
+              </span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </Card>
+  )
+}
+
+/** Weekday initial for a forecast column. */
+function dayLabel(iso: string) {
+  const d = new Date(`${iso}T00:00:00`)
+  return Number.isNaN(d.getTime())
+    ? ''
+    : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
 }
 
 // `Stats` is referenced by the async hook's generic inference above.

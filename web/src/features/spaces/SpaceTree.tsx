@@ -6,6 +6,7 @@ import { toneDot, toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { subspacePath } from '../../lib/nav'
 import { useSpaces } from './SpacesProvider'
 
 export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
@@ -39,7 +40,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       const created = await addSubspace(spaceId, name)
       setAddingIn(null)
       setNewTopic('')
-      navigate(`/s/${spaceId}/${created.id}`)
+      const parent = spaces.find((s) => s.id === spaceId)
+      navigate(parent ? subspacePath(parent, created) : `/s/${spaceId}/${created.id}`)
     } catch (e) {
       show(friendlyMessage(e), 'error')
     }
@@ -62,7 +64,17 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
     setBusy(true)
     try {
       await deleteSubspace(id)
-      if (subspaceId === id) navigate(spaceId ? `/s/${spaceId}` : '/', { replace: true })
+      if (subspaceId === id) {
+        // There is no route for a bare `/s/:spaceId` — only `/s/:spaceId/:subspaceId`
+        // — so sending the user there after deleting the topic they were looking at
+        // dropped them straight onto NotFound. Land on a sibling topic when the
+        // subject still has one, otherwise Home.
+        const parent = spaces.find((s) => s.id === spaceId)
+        const sibling = parent?.subspaces.find((sub) => sub.id !== id)
+        navigate(parent && sibling ? subspacePath(parent, sibling) : '/home', {
+          replace: true,
+        })
+      }
       setConfirmDeleteSubspace(null)
     } catch (e) {
       show(friendlyMessage(e), 'error')
@@ -113,7 +125,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                 {space.subspaces.map((sub) => (
                   <div key={sub.id} className="group/sub flex items-center">
                     <NavLink
-                      to={`/s/${space.id}/${sub.id}`}
+                      to={subspacePath(space, sub)}
                       onClick={onNavigate}
                       className={({ isActive }) =>
                         cn(

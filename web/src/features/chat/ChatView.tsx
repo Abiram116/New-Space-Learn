@@ -27,7 +27,7 @@ import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
-import { ContextDock } from './ContextDock'
+import { ActiveSkillStrip, ContextDock } from './ContextDock'
 import type { AgentKey } from './agents'
 
 export function ChatView() {
@@ -199,6 +199,9 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             />
           )}
         </div>
+
+        {/* Only below lg, where the dock isn't there to say it. */}
+        <ActiveSkillStrip subspaceId={subspaceId} base={base} />
 
         <Composer
           placeholder={`Ask about ${subspaceName}…`}

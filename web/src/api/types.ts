@@ -171,6 +171,19 @@ export type HeatmapCell = {
   minutes: number
 }
 
+/** Cards landing on one upcoming day. Index 0 is today, and includes overdue. */
+export type ForecastDay = {
+  day: string
+  count: number
+}
+
+/** What the last seven days were spent on, not just how long they took. */
+export type StudyComposition = {
+  chat_messages: number
+  cards_reviewed: number
+  quizzes_taken: number
+}
+
 export type Stats = {
   streak_days: number
   max_streak: number
@@ -181,6 +194,10 @@ export type Stats = {
   spaces_count: number
   heatmap: HeatmapCell[]
   badges: Badge[]
+  /** The target the streak bars are measured against. */
+  daily_goal: number
+  composition: StudyComposition
+  due_forecast: ForecastDay[]
 }
 
 export type Settings = {

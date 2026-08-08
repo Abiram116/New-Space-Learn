@@ -29,6 +29,7 @@ import { Card, DashedCard } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { SectionLabel, Toggle } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import { SKILL_ICON_CHOICES, resolveSkillIcon } from './skillIcon'
@@ -39,12 +40,6 @@ import { useActiveSubspace } from '../../lib/nav'
 import { toneSoft, toneText } from '../../lib/tone'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
-
-const CAPABILITY_OPTIONS = [
-  { value: 'docs', label: 'Indexed docs' },
-  { value: 'quiz', label: 'Quiz agent' },
-  { value: 'flashcards', label: 'Flashcards' },
-]
 
 const MEMORY_SCOPE_OPTIONS: { value: MemoryScope; label: string; hint: string }[] = [
   { value: 'session', label: 'This session', hint: 'Last ~8 messages.' },
@@ -58,10 +53,29 @@ const emptyForm = (): SkillInput => ({
   tone: 'brand',
   description: '',
   instructions: '',
-  capabilities: ['docs', 'quiz'],
+  // Sent for API-shape compatibility only. Nothing reads it — there is no
+  // capability gate on the server — so it isn't offered as a control.
+  capabilities: [],
   memory_scope: 'session',
   output_format: '',
 })
+
+/**
+ * The editor is a persistent side panel at xl and a modal below it. Which one
+ * renders has to be a real branch, not a `hidden` class: the panel is portal-
+ * free markup, the modal isn't, and rendering both would double the form.
+ */
+function useIsWide(query = '(min-width: 1280px)') {
+  const [wide, setWide] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const sync = () => setWide(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [query])
+  return wide
+}
 
 export function SkillsView() {
   const { space, subspace } = useActiveSubspace()
@@ -79,6 +93,21 @@ function Inner({ subspaceId }: { subspaceId: string }) {
   const [form, setForm] = useState<SkillInput>(emptyForm)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const isWide = useIsWide()
+  const [editorOpen, setEditorOpen] = useState(false)
+
+  /** Every entry point into the form goes through here, so the modal opens. */
+  const openEditor = useCallback((id: string | null) => {
+    setSelectedId(id)
+    if (id === null) setForm(emptyForm())
+    setEditorOpen(true)
+  }, [])
+
+  const closeEditor = useCallback(() => {
+    setEditorOpen(false)
+    setSelectedId(null)
+    setForm(emptyForm())
+  }, [])
 
   const refresh = useCallback(async () => {
     try {
@@ -171,6 +200,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         setSelectedId(created.id)
         show('Skill created.', 'success')
       }
+      setEditorOpen(false)
     } catch (err) {
       showError(err)
     } finally {
@@ -188,7 +218,10 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         copy.delete(confirmDelete)
         return copy
       })
-      if (selectedId === confirmDelete) setSelectedId(null)
+      if (selectedId === confirmDelete) {
+        setSelectedId(null)
+        setEditorOpen(false)
+      }
       setConfirmDelete(null)
       show('Skill deleted.', 'success')
     } catch (err) {
@@ -216,20 +249,99 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     }
   }
 
+  /* One form, two containers. Rendered into the side panel at xl and into a
+     modal below it — see useIsWide. */
+  const editorBody = (
+    <>
+      <Input
+        label="Name"
+        value={form.name}
+        onChange={(e) => setForm({ ...form, name: e.target.value })}
+        placeholder="Socratic Tutor"
+      />
+
+      <div className="flex flex-col gap-1.5 text-xs">
+        <span className="font-semibold text-muted">Icon &amp; colour</span>
+        <div className="flex gap-1.5">
+          {SKILL_ICON_CHOICES.map((choice) => {
+            const active = form.icon === choice.icon && form.tone === choice.tone
+            return (
+              <button
+                key={choice.icon}
+                onClick={() => setForm({ ...form, icon: choice.icon, tone: choice.tone })}
+                title={choice.label}
+                aria-label={choice.label}
+                className={cn(
+                  'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
+                  toneSoft[choice.tone],
+                  toneText[choice.tone],
+                  active ? 'border-brand' : 'border-transparent hover:border-line-dash',
+                )}
+              >
+                <Icon name={choice.icon} size={16} />
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <Textarea
+        label="Instructions"
+        rows={6}
+        value={form.instructions}
+        onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+        placeholder="Ask one guiding question at a time. Never reveal the full answer until I've attempted it twice…"
+        hint="Written in second person. Kept as a system prompt when this skill is active."
+      />
+
+      <div className="flex flex-col gap-1.5 text-xs">
+        <span className="font-semibold text-muted">Remembers</span>
+        <div className="flex flex-wrap gap-1.5">
+          {MEMORY_SCOPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              title={opt.hint}
+              onClick={() => setForm({ ...form, memory_scope: opt.value })}
+              className={cn(
+                'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
+                form.memory_scope === opt.value
+                  ? 'bg-line-soft text-ink'
+                  : 'border-[1.5px] border-line bg-canvas text-faint',
+              )}
+            >
+              {form.memory_scope === opt.value && <Icon name="check" size={11} />}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Input
+        label="Output format"
+        value={form.output_format ?? ''}
+        onChange={(e) => setForm({ ...form, output_format: e.target.value })}
+        placeholder="e.g. bullet points only, or one short paragraph"
+        hint="Optional — a formatting rule added on top of the instructions above."
+      />
+
+      <div className="mt-auto flex gap-2 pt-3">
+        <Button onClick={save} disabled={busy} className="flex-1">
+          {busy ? 'Saving…' : editingExisting ? 'Save changes' : 'Create skill'}
+        </Button>
+        {(editingExisting || !isWide) && (
+          <Button variant="secondary" onClick={closeEditor}>
+            Cancel
+          </Button>
+        )}
+      </div>
+    </>
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title="Skills"
-        actions={
-          <Button
-            onClick={() => {
-              setSelectedId(null)
-              setForm(emptyForm())
-            }}
-          >
-            + New skill
-          </Button>
-        }
+        actions={<Button onClick={() => openEditor(null)}>+ New skill</Button>}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -261,7 +373,8 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                 <EmptyState
                   icon="skill"
                   title="No skills yet"
-                  description="Write one on the right, or add a template from the library below."
+                  description="Write your own, or add a template from the library below."
+                  action={<Button onClick={() => openEditor(null)}>Write a skill</Button>}
                 />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
@@ -278,7 +391,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           <Icon name={resolveSkillIcon(skill.icon)} size={16} />
                         </span>
                         <button
-                          onClick={() => setSelectedId(skill.id)}
+                          onClick={() => openEditor(skill.id)}
                           className={cn(
                             'flex-1 text-left text-[15px] font-bold cursor-pointer',
                             selectedId === skill.id && 'text-brand',
@@ -301,11 +414,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         <span>
                           Remembers {MEMORY_SCOPE_OPTIONS.find((o) => o.value === skill.memory_scope)?.label.toLowerCase() ?? 'this session'}
                         </span>
-                        <span>·</span>
-                        <span>
-                          {skill.capabilities.length} capabilit
-                          {skill.capabilities.length === 1 ? 'y' : 'ies'}
-                        </span>
                         <button
                           onClick={() => setConfirmDelete(skill.id)}
                           className="ml-auto opacity-0 group-hover:opacity-100 hover:text-coral-deep transition-opacity cursor-pointer"
@@ -316,10 +424,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                     </Card>
                   ))}
                   <DashedCard
-                    onClick={() => {
-                      setSelectedId(null)
-                      setForm(emptyForm())
-                    }}
+                    onClick={() => openEditor(null)}
                     className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 p-3.5 text-[13px] text-muted transition-colors cursor-pointer hover:border-brand/50 hover:text-brand-deep"
                   >
                     <Icon name="plus" size={18} />
@@ -370,133 +475,28 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           )}
         </div>
 
-        {/* Editor panel */}
-        <aside className="hidden w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l-[1.5px] border-line bg-surface p-5 xl:flex">
-          <h2 className="font-display text-[15px] font-semibold">
-            {editingExisting ? 'Edit skill' : 'New skill'}
-          </h2>
-
-          <Input
-            label="Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="Socratic Tutor"
-          />
-
-          <div className="flex flex-col gap-1.5 text-xs">
-            <span className="font-semibold text-muted">Icon &amp; colour</span>
-            <div className="flex gap-1.5">
-              {SKILL_ICON_CHOICES.map((choice) => {
-                const active = form.icon === choice.icon && form.tone === choice.tone
-                return (
-                  <button
-                    key={choice.icon}
-                    onClick={() =>
-                      setForm({ ...form, icon: choice.icon, tone: choice.tone })
-                    }
-                    title={choice.label}
-                    aria-label={choice.label}
-                    className={cn(
-                      'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
-                      toneSoft[choice.tone],
-                      toneText[choice.tone],
-                      active ? 'border-brand' : 'border-transparent hover:border-line-dash',
-                    )}
-                  >
-                    <Icon name={choice.icon} size={16} />
-                  </button>
-                )
-              })}
+        {/* At xl the editor is a panel that lives beside the list. Below xl
+            that panel was simply `hidden`, which meant no way to create or
+            edit a skill at all — so the same form becomes a modal instead. */}
+        {isWide ? (
+          <aside className="hidden w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l-[1.5px] border-line bg-surface p-5 xl:flex">
+            <h2 className="font-display text-[15px] font-semibold">
+              {editingExisting ? 'Edit skill' : 'New skill'}
+            </h2>
+            {editorBody}
+          </aside>
+        ) : (
+          <Modal
+            open={editorOpen}
+            onClose={closeEditor}
+            title={editingExisting ? 'Edit skill' : 'New skill'}
+            width="lg"
+          >
+            <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
+              {editorBody}
             </div>
-          </div>
-
-          <Textarea
-            label="Instructions"
-            rows={6}
-            value={form.instructions}
-            onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-            placeholder="Ask one guiding question at a time. Never reveal the full answer until I've attempted it twice…"
-            hint="Written in second person. Kept as a system prompt when this skill is active."
-          />
-
-          <div className="flex flex-col gap-1.5 text-xs">
-            <span className="font-semibold text-muted">Can use</span>
-            <div className="flex flex-wrap gap-1.5">
-              {CAPABILITY_OPTIONS.map((cap) => {
-                const on = form.capabilities?.includes(cap.value) ?? false
-                return (
-                  <button
-                    key={cap.value}
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        capabilities: on
-                          ? form.capabilities?.filter((c) => c !== cap.value) ?? []
-                          : [...(form.capabilities ?? []), cap.value],
-                      })
-                    }
-                    className={cn(
-                      'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
-                      on
-                        ? 'bg-line-soft text-ink'
-                        : 'border-[1.5px] border-line bg-canvas text-faint',
-                    )}
-                  >
-                    {on && <Icon name="check" size={11} />}
-                    {cap.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-1.5 text-xs">
-            <span className="font-semibold text-muted">Remembers</span>
-            <div className="flex flex-wrap gap-1.5">
-              {MEMORY_SCOPE_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  title={opt.hint}
-                  onClick={() => setForm({ ...form, memory_scope: opt.value })}
-                  className={cn(
-                    'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
-                    form.memory_scope === opt.value
-                      ? 'bg-line-soft text-ink'
-                      : 'border-[1.5px] border-line bg-canvas text-faint',
-                  )}
-                >
-                  {form.memory_scope === opt.value && <Icon name="check" size={11} />}
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Input
-            label="Output format"
-            value={form.output_format ?? ''}
-            onChange={(e) => setForm({ ...form, output_format: e.target.value })}
-            placeholder="e.g. bullet points only, or one short paragraph"
-            hint="Optional — a formatting rule added on top of the instructions above."
-          />
-
-          <div className="mt-auto flex gap-2 pt-3">
-            <Button onClick={save} disabled={busy} className="flex-1">
-              {busy ? 'Saving…' : editingExisting ? 'Save changes' : 'Create skill'}
-            </Button>
-            {editingExisting && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setSelectedId(null)
-                  setForm(emptyForm())
-                }}
-              >
-                Cancel
-              </Button>
-            )}
-          </div>
-        </aside>
+          </Modal>
+        )}
       </div>
 
       <ConfirmDialog

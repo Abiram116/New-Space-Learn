@@ -1,20 +1,9 @@
 import type { ChatMessage as Message } from '../../api/types'
-import { OutlinePill } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
 import { MarkdownMessage } from './MarkdownMessage'
 
-export function ChatMessage({
-  message,
-  onSaveNote,
-  onMakeCards,
-  onQuiz,
-}: {
-  message: Message
-  onSaveNote?: () => void
-  onMakeCards?: () => void
-  onQuiz?: () => void
-}) {
+export function ChatMessage({ message }: { message: Message }) {
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
@@ -63,14 +52,6 @@ export function ChatMessage({
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {(onSaveNote || onMakeCards || onQuiz) && (
-        <div className="flex gap-2 pt-0.5">
-          {onSaveNote && <OutlinePill onClick={onSaveNote}><Icon name="note" size={13} /> Save as note</OutlinePill>}
-          {onMakeCards && <OutlinePill onClick={onMakeCards}><Icon name="deck" size={13} /> Make cards</OutlinePill>}
-          {onQuiz && <OutlinePill onClick={onQuiz}><Icon name="quiz" size={13} /> Quiz me</OutlinePill>}
         </div>
       )}
     </div>

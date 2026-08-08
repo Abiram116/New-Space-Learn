@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import asyncio
 import json
 import logging
@@ -212,7 +214,13 @@ async def note_ai_inline(
         "Write ONLY the markdown fragment to insert at their cursor — no "
         "title, no preamble, no restating the request. Ground it in the "
         "material and conversation above; do not invent facts not present "
-        "in either."
+        "in either.\n\n"
+        "Output PLAIN MARKDOWN ONLY. Never emit HTML tags — no <p>, <br>, "
+        "<h1>, <ul>, <div>, <strong>. The editor renders markdown and shows "
+        "any HTML you write as literal visible text, so a stray <p> ends up "
+        "printed in the student's note. Use markdown syntax for every "
+        "structure: # for headings, - for bullets, > for quotes, ``` for "
+        "code, **bold**. Do not wrap the whole answer in a code fence."
     )
 
     try:
@@ -237,9 +245,49 @@ async def note_ai_inline(
         log.exception("inline note AI failed")
         raise UpstreamUnavailable("Couldn't reach the AI just now.") from e
 
+    content = _demote_html(content)
     if not content:
         raise UpstreamUnavailable("Came back empty. Try rephrasing.")
     return NoteAiInlineOut(content_md=content)
+
+
+# Block-level tags the model reaches for most, mapped to their markdown
+# equivalent so structure survives the conversion instead of being deleted.
+_HTML_BLOCK_MAP = [
+    (re.compile(r"</?(p|div|section|article)\b[^>]*>", re.I), "\n"),
+    (re.compile(r"<br\s*/?>", re.I), "\n"),
+    (re.compile(r"<h1\b[^>]*>", re.I), "\n# "),
+    (re.compile(r"<h2\b[^>]*>", re.I), "\n## "),
+    (re.compile(r"<h3\b[^>]*>", re.I), "\n### "),
+    (re.compile(r"<li\b[^>]*>", re.I), "\n- "),
+    (re.compile(r"<blockquote\b[^>]*>", re.I), "\n> "),
+    (re.compile(r"</?(strong|b)\b[^>]*>", re.I), "**"),
+    (re.compile(r"</?(em|i)\b[^>]*>", re.I), "*"),
+]
+
+
+def _demote_html(text: str) -> str:
+    """Convert stray HTML in a model response into equivalent markdown.
+
+    The editor stores markdown and is configured with `html: false`, so any
+    tag that slips through is escaped and rendered as literal visible text —
+    which is exactly how notes ended up containing a printed `<p>...</p>`.
+
+    Instructing the model not to emit HTML is necessary but not sufficient:
+    models regress under load and on unusual prompts, and a note is the
+    student's own document. Belt and braces.
+    """
+    if "<" not in text:
+        return text.strip()
+
+    for pattern, replacement in _HTML_BLOCK_MAP:
+        text = pattern.sub(replacement, text)
+    # Anything still tag-shaped is decoration we have no mapping for; drop the
+    # tag and keep whatever it wrapped.
+    text = re.sub(r"</?[a-zA-Z][^>\n]{0,60}>", "", text)
+    # Collapse the blank lines the substitutions above introduce.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 @router.patch("/notes/{note_id}", response_model=NoteOut)

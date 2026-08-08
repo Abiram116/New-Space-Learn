@@ -42,6 +42,7 @@ async def create_subspace(
     user: CurrentUser = Depends(get_current_user),
 ) -> SubspaceOut:
     await _assert_space_owned(user.id, space_id)
+    # No `slug` field — the slug columns were dropped from the database.
     inserted = await supabase.db_insert(
         "subspaces",
         {"user_id": user.id, "subject_id": space_id, "name": body.name},

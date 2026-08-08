@@ -10,13 +10,16 @@ import { LitGrid, ParallaxLayer, usePointerParallax } from '../landing/motion'
  *
  * The form stays narrow — sign-in is four fields and does not earn half a
  * screen — but not cramped against the edge. The panel takes everything else
- * and spreads the product's *whole* output across it: an answer with its
- * citation, a note, a quiz, a skill, a card, an indexed source.
+ * and spreads the product's whole output across it: an answer with its
+ * citation, a note, a quiz, a skill, a card, a streak, an indexed source.
  *
- * Showing only flashcards would misrepresent the platform, and a spread that
- * stops halfway leaves the right side of the screen looking unfinished. The
- * pieces sit at different depths and answer the pointer at different rates,
- * and the lamp moves with the cursor so the ruled ground catches it.
+ * The pieces sit at different depths and answer the pointer at different
+ * rates, and the lamp moves with the cursor so the ruled ground catches it.
+ *
+ * Below `xl` the panel is simply gone and the form stands alone. There is
+ * deliberately NO stacked fallback: a phone arriving at sign-in does not need
+ * the pitch repeated underneath the button it came to press, and the stacked
+ * version only pushed the fold down.
  */
 export function AuthShell({
   title,
@@ -45,53 +48,9 @@ export function AuthShell({
 
         <div className="max-w-sm">{children}</div>
         <div className="max-w-sm text-[13px] text-muted">{footer}</div>
-
-        {/* Below xl the side panel is gone, so the pitch travels with the form
-            rather than leaving a tall empty column. Same artifacts, stacked. */}
-        <CompactSpread />
       </div>
 
       <ArtifactField />
-    </div>
-  )
-}
-
-/** The three most representative artifacts, for when the panel can't show. */
-function CompactSpread() {
-  const picks = [PIECES[0], PIECES[1], PIECES[3]]
-  return (
-    <div className="mt-2 flex flex-col gap-3 xl:hidden">
-      <div className="flex items-center gap-3">
-        <span className="h-px flex-1 bg-line" />
-        <span className="setcode">What you get back</span>
-        <span className="h-px flex-1 bg-line" />
-      </div>
-      <div className="flex flex-col gap-2.5">
-        {picks.map((p) => (
-          <article
-            key={p.kind}
-            className="cardstock flex items-start gap-3 rounded-xl p-3"
-          >
-            <span
-              className={cn(
-                'mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                TONE_CHIP[p.tone],
-              )}
-            >
-              <Icon name={p.icon} size={14} />
-            </span>
-            <div className="min-w-0">
-              <span className="setcode">{p.kind}</span>
-              <p className="nameplate mt-0.5 text-[16px] leading-tight text-ink">
-                {p.title}
-              </p>
-              {p.body && (
-                <p className="mt-1 text-[12.5px] leading-relaxed text-muted">{p.body}</p>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
     </div>
   )
 }
@@ -113,15 +72,20 @@ type Piece = {
   delay: number
 }
 
-/** Six artifacts — one per thing the platform actually makes. */
+/**
+ * Seven artifacts — one per thing the platform actually makes, and each from a
+ * different subject. Deliberately not the subjects the landing page uses:
+ * across the two signed-out surfaces a visitor should see several fields of
+ * study, not one course repeated.
+ */
 const PIECES: Piece[] = [
   {
     icon: 'chat',
     kind: 'Answer',
     tone: 'brand',
-    title: 'Why does value iteration converge?',
-    body: 'The Bellman operator is a contraction — every sweep shrinks the error by at least the discount factor.',
-    code: 'lecture-04.pdf · p.12',
+    title: 'Why does a price ceiling cause shortages?',
+    body: 'Held under the market price, demand outruns supply — and the gap has to clear some other way, usually queues.',
+    code: 'micro-ch7.pdf · p.88',
     x: 5,
     y: 36,
     w: 318,
@@ -133,8 +97,8 @@ const PIECES: Piece[] = [
     icon: 'quiz',
     kind: 'Quiz',
     tone: 'sky',
-    title: 'A policy maps…',
-    options: ['states to actions', 'rewards to states', 'values to actions'],
+    title: 'A hash collision happens when…',
+    options: ['two keys land in one bucket', 'a key exceeds the table size', 'the load factor hits zero'],
     code: '5 questions',
     x: 43,
     y: 5,
@@ -147,8 +111,8 @@ const PIECES: Piece[] = [
     icon: 'skill',
     kind: 'Skill',
     tone: 'mint',
-    title: 'Socratic Tutor',
-    body: 'Never hands you the answer. Asks one question at a time until you get there.',
+    title: 'Cite Everything',
+    body: 'Answers only from your indexed documents, and refuses any claim it cannot source.',
     code: 'on in this topic',
     x: 70,
     y: 27,
@@ -161,8 +125,8 @@ const PIECES: Piece[] = [
     icon: 'note',
     kind: 'Note',
     tone: 'coral',
-    title: 'MDP — the four parts',
-    body: 'States, actions, transitions, rewards. Everything else is built on top of these.',
+    title: 'What set off the 1929 crash',
+    body: 'Margin buying, a farm economy already stalling, and a Fed that tightened into the fall.',
     code: 'edited 2h ago',
     x: 33,
     y: 66,
@@ -175,8 +139,8 @@ const PIECES: Piece[] = [
     icon: 'deck',
     kind: 'Card',
     tone: 'sun',
-    title: 'What does the discount factor do?',
-    body: 'How much future reward counts against reward you could take now.',
+    title: 'What does one turn of the Krebs cycle yield?',
+    body: 'Three NADH, one FADH2, one ATP, and two CO2.',
     code: 'due today',
     x: 63,
     y: 55,
@@ -202,7 +166,7 @@ const PIECES: Piece[] = [
     icon: 'doc',
     kind: 'Source',
     tone: 'sky',
-    title: 'lecture-04.pdf',
+    title: 'thermo-lecture-04.pdf',
     body: '41 pages · indexed',
     x: 79,
     y: 80,
@@ -248,7 +212,7 @@ function ArtifactField() {
         <h2 className="nameplate text-[clamp(28px,3vw,44px)] leading-[0.92] text-ink">
           Ask once.
           <br />
-          <span className="text-brand">Keep it forever.</span>
+          <span className="text-brand">Keep the page.</span>
         </h2>
         <p className="mt-3 max-w-[19rem] text-[14px] leading-relaxed text-ink-3">
           Every answer cites the page it came from — then becomes a card, a note

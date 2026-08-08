@@ -55,8 +55,11 @@ async def list_spaces(user: CurrentUser = Depends(get_current_user)) -> list[Spa
 async def create_space(
     body: SpaceCreate, user: CurrentUser = Depends(get_current_user)
 ) -> SpaceOut:
+    # No `slug` field — the slug columns and their generator function were
+    # removed. Routing is by id only; see `web/src/lib/nav.ts`.
     inserted = await supabase.db_insert(
-        "subjects", {"user_id": user.id, "name": body.name, "tone": body.tone}
+        "subjects",
+        {"user_id": user.id, "name": body.name, "tone": body.tone},
     )
     row = inserted[0]
     return SpaceOut(id=row["id"], name=row["name"], tone=row["tone"], subspaces=[])
@@ -102,35 +105,65 @@ async def delete_space(
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
+async def _sequential(*coros):
+    """Await coroutines in order, returning their results as a tuple.
+
+    Exists so the call site can read like `asyncio.gather` while being
+    explicitly serial — see the measurement note in `_bulk_counts` for why
+    serial is the faster shape against a remote Postgres.
+    """
+    return [await c for c in coros]
+
+
 async def _bulk_counts(user_id: str, subspace_ids: list[str]) -> dict[str, dict[str, int]]:
     """Fetch counts for docs/notes/quizzes/cards in a single pass per table."""
 
     if not subspace_ids:
         return {}
     ids_csv = ",".join(subspace_ids)
-    tables = {
-        "docs": ("documents", "subspace_id"),
-        "notes": ("notes", "subspace_id"),
-        "quizzes": ("quizzes", "subspace_id"),
-    }
     out: dict[str, dict[str, int]] = {sid: {"docs": 0, "notes": 0, "quizzes": 0, "cards": 0} for sid in subspace_ids}
-    for key, (table, col) in tables.items():
-        rows = await supabase.db_select(
-            table,
-            filters={"user_id": f"eq.{user_id}", col: f"in.({ids_csv})"},
-            select=f"{col}",
-        )
+
+    # MEASURED, not assumed — and the intuitive answer is wrong here.
+    #
+    # Against this remote Supabase, one warm round trip is ~257ms. Four of them
+    # sequentially is ~1114ms, because they all reuse a single keepalive
+    # connection. Four via `asyncio.gather` is ~1566ms — SLOWER — because
+    # concurrency forces new TLS handshakes that then compete for bandwidth,
+    # and the handshake costs more than the serialisation saved.
+    #
+    # So this is kept sequential deliberately. If the database were local or
+    # co-located, the opposite would be true; the win here would come from
+    # asking for FEWER queries, not from overlapping them.
+    docs_rows, notes_rows, quiz_rows, decks = await _sequential(
+        supabase.db_select(
+            "documents",
+            filters={"user_id": f"eq.{user_id}", "subspace_id": f"in.({ids_csv})"},
+            select="subspace_id",
+        ),
+        supabase.db_select(
+            "notes",
+            filters={"user_id": f"eq.{user_id}", "subspace_id": f"in.({ids_csv})"},
+            select="subspace_id",
+        ),
+        supabase.db_select(
+            "quizzes",
+            filters={"user_id": f"eq.{user_id}", "subspace_id": f"in.({ids_csv})"},
+            select="subspace_id",
+        ),
+        supabase.db_select(
+            "decks",
+            filters={"user_id": f"eq.{user_id}", "subspace_id": f"in.({ids_csv})"},
+            select="id,subspace_id",
+        ),
+    )
+
+    for key, rows in (("docs", docs_rows), ("notes", notes_rows), ("quizzes", quiz_rows)):
         for r in rows:
-            sid = r[col]
+            sid = r["subspace_id"]
             if sid in out:
                 out[sid][key] += 1
 
     # Cards: join through decks (deck belongs to subspace).
-    decks = await supabase.db_select(
-        "decks",
-        filters={"user_id": f"eq.{user_id}", "subspace_id": f"in.({ids_csv})"},
-        select="id,subspace_id",
-    )
     deck_to_subspace = {d["id"]: d["subspace_id"] for d in decks}
     if decks:
         deck_ids = ",".join(deck_to_subspace.keys())

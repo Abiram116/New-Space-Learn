@@ -38,8 +38,16 @@ export function StreakLedger({
   }, [stats])
 
   const cells = useMemo(() => (stats ? stats.heatmap.slice(-DAYS) : []), [stats])
+
+  /**
+   * Scaled by MINUTES, not by the 0–3 `intensity` bucket.
+   *
+   * Intensity flattened the chart: a 10-minute day and a 55-minute day landed
+   * in the same bucket and drew the same bar, so the shape carried almost no
+   * information. Minutes are the real figure and are already on the wire.
+   */
   const peak = useMemo(
-    () => Math.max(1, ...cells.map((c) => c.intensity)),
+    () => Math.max(1, ...cells.map((c) => c.minutes)),
     [cells],
   )
 
@@ -123,10 +131,18 @@ export function StreakLedger({
         className="relative mt-5 flex h-28 items-end gap-1.5"
         onMouseLeave={() => setHover(null)}
       >
+        {/* NO goal line here, deliberately. `daily_goal` is measured in CARDS
+            — that is what Settings labels it and what a user sets — while this
+            chart is minutes. Drawing a cards target across a minutes axis
+            would put a confident dashed line at a meaningless height. The goal
+            is surfaced on Home's composition panel instead, where the units
+            match. */}
         {cells.map((cell, i) => {
-          const lit = i >= litFrom && cell.intensity > 0
+          const lit = i >= litFrom && cell.minutes > 0
           const isHover = hover === i
-          const pct = cell.intensity === 0 ? 6 : 18 + (cell.intensity / peak) * 82
+          // A day with any logged time keeps a visible floor, so "a little"
+          // never renders identically to "nothing".
+          const pct = cell.minutes === 0 ? 4 : Math.max(9, (cell.minutes / peak) * 100)
           return (
             <button
               key={cell.day}
@@ -144,7 +160,7 @@ export function StreakLedger({
                   'w-full rounded-[4px] transition-all duration-300 ease-out',
                   lit
                     ? 'bg-brand'
-                    : cell.intensity > 0
+                    : cell.minutes > 0
                       ? 'bg-brand/45'
                       : 'bg-line',
                   isHover && 'brightness-125',

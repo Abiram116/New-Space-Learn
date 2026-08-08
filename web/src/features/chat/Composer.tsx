@@ -101,7 +101,6 @@ export function Composer({
             {c.command}
           </button>
         ))}
-        <span className="text-faint">← agents live in the composer</span>
       </div>
     </div>
   )

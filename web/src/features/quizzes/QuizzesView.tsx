@@ -14,7 +14,7 @@ import { friendlyMessage } from '../../api/errors'
 import { clearStatsCache } from '../../lib/briefCache'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
-import { Card, DashedCard } from '../../components/ui/Card'
+import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Input } from '../../components/ui/Input'
@@ -89,6 +89,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         />
         <QuizRunner
           quizId={activeId}
+          onBack={back}
           onDone={() => {
             show('Answers submitted.', 'success')
             void quizzes.refresh()
@@ -208,18 +209,19 @@ function QuizList({
           </Card>
         </button>
       ))}
-      <DashedCard
-        onClick={onGenerate}
-        className="flex min-h-[132px] cursor-pointer flex-col items-center justify-center gap-2 text-[13px] transition-colors hover:border-sky/50 hover:text-sky-deep"
-      >
-        <Icon name="sparkle" size={20} />
-        Generate another
-      </DashedCard>
     </div>
   )
 }
 
-function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) {
+function QuizRunner({
+  quizId,
+  onDone,
+  onBack,
+}: {
+  quizId: string
+  onDone: () => void
+  onBack: () => void
+}) {
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [answers, setAnswers] = useState<number[]>([])
@@ -227,19 +229,25 @@ function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) 
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<QuizResult | null>(null)
 
-  useEffect(() => {
-    setQuiz(null)
+  /* Back to a blank attempt. Lifted out of the load effect so the results
+     screen can reuse it as "retake" — same reset, no refetch. */
+  const reset = useCallback((q: Quiz | null) => {
     setResult(null)
     setError(null)
     setIndex(0)
-    setAnswers([])
+    setAnswers(q ? new Array(q.questions.length).fill(-1) : [])
+  }, [])
+
+  useEffect(() => {
+    setQuiz(null)
+    reset(null)
     getQuiz(quizId)
       .then((q) => {
         setQuiz(q)
-        setAnswers(new Array(q.questions.length).fill(-1))
+        reset(q)
       })
       .catch((err) => setError(friendlyMessage(err)))
-  }, [quizId])
+  }, [quizId, reset])
 
   const chosen = answers[index]
   const canAdvance = chosen !== undefined && chosen !== -1
@@ -271,7 +279,15 @@ function QuizRunner({ quizId, onDone }: { quizId: string; onDone: () => void }) 
   if (!quiz) return <PageSpinner label="Loading quiz…" />
 
   if (result) {
-    return <QuizResults quiz={quiz} answers={answers} result={result} />
+    return (
+      <QuizResults
+        quiz={quiz}
+        answers={answers}
+        result={result}
+        onRetake={() => reset(quiz)}
+        onBack={onBack}
+      />
+    )
   }
 
   const q = quiz.questions[index]
@@ -373,10 +389,14 @@ function QuizResults({
   quiz,
   answers,
   result,
+  onRetake,
+  onBack,
 }: {
   quiz: Quiz
   answers: number[]
   result: QuizResult
+  onRetake: () => void
+  onBack: () => void
 }) {
   const scoreClass = useMemo(() => {
     if (result.score >= 80) return 'text-mint'
@@ -393,6 +413,17 @@ function QuizResults({
         </div>
         <div className="text-sm text-muted">
           {result.correct.filter(Boolean).length} of {quiz.questions.length} correct
+        </div>
+
+        {/* A terminal screen has to offer a way forward — sit them under the
+            score so they're reachable without scrolling past every review. */}
+        <div className="flex flex-col gap-2 border-t border-line pt-3">
+          <Button onClick={onRetake}>
+            <Icon name="refresh" size={14} /> Retake this quiz
+          </Button>
+          <Button variant="secondary" onClick={onBack}>
+            Back to all quizzes
+          </Button>
         </div>
       </Card>
 

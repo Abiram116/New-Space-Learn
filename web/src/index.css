@@ -1,23 +1,37 @@
 @import 'tailwindcss';
 
-/* ── Foil Binder ────────────────────────────────────────────────────────
-   Warm card-table ground, foil accents, no violet, dark-only by design.
-   Semantic names are kept from the previous system so every surface moves
-   into the new world at once; their VALUES are wholly replaced. `ink` still
-   means "text", `canvas` still means "ground" — on a dark table those simply
-   trade ends of the scale.
+/* ── Drafting Table ─────────────────────────────────────────────────────
+   A dark drafting table under a lamp. Warm graphite ground, hairline
+   linework, blueprint accents, no violet, dark-only by design.
+
+   Three materials carry meaning, and which one a surface is made of tells
+   you what kind of thing it is before you read a word:
+
+     .cardstock  things you OWN      — decks, cards, badges, topics, sources
+     .leaf       things you READ     — notes, prose, question stems
+     .ruled      things you're MEASURED against — streak, forecast, scores
+
+   Token NAMES are inherited from the previous system so every surface moves
+   at once with no component edits; their VALUES are retuned. Renaming these
+   to semantic roles (source/recall/test/signal) is a separate mechanical pass.
    ──────────────────────────────────────────────────────────────────────── */
 
 @theme {
   --font-sans: 'Manrope', system-ui, sans-serif;
-  --font-display: 'Big Shoulders Display', 'Manrope', system-ui, sans-serif;
+  /* Archivo: engineered grotesque with a real width axis. Goes wide and heavy
+     for poster moments, and carries the glyphs Big Shoulders kept dropping
+     (▮ and γ each shipped as tofu — three separate bugs). */
+  --font-display: 'Archivo', 'Manrope', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Ground: warm, mid-dark. Never black — this is felt under a lamp. */
-  --color-canvas: #1e1815;
-  --color-well: #151110;
-  --color-surface: #262019;
-  --color-raised: #2e251f;
+  /* Ground: warm graphite, mid-dark. Never black — this is felt under a lamp. */
+  --color-canvas: #1e1a17;
+  --color-well: #141110;
+  --color-surface: #262119;
+  --color-raised: #2e2820;
+  /* The drafting sheet: a plane you work ON, so it lifts slightly off the
+     table and takes no border, no gradient, no shadow. */
+  --color-leaf: #231f1a;
 
   /* Text: warm off-white, never pure #fff. */
   --color-ink: #f5ede4;
@@ -30,7 +44,9 @@
   --color-line-soft: #2e251f;
   --color-line-dash: #4a3c32;
 
-  /* Foil. Five tones double as subject-set identity and badge rarity. */
+  /* Accents read as roles on a drafting table, not rarity tiers:
+     brand = signal/you-are-here · sky = source/evidence · sun = recall/due
+     coral = test/score · azure = blueprint linework · mint, jade = subject sets */
   --color-brand: #ff5a3c; /* flare — primary action, streak */
   --color-brand-tint: #241713;
   --color-brand-soft: #37201a;
@@ -38,9 +54,9 @@
   --color-brand-300: #ff8b76;
   --color-brand-deep: #ffb3a0;
 
-  --color-sky: #2ee6d6; /* holo */
-  --color-sky-soft: #10312f;
-  --color-sky-deep: #8ff3ea;
+  --color-sky: #35d6e8; /* blueprint cyan — sources, citations, indexed */
+  --color-sky-soft: #0e2f34;
+  --color-sky-deep: #92eaf4;
 
   --color-mint: #b8ff3c; /* lime */
   --color-mint-soft: #22320f;
@@ -54,15 +70,46 @@
   --color-coral-soft: #351122;
   --color-coral-deep: #ff9ac1;
 
-  --color-azure: #4d8dff; /* deep foil */
+  --color-azure: #5590ff; /* drafting blue — the blueprint line */
   --color-azure-soft: #131f38;
-  --color-azure-deep: #9fc2ff;
+  --color-azure-deep: #a6c6ff;
 
   --color-jade: #22d3a0; /* patina */
   --color-jade-soft: #0f2c25;
   --color-jade-deep: #86e9c9;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  /* The landing page's single motion language. Declared on `:root` rather
+     than inside `@theme` because Tailwind v4 only emits custom properties in
+     namespaces it recognises — `--dur-sl` is not one, so it was being dropped
+     entirely and both tokens resolved to empty strings.
+
+     Mirrored in `features/landing/language.ts`, which builds a GSAP CustomEase
+     from the same four numbers so JS tweens and CSS transitions on adjacent
+     elements move identically. Change one, change both. */
+  :root {
+    --ease-sl: cubic-bezier(0.22, 1, 0.36, 1);
+    --dur-sl: 700ms;
+  }
+
+}
+
+/* ONE curve, enforced — and deliberately OUTSIDE every `@layer`.
+   Tailwind's transition utilities ship their own easing
+   (`cubic-bezier(0.4,0,0.2,1)`), so without this the page speaks three
+   dialects at once: measured at 13 elements on Tailwind's default, 9 on
+   ease-out, 6 on ours. Specificity alone cannot fix it — `.sl-motion *` and
+   `.duration-300` are both a single class, and `@layer utilities` is declared
+   after `@layer base`, so Tailwind wins the tie. Unlayered rules outrank
+   layered ones no matter the order, which is exactly the tool for this job.
+   Scoped to `.sl-motion` so the app keeps Tailwind's defaults. */
+.sl-motion *,
+.sl-motion *::before,
+.sl-motion *::after {
+  transition-timing-function: var(--ease-sl);
 }
 
 @layer base {
@@ -74,10 +121,20 @@
 
   body {
     @apply bg-canvas text-ink font-sans antialiased;
-    /* Lamp on a table: light pools where the work is, falls off at the edges. */
+    /* A drafting table under a lamp: a faint graticule ruled across the whole
+       surface, then light pooling where the work is and falling off at the
+       edges. The grid sits under the light so it reads as the table's own
+       ruling rather than an overlay. */
     background-image:
-      radial-gradient(120ch 80ch at 18% -10%, #2a211b 0%, transparent 60%),
-      radial-gradient(90ch 60ch at 100% 0%, #2b1a18 0%, transparent 55%);
+      radial-gradient(120ch 80ch at 18% -10%, #2b221c 0%, transparent 60%),
+      radial-gradient(90ch 60ch at 100% 0%, #2c1b18 0%, transparent 55%),
+      linear-gradient(to right, rgba(245, 237, 228, 0.022) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(245, 237, 228, 0.022) 1px, transparent 1px);
+    background-size:
+      auto,
+      auto,
+      32px 32px,
+      32px 32px;
     background-attachment: fixed;
   }
 
@@ -118,12 +175,15 @@
 }
 
 @layer components {
-  /* Nameplate: the condensed caps band across the top of a card. */
+  /* Nameplate: the caps band across the top of a card. Architects letter in
+     wide, heavy caps — Archivo's width axis gets us there without a second
+     family, and the near-zero tracking keeps it a block rather than a banner. */
   .nameplate {
     font-family: var(--font-display);
     font-weight: 800;
-    letter-spacing: 0.01em;
-    line-height: 0.92;
+    font-stretch: 112%;
+    letter-spacing: 0.005em;
+    line-height: 0.9;
     text-transform: uppercase;
   }
 
@@ -181,7 +241,13 @@
     transform: translateX(60%);
   }
 
-  /* Card edge: a printed card has a light top edge and sits on its own shadow. */
+  /* ── The three materials ───────────────────────────────────────────────
+     One-line test: cardstock is a thing you HAVE; a leaf is a thing you're
+     INSIDE; a ledger is a thing you're MEASURED AGAINST. */
+
+  /* CARDSTOCK — things you own. A printed card has a light top edge and sits
+     on its own shadow. Only ever for a discrete, countable, ownable object
+     WITH a state; if it has no state, it is not a card. */
   .cardstock {
     background: linear-gradient(180deg, var(--color-raised), var(--color-surface));
     border: 1px solid var(--color-line);
@@ -189,6 +255,45 @@
       inset 0 1px 0 rgba(255, 237, 220, 0.06),
       0 1px 2px rgba(0, 0, 0, 0.4),
       0 8px 24px -12px rgba(0, 0, 0, 0.7);
+  }
+
+  /* LEAF — things you read and write. Defined by a margin rule and a measure,
+     not by a box. It sits IN the table, not on it, so it never lifts: no
+     border, no gradient, no shadow, never foil. */
+  .leaf {
+    background: var(--color-leaf);
+    border: 0;
+    border-left: 1px solid var(--color-line);
+    box-shadow: none;
+    padding-left: clamp(16px, 3vw, 34px);
+  }
+  /* Prose gets a measure. 66ch keeps a line inside the range the eye tracks
+     without re-finding the left edge. */
+  .leaf-measure {
+    max-width: 66ch;
+  }
+
+  /* LEDGER — things you're measured against. Figures sit ON rules, never
+     inside a box, so no fill and no radius. Digits align in columns. */
+  .ruled {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    border-bottom: 1px solid var(--color-line);
+    font-variant-numeric: tabular-nums;
+  }
+  /* The reference line — a goal, an average, a zero. Without one a bar chart
+     is decoration: the reader has nothing to judge the height against. */
+  .ruled-datum {
+    border-top: 1px dashed var(--color-line-dash);
+  }
+
+  /* Drafting graticule for a panel that should read as ruled stock. */
+  .graticule {
+    background-image:
+      linear-gradient(to right, rgba(245, 237, 228, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(245, 237, 228, 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
   }
 }
 
@@ -325,3 +430,206 @@
 .chat-md .hljs-attribute { color: var(--color-brand-300); }
 .chat-md .hljs-punctuation,
 .chat-md .hljs-operator { color: var(--color-ink-3); }
+
+/* ── Notes document ──────────────────────────────────────────────────────
+   `.chat-md` styles assistant prose in a 13.5px chat column. A note is a
+   document the student is WRITING, so it needs the node types chat never
+   renders: to-dos, tables, images, resizable columns. Scoped to
+   `.notes-doc` so nothing here leaks back into chat. */
+
+.notes-doc:focus { outline: none; }
+
+/* Placeholder on the first empty line only — on every empty block it reads
+   as clutter while you're drafting. */
+.notes-doc p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* To-do lists. The marker is a real checkbox, so the list is usable rather
+   than decorative. */
+.notes-doc ul[data-type='taskList'] { list-style: none; padding-left: 0; }
+.notes-doc ul[data-type='taskList'] li { display: flex; gap: 0.6rem; align-items: flex-start; }
+.notes-doc ul[data-type='taskList'] li > label { margin-top: 0.28rem; user-select: none; }
+.notes-doc ul[data-type='taskList'] li > div { flex: 1 1 auto; min-width: 0; }
+.notes-doc ul[data-type='taskList'] input[type='checkbox'] {
+  accent-color: var(--color-brand);
+  width: 0.95rem;
+  height: 0.95rem;
+  cursor: pointer;
+}
+/* A ticked item is done — say so, so a long list can be skimmed. */
+.notes-doc ul[data-type='taskList'] li[data-checked='true'] > div {
+  color: var(--color-faint);
+  text-decoration: line-through;
+}
+
+/* Tables. `table-layout: fixed` is what makes column resizing behave: without
+   it the browser re-solves every column width from content on each keystroke
+   and the handles fight the text. */
+.notes-doc table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+.notes-doc th,
+.notes-doc td {
+  border: 1px solid var(--color-line);
+  padding: 0.45rem 0.6rem;
+  vertical-align: top;
+  position: relative;
+  min-width: 3rem;
+}
+.notes-doc th { background: var(--color-well); font-weight: 700; text-align: left; }
+.notes-doc .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(255 90 60 / 0.12);
+  pointer-events: none;
+}
+.notes-doc .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-brand);
+  cursor: col-resize;
+}
+
+/* Images. `height: auto` with a max width is what makes surrounding text
+   reflow correctly when an image is dropped mid-document. */
+.notes-doc img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  margin: 1rem 0;
+}
+.notes-doc img.ProseMirror-selectednode { outline: 2px solid var(--color-brand); }
+
+/* Blockquote and divider, which chat never renders. */
+.notes-doc blockquote {
+  border-left: 2px solid var(--color-brand);
+  padding-left: 0.9rem;
+  margin: 0.9rem 0;
+  color: var(--color-ink-3);
+}
+.notes-doc hr {
+  border: none;
+  border-top: 1px solid var(--color-line);
+  margin: 1.4rem 0;
+}
+
+/* Links are underlined rather than colour-only, so they survive a
+   grayscale print and are distinguishable without relying on hue. */
+.notes-doc a {
+  color: var(--color-sky-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Toggle sections. The marker is a real disclosure control, and the whole
+   summary row is the hit target — clicking only a 12px arrow is a miss most
+   of the time. */
+.notes-doc .notes-toggle {
+  border-left: 2px solid var(--color-line);
+  padding-left: 0.85rem;
+  margin: 0.75rem 0;
+}
+.notes-doc .notes-toggle > summary,
+.notes-doc .notes-toggle > div:first-child {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--color-ink);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.notes-doc .notes-toggle > summary::-webkit-details-marker { display: none; }
+.notes-doc .notes-toggle > button {
+  background: none;
+  border: 0;
+  color: var(--color-faint);
+  cursor: pointer;
+  padding: 0 0.2rem 0 0;
+  transition: transform 160ms var(--ease-out-expo);
+}
+.notes-doc .notes-toggle[open] > button { transform: rotate(90deg); }
+
+/* ── Notes: document typography ──────────────────────────────────────────
+   `.chat-md` is tuned for a 13.5px assistant reply. A note is a document you
+   read for twenty minutes, so it gets its own scale: a real heading ramp, a
+   comfortable measure, and space between blocks. */
+.notes-doc { max-width: 46rem; }
+.notes-doc > * + * { margin-top: 0.85rem; }
+.notes-doc h1 { font-size: 1.7rem; line-height: 1.15; margin-top: 1.9rem; }
+.notes-doc h2 { font-size: 1.35rem; line-height: 1.2; margin-top: 1.6rem; }
+.notes-doc h3 { font-size: 1.12rem; line-height: 1.25; margin-top: 1.3rem; }
+.notes-doc h1:first-child,
+.notes-doc h2:first-child,
+.notes-doc h3:first-child { margin-top: 0; }
+.notes-doc p { line-height: 1.75; }
+.notes-doc ul, .notes-doc ol { padding-left: 1.35rem; }
+.notes-doc li + li { margin-top: 0.28rem; }
+
+/* Code blocks. Syntax colours come from lowlight's hljs class names — the
+   same palette `.chat-md` already maps, so code looks identical whether it is
+   in a note or an answer. */
+.notes-doc pre {
+  background: var(--color-well);
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.notes-doc pre code { background: none; padding: 0; font-size: inherit; color: var(--color-ink-2); }
+.notes-doc :not(pre) > code {
+  background: var(--color-well);
+  border: 1px solid var(--color-line-soft);
+  border-radius: 5px;
+  padding: 0.1rem 0.32rem;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  color: var(--color-brand-300);
+}
+
+/* lowlight / highlight.js tokens, matched to the drafting palette. */
+.notes-doc .hljs-comment, .notes-doc .hljs-quote { color: var(--color-faint); font-style: italic; }
+.notes-doc .hljs-keyword, .notes-doc .hljs-selector-tag, .notes-doc .hljs-literal { color: var(--color-coral-deep); }
+.notes-doc .hljs-string, .notes-doc .hljs-attr { color: var(--color-mint-deep); }
+.notes-doc .hljs-number, .notes-doc .hljs-symbol { color: var(--color-sun-deep); }
+.notes-doc .hljs-title, .notes-doc .hljs-name, .notes-doc .hljs-function { color: var(--color-sky-deep); }
+.notes-doc .hljs-built_in, .notes-doc .hljs-type { color: var(--color-azure-deep); }
+.notes-doc .hljs-variable, .notes-doc .hljs-attribute { color: var(--color-brand-300); }
+.notes-doc .hljs-punctuation, .notes-doc .hljs-operator { color: var(--color-ink-3); }
+
+/* Inline marks and list markers — previously inherited from `.chat-md`, which
+   is no longer applied to the editor because its list rules broke task lists
+   and toggles. */
+.notes-doc :is(h1, h2, h3) {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--color-ink);
+  /* NOT uppercased, unlike chat. Chat headings are nameplates in a short
+     reply; a note is a document, and shouting every heading in a page of
+     revision notes is exhausting to read. */
+  text-transform: none;
+}
+.notes-doc ol { list-style: decimal; }
+.notes-doc ol::marker { font-family: var(--font-mono); color: var(--color-faint); }
+.notes-doc ul { list-style: disc; }
+.notes-doc ul[data-type='taskList'] { list-style: none; }
+.notes-doc strong { font-weight: 700; color: #fff6ec; }
+.notes-doc em { font-style: italic; }

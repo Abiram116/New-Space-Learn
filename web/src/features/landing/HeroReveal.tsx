@@ -28,13 +28,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { Link } from 'react-router-dom'
-import { Button } from '../../components/ui/Button'
-import { Icon } from '../../components/ui/Icon'
+import { SplitText } from 'gsap/SplitText'
+import { DUR, EASE, STAGGER } from './language'
 import { useReducedMotion } from '../../components/ui/motion'
-import { FoilText } from './motion'
+import { CTA } from './wow'
 
-gsap.registerPlugin(ScrollTrigger)
+gsap.registerPlugin(ScrollTrigger, SplitText)
 
 export function HeroReveal({
   src,
@@ -67,6 +66,74 @@ export function HeroReveal({
     )
     io.observe(el)
     return () => io.disconnect()
+  }, [reduced])
+
+  // The welcome. Runs once, on load, and ONLY if the visitor is actually at
+  // the top — a reload halfway down the page restores scroll position, and
+  // playing an intro for a hero that is 3000px above the fold means the whole
+  // thing happens where nobody can see it, then leaves them looking at
+  // something that already finished.
+  //
+  // It is also a genuine page-load sequence rather than scroll-triggered
+  // decoration: the sheet edge draws, the frame settles, then the headline
+  // arrives a line at a time. Everything is transform/opacity, so it composites
+  // on the GPU and never blocks the first scroll.
+  useEffect(() => {
+    if (reduced) return
+    if (window.scrollY > 40) return
+    const copy = copyRef.current
+    const frame = frameRef.current
+    if (!copy || !frame) return
+
+    const heading = copy.querySelector('h1')
+    const tail = copy.querySelectorAll('[data-hero-tail]')
+    if (!heading) return
+
+    // Per WORD, not per line. A whole line revealing at once is a curtain;
+    // words arriving with their own timing is someone speaking. The words
+    // overlap heavily (stagger is a fraction of the duration) so the phrase
+    // still lands as one gesture rather than a typewriter.
+    const split = new SplitText(heading, {
+      type: 'lines,words',
+      linesClass: 'sl-line',
+      wordsClass: 'sl-word',
+    })
+
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: EASE } })
+
+      tl.fromTo(
+        frame,
+        { opacity: 0, scale: 0.965, y: () => window.innerHeight * 0.56 + 26 },
+        { opacity: 1, scale: 1, y: () => window.innerHeight * 0.56, duration: DUR * 1.6 },
+        0,
+      )
+      // Words rise out of their own line box and scale down INTO place, so the
+      // type settles rather than simply appearing at final size.
+      tl.fromTo(
+        split.words,
+        { yPercent: 108, scale: 1.14, opacity: 0 },
+        {
+          yPercent: 0,
+          scale: 1,
+          opacity: 1,
+          duration: DUR * 1.25,
+          stagger: STAGGER * 0.8,
+        },
+        0.12,
+      )
+      tl.fromTo(
+        tail,
+        { opacity: 0, y: 14 },
+        { opacity: 1, y: 0, duration: DUR, stagger: STAGGER },
+        0.55,
+      )
+    }, sectionRef)
+
+    return () => {
+      ctx.revert()
+      split.revert()
+    }
   }, [reduced])
 
   // The reveal itself.
@@ -104,7 +171,12 @@ export function HeroReveal({
       // because the two elements have different heights and `yPercent` is
       // relative to each element's own box — the one thing that guarantees
       // they *won't* stay in lockstep.
-      const travel = () => window.innerHeight * 0.46
+      // Also sets the standing gap between copy and frame. Because both move
+      // the same distance, the gap at rest is `11svh + travel` — so this number
+      // is what decides whether the copy block clears the video, and 0.46 did
+      // not: the block measures ~450px against a ~397px gap on a 1447×811
+      // screen, which is exactly the overlap that showed up on the button row.
+      const travel = () => window.innerHeight * 0.56
 
       tl.fromTo(
         frame,
@@ -121,7 +193,7 @@ export function HeroReveal({
       // Only fades at the very end, once it is nearly off screen anyway.
       // Fading earlier would read as the copy dissolving on its own rather
       // than being shoved out of frame.
-      tl.to(copy, { opacity: 0, ease: 'none', duration: 0.25 }, 0.75)
+      tl.to(copy, { opacity: 0, ease: 'none', duration: 0.28 }, 0.58)
     }, section)
 
     return () => ctx.revert()
@@ -158,7 +230,12 @@ export function HeroReveal({
           sides. */}
       <div
         ref={frameRef}
-        className="absolute left-1/2 top-[11svh] aspect-video h-[80svh] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[20px] border border-line bg-well shadow-[0_50px_140px_-50px_rgba(0,0,0,0.95)]"
+        // The drop shadow is kept tight on purpose. At `0 50px 140px -50px` it
+        // reached past the bottom of this `h-[100svh] overflow-hidden` section
+        // and got sliced off dead flat at the fold — a hard horizontal line
+        // right under the video, which read as a slide boundary. Pulling the
+        // blur in keeps the whole shadow inside the section.
+        className="absolute left-1/2 top-[11svh] aspect-video h-[80svh] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[20px] border border-line bg-well shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]"
       >
         <video
           poster={poster}
@@ -183,31 +260,37 @@ export function HeroReveal({
 function HeroCopy() {
   return (
     <>
-      {/* Set as large as the block can go while still clearing the frame
-          below it. `leading-[0.86]` matters as much as the size here: this
-          face is condensed caps, and tight leading is what makes three
-          lines read as one mass rather than three sentences. */}
-      <h1 className="nameplate max-w-5xl text-[clamp(38px,7.2vw,104px)] leading-[0.86] text-ink">
-        It remembers
-        <br />
-        <FoilText>what you forgot</FoilText>
-        <br />
-        and picks up right there.
+      {/* Three SHORT lines, and that is load-bearing rather than a style
+          preference. The whole block has to clear the video frame, whose top
+          edge starts around 57svh — so the headline's line COUNT is a layout
+          constraint, not just a reading one. The previous copy ran to four
+          lines in this face and pushed the button down onto the frame.
+
+          `leading-[0.86]`: tight leading is what makes the lines read as one
+          mass rather than three separate sentences. */}
+      {/* SplitText re-splits this into lines and words at runtime, so the
+          markup stays plain prose. `.sl-line { overflow: hidden }` is what
+          lets each word rise out of its own line box rather than sliding over
+          the one above. */}
+      {/* Plain prose — no FoilText here. FoilText renders a DUPLICATE copy of
+          its children for the gradient sweep plus an inline <style> block, and
+          SplitText walks all of it: the heading split into 38 "words" and read
+          "IT CITES THE PAGE THE PAGE EVERY TIME". The foil belongs on static
+          type; animated type gets its emphasis from colour and motion. */}
+      <h1 className="nameplate max-w-4xl text-[clamp(38px,7.6vw,100px)] leading-[0.86] text-ink [&_.sl-line]:overflow-hidden">
+        It cites <span className="text-brand">the page</span> every time.
       </h1>
-      <p className="mt-5 max-w-lg text-[14.5px] leading-relaxed text-ink-3">
-        Drop in your lecture PDFs. It reads them, remembers what you've
-        actually covered, and tells you what to study next — with cards, notes
-        and quizzes it writes for you, each one still pointing back at the page
-        it came from.
+      <p data-hero-tail className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-3">
+        Upload the PDFs you actually have to know. Every answer comes back with
+        the document and page it was built from — then becomes notes, cards or a
+        quiz without leaving the conversation.
       </p>
-      <div className="mt-6 flex flex-wrap items-center gap-4">
-        <Link to="/signup">
-          <Button size="lg">
-            Open your first pack
-            <Icon name="arrowRight" size={15} />
-          </Button>
-        </Link>
-        <span className="setcode">Free while in preview</span>
+      {/* Same CTA component as the close. The hero used to use the app's
+          bevelled Button while the close used a glowing hand-rolled link —
+          one page, two button languages. */}
+      <div data-hero-tail className="mt-6 flex flex-wrap items-center gap-4">
+        <CTA to="/signup">Start free</CTA>
+        <span className="setcode">No card needed</span>
       </div>
     </>
   )
