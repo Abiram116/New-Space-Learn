@@ -31,8 +31,24 @@ services:
         value: qwen/qwen3.6-27b
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
+      # Embeddings — the one second provider (Groq hosts no embedding model).
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: EMBEDDING_BASE_URL
+        value: https://api.openai.com/v1
+      - key: EMBEDDING_MODEL
+        value: text-embedding-3-small
+      # Still "true" because no EMBEDDING_API_KEY is provisioned yet. Under the
+      # stub, retrieval is NOT semantically meaningful — see docs/AI_ENGINE.md
+      # §4. To go live: set EMBEDDING_API_KEY in the Render dashboard, flip
+      # this to "false", redeploy, then run scripts/reembed_documents.py once.
+      # Setting the flag without the key logs a warning and keeps the stub,
+      # rather than failing every upload.
       - key: USE_STUB_EMBEDDINGS
         value: "true"
+      # No endpoint map in production.
+      - key: EXPOSE_API_DOCS
+        value: "false"
       - key: CORS_ORIGINS
         sync: false
       - key: LOG_LEVEL

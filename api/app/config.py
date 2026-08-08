@@ -37,14 +37,34 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_timeout_s: float = 60.0
 
+    # Embeddings.
+    # Groq hosts no embedding endpoint, so this is the one place the backend
+    # talks to a second provider (see docs/adr/0005-groq-single-provider.md —
+    # an acknowledged exception, not a reversal). Any OpenAI-compatible
+    # `/embeddings` endpoint works; point `embedding_base_url` elsewhere to
+    # switch vendors without touching code.
+    embedding_api_key: str = ""
+    embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_timeout_s: float = 30.0
+    # How many chunks per request. The provider accepts far more, but a
+    # smaller batch keeps peak memory down on a 512MB instance and bounds how
+    # much work is lost if one request fails mid-document.
+    embedding_batch_size: int = 64
+
     # Feature flags
     use_stub_embeddings: bool = True
 
     # Runtime
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     log_level: str = "info"
+    # OpenAPI docs are a live map of every endpoint and payload shape. Useful
+    # locally, needless attack-surface detail in production.
+    expose_api_docs: bool = True
 
     # Embedding dimension must match the vector column in the DB migration.
+    # 1536 is both pgvector's column width here and text-embedding-3-small's
+    # native size — changing this requires a migration, not just a setting.
     embedding_dim: int = 1536
 
     @property
@@ -58,6 +78,18 @@ class Settings(BaseSettings):
     @property
     def llm_configured(self) -> bool:
         return bool(self.groq_api_key)
+
+    @property
+    def real_embeddings_enabled(self) -> bool:
+        """Real embeddings need both the flag off *and* a key present.
+
+        Deliberately not just `not use_stub_embeddings`: flipping the flag
+        without a key would fail every upload at the point of embedding,
+        after the file is already stored and the row says `processing`.
+        Requiring both means a half-finished config degrades to the stub
+        (with a warning) instead of breaking ingestion.
+        """
+        return not self.use_stub_embeddings and bool(self.embedding_api_key)
 
 
 @lru_cache

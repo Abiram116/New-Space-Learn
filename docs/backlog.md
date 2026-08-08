@@ -34,13 +34,26 @@ audit. Ranked by actual risk, not by how they were discovered.
   one-function swap, not a refactor) — most likely OpenAI's
   `text-embedding-3-small` proxied through the existing Groq-key pattern,
   per the `TODO` already in that file. Priced in `COST_MODEL.md`.
-- **Zero automated tests exist anywhere in the repo** — confirmed by a full
-  find across `api/` and `web/src/`, despite `pytest`/`pytest-asyncio`
-  already declared in `api/pyproject.toml`. Highest-risk untested surface:
-  `guards.py`'s ownership assertions (a cross-user leak already happened
-  once and was fixed by hand — exactly the class of bug a regression test
-  would catch silently reintroducing) and the SM-2 grading math in
-  `flashcards.py`'s `grade_card()`. Start there, not with UI snapshot tests.
+- ~~**Zero automated tests exist anywhere in the repo**~~ — **addressed in
+  Phase 0** (2026-08-09). `api/tests/` now holds 34 passing tests covering
+  the two highest-risk surfaces: `guards.py` ownership assertions (plus a
+  coverage test that fails if a *future* endpoint forgets its guard, which is
+  the failure mode that actually shipped once) and SM-2 grading, including a
+  parity test that executes the real `web/src/lib/schedule.ts` over 480 cases
+  to prove the deliberate Python/TypeScript duplication still agrees.
+  **Still uncovered and worth doing next:** the RAG prompt builder, document
+  chunking, and anything in the frontend (no test runner is configured for
+  `web/` at all).
+
+- **`subspaces.py` duplicates `guards.py` and disagrees with it** (found
+  2026-08-09). It defines its own `_get_owned_subspace` and
+  `_assert_space_owned` rather than using the shared helpers. Functionally
+  safe — both check ownership — but `_assert_space_owned` raises
+  `Forbidden` (403) where `guards.assert_space` raises `NotFound` (404).
+  `guards.py` documents 404 as deliberate: a 403 confirms the row exists and
+  belongs to *somebody*, which is an enumeration oracle. Two call sites, two
+  behaviours, one of them contradicting a documented security decision. Fix
+  is to delete the local copies and call the shared guards.
 - **Three frontend files bundle multiple components each**, verified by
   grepping component boundaries directly: `FlashcardsView.tsx` (1046 lines —
   `DeckTile`, `DeckDetail`, `CardEditor`, `Review`, `CardFace`, `Summary`,

@@ -8,7 +8,19 @@ export const listMessages = (subspaceId: string) =>
 export type ChatStreamEvent =
   | { type: 'token'; delta: string }
   | { type: 'citation'; citation: Citation }
-  | { type: 'done'; messageId: string | null; userMessageId: string | null; citations: Citation[] }
+  | {
+      type: 'done'
+      messageId: string | null
+      userMessageId: string | null
+      citations: Citation[]
+      /**
+       * The canonical stored reply. Differs from the concatenated tokens only
+       * when the server stripped a citation marker pointing at a source that
+       * doesn't exist — reconcile against this so the bubble matches what a
+       * refresh would show.
+       */
+      content: string | null
+    }
   | { type: 'error'; code: string; message: string }
 
 /**
@@ -80,6 +92,7 @@ function parseSseEvent(raw: string): ChatStreamEvent | null {
         messageId: (data.message_id as string | null) ?? null,
         userMessageId: (data.user_message_id as string | null) ?? null,
         citations: (data.citations as Citation[]) ?? [],
+        content: (data.content as string | undefined) ?? null,
       }
     case 'error':
       return {

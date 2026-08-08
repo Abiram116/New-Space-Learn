@@ -34,7 +34,7 @@ from .routers import (
     subspace_chat,
     subspaces,
 )
-from .services import llm, supabase
+from .services import embeddings, llm, supabase
 
 
 logging.basicConfig(
@@ -48,14 +48,20 @@ async def lifespan(_: FastAPI):
     yield
     await supabase.close_client()
     await llm.close_llm()
+    await embeddings.close_client()
 
 
 def create_app() -> FastAPI:
+    # The OpenAPI docs enumerate every endpoint, payload shape and error code.
+    # That's a useful local development tool and needless reconnaissance detail
+    # in production, so it's opt-in per environment rather than always on.
+    docs_enabled = settings.expose_api_docs
     app = FastAPI(
         title="Space Learn API",
         version="0.1.0",
-        docs_url="/api/v1/docs",
-        openapi_url="/api/v1/openapi.json",
+        docs_url="/api/v1/docs" if docs_enabled else None,
+        redoc_url="/api/v1/redoc" if docs_enabled else None,
+        openapi_url="/api/v1/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
 

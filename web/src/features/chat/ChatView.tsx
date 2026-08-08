@@ -240,7 +240,11 @@ function handleEvent(
   }
   if (evt.type === 'done') {
     setPending((prev) => {
-      const finalText = (prev?.text ?? '').trim() || '(no reply)'
+      // Prefer the server's canonical text: it's what got stored, and it has
+      // had any citation marker pointing at a non-existent source stripped.
+      // Falling back to the streamed buffer keeps this working if an older
+      // backend doesn't send `content`.
+      const finalText = (evt.content ?? prev?.text ?? '').trim() || '(no reply)'
       onDone(finalText, evt.citations.length ? evt.citations : (prev?.citations ?? []))
       return { text: '', citations: [] }
     })

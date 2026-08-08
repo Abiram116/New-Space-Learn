@@ -8,6 +8,7 @@ Two responsibilities kept intentionally small so they're easy to test:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -156,3 +157,42 @@ def build_prompt(
 def _snippet(text: str, *, limit: int = 90) -> str:
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+_CITATION_MARKER = re.compile(r"\[\[(\d+)\]\]")
+
+
+def strip_invalid_citations(text: str, valid_count: int) -> tuple[str, list[int]]:
+    """Remove `[[n]]` markers that don't point at a real source.
+
+    `build_prompt` instructs the model to cite only the numbered sources it was
+    given, but an instruction is not a guarantee — a model can emit `[[7]]`
+    when four sources were provided. Product Principle 3 ("every claim is
+    traceable") is load-bearing for this product, so a marker that resolves to
+    nothing is worse than no marker at all: it renders as a citation the
+    student can't click, which reads as a broken promise rather than a missing
+    one.
+
+    Returns the cleaned text and the sorted list of markers that were dropped,
+    so the caller can log how often this actually happens.
+
+    Runs after the stream completes, over text already fully in memory — it
+    adds nothing to time-to-first-token.
+    """
+
+    dropped: set[int] = set()
+
+    def _replace(match: re.Match[str]) -> str:
+        n = int(match.group(1))
+        if 1 <= n <= valid_count:
+            return match.group(0)
+        dropped.add(n)
+        return ""
+
+    cleaned = _CITATION_MARKER.sub(_replace, text)
+    if dropped:
+        # Removing a marker mid-sentence can leave " ." or a double space.
+        cleaned = re.sub(r" +([.,;:!?])", r"\1", cleaned)
+        cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+        cleaned = re.sub(r" +\n", "\n", cleaned)
+    return cleaned.strip(), sorted(dropped)

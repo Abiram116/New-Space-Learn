@@ -124,6 +124,19 @@ async def send_chat(
                 buffer.append(delta)
                 yield _sse("token", {"delta": delta})
             assistant_text = "".join(buffer).strip() or "(no reply)"
+            # The model was told to cite only the sources it was given, but an
+            # instruction isn't a guarantee. A marker pointing at a source that
+            # doesn't exist renders as an unclickable citation — a broken
+            # promise, which is worse than no citation at all.
+            assistant_text, dropped = rag.strip_invalid_citations(
+                assistant_text, len(citations_meta)
+            )
+            if dropped:
+                log.warning(
+                    "dropped out-of-range citation markers %s (had %d sources)",
+                    dropped,
+                    len(citations_meta),
+                )
             saved = await supabase.db_insert(
                 "chat_messages",
                 {
@@ -147,6 +160,12 @@ async def send_chat(
                     "message_id": saved_id,
                     "user_message_id": user_row["id"],
                     "citations": citations_meta,
+                    # The canonical stored text. Tokens were already streamed
+                    # raw, so if any marker was stripped above the client's
+                    # buffer now differs from what's in the database — it
+                    # reconciles against this rather than showing one thing now
+                    # and another after a refresh.
+                    "content": assistant_text,
                 },
             )
         except ApiError as e:

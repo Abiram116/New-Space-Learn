@@ -106,16 +106,23 @@ stage — see §11 for why.
   semantically similar text is geometrically close.
 - **Input:** a batch of chunk strings.
 - **Output:** a `vector(1536)` per chunk.
-- **Status: not actually built.** `USE_STUB_EMBEDDINGS=true` is set in
-  **every environment that exists** — the local `.env`, `.env.example`, and
-  the `render.yaml` deploy manifest — so every call routes through
-  `_stub_embedding()`, a deterministic hash of the text, explicitly "not
-  semantically meaningful" per its own docstring. **This means retrieval today
-  returns chunks by an arbitrary-but-consistent ordering, not by actual
-  relevance.** Flagged as the top finding in `backlog.md`. (Whether a live
-  deployment is currently running is a separate question — `CHECKPOINT.md`
-  records a standing "local only, do not deploy until told" constraint. The
-  finding holds either way, because the stub is the default everywhere.)
+- **Status (updated 2026-08-09): the provider is wired; the switch is off.**
+  Phase 0.1 replaced the `TODO` with a real OpenAI-compatible client
+  (batching, index-ordered results, dimension checking, typed errors), but
+  `USE_STUB_EMBEDDINGS=true` remains set in the local `.env`, `.env.example`,
+  and `render.yaml` because **no `EMBEDDING_API_KEY` is provisioned in any
+  environment**. Until one is, every call still routes through
+  `_stub_embedding()` — a deterministic hash, explicitly "not semantically
+  meaningful" — so **retrieval returns chunks in an arbitrary-but-consistent
+  order, not by relevance.**
+- **Turning it on:** set `EMBEDDING_API_KEY`, set `USE_STUB_EMBEDDINGS=false`,
+  then run `api/scripts/reembed_documents.py` once — documents ingested under
+  the stub keep their meaningless vectors otherwise, and nothing about them
+  looks broken from the outside.
+- **Fails safe by design:** `Settings.real_embeddings_enabled` requires the
+  flag *and* a key. Flipping the flag alone logs a loud one-time warning and
+  keeps using the stub, rather than failing every upload after the file is
+  already stored.
 - **Latency (stub):** microseconds, pure hashing. **Latency (real, once
   wired):** a network call to an embedding provider — **estimated
   100–300ms** for a small batch, run once per uploaded document (not per
@@ -224,25 +231,25 @@ still a measured problem at that volume.
   and quota for work an 8B model handles fine. This tiering *is* the cost
   optimization; see `COST_MODEL.md`.
 
-## 10. Citation validation — partially built
+## 10. Citation validation — built (Phase 0.4)
 
-- **What exists:** the model is instructed to mark citations as `[[n]]`
-  matching the numbered sources block, and told explicitly not to invent
-  citations (`rag.py::build_prompt`).
-- **What's missing:** nothing programmatically checks that every `[[n]]` the
-  model actually emits corresponds to a real entry in `citations_meta`, or
-  that `n` is within range. An instruction is not a guarantee — a model can
-  still emit `[[7]]` when only 4 sources were provided. Given Product
-  Principle 3 ("every claim is traceable") is load-bearing for this
-  product's entire pitch, this is a real, currently-open gap, not a
-  theoretical one.
-- **Recommended fix (small, not yet scheduled in any plan doc — added
-  here):** after the stream completes, regex-extract every `[[n]]` marker
-  from the assembled text server-side; drop or visibly flag any marker
-  outside `1..len(citations_meta)` before persisting the message. Cheap
-  (one regex pass over text already fully in memory at stream-end), no new
-  model call, no latency added to the stream itself since it runs after the
-  last token, not before.
+- **Instruction layer:** the model is told to mark citations as `[[n]]`
+  matching the numbered sources block, and explicitly not to invent citations
+  (`rag.py::build_prompt`).
+- **Enforcement layer:** `rag.strip_invalid_citations()` runs once the stream
+  completes and removes any marker outside `1..len(citations_meta)`, tidying
+  the whitespace and punctuation the removal leaves behind. An instruction is
+  not a guarantee — a model can emit `[[7]]` when four sources were provided,
+  and a marker resolving to nothing is worse than no marker at all: it renders
+  as a citation the student can't click, which reads as a broken promise.
+- **Reconciliation:** tokens stream raw, so a stripped marker would leave the
+  client's buffer disagreeing with what was stored. The `done` event carries
+  the canonical `content` and `ChatView` prefers it, so the bubble matches
+  what a refresh would show.
+- **Cost/latency:** one regex pass over text already in memory, after the last
+  token. Nothing added to time-to-first-token, no extra model call.
+- **Observability:** dropped markers are logged with the source count, so how
+  often this actually fires is measurable rather than assumed.
 - **Alternatives rejected:** a second LLM call to "verify" citations against
   source text would catch more subtle issues (a citation that's in-range but
   doesn't actually support the claim) but doubles the cost of every chat
@@ -340,13 +347,13 @@ codebase uses instead (tagged evidence rows, not a unified object).
 | Upload | Yes | ~200–800ms (est.) | $0 |
 | Parsing | Yes (text); vision path costs an LLM call | 50–300ms text / LLM-call latency for images | $0 text / metered for images |
 | Chunking | Yes | <10ms (est.) | $0 |
-| Embedding | **Stubbed, not real** | µs (stub) | $0 (stub); real cost priced in `COST_MODEL.md` |
+| Embedding | Provider wired; **flag off pending a key** | µs (stub) | $0 (stub); real cost priced in `COST_MODEL.md` |
 | Retrieval | Yes | ~300–700ms (2–3 sequential round trips, est.) | $0 |
 | Hybrid search | **Not built — sequenced after real embeddings** | — | — |
 | Reranking | **Not built — not justified at current scale** | — | — |
 | Context building | Yes | <5ms | $0 |
 | Reasoning | Yes | 300–600ms TTFT + streaming (est.) | Priced in `COST_MODEL.md` |
-| Citation validation | **Partial — range-check not yet added** | — | — |
+| Citation validation | Yes (Phase 0.4) | one regex pass, post-stream | $0 |
 | Artifact generation | Yes | one 70B call | 2x a chat turn's quota cost |
 | Learning state | Yes | computed at read time | $0 |
 | Scheduling | Yes (SM-2); exam-aware compression planned | <1ms | $0 |

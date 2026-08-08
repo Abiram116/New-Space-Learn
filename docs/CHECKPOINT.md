@@ -1,85 +1,105 @@
-# Checkpoint — 2026-08-05
+# Checkpoint — 2026-08-09
 
-> **Superseded for sequencing (2026-08-09).** This file's "Do this next"
-> ordering has been folded into
-> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), which is now the single
-> authority on what to work on next — its Phase 0 carries the
-> browser-verification items below. Keep reading this file for the *historical
-> record* of what was uncommitted and why on 2026-08-05; ignore its ordering.
+Where things stand, so work can resume without re-deriving context.
 
-Where things stand, so work can resume without re-deriving context. Delete
-this file once the open items below are done.
+**Sequencing authority is [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).**
+This file records *state*, not order — what's done, what's blocked, and what
+needs a human decision. The 2026-08-05 edition of this file has been folded
+into that plan and is gone; its unfinished items are tracked below.
 
-## Committed and pushed
+## Where the project is
 
-- `b80d659` — backlog §7–§13, plus the performance/security audit
-  (8-round-trip `/me/stats` → 1, unmetered LLM endpoint closed, route
-  code-splitting 451 KB → 245 KB gzipped).
+**Architecture v1 is frozen** (see [README.md](README.md) and
+[adr/](adr/README.md)). Design is finished; the work now is implementation
+against a settled plan.
 
-## Uncommitted, in the working tree
+**Phase 0 is implemented and awaiting review.** It fixed correctness problems,
+not features — nothing on screen looks different except the toasts.
 
-Everything below is written, typechecked, built, and backend-verified —
-but **not committed and not seen in a browser**.
+## Phase 0 — what landed
 
-### Fixes from live feedback
-- **Streak hover showed empty boxes.** `StreakLedger` rendered
-  `'▮'.repeat(intensity)` — a glyph Big Shoulders Display doesn't carry.
-  Third recurrence of the unsupported-glyph class (after `γ` in AuthShell
-  and Landing). Backend also discarded real per-day minutes and sent only
-  an abstract 0–3 intensity, so the hover had nothing true to show.
-  `HeatmapCell` now carries `minutes`; hover reads `~12m`.
-- **Study time was not measured.** 60s/chat, 20s/card, 180s/quiz were bare
-  magic numbers in three routers. Centralised in `services/activity.py`
-  with reasoning; UI now renders `~11m` because presenting an estimate as a
-  measurement is the `fullness()` mistake again.
-- **Page switching.** Ownership guard and data read ran sequentially in six
-  list endpoints. The reads are already `user_id`-scoped, so they can't
-  leak — now gathered. All six verified to still raise `NotFound` for an
-  unowned subspace (`verify_guard.py`). 2–3 round trips → 1.
-- **Chunk prefetch.** Split chunks warm on idle, so splitting the bundle
-  doesn't cost a wait on first opening Notes/Cards/Quizzes.
-- **Brief copy.** Prompt said "Name the actual topic" in the body, but the
-  headline already names it — that caused "Markov decision processes" to
-  appear twice. Fixed, plus an explicit ban on filler phrasing.
+| Task | State |
+|---|---|
+| 0.1 Real embedding provider | Code complete, **switch off** — see blockers |
+| 0.2 Guard tests | Done — 15 tests |
+| 0.3 SM-2 tests + Python/TS parity | Done — 9 tests + 480-case parity check |
+| 0.4 Citation validation | Done — 9 tests |
+| 0.5 Cold-start warm-up | Done, verified live |
+| 0.6 API docs gate | Done, verified both states |
+| 0.7 Browser verification | **Partial** — see blockers |
 
-### New: app motion system
-`web/src/components/ui/motion.tsx` — `Rise`, `Stagger`, `PageTransition`,
-`CountUp`, `useReducedMotion`. Closes the audit's biggest finding: the
-landing page had a full motion vocabulary while the app had hover colours
-and nothing else.
+Verification at time of writing: **34 tests pass**, `ruff check app/ --select
+F,E9` clean, new files clean under the full ruleset, `tsc -b` clean, frontend
+builds. Entry bundle measured at **147 KB gzipped** (~209 KB for a landing
+visit), against a 250 KB budget — the 245 KB figure in older docs predated the
+landing rebuild.
 
-Applied: page cross-fades (`AppShell`), dealt-in topic cards + counting
-streak (Home), chat bubble entrances, quiz results stagger + score
-count-up.
+## Blocked — needs you
 
-### New: `docs/design-plan.md`
-Per-page design plan for every surface, motion principles, and Higgsfield
-asset briefs written as ready-to-paste prompts, with sequencing.
+1. **No embedding provider key exists.** This is the big one. The provider is
+   fully wired (`embeddings.py`, batching + dimension checks + typed errors),
+   but `USE_STUB_EMBEDDINGS=true` is still set in `.env`, `.env.example` and
+   `render.yaml` because there's no `EMBEDDING_API_KEY` anywhere. **Until
+   that changes, retrieval is not semantically meaningful** — it returns
+   chunks in an arbitrary-but-consistent order, and every citation points at
+   a real page that isn't necessarily the right one.
 
-### Other
-- Profile had **no empty state at all** — a new account saw empty charts
-  with no explanation. Added, and switched it to the shared stats cache.
-- Home first-run copy rewritten to sound like the companion introducing
-  itself rather than a database reporting zero rows.
-- Home suggestion CTA now visually distinct from a generic action.
+   To switch on: set `EMBEDDING_API_KEY`, set `USE_STUB_EMBEDDINGS=false`,
+   then run `uv run python scripts/reembed_documents.py` from `api/` once.
+   Documents ingested under the stub keep their meaningless vectors until you
+   do, and nothing about them looks broken from the outside.
 
-## Do this next, in order
+   Costed in [COST_MODEL.md](COST_MODEL.md) — roughly 2¢ per student per
+   semester. The blocker is account access, not money.
 
-> Superseded — see the note at the top of this file.
-> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Phase 0 now carries items
-> 1–2 below; items 3–4 remain scoped in `design-plan.md` and
-> `plan-frontend.md §16`.
+   Setting the flag without a key is safe: it logs a warning once and keeps
+   using the stub rather than failing every upload.
 
-1. **Run it and click through.** Nothing above has been seen in a browser.
-   Highest priority is the **Notes editor** (Tiptap, inline `/ai`) — built
-   two sessions ago and still never visually verified.
-2. `docs/design-plan.md` §5 Phase 1 — toast contrast, landing font race and
-   marquee gap.
-3. Phase 2 — flashcard grade buttons (flagged twice as feeling wrong, still
-   unaddressed), docs processing→ready transition.
-4. Phase 3 — Higgsfield assets. Generate the §4.2 icon set first: smallest,
-   fastest way to judge whether the style contract holds before committing
-   to video.
+2. **The Notes editor still has not been opened in a browser.** Rebuilt on
+   Tiptap several sessions ago, never visually verified — the longest-standing
+   unverified thing in the project. It sits behind sign-in, and signing in
+   isn't something I can do for you. Same for the Profile empty state.
+
+   When you sign in, check: inline `/ai`, the formatting toolbar, markdown
+   round-tripping, and that no raw HTML or literal `**` reaches the screen
+   (`notes.py::_demote_html` is the defensive net; confirm it's holding).
+
+## What changed on screen
+
+Only the toasts. All three kinds failed WCAG AA — success 1.21:1, error
+1.97:1, and info **1.16:1** (white text on the near-white `--color-ink`,
+which `plan-frontend.md §14` had never noticed). Now 8.5–12.2:1 using the
+`-soft`/`-deep` pairing the flashcard grade buttons already use. Verified by
+computing resolved contrast in a live browser.
+
+## Corrections made while implementing
+
+Two documented claims turned out to be false, and are fixed in the docs:
+
+- **The landing page never actually warmed the API.** `SOUL.md §10` described
+  the mitigation and `PERFORMANCE.md §6` called it "already mitigated," but no
+  ping existed outside `OfflineBanner` (which is behind auth). Now real, at
+  Landing and the auth pages.
+- **`plan-frontend.md §15` was stale.** The display font is Archivo, not Big
+  Shoulders Display, and `CodeMarquee` no longer exists — that half of the
+  item is obsolete. The font race is real; axes were narrowed to what's
+  actually used, which shortens the swap window without closing it.
+
+## Found, logged, not fixed
+
+- `subspaces.py` keeps private copies of the `guards.py` helpers, and one
+  raises `Forbidden` (403) where the shared guard raises `NotFound` (404) —
+  contradicting the documented anti-enumeration choice. In
+  [backlog.md](backlog.md).
+- No frontend test runner is configured at all. Backend coverage now exists;
+  `web/` has none.
+
+## Next
+
+Phase 1 (`IMPLEMENTATION_PLAN.md`) — the tag/choice schema change that
+prepares confusion pairs. It does not depend on the embedding key, so it can
+start while that's being sorted out. Every retrieval-quality claim stays
+provisional until blocker 1 is cleared.
 
 ## Standing constraints
 

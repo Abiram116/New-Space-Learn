@@ -206,6 +206,8 @@ buckets swept after 15 minutes so memory can't grow unbounded.
 **Limitations, both documented in the code itself:**
 - In-process, so it resets on deploy and would not work correctly across
   more than one worker. Correct for exactly today's deployment shape.
+- **Not covered by tests.** Phase 0 added guard and SM-2 coverage; the token
+  bucket's refill/exhaustion behaviour is still unverified.
 - **Non-LLM endpoints are unlimited.** Nothing rate-limits list/read
   endpoints — a scripted client could hammer `GET /subspaces/{id}/notes`
   freely. On a single free-tier worker that's a plausible cheap DoS. Not
@@ -249,7 +251,7 @@ Worth confirming no real key has ever been committed historically, e.g. via
 | **A03 Injection (SQL)** | No raw SQL string-building in application code; everything goes through PostgREST filters or a parameterized RPC. Low risk. |
 | **A03 Injection (Prompt)** | See §4 — contained by the absence of tool-calling. |
 | **A04 Insecure Design** | Deliberate, documented trade-offs (service-role key, in-process limiter) with the reasoning recorded — the opposite of accidental design. |
-| **A05 Security Misconfiguration** | CORS is an explicit allow-list from `CORS_ORIGINS`. **Note: `/api/v1/docs` (Swagger) is enabled unconditionally**, exposing the full API shape publicly — no data, but free reconnaissance. Worth gating behind an env flag in production. |
+| **A05 Security Misconfiguration** | CORS is an explicit allow-list from `CORS_ORIGINS`. `/api/v1/docs`, `/redoc` and the OpenAPI schema are gated behind `EXPOSE_API_DOCS` (Phase 0.6) — on by default for local development, set `"false"` in `render.yaml` so production serves no endpoint map. Verified in both states. |
 | **A06 Vulnerable Components** | Dependencies are pinned to ranges in `pyproject.toml`/`package.json`. No automated scanning (no Dependabot/`pip-audit`/`npm audit` in CI — there is no CI). |
 | **A07 Auth Failures** | Supabase-managed, email confirmation required. The 60s verified-token cache is the one deliberate softening. |
 | **A08 Data Integrity** | No CI/CD signing or artifact verification; deploys are Render/Vercel git-triggered. |
@@ -286,16 +288,23 @@ deployment, where §4's cross-tenant analysis also has to be redone.
 
 ## 11. Priority-ranked security work
 
-1. **Test `guards.py`'s ownership assertions** (§2) — the only control
-   standing between users, currently unverified by anything automated.
-   Highest value security work in the repo.
-2. **Validate citation markers server-side** (§4.2, `AI_ENGINE.md §10`) —
-   closes the injection consequence that actually threatens the product's
-   central claim. One regex, no new model call.
-3. **Gate `/api/v1/docs` behind an env flag in production** (§9/A05) —
-   minutes of work, removes free reconnaissance.
+1. ~~**Test `guards.py`'s ownership assertions**~~ (§2) — **done, Phase 0.2.**
+   15 tests, including a route-coverage test that fails if a future endpoint
+   accepts a caller-supplied id without calling a guard or scoping by
+   `user_id` — the failure mode that actually shipped once.
+2. ~~**Validate citation markers server-side**~~ (§4.2, `AI_ENGINE.md §10`) —
+   **done, Phase 0.4.** `rag.strip_invalid_citations()`, 9 tests.
+3. ~~**Gate `/api/v1/docs` behind an env flag**~~ (§9/A05) — **done, Phase
+   0.6.** `EXPOSE_API_DOCS`, `"false"` in `render.yaml`.
 4. **One structured log line per authenticated request** (§10) — makes
-   post-incident reconstruction possible at near-zero cost.
+   post-incident reconstruction possible at near-zero cost. **Now the top
+   open item.**
+5. **Align `subspaces.py` with `guards.py`** — it keeps private copies of the
+   ownership helpers, and one raises `Forbidden` (403) where the shared guard
+   raises `NotFound` (404), contradicting the documented anti-enumeration
+   choice. See `backlog.md`.
+6. **Cover the rate limiter with tests** — refill and exhaustion behaviour is
+   still unverified.
 5. **Rate-limit non-LLM endpoints** (§7) — matters only once there's traffic
    worth defending; correct to defer, wrong to forget.
 6. **Sniff upload magic bytes instead of trusting `content_type`** (§6.1) —

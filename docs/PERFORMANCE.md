@@ -17,7 +17,7 @@ before it's trusted further.
 | Chat time-to-first-token, warm | <1.5s | Retrieval (2–3 round trips) + Groq TTFT (estimated 300–600ms) — not independently measured end-to-end |
 | Quiz/flashcard generation (full artifact) | <6s | One 70B call generating N structured items — the slowest routine user-facing wait in the product; must always show a real loading state, never a bare spinner with no explanation |
 | Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | Not independently measured; falls back to "still processing, tap reprocess" on timeout rather than hanging |
-| First-load JS bundle (gzipped) | ≤250KB | **245KB today** — right at the self-imposed ceiling; see §2 |
+| First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-09: 147KB** entry (app), **~209KB** for a landing visit (entry + the lazy `Landing` chunk). The 245KB previously recorded here predates the landing rebuild and further splitting. |
 | Any in-app animation | ≤320ms (`design-plan.md §2`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
 
 These are planning targets, not SLAs verified by a monitoring system —
@@ -111,16 +111,29 @@ mitigation there has to be a good loading state, not a streaming response.
 ## 6. Cold starts
 
 Render's free tier spins down after 15 minutes idle; the next request pays
-~30s. `SOUL.md §10`'s mitigation — a `/health` ping fired from the landing
-page on load — covers a visitor who arrives at `/welcome` and reads the
-pitch before clicking through. **It does not cover a returning student who
-bookmarks the app directly** (`/home`, or a specific subspace URL) and hits
-a cold backend with no warm-up window. This is a real, currently-unaddressed
-gap for exactly the "re-entry beats onboarding" user `PRODUCT.md` names as
-primary. Cheapest fix: fire the same health-ping from the app shell's own
-mount (`AppShell`), not just the landing page — a few lines, no new
-infrastructure, closes the gap for the more important of the two visitor
-types.
+~30s.
+
+**Corrected 2026-08-09.** This section previously said `SOUL.md §10`'s
+landing-page warm-up was "already mitigated." It wasn't — no ping existed
+anywhere except `OfflineBanner`, which lives inside `AppShell`, behind auth.
+The design response had been written down but never built.
+
+**Now implemented** (`web/src/lib/warmApi.ts`, Phase 0.5), at the two points
+where the wake-up actually overlaps with something the user is already doing:
+
+- **Landing** — a visitor reads the pitch for 10–30s before clicking through.
+- **Sign-in / sign-up** (`AuthShell`) — typing credentials is another
+  10–20s, and the data fetch straight after login is what would otherwise
+  hit a cold server.
+
+Verified live: `GET /api/v1/health → 200` fires on both.
+
+**Deliberately not added to `AppShell`.** `OfflineBanner` already pings on
+mount, and by that point the page's real data requests are in flight against
+the same cold server — a ping racing them warms nothing. **A student who
+bookmarks the app directly still pays the cold start**, and no client-side
+trick fixes that; only a paid instance does. Worth stating plainly rather
+than implying it's covered.
 
 ---
 

@@ -222,21 +222,51 @@ clustering on question text client-side. Closely related to, and worth
 building alongside, §17's confusion-pair surfacing — both read the same
 `subtopic`/concept tags.
 
-### 14. Toast contrast
-Confirmed via screenshot (2026-08-05): the success toast (`bg-mint
-text-white` in `web/src/components/ui/Toast.tsx`) renders white text on a
-bright mint-green background — hard to read. The error toast
-(`bg-coral-deep text-white`, same file) has the same problem. Fix by
-darkening the background token used for toast fills specifically (not the
-shared `mint`/`coral-deep` tone tokens used elsewhere, which may be fine in
-their other contexts) or switching toast text to a dark ink color on the
-light end of those tones — whichever keeps it inside the existing Foil
-Binder palette rather than introducing a one-off color. Small, no backend
-dependency, but real — text that can't be read defeats the point of a
-confirmation.
+### 14. Toast contrast — **done (Phase 0.7, 2026-08-09)**
+Measured rather than eyeballed, and worse than this item recorded: all three
+toast kinds failed WCAG AA, including one this item never mentioned.
+
+| Kind | Was | Ratio | Now | Ratio |
+|---|---|---|---|---|
+| success | `bg-mint text-white` | 1.21:1 | `bg-mint-soft text-mint-deep` | 12.17:1 |
+| error | `bg-coral-deep text-white` | 1.97:1 | `bg-coral-soft text-coral-deep` | 8.48:1 |
+| info | `bg-ink text-white` | **1.16:1** | `bg-line text-ink` | 11.05:1 |
+
+The info toast was the worst of the three and wasn't flagged here:
+`--color-ink` is `#f5ede4`, so it was rendering white text on a near-white
+fill — effectively invisible. Fixed using the dark-fill/light-text `-soft` +
+`-deep` pairing the flashcard grade buttons already use, so no one-off colour
+was introduced. Verified in a live browser by computing the resolved
+computed-style contrast, not by inspecting the tokens.
 
 ### 15. Landing — hero text inconsistency + marquee loop gap
-Two separate bugs, confirmed via screenshot (2026-08-05):
+> **Revisited Phase 0.7 (2026-08-09). Both halves have changed since this was
+> written — the landing rebuild (`1e3626d`, `51394e2`) moved the ground.**
+>
+> - **The marquee half is obsolete.** `CodeMarquee` no longer exists anywhere
+>   in `web/src/`; the section it lived in was replaced. Nothing to fix. The
+>   "fake citations read as weak marketing texture" note was a fair criticism
+>   and the rebuild already answered it.
+> - **The font half was misdiagnosed but real.** The display font is now
+>   **Archivo** (variable), not Big Shoulders Display, and both `preconnect`
+>   hints are already present. The FOUT is genuine though: `display=swap`
+>   with `Manrope` as the fallback means a cold cache paints the fallback
+>   first. **Partially fixed** — the request asked for `wdth 62..125,
+>   wght 400..900` while the app only renders `wdth 100%–112%` and weights
+>   500–800, so the axes were narrowed to exactly what's used, shrinking the
+>   download and the swap window. Verified live: faces now report
+>   `weight: "500 800"`, `stretch: "100% 112%"`, headline unchanged at
+>   800/112%.
+> - **Residual, deliberately not done:** narrowing shortens the swap window,
+>   it doesn't close it. Eliminating FOUT needs a metric-matched `@font-face`
+>   fallback (`size-adjust`/`ascent-override`) or self-hosting the woff2 so it
+>   can be preloaded — a Google Fonts URL can't be safely preloaded because
+>   the file URL changes between CSS revisions. Worth doing only if the
+>   remaining shift is actually noticeable; it's a bigger change than this
+>   item's "small fix" framing assumed.
+
+Original diagnosis, kept for context — two separate bugs, confirmed via
+screenshot (2026-08-05):
 
 - **Hero headline looks different between loads (sometimes bolder/heavier)**
   — this is a font-loading race, not a random rendering glitch. `index.html`

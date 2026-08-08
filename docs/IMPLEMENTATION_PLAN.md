@@ -19,6 +19,19 @@ would produce a plan that breaks on contact.
 
 ## Phase 0 — Fix what's actually broken (1 week)
 
+> **Status: implemented 2026-08-09, awaiting review.** 34 tests pass, ruff and
+> `tsc` clean, frontend builds. Two items are partially blocked and need you:
+>
+> | Task | Status |
+> |---|---|
+> | 0.1 embeddings | **Code path complete; flag still `true`.** No embedding provider key exists in any environment, so flipping `USE_STUB_EMBEDDINGS=false` would break every upload. This is exactly the risk this phase flagged. Set `EMBEDDING_API_KEY`, flip the flag, run `api/scripts/reembed_documents.py`. |
+> | 0.2 guard tests | Done — 15 tests, including a coverage test that fails if a *future* endpoint forgets its guard. |
+> | 0.3 SM-2 tests | Done — 9 branch tests plus a parity test that executes the real `schedule.ts` over 480 cases. They agree. |
+> | 0.4 citation validation | Done — 9 tests; the canonical text is also returned on the `done` event so the client reconciles. |
+> | 0.5 warm-up | Done, **and a doc error corrected**: the landing page never actually pinged. Now warms from Landing and the auth pages. Verified live (`GET /api/v1/health → 200`). |
+> | 0.6 docs gate | Done — `EXPOSE_API_DOCS`, off in `render.yaml`. Verified both states. |
+> | 0.7 browser verification | **Partially blocked.** Toast contrast and the landing font race are fixed and verified in-browser. The Notes editor and Profile empty state sit behind sign-in, which needs your credentials. |
+
 **Why first:** two of these are correctness problems, not features, and one
 of them (embeddings) invalidates any retrieval-quality measurement taken
 before it lands. Building SOUL.md features on top of broken retrieval would

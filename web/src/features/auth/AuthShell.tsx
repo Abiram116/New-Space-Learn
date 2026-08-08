@@ -1,8 +1,9 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
 import { cn } from '../../lib/cn'
+import { warmApi } from '../../lib/warmApi'
 import { LitGrid, ParallaxLayer, usePointerParallax } from '../landing/motion'
 
 /**
@@ -32,6 +33,12 @@ export function AuthShell({
   children: ReactNode
   footer: ReactNode
 }) {
+  // Typing credentials is ~10–20s of cover to wake the free-tier backend, so
+  // the data fetch immediately after login lands on a warm server instead of
+  // paying the cold start in front of a spinner. Covers sign-in and sign-up,
+  // which both render through here.
+  useEffect(warmApi, [])
+
   return (
     <div className="grid min-h-full bg-canvas text-ink xl:grid-cols-[minmax(0,520px)_1fr]">
       <div className="mx-auto flex w-full max-w-md flex-col justify-center gap-7 px-7 py-12 sm:px-0 xl:mx-0 xl:max-w-none xl:px-16 2xl:px-20">

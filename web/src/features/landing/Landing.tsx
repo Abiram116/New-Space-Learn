@@ -29,6 +29,7 @@ import { Icon } from '../../components/ui/Icon'
 import { Logo, LogoMark } from '../../components/ui/Logo'
 import { cn } from '../../lib/cn'
 import { mapRange, useScrollProgress } from '../../lib/useScrollProgress'
+import { warmApi } from '../../lib/warmApi'
 import { HeroReveal } from './HeroReveal'
 import { SmoothScroll } from './SmoothScroll'
 import {
@@ -41,6 +42,11 @@ import {
 } from './wow'
 
 export function Landing() {
+  // Wake the free-tier backend while the visitor reads. By the time they reach
+  // "Start free" the API is usually up, so sign-up doesn't eat a ~30s cold
+  // start. Costs one fetch; see lib/warmApi.
+  useEffect(warmApi, [])
+
   return (
     <SmoothScroll>
       {/* `cursor-none` is scoped to this wrapper on purpose — the reticle is a

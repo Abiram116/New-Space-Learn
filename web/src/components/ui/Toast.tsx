@@ -84,11 +84,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <button
             key={t.id}
             onClick={() => dismiss(t.id)}
+            /* Dark fill, light tinted text — the same soft/deep pairing the
+               flashcard grade buttons use, rather than a one-off colour.
+               White on the bright tones measured 1.2–2.0:1 (and `bg-ink` is
+               a near-white token, so the info toast was white-on-white at
+               1.16:1). These pairings measure 8.5–12.2:1. */
             className={cn(
-              'pointer-events-auto max-w-md rounded-xl px-4 py-2.5 text-sm shadow-lg backdrop-blur transition-all cursor-pointer',
-              t.kind === 'error' && 'bg-coral-deep text-white',
-              t.kind === 'success' && 'bg-mint text-white',
-              t.kind === 'info' && 'bg-ink text-white',
+              'pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur transition-all cursor-pointer',
+              t.kind === 'error' && 'border-coral/30 bg-coral-soft text-coral-deep',
+              t.kind === 'success' && 'border-mint/30 bg-mint-soft text-mint-deep',
+              t.kind === 'info' && 'border-line-dash bg-line text-ink',
             )}
           >
             {t.message}
