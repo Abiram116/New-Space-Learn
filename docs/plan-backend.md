@@ -1,10 +1,25 @@
 # Plan — Backend
 
-**Status: all backend epics here are built and shipped** (2026-08-05), plus
-the cross-cutting Responsiveness work below. Epics are numbered to match
-[plan-frontend.md](plan-frontend.md) — same number, same feature, backend
-half. Context for why this list looks the way it does:
-[v2-review.md](v2-review.md).
+**Status: §1–§9 are built and shipped** (2026-08-05), plus the cross-cutting
+Responsiveness work below. **§11–§14 (2026-08-09) are the backend half of the
+architecture redesign in [SOUL.md](SOUL.md) — not started.**
+
+**Numbering:** §1–§10 share numbers with [plan-frontend.md](plan-frontend.md)
+(same number, same feature, backend half). The redesign epics **do not** —
+they were appended to each document's own sequence, so backend §11–§14 map to
+frontend §17–§19. Every one of them names its counterpart explicitly, so
+follow the cross-reference rather than the number:
+
+| Feature | Backend | Frontend |
+|---|---|---|
+| Confusion pairs | §11 | §17 |
+| Exam-aware scheduling | §12 | §18 |
+| Gap Map | §13 | §19 |
+| Cross-subject transfer | §14 | *(postponed — no frontend epic scoped yet)* |
+
+Context for why this list looks the way it does: [v2-review.md](v2-review.md)
+and, for §11–§14, `SOUL.md` §6–§8. Order of work is decided in
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), not here.
 
 Migrations added by this work, all applied:
 `20260805110000_student_model.sql`, `20260805120000_linked_subspaces.sql`,
@@ -194,33 +209,103 @@ same-subspace only, per the original backlog note — cross-subspace
 note-referencing is subsumed by Linked Subspaces (§4) once that exists.
 **Frontend consumer:** `plan-frontend.md` §10.
 
-### 9b. Note storage shape
-`notes.body_md` is currently a plain markdown string, which is exactly why
-raw `**`/`__` can leak to the screen when the render path doesn't match
-(see the concrete bug logged in `plan-frontend.md` §10). Once the editor
-decision in §10 is made, decide whether `body_md` stays markdown (rendered
-through a real markdown renderer, never shown raw) or becomes the editor's
-own structured format (e.g. Tiptap JSON, stored as `jsonb`) with markdown
-generated only for export/citation purposes. Whichever the editor needs —
-this is a follow-on decision, not a separate task, and should be settled
-alongside §10, not before it. `generate_note` (already built, §2) writes
-plain markdown into `body_md` today; if the storage shape changes, that
-endpoint's output needs to change with it.
+### 9b. Note storage shape — **resolved, this item is stale**
+Decided in favor of the smaller change: `notes.body_md` stayed a plain
+markdown string; the Tiptap editor (§10) renders it via `tiptap-markdown`
+rather than switching storage to structured JSON. `generate_note` and the
+`/ai`-inline endpoint (`notes.py::note_ai_inline`) both still write/return
+plain markdown. One real risk this decision introduced, already mitigated
+in code: Tiptap is configured `html: false`, so any stray HTML tag a model
+emits would otherwise render as literal visible text in a student's note
+(the exact bug `plan-frontend.md` §10 logged from a live screenshot).
+`notes.py::_demote_html` converts common HTML block/inline tags to their
+markdown equivalent as a defensive second layer, on top of instructing the
+model not to emit HTML in the first place — belt and braces, per its own
+comment. No further action needed here; don't re-open this decision.
 **Frontend consumer:** `plan-frontend.md` §10.
 
 ## P3 — flagged, needs care before building
 
-### 10. Quiz question subtopic tagging
-Add a `subtopic` text column to the quiz-questions table, populated at
-generation time by the same model call that writes the question (cheap —
-it already "knows" what the question is about). Only build the
-weak-topic-identification frontend feature (`plan-frontend.md` §13) once
-this column exists and is actually being populated with real values — 
-don't compute weak topics from anything client-side-guessed.
+### 10. Quiz question subtopic tagging — **already shipped, this item is stale**
+`QuizQuestion.subtopic` exists and is populated at generation time
+(`routers/quizzes.py`'s prompt asks for it explicitly), and the frontend
+already renders it (`QuizzesView.tsx`). What's still open is the *aggregation*
+on top of it — weak-topic identification (`plan-frontend.md` §13) and the
+confusion-pair work below (§11) — not the column itself. Don't re-scope this
+as new work.
 
-## Explicitly out of scope for this phase
+## New — the SOUL.md architecture redesign (2026-08-09)
+
+`SOUL.md` proposed a `concepts`/`concept_edges` graph schema. Rejected — see
+`SOUL.md` §6 and §9 for why (two of its four "free" edge-derivation claims
+don't hold against this schema, and nothing below actually needs a graph).
+These three epics are the redesigned, cheaper implementation of the same
+product value. Same priority tier as the item they replace conceptually
+(P3's weak-topic work) plus one genuinely independent win (exam-aware
+scheduling), so sequenced as their own tier rather than folded into P0–P2
+above, which are all already shipped.
+
+### 11. Confusion pairs (`SOUL.md` §8.1)
+Two parts, both additive:
+- **Generation-time:** change the quiz-generation prompt/schema so each
+  `choices` entry carries its own short concept label, not just the question's
+  `subtopic` — e.g. `choices: [{"text": str, "concept": str}]` instead of
+  `list[str]`. One extra field per choice, same LLM call, no new request.
+  Extend the same `subtopic` pattern to flashcard generation while touching
+  this code (flashcards currently have no topic tag at all).
+- **Read-time:** a new endpoint (e.g. `GET /me/confusion-pairs`) that joins
+  `quiz_results.answers` against `quizzes.questions` (both `jsonb`, unnested
+  in the query), buckets wrong answers by `(correct_concept, chosen_concept)`
+  normalized (trim + lowercase for grouping, original casing for display),
+  and returns pairs with count ≥ 3. Pure SQL/PostgREST, no LLM call, no new
+  table. Consumed by `plan-frontend.md` §17 (quiz results) and folded into the
+  existing `/me/brief` suggestion (§1) as a candidate signal alongside lowest
+  quiz average and overdue decks.
+**Frontend consumer:** `plan-frontend.md` §17.
+
+### 12. Exam-aware scheduling (`SOUL.md` §8.2)
+Fully independent of §11 — never depended on concepts or edges. Add an
+`exam_date date` column to `subjects` (nullable — most subjects won't have
+one). In `grade_card()` (`routers/flashcards.py`), when a computed `due_at`
+would land after the subspace's subject's `exam_date`, compress the interval
+to fit the remaining runway instead of scheduling past it, and surface which
+cards got compressed so the "honest cram" framing holds — no silently
+dropped reviews. No new table; one column, one branch in existing logic.
+**Frontend consumer:** `plan-frontend.md` §18.
+
+### 13. Gap Map data endpoint (`SOUL.md` §8.3)
+Concept-level and **derived at render time** — see
+[ADR-0011](adr/0011-gap-map-derived-concept-visualization.md). A new endpoint
+(e.g. `GET /me/gap-map?subject_id=`) returning, scoped to one subject:
+- **nodes** — one per normalized concept tag (`trim` + `lowercase` for
+  grouping, original casing for display), with `size` = count of quiz
+  questions + flashcards carrying that tag, and `strength` = quiz average
+  grouped by that tag (same computation as `TopicSignal`, finer grain)
+- **edges** — confusion pairs between two tags with their tally, reusing §11's
+  aggregation rather than reimplementing it
+- **a flag per node** for tags that also appear in another subject, which is
+  what §14 later reads
+
+All of it is `GROUP BY` over `quizzes`, `quiz_results`, and `flashcards`. **No
+new table, no materialized view, no adjacency storage, no recursive query** —
+the relational tables stay authoritative and the projection is discarded after
+the response. **Hard dependency on §11:** confusion pairs are the *only* edge
+source, not merely a weight, so with no confusion data this endpoint returns
+nodes and an empty edge list — a valid state the frontend must render, not an
+error.
+**Frontend consumer:** `plan-frontend.md` §19.
+
+### 14. Cross-subject transfer (`SOUL.md` §8.4) — postponed
+String-match on normalized `subtopic`/concept labels across subjects, same
+mechanism as §11's grouping. Deliberately not scoped further yet — needs §11
+shipped and generating real repeated-tag data first, otherwise there's
+nothing to match against.
+
+## Explicitly out of scope
 
 Auto-extracted knowledge graph (concept/entity extraction, relationship
-inference, a graph store) — rejected in `v2-review.md` on free-tier
-infrastructure grounds, not just product grounds. If Linked Subspaces (§4)
-later proves insufficient, that's the point to revisit this, not before.
+inference, a graph store) — rejected twice now: once in `v2-review.md` for
+the external reviewer's "auto-organized Workspace" proposal, and again in
+`SOUL.md` §9 for the `concepts`/`concept_edges` schema this document's own
+earlier draft proposed. Don't propose it a third time without new evidence
+that string-tag matching (§11, §14) has hit a real, observed limit.

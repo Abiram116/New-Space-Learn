@@ -15,6 +15,48 @@ review's more concrete "Linked Subspaces" and "Student Model" epics — kept
 here for history, but scope new work from the plan docs, not from this raw
 list.
 
+## Engineering health — audit findings (2026-08-09)
+
+Not product features — real technical debt found during a full-codebase
+audit. Ranked by actual risk, not by how they were discovered.
+
+- **Real embeddings are still stubbed everywhere.**
+  `USE_STUB_EMBEDDINGS=true` is set in the local `.env`, in `.env.example`,
+  *and* in the `render.yaml` deploy manifest, so RAG retrieval runs cosine
+  similarity over deterministic hash-based pseudo-vectors
+  (`embeddings.py`'s `_stub_embedding`), not real semantic meaning.
+  Citations still point at a real `document · page`, but the "top-k relevant
+  chunks" for any question are close to arbitrary. This is a bigger gap than
+  any pending epic — the product's central claim (answers grounded in *your*
+  material) isn't actually true in any environment yet.
+  Fix: wire a real embedding provider (`embeddings.py`
+  already isolates every caller behind `embed_texts()`, so this is a
+  one-function swap, not a refactor) — most likely OpenAI's
+  `text-embedding-3-small` proxied through the existing Groq-key pattern,
+  per the `TODO` already in that file. Priced in `COST_MODEL.md`.
+- **Zero automated tests exist anywhere in the repo** — confirmed by a full
+  find across `api/` and `web/src/`, despite `pytest`/`pytest-asyncio`
+  already declared in `api/pyproject.toml`. Highest-risk untested surface:
+  `guards.py`'s ownership assertions (a cross-user leak already happened
+  once and was fixed by hand — exactly the class of bug a regression test
+  would catch silently reintroducing) and the SM-2 grading math in
+  `flashcards.py`'s `grade_card()`. Start there, not with UI snapshot tests.
+- **Three frontend files bundle multiple components each**, verified by
+  grepping component boundaries directly: `FlashcardsView.tsx` (1046 lines —
+  `DeckTile`, `DeckDetail`, `CardEditor`, `Review`, `CardFace`, `Summary`,
+  two modals, plus the view itself), `NotesView.tsx` (847 lines, embeds a
+  500-line `NoteEditor`), `Settings.tsx` (663 lines, embeds six generic
+  `Row*` primitives — `RowShell`, `RowWithToggle`, `RowWithNumber`,
+  `RowWithTime`, `RowWithText`, `RowWithSelect` — that aren't
+  settings-specific and belong in `components/ui/`). Not bugs, but exactly
+  the files `plan-frontend.md` §17/§18 (confusion-pair card, exam countdown)
+  are about to add more surface to. Split before adding, not after.
+- **`api/app/routers/me.py` (679 lines, already the largest backend file)**
+  is about to gain the confusion-pairs and Gap Map endpoints
+  (`plan-backend.md` §11/§13). Split into `me_brief.py` / `me_stats.py` /
+  `me_student_model.py` before it crosses ~1000 lines, not after — the
+  pattern every other domain already follows (one router file per concern).
+
 ## Layout / space usage
 
 The quiz-taking screen, quiz results, the quiz list (also reported as not

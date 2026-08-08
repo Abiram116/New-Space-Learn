@@ -1,5 +1,12 @@
 # Checkpoint — 2026-08-05
 
+> **Superseded for sequencing (2026-08-09).** This file's "Do this next"
+> ordering has been folded into
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), which is now the single
+> authority on what to work on next — its Phase 0 carries the
+> browser-verification items below. Keep reading this file for the *historical
+> record* of what was uncommitted and why on 2026-08-05; ignore its ordering.
+
 Where things stand, so work can resume without re-deriving context. Delete
 this file once the open items below are done.
 
@@ -57,6 +64,11 @@ asset briefs written as ready-to-paste prompts, with sequencing.
 - Home suggestion CTA now visually distinct from a generic action.
 
 ## Do this next, in order
+
+> Superseded — see the note at the top of this file.
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) Phase 0 now carries items
+> 1–2 below; items 3–4 remain scoped in `design-plan.md` and
+> `plan-frontend.md §16`.
 
 1. **Run it and click through.** Nothing above has been seen in a browser.
    Highest priority is the **Notes editor** (Tiptap, inline `/ai`) — built

@@ -1,9 +1,13 @@
 # Plan — Frontend
 
-**Status: §1–§13 are built and shipped** (2026-08-05). §14–§16 remain open.
-Ordered by priority, not by size. Each epic notes its backend dependency
-(if any) — see [plan-backend.md](plan-backend.md) for the matching
-backend-side work; epics are named the same on both sides so they line up.
+**Status: §1–§11 are built and shipped** (2026-08-05). §14–§16 remain open.
+§17–§19 (2026-08-09) are the frontend half of the architecture redesign in
+[SOUL.md](SOUL.md) — not started. Ordered by priority, not by size.
+
+**Numbering:** §1–§10 share numbers with [plan-backend.md](plan-backend.md).
+The redesign epics do not — frontend §17/§18/§19 are backend §11/§12/§13
+respectively (see that document's mapping table). Each epic names its
+counterpart explicitly; follow the cross-reference, not the number.
 
 Context for why this list looks the way it does: [v2-review.md](v2-review.md).
 Read [vision.md](vision.md) first — everything below is judged against it.
@@ -12,15 +16,20 @@ Read [vision.md](vision.md) first — everything below is judged against it.
 
 | # | Item | Why it's still open |
 |---|---|---|
+| §12 | Flashcard predicted-retention estimate | Deliberately unbuilt — only ships with a defensible formula (see the epic). |
+| §13 | Quiz weak-topic identification | Per-question `subtopic` tagging is shipped; the cross-attempt rollup is not. |
 | §14 | Toast contrast | Small CSS fix, not yet done. |
 | §15 | Landing hero font race + marquee loop gap | Diagnosed, not yet fixed. |
 | §16 | Cinematic Higgsfield pass | Deliberately its own session — asset generation, not code. |
+| §17–§19 | Confusion pairs, exam-aware scheduling, the Gap Map | The approved `SOUL.md` redesign — not started. Sequenced in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). |
 
 Also deferred inside otherwise-shipped epics: composer paste-as-attachment
 and paste-image-into-chat (§9 shipped CSV/image *document* ingestion and the
-dock drop zone, not the composer chip UI), and aggregate weak-topic
-analytics (§13 ships per-question `subtopic` tagging; the cross-attempt
-rollup waits until there's real tagged data to aggregate).
+dock drop zone, not the composer chip UI).
+
+**Order of work is not decided here.** This document is the scoped epic list;
+[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) is the single authority on
+sequencing.
 
 ## Cross-cutting — Voice & Identity
 
@@ -204,10 +213,14 @@ labeled as an estimate, not a bare "82%" presented as fact. If no
 defensible formula is agreed on, don't ship a number at all.
 
 ### 13. Quiz weak-topic identification
-"You're weak on Policy Iteration, not just Reinforcement Learning" requires
-storing a subtopic tag per quiz question, not just a topic per quiz — a
-real schema change (see `plan-backend.md` §10), not a frontend-only
-grouping trick. Don't fake this by clustering on question text client-side.
+"You're weak on Policy Iteration, not just Reinforcement Learning" needs a
+rollup grouped by the existing `subtopic` tag (already shipped per question —
+`plan-backend.md` §10 is stale on this point, the column and its population
+are done) across a student's quiz history. What's actually still open is the
+aggregation query and its display, not the schema. Don't fake this by
+clustering on question text client-side. Closely related to, and worth
+building alongside, §17's confusion-pair surfacing — both read the same
+`subtopic`/concept tags.
 
 ### 14. Toast contrast
 Confirmed via screenshot (2026-08-05): the success toast (`bg-mint
@@ -367,9 +380,56 @@ in addition to the asset itself.
 `PRODUCT.md` — dark-only, no violet, no emoji — → integrate → verify at
 every scroll breakpoint) — deserves its own session, not a squeeze-in.
 
+## New — the SOUL.md architecture redesign (2026-08-09)
+
+See `SOUL.md` for the full reasoning: a proposed `concepts`/`concept_edges`
+graph schema was rejected, and its promised product value redesigned onto
+tag columns and aggregation queries over the existing schema instead. These
+three epics are the frontend half of that redesign.
+
+### 17. Confusion pairs
+Surface `plan-backend.md` §11's confusion-pair endpoint in two places: a new
+card on the quiz results screen ("You've confused Self-Attention with
+Cross-Attention 4 times — here's the paragraph that separates them," wired to
+the existing `source` field the backward-edge note in `SOUL.md` §7 already
+flags as unused) and as a candidate signal in the Home brief's suggestion
+(alongside lowest quiz average and overdue decks — the brief already picks
+one signal to lead with, this is one more candidate, not a new UI pattern).
+**Backend dependency:** `plan-backend.md` §11.
+
+### 18. Exam-aware scheduling
+A per-subject exam-date field (Settings, or the subject's own settings panel)
+and a visible "compressed to fit your exam" indicator on affected cards in
+review, so compression is honest and seen, not silent. Small, self-contained
+addition — doesn't touch the deck/card list layout otherwise.
+**Backend dependency:** `plan-backend.md` §12.
+
+### 19. The Gap Map
+A new view (own nav entry, or a Home panel) rendering `plan-backend.md` §13's
+data, scoped to one subject: **nodes are normalized concept tags** sized by how
+much material covers them and coloured by recall strength; **edges are
+confusion pairs** with thickness from the tally. Derived at render time from
+relational rows — no stored graph, per
+[ADR-0011](adr/0011-gap-map-derived-concept-visualization.md).
+
+Three things this view must get right:
+- **Boring and readable**, per `SOUL.md` §8.3's explicit design goal — a
+  diagnostic, not a portfolio piece. If the eye doesn't land on the worst edge
+  within five seconds it has failed, and the fix is not a prettier layout.
+- **The no-edges state is normal, not empty.** Until a student has three
+  repeated confusions, the map is nodes only. That must read as "nothing's
+  gone wrong yet," never as a broken or empty visualization.
+- **Its own lazy route chunk** — first load is 245 KB gzipped against a 250 KB
+  ceiling (`PERFORMANCE.md` §2), so any rendering library must not reach a
+  shared module.
+**Backend dependency:** `plan-backend.md` §13 (which itself hard-depends on
+§17's confusion data for edges).
+
 ## Explicitly out of scope for this phase
 
 Full knowledge-graph UI (concept map visualization, auto-extracted
-relationship browsing) — see `v2-review.md` for why. Revisit only if Linked
-Subspaces (§4) proves the cross-referencing need is bigger than the scoped
-version handles.
+relationship browsing) — see `v2-review.md` for why, and `SOUL.md` §9 for the
+second, independent time this was rejected. The Gap Map (§19) is the
+diagnostic view that replaces this need without the graph underneath it.
+Revisit only if Linked Subspaces (§4) or the Gap Map itself prove the
+cross-referencing need is bigger than the scoped version handles.

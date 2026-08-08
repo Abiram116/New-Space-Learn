@@ -188,3 +188,22 @@ knowledge graph, adaptive planning) framing the review landed on maps
 directly onto this doc's P0/P1/P2/P3 split in `plan-frontend.md` and
 `plan-backend.md` — restated here as the two-review-converged shape, not
 duplicated as a separate roadmap.
+
+## Round 3 — the same rearchitecture, proposed a third way, rejected the same way
+
+A later internal vision document (`SOUL.md`) independently proposed a
+`concepts`/`concept_edges` graph schema — not from an external review this
+time, from within the project itself. Checked against the actual schema and
+code (2026-08-09) and rejected for the same underlying reasons as Round 1's
+"auto-organized Workspace" proposal: the product value it targets (confusion
+pairs, cross-subject transfer, a diagnostic map) turned out to be buildable
+as tag columns and aggregation queries over tables that already exist, with
+no entity extraction or resolution step. Full reasoning lives in `SOUL.md`
+§5–§9; the redesigned, buildable version of the same features is scoped as
+epics in `plan-backend.md` §11–§14 and `plan-frontend.md` §17–§19.
+
+Recorded here, same as Round 1, so it isn't silently re-proposed a fourth
+time without this reasoning being re-litigated. Two independent proposals to
+build a concept graph on this stack, two independent rejections for
+overlapping reasons, is a strong signal this architecture doesn't need one —
+not just that two reviewers happened to agree.

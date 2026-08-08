@@ -227,7 +227,15 @@ Only if §4.1–§4.4 land well — this is garnish, not structure.
 
 Ordered so nothing is blocked and value lands early.
 
-**Phase 1 — verify and fix (no assets needed)**
+> **Scope note (2026-08-09):** this section sequences *design and motion* work
+> only. Overall project sequencing lives in
+> [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), which is the single
+> authority — its Phase 0 absorbed Phase 1 below (the verification items), so
+> treat those as scheduled there, not here. Phases 2–4 below remain this
+> document's own.
+
+**Phase 1 — verify and fix (no assets needed)** — *now `IMPLEMENTATION_PLAN.md`
+Phase 0, task 0.7*
 1. Click through the Notes editor. It is unverified and it is the newest
    thing in the app.
 2. Profile empty state.
