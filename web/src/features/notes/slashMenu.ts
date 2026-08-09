@@ -8,11 +8,16 @@ import type { IconName } from '../../components/ui/Icon'
  *
  *   - **AI** (`ai`, `summarise`, `toc`, `explain`, `expand`, …) sends a prompt
  *     to the backend and inserts what comes back.
- *   - **Insert** (`heading`, `quote`, `code`, `table`, `image`, …) runs
- *     instantly against the editor. No network, no waiting.
+ *   - **Insert** (`heading`, `quote`, `code`, `table`, …) runs instantly
+ *     against the editor. No network, no waiting.
  *
  * AI comes first in the menu because it is the reason this editor exists — the
  * structure commands are table stakes that every editor has.
+ *
+ * **Nothing here duplicates a gesture that already works.** There is no
+ * "Insert image" command, because pasting a screenshot and dragging a file in
+ * both already drop an image where you put it — a menu entry for that is a
+ * longer way to do a thing you can already do in one motion.
  *
  * **Availability is contextual.** Half these commands are meaningless on a
  * blank note: "Summarise" with nothing to summarise used to sit there, fully
@@ -150,16 +155,6 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
 
   // ── Insert ───────────────────────────────────────────────────────────
-  {
-    id: 'image',
-    label: 'Image',
-    hint: 'Upload — then resize, align, caption',
-    icon: 'upload',
-    group: 'insert',
-    needs: 'nothing',
-    keywords: ['image', 'picture', 'photo', 'upload', 'img', 'screenshot'],
-    // Handled by the editor component, which owns the file input.
-  },
   {
     id: 'h1',
     label: 'Heading 1',

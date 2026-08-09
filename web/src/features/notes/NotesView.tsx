@@ -446,7 +446,6 @@ function NoteEditor({
     { query: string; from: number; to: number; ctx: SlashContext } | null
   >(null)
   const [slashIndex, setSlashIndex] = useState(0)
-  const fileRef = useRef<HTMLInputElement | null>(null)
 
   const trackSlash = useCallback((ed: Editor) => {
     const { $from, empty } = ed.state.selection
@@ -668,12 +667,6 @@ function NoteEditor({
       if (!ed || !slash) return
       const { from, to } = slash
       setSlash(null)
-
-      if (cmd.id === 'image') {
-        ed.chain().focus().deleteRange({ from, to }).run()
-        fileRef.current?.click()
-        return
-      }
 
       if (cmd.ai) {
         // Whatever is selected becomes the subject of the command, so
@@ -1007,20 +1000,6 @@ function NoteEditor({
             )}
           </div>
 
-          {/* Owned here rather than inside the slash menu so the input
-              survives the menu unmounting the moment a command is chosen. */}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={(e) => {
-              const files = Array.from(e.target.files ?? [])
-              e.target.value = ''
-              if (files.length) void insertImageFiles(files)
-            }}
-          />
         </Leaf>
       </div>
     </div>
