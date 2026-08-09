@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Editor, EditorContent, useEditor } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -40,16 +41,16 @@ import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Chip } from '../../components/ui/Bits'
-import { Icon } from '../../components/ui/Icon'
+import { Icon, type IconName } from '../../components/ui/Icon'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Leaf } from '../../components/ui/Surface'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
+import { stripMarkdown } from '../../lib/text'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
 type Filter = 'all' | 'ai' | 'mine'
@@ -125,6 +126,14 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
 
   const current = notes?.find((n) => n.id === selectedId) ?? null
 
+  /* The origin filter is only meaningful when both kinds exist. */
+  const mixedOrigins = useMemo(() => {
+    if (!notes || notes.length < 2) return false
+    return (
+      notes.some((n) => n.origin === 'user') && notes.some((n) => n.origin !== 'user')
+    )
+  }, [notes])
+
   /** Selects a note AND writes it to the URL, so the two never disagree.
    *  `?n=` was previously only written on create, so reloading or sharing the
    *  page after clicking around reopened whichever note happened to be first. */
@@ -179,87 +188,127 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
           note, then the editor (which offers its own way back). */}
       <aside
         className={cn(
-          'w-full shrink-0 flex-col border-r-[1.5px] border-line bg-surface md:flex md:w-[260px]',
+          'w-full shrink-0 flex-col border-r border-line bg-well md:flex md:w-[288px]',
           current ? 'hidden' : 'flex',
         )}
       >
-        <div className="flex flex-col gap-2.5 border-b-[1.5px] border-line p-4">
-          <div className="flex items-center gap-2">
-            <h1 className="font-display text-base font-semibold flex-1">
-              Notes · {subspaceName}
-            </h1>
-            <button
-              onClick={newBlank}
-              className="grid h-7 w-7 place-items-center rounded-full bg-brand-soft text-brand-deep transition-colors hover:bg-brand-200/60 cursor-pointer"
-              aria-label="New note"
-            >
-              <Icon name="plus" size={14} />
-            </button>
+        <div className="flex flex-col gap-3 px-4 pb-3 pt-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h1 className="nameplate text-[19px] leading-none text-ink">Notes</h1>
+              <span className="setcode mt-1 block truncate">{subspaceName}</span>
+            </div>
+            <Button size="sm" onClick={newBlank}>
+              <Icon name="plus" size={13} /> New
+            </Button>
           </div>
-          <input
-            placeholder="Search notes"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="rounded-[10px] border-[1.5px] border-line px-2.5 py-1.5 text-[12.5px] outline-none placeholder:text-faint focus:border-brand"
-          />
-          <div className="flex gap-1.5">
-            {(['all', 'ai', 'mine'] as Filter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  'rounded-full px-2.5 py-1 text-[11.5px] font-medium cursor-pointer',
-                  filter === f
-                    ? 'bg-brand-soft font-semibold text-brand'
-                    : 'border-[1.5px] border-line text-muted',
-                )}
-              >
-                {labelFor(f, notes)}
-              </button>
-            ))}
-          </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto text-[13px]">
-          {loading && (
-            <div className="flex flex-col gap-2 p-4">
-              <Skeleton className="h-14" />
-              <Skeleton className="h-14" />
-              <Skeleton className="h-14" />
+          {/* Search and filters only exist once there is something to search or
+              filter. On a fresh topic they were two dead controls above an
+              empty state, which is three things saying "nothing here". */}
+          {totalNotes > 0 && (
+            <label className="relative flex items-center">
+              <Icon
+                name="search"
+                size={13}
+                className="pointer-events-none absolute left-2.5 text-faint"
+              />
+              <input
+                placeholder="Search notes"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full rounded-[10px] border border-line bg-canvas py-1.5 pl-8 pr-2.5 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
+              />
+            </label>
+          )}
+
+          {/* Only when there is genuinely a mix. A "Mine 1 / AI 0" toggle row
+              filters nothing and just adds three numbers to read. */}
+          {mixedOrigins && (
+            <div className="flex gap-1">
+              {(['all', 'ai', 'mine'] as Filter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={cn(
+                    'flex-1 rounded-[8px] px-2 py-1 text-[11.5px] transition-colors cursor-pointer',
+                    filter === f
+                      ? 'bg-brand-soft font-bold text-brand-deep'
+                      : 'text-muted hover:bg-line-soft hover:text-ink-3',
+                  )}
+                >
+                  {labelFor(f, notes)}
+                </button>
+              ))}
             </div>
           )}
-          {error && (
-            <p className="p-4 text-xs text-coral-deep">{error}</p>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading && (
+            <div className="flex flex-col gap-2 p-4">
+              <Skeleton className="h-16 rounded-lg" />
+              <Skeleton className="h-16 rounded-lg" />
+              <Skeleton className="h-16 rounded-lg" />
+            </div>
           )}
+          {error && <p className="p-4 text-xs text-coral-deep">{error}</p>}
           {!loading && !error && totalNotes === 0 && (
             <div className="p-4">
               <EmptyState
                 icon="note"
                 title="No notes yet"
-                description="Save a note from chat, or start a blank one."
+                description="Start a blank one, or save a note from a chat."
                 action={<Button onClick={newBlank}>New note</Button>}
               />
             </div>
           )}
+          {!loading && totalNotes > 0 && visible.length === 0 && (
+            <p className="px-4 py-6 text-center text-[12.5px] text-muted">
+              Nothing matches “{search}”.
+            </p>
+          )}
           {!loading &&
             visible.map((item) => {
               const active = item.id === current?.id
+              const preview = notePreview(item.body_md)
               return (
                 <button
                   key={item.id}
                   onClick={() => select(item.id)}
                   className={cn(
-                    'block w-full border-b border-line-soft px-4 py-3 text-left transition-all duration-150 cursor-pointer',
-                    active
-                      ? 'border-l-[3px] border-l-brand bg-brand-tint'
-                      : 'border-l-[3px] border-l-transparent hover:bg-line-soft',
+                    'relative block w-full px-4 py-3 text-left transition-colors cursor-pointer',
+                    active ? 'bg-surface' : 'hover:bg-surface/60',
                   )}
                 >
-                  <div className={cn('truncate', active ? 'font-bold' : 'font-semibold')}>
+                  {/* A rule, not a filled tint block — the selected row is
+                      marked in the margin the way a page is, so the list still
+                      reads as a list. */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'absolute inset-y-0 left-0 w-[2px]',
+                      active ? 'bg-brand' : 'bg-transparent',
+                    )}
+                  />
+                  <div
+                    className={cn(
+                      'truncate text-[13px]',
+                      active ? 'font-bold text-ink' : 'font-semibold text-ink-2',
+                    )}
+                  >
                     {item.title || 'Untitled note'}
                   </div>
-                  <div className="mt-0.5 text-xs text-muted">
-                    {originLabel(item.origin)} · {relativeTime(item.updated_at)}
+                  {preview && (
+                    <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted">
+                      {preview}
+                    </div>
+                  )}
+                  <div className="setcode mt-1.5 flex items-center gap-1.5">
+                    {item.origin !== 'user' && (
+                      <Icon name="sparkle" size={9} className="text-sky-deep" />
+                    )}
+                    {relativeTime(item.updated_at)}
                   </div>
                 </button>
               )
@@ -310,29 +359,35 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
 }
 
 /**
- * The always-visible toolbar. Deliberately short: it holds the marks you reach
- * for mid-sentence, where stopping to type `/` would break the sentence.
- * Everything structural (headings, quote, code, table, to-do, image, divider)
- * lives in the slash menu, because you only ever want those at the START of a
- * block — which is exactly when your hands are already free to type `/`.
+ * Formatting, shown only while text is selected.
  *
- * H1–H3 are the exception: `docs/backlog.md` asked for them explicitly and
- * they are the most-used structure in a study note, so they earn the space.
+ * This replaced a permanent strip of twelve buttons labelled `H1 B I U S </>
+ * •— 1. ☑ ❝`. Two things were wrong with it. It was always on screen, so every
+ * note paid for chrome it wasn't using — and the glyphs were guesses: `•—` and
+ * `❝` are not words, and `☑` renders differently on every platform.
+ *
+ * Marks belong on a selection because that is the only time they apply. Block
+ * structure (headings, quote, code, table, to-do, image, divider) stays in the
+ * `/` menu, because you only ever want those at the START of a block, which is
+ * exactly when your hands are free to type `/`.
  */
-const TOOLBAR: { key: string; label: string; run: (e: Editor) => void; active: (e: Editor) => boolean }[] = [
-  { key: 'h1', label: 'H1', run: (e) => e.chain().focus().toggleHeading({ level: 1 }).run(), active: (e) => e.isActive('heading', { level: 1 }) },
-  { key: 'h2', label: 'H2', run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run(), active: (e) => e.isActive('heading', { level: 2 }) },
-  { key: 'h3', label: 'H3', run: (e) => e.chain().focus().toggleHeading({ level: 3 }).run(), active: (e) => e.isActive('heading', { level: 3 }) },
-  { key: 'bold', label: 'B', run: (e) => e.chain().focus().toggleBold().run(), active: (e) => e.isActive('bold') },
-  { key: 'italic', label: 'I', run: (e) => e.chain().focus().toggleItalic().run(), active: (e) => e.isActive('italic') },
-  { key: 'underline', label: 'U', run: (e) => e.chain().focus().toggleUnderline().run(), active: (e) => e.isActive('underline') },
-  { key: 'strike', label: 'S', run: (e) => e.chain().focus().toggleStrike().run(), active: (e) => e.isActive('strike') },
-  { key: 'code', label: '</>', run: (e) => e.chain().focus().toggleCode().run(), active: (e) => e.isActive('code') },
-  { key: 'bulletList', label: '•—', run: (e) => e.chain().focus().toggleBulletList().run(), active: (e) => e.isActive('bulletList') },
-  { key: 'orderedList', label: '1.', run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive('orderedList') },
-  { key: 'taskList', label: '☑', run: (e) => e.chain().focus().toggleTaskList().run(), active: (e) => e.isActive('taskList') },
-  { key: 'blockquote', label: '❝', run: (e) => e.chain().focus().toggleBlockquote().run(), active: (e) => e.isActive('blockquote') },
+const MARKS: {
+  key: string
+  label: string
+  icon?: IconName
+  title: string
+  run: (e: Editor) => void
+  active: (e: Editor) => boolean
+}[] = [
+  { key: 'bold', label: 'B', title: 'Bold', run: (e) => e.chain().focus().toggleBold().run(), active: (e) => e.isActive('bold') },
+  { key: 'italic', label: 'I', title: 'Italic', run: (e) => e.chain().focus().toggleItalic().run(), active: (e) => e.isActive('italic') },
+  { key: 'underline', label: 'U', title: 'Underline', run: (e) => e.chain().focus().toggleUnderline().run(), active: (e) => e.isActive('underline') },
+  { key: 'strike', label: 'S', title: 'Strikethrough', run: (e) => e.chain().focus().toggleStrike().run(), active: (e) => e.isActive('strike') },
+  { key: 'code', label: '', icon: 'agent', title: 'Inline code', run: (e) => e.chain().focus().toggleCode().run(), active: (e) => e.isActive('code') },
 ]
+
+/** Heading level, as a real choice rather than three separate toggles. */
+const HEADINGS = [1, 2, 3] as const
 
 function NoteEditor({
   note,
@@ -350,6 +405,7 @@ function NoteEditor({
   const [title, setTitle] = useState(note.title)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [aiBusy, setAiBusy] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   // Title and body debounce separately. They used to share one timer, which meant
   // touching the title inside the 800ms window cleared the pending body save — the
   // edit was dropped while the header still reported "saved".
@@ -522,7 +578,9 @@ function NoteEditor({
       }),
       Underline,
       Placeholder.configure({
-        placeholder: "Write, or press '/' for commands…",
+        // The one piece of discovery this editor needs. There is no permanent
+        // toolbar any more, so this line is where `/` is learned.
+        placeholder: 'Write, or press / to ask the tutor and add blocks…',
       }),
       TaskList,
       // Nested to-dos, because revision checklists are naturally hierarchical.
@@ -678,89 +736,182 @@ function NoteEditor({
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b-[1.5px] border-line bg-surface px-4 py-3 text-[12.5px] text-muted sm:px-6">
+      {/* One quiet bar. Everything that used to compete for attention here —
+          twelve format buttons and a bright Delete — has moved to where it is
+          actually needed: marks onto the selection, Delete into a menu. */}
+      <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-2.5 sm:px-8">
         <button
           type="button"
           onClick={onBack}
-          className="-ml-1 flex items-center gap-1 rounded-[9px] px-1.5 py-1 text-ink-3 transition-colors hover:bg-line-soft md:hidden"
+          className="-ml-1 flex items-center gap-1 rounded-[9px] px-1.5 py-1 text-[12.5px] text-ink-3 transition-colors hover:bg-line-soft md:hidden"
         >
-          <Icon name="arrowLeft" size={13} /> All notes
+          <Icon name="arrowLeft" size={13} /> Notes
         </button>
-        <Chip active={note.origin !== 'user'} className={note.origin === 'user' ? 'bg-line-soft' : ''}>
-          {originLabel(note.origin)}
-        </Chip>
-        <span className="flex items-center gap-1.5 text-xs text-faint">
-          {aiBusy && (
+
+        {note.origin !== 'user' && (
+          <Chip active>
+            <Icon name="sparkle" size={10} /> {originLabel(note.origin)}
+          </Chip>
+        )}
+
+        {/* Save state is a fact about the document, so it reads as one line of
+            plain text rather than a badge — a green "Saved" pill on every
+            keystroke is a reward for typing, which is not what this is. */}
+        <span className="setcode flex items-center gap-1.5">
+          {aiBusy ? (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
               Writing…
             </>
-          )}
-          {!aiBusy && status === 'saving' && (
+          ) : status === 'saving' ? (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
               Saving…
             </>
-          )}
-          {!aiBusy && status === 'saved' && (
+          ) : status === 'saved' ? (
             <span className="flex items-center gap-1 text-mint-deep">
-              <Icon name="check" size={12} /> Saved
+              <Icon name="check" size={11} /> Saved
             </span>
-          )}
-          {!aiBusy && status === 'error' && (
+          ) : status === 'error' ? (
             <span className="flex items-center gap-1 text-coral-deep">
-              <Icon name="alert" size={12} /> Save failed
+              <Icon name="alert" size={11} /> Couldn’t save
             </span>
+          ) : (
+            `Edited ${relativeTime(note.updated_at)}`
           )}
-          {!aiBusy && status === 'idle' && `Edited ${relativeTime(note.updated_at)}`}
         </span>
-        <div className="ml-auto flex gap-2">
-          <Button variant="danger" size="sm" onClick={onDelete}>
-            Delete
-          </Button>
+
+        <div className="relative ml-auto">
+          <button
+            type="button"
+            aria-label="Note actions"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+            className="grid h-7 w-7 place-items-center rounded-[8px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+          >
+            <Icon name="settings" size={14} />
+          </button>
+          {menuOpen && (
+            <>
+              {/* Click-away sits behind the menu, not over it. */}
+              <button
+                type="button"
+                aria-hidden
+                tabIndex={-1}
+                onClick={() => setMenuOpen(false)}
+                className="fixed inset-0 z-30 cursor-default"
+              />
+              <div className="absolute right-0 top-9 z-40 w-44 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    onDelete()
+                  }}
+                  className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px] text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
+                >
+                  <Icon name="trash" size={12} /> Delete note
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Toolbar — always visible, applies to a user-typed note exactly the
-          same as an AI-written one. */}
+      {/* Formatting follows the selection. Nothing on screen until there is
+          something to format. */}
       {editor && (
-        <div className="flex shrink-0 items-center gap-1 border-b border-line-soft bg-surface px-4 py-1.5 sm:px-6">
-          {TOOLBAR.map((t) => (
+        <BubbleMenu
+          editor={editor}
+          options={{ placement: 'top', offset: 8 }}
+          className="flex items-center gap-0.5 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
+        >
+          {HEADINGS.map((level) => (
             <button
-              key={t.key}
+              key={level}
               type="button"
-              onClick={() => t.run(editor)}
+              title={`Heading ${level}`}
+              onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
               className={cn(
-                'flex h-7 w-8 items-center justify-center rounded-md font-mono text-[12px] font-bold transition-colors cursor-pointer',
-                t.active(editor) ? 'bg-brand-soft text-brand-deep' : 'text-ink-3 hover:bg-line-soft',
+                'grid h-7 w-7 place-items-center rounded-md text-[11.5px] font-bold transition-colors cursor-pointer',
+                editor.isActive('heading', { level })
+                  ? 'bg-brand-soft text-brand-deep'
+                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
               )}
             >
-              {t.label}
+              H{level}
             </button>
           ))}
-          {/* Points at the menu, not at one command. This used to advertise
-              `/ai your request` only, which is now one of nineteen and the
-              only one you cannot discover by pressing `/`. */}
-          <span className="ml-3 text-[11px] text-faint">
-            Press <code className="rounded bg-well px-1 py-0.5">/</code> for
-            headings, code, tables, images and AI
-          </span>
-        </div>
+          <span className="mx-0.5 h-4 w-px bg-line" />
+          {MARKS.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              title={m.title}
+              aria-label={m.title}
+              onClick={() => m.run(editor)}
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-md text-[12.5px] transition-colors cursor-pointer',
+                m.key === 'italic' && 'italic font-serif',
+                m.key === 'strike' && 'line-through',
+                m.key === 'underline' && 'underline',
+                m.key === 'bold' && 'font-bold',
+                m.active(editor)
+                  ? 'bg-brand-soft text-brand-deep'
+                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
+              )}
+            >
+              {m.icon ? <Icon name={m.icon} size={12} /> : m.label}
+            </button>
+          ))}
+          <span className="mx-0.5 h-4 w-px bg-line" />
+          {/* The one AI action worth reaching for mid-sentence. Everything
+              else is a `/` away and doesn't need permanent real estate. */}
+          <button
+            type="button"
+            title="Rewrite this with AI"
+            onClick={() => {
+              const { from, to } = editor.state.selection
+              const sel = editor.state.doc.textBetween(from, to, '\n')
+              if (!sel.trim()) return
+              void runInlineAi(
+                `Rewrite this more clearly, keeping the meaning and any facts exactly:\n\n${sel}`,
+                from,
+                to,
+              )
+            }}
+            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
+          >
+            <Icon name="sparkle" size={12} /> Rewrite
+          </button>
+        </BubbleMenu>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-8">
+      {/* The page IS the leaf. It used to be a `bg-leaf` block sitting inside a
+          `bg-canvas` scroller, and the one-step colour difference read as a
+          narrow card floating in a void — the writing surface looked like a
+          widget on the page rather than being the page. Same colour on both,
+          so all that remains of the leaf is its margin rule. */}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-leaf">
         {/* LEAF — the canonical case. A note is the one thing in this app you
             are *inside* rather than holding, so it gets the margin rule and a
             measure instead of a card's border and lift. `measure` caps the
             line at 66ch, which replaces the arbitrary `max-w-3xl`: 3xl is a
             width, 66ch is a reading length, and only one of those is about
             the text. */}
-        <Leaf measure className="mx-auto flex h-full flex-col gap-4">
-          <Input
+        <Leaf
+          measure
+          className="mx-auto flex min-h-full flex-col gap-3 px-5 py-10 sm:py-14"
+        >
+          {/* A title, not a form field. The bordered input made the first line
+              of a note look like something to fill in rather than something to
+              write. */}
+          <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="border-transparent bg-transparent px-0 text-2xl font-display font-semibold focus:border-transparent focus:ring-0"
             placeholder="Untitled note"
+            aria-label="Note title"
+            className="nameplate w-full border-0 bg-transparent p-0 text-[clamp(26px,3.2vw,36px)] leading-tight text-ink outline-none placeholder:text-faint"
           />
           <div className="relative min-h-0 flex-1">
             {/* Language picker, shown only while the caret is inside a code
@@ -877,6 +1028,21 @@ function NoteEditor({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * First line or so of a note, for the list.
+ *
+ * Images are dropped **before** anything else runs. They are stored as data
+ * URLs inside the markdown, so a note that opens with a screenshot would
+ * otherwise preview as several thousand characters of base64 — and
+ * `stripMarkdown` has no reason to know that.
+ */
+function notePreview(bodyMd: string, limit = 110): string {
+  const withoutImages = bodyMd.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+  const text = stripMarkdown(withoutImages).replace(/\s+/g, ' ').trim()
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit - 1).trimEnd()}…`
+}
 
 function labelFor(f: Filter, notes: Note[] | null): string {
   if (!notes) return f === 'all' ? 'All' : f === 'ai' ? 'AI' : 'Mine'
