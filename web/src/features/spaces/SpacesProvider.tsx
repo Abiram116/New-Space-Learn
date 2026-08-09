@@ -28,6 +28,7 @@ import {
 import type { Space, Subspace, Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
+import { clearBriefCache } from '../../lib/briefCache'
 
 type Ctx = {
   spaces: Space[]
@@ -121,6 +122,12 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
       deleteSpace: async (id) => {
         await deleteSpaceApi(id)
         setSpaces((prev) => prev.filter((s) => s.id !== id))
+        // The brief is model-written and cached for half an hour, so Home
+        // went on talking about a subject the student had just deleted —
+        // quoting chats and topics that no longer exist. The rows really are
+        // gone (every table cascades off `subjects`); it was only the cached
+        // sentence that survived. Same for the counts.
+        clearBriefCache()
       },
       addSubspace: async (spaceId, name) => {
         const created = await createSubspaceApi(spaceId, { name })
@@ -148,6 +155,9 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
             subspaces: s.subspaces.filter((sub) => sub.id !== id),
           })),
         )
+        // A topic carries its own chat, notes, cards and quizzes, all of
+        // which the brief may be quoting. See deleteSpace above.
+        clearBriefCache()
       },
     }),
     [spaces, loading, error, refresh],

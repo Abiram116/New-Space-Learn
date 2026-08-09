@@ -11,7 +11,7 @@
  * come from the spaces list. Nothing here is invented for decoration.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type {
   ForecastDay,
@@ -26,7 +26,7 @@ import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Tip } from '../../components/ui/Tip'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { CountUp, Stagger } from '../../components/ui/motion'
+import { CountUp, Rise, Stagger } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Ledger } from '../../components/ui/Surface'
 import { cn } from '../../lib/cn'
@@ -57,6 +57,11 @@ export function Home() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
         {/* ── The brief ── */}
+        {/* Each band rises in just behind the one above it, so Home assembles
+            top-down the way you read it. Delays stay inside the ~250ms budget
+            in ui/motion — past that a stagger stops reading as motion and
+            starts reading as lag. Reduced-motion users get all of it at once,
+            handled inside Rise. */}
         <header className="flex flex-col gap-5 pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
           {brief.loading ? (
             <div className="flex flex-col gap-3">
@@ -126,6 +131,7 @@ export function Home() {
             sits directly beneath the rule they share, as the evidence for the
             two of them that are time-based. */}
         {anySpaces && (
+          <Rise delay={60}>
           <section className="flex flex-col gap-5 border-t border-line pt-7">
             <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
               <Figure
@@ -184,6 +190,7 @@ export function Home() {
             </div>
             <Fortnight stats={stats.data} loading={stats.loading} />
           </section>
+          </Rise>
         )}
 
         {/* ── What's coming, and what you actually did ──
@@ -192,6 +199,7 @@ export function Home() {
             proportion are measurements, and the rule under each closes the
             band before the topic cards below. */}
         {anySpaces && !stats.loading && stats.data && (
+          <Rise delay={120}>
           <section className="grid gap-x-10 gap-y-7 border-t border-line pt-7 lg:grid-cols-2">
             <DueForecast days={stats.data.due_forecast} />
             <Composition
@@ -199,6 +207,7 @@ export function Home() {
               dailyGoal={stats.data.daily_goal}
             />
           </section>
+          </Rise>
         )}
 
         {/* ── Topics as face-up cards ── ── the only cardstock on this page.
@@ -419,6 +428,15 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
   const peak = Math.max(1, ...safe.map((d) => d.count))
   const total = safe.reduce((n, d) => n + d.count, 0)
 
+  /* Columns grow from the axis on first paint, left to right — the same beat
+     the fortnight chart already uses, so the two charts on this page behave
+     like one instrument rather than two widgets. */
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDrawn(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   return (
     <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
@@ -444,10 +462,15 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
               </span>
               <span
                 className={cn(
-                  'w-full rounded-[3px] transition-[height]',
+                  'w-full rounded-[3px] transition-[height] duration-300 ease-out',
                   i === 0 ? 'bg-brand' : 'bg-line-dash',
                 )}
-                style={{ height: `${Math.max(d.count ? 6 : 2, (d.count / peak) * 72)}px` }}
+                style={{
+                  height: drawn
+                    ? `${Math.max(d.count ? 6 : 2, (d.count / peak) * 72)}px`
+                    : '2px',
+                  transitionDelay: drawn ? `${i * 40}ms` : '0ms',
+                }}
               />
               <span className={cn('setcode', i === 0 && 'text-brand')}>
                 {i === 0 ? 'today' : dayLabel(d.day)}
@@ -494,6 +517,14 @@ function Composition({
   ]
   const total = parts.reduce((n, p) => n + p.n, 0)
 
+  /* The proportions fill in from zero, so the shape of the week is something
+     you watch resolve rather than something already decided when you look. */
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDrawn(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   return (
     <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
@@ -514,8 +545,8 @@ function Composition({
                 p.n > 0 && (
                   <span
                     key={p.key}
-                    className={p.cls}
-                    style={{ width: `${(p.n / total) * 100}%` }}
+                    className={cn(p.cls, 'transition-[width] duration-500 ease-out')}
+                    style={{ width: drawn ? `${(p.n / total) * 100}%` : '0%' }}
                   />
                 ),
             )}

@@ -114,7 +114,12 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => setConfirmDeleteSpace(space.id)}
                 title="Delete space"
                 aria-label={`Delete space ${space.name}`}
-                className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity hover:text-coral focus-visible:opacity-100 group-hover/space:opacity-100 cursor-pointer"
+                /* Faint, not invisible. `opacity-0` until hover meant this
+                   button did not exist at all on a touch screen — there is no
+                   hover to trigger it, so a phone or tablet had no way to
+                   delete a subject. It now sits quietly at 40% and comes up
+                   on hover, focus, or a tap target that is always there. */
+                className="shrink-0 rounded-md p-1 text-faint opacity-40 transition-opacity hover:text-coral hover:opacity-100 focus-visible:opacity-100 group-hover/space:opacity-100 cursor-pointer"
               >
                 <Icon name="trash" size={13} />
               </button>
@@ -141,7 +146,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     <button
                       onClick={() => setConfirmDeleteSubspace(sub.id)}
                       aria-label={`Delete topic ${sub.name}`}
-                      className="shrink-0 rounded-md p-1 text-faint opacity-0 transition-opacity hover:text-coral focus-visible:opacity-100 group-hover/sub:opacity-100 cursor-pointer"
+                      /* Same reasoning as the subject delete above. */
+                      className="shrink-0 rounded-md p-1 text-faint opacity-40 transition-opacity hover:text-coral hover:opacity-100 focus-visible:opacity-100 group-hover/sub:opacity-100 cursor-pointer"
                     >
                       <Icon name="trash" size={12} />
                     </button>
