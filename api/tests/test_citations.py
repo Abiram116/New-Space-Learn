@@ -12,7 +12,7 @@ See `docs/AI_ENGINE.md §10`.
 
 from __future__ import annotations
 
-from app.services.rag import strip_invalid_citations
+from app.services.rag import cited_markers, strip_invalid_citations
 
 
 def test_valid_markers_survive_untouched():
@@ -76,3 +76,11 @@ def test_bracketed_text_that_is_not_a_marker_is_left_alone():
     cleaned, dropped = strip_invalid_citations(text, 1)
     assert cleaned == text
     assert dropped == []
+
+
+def test_cited_markers_lists_every_marker_present():
+    assert cited_markers("A [[1]] and B [[2]], also A again [[1]].") == [1, 2, 1]
+
+
+def test_cited_markers_empty_when_none_present():
+    assert cited_markers("No sources needed here.") == []

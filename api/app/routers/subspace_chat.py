@@ -137,6 +137,31 @@ async def send_chat(
                     dropped,
                     len(citations_meta),
                 )
+            # The retrieval audit trail. `chat_messages.citations` is the
+            # user-facing record (doc, locator, snippet, kept forever on the
+            # row) — this is the operator-facing one: which chunks the vector
+            # search actually returned and how similar each was, so a "why
+            # did it answer that" question can be answered from the log
+            # without re-running the retrieval. One line per turn, not a new
+            # table — this is exactly the amount of audit trail this product
+            # needs today.
+            used_markers = {int(n) for n in rag.cited_markers(assistant_text)}
+            log.info(
+                "chat turn subspace=%s user=%s retrieved=%s cited=%s",
+                subspace_id,
+                user.id,
+                [
+                    {
+                        "marker": i,
+                        "document_id": r.document_id,
+                        "document_name": r.document_name,
+                        "locator": r.locator,
+                        "similarity": round(r.similarity, 4),
+                    }
+                    for i, r in enumerate(retrieved, start=1)
+                ],
+                sorted(used_markers),
+            )
             saved = await supabase.db_insert(
                 "chat_messages",
                 {

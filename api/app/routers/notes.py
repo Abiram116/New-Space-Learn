@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
-
 import asyncio
+import html
 import json
 import logging
+import re
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
@@ -266,6 +266,9 @@ _HTML_BLOCK_MAP = [
 ]
 
 
+_CODE_SPAN = re.compile(r"```.*?```|`[^`\n]+`", re.S)
+
+
 def _demote_html(text: str) -> str:
     """Convert stray HTML in a model response into equivalent markdown.
 
@@ -276,17 +279,49 @@ def _demote_html(text: str) -> str:
     Instructing the model not to emit HTML is necessary but not sufficient:
     models regress under load and on unusual prompts, and a note is the
     student's own document. Belt and braces.
-    """
-    if "<" not in text:
-        return text.strip()
 
-    for pattern, replacement in _HTML_BLOCK_MAP:
-        text = pattern.sub(replacement, text)
-    # Anything still tag-shaped is decoration we have no mapping for; drop the
-    # tag and keep whatever it wrapped.
-    text = re.sub(r"</?[a-zA-Z][^>\n]{0,60}>", "", text)
+    Two things this has to get right that the first version didn't:
+
+    1. **Entities, not just raw tags.** The model sometimes emits `&lt;p&gt;`
+       rather than `<p>` — especially when the prompt tells it not to write
+       HTML, which reads to some models as "escape it instead". The old guard
+       returned early whenever there was no literal `<`, so entity-escaped
+       tags passed through untouched, round-tripped through the markdown
+       serializer, and landed in the note as visible `&lt;p&gt;`. That is the
+       exact text a student reported seeing.
+    2. **Code must survive.** A student asking about HTML or JSX gets an
+       answer whose whole point is the tags in it. Stripping those would
+       destroy the answer, so fenced blocks and inline spans are lifted out
+       before any substitution runs and put back afterwards.
+    """
+
+    # Lift code out of harm's way first — everything below rewrites tags, and
+    # inside a code span a tag is content, not markup.
+    spans: list[str] = []
+
+    def _stash(match: re.Match[str]) -> str:
+        spans.append(match.group(0))
+        return f"\x00{len(spans) - 1}\x00"
+
+    text = _CODE_SPAN.sub(_stash, text)
+
+    # Entity-encoded tags become real tags so the maps below can see them.
+    # Done after stashing so `&lt;` written inside a code fence stays literal.
+    if "&" in text:
+        text = html.unescape(text)
+
+    if "<" in text:
+        for pattern, replacement in _HTML_BLOCK_MAP:
+            text = pattern.sub(replacement, text)
+        # Anything still tag-shaped is decoration we have no mapping for; drop
+        # the tag and keep whatever it wrapped.
+        text = re.sub(r"</?[a-zA-Z][^>\n]{0,60}>", "", text)
+
     # Collapse the blank lines the substitutions above introduce.
     text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # Restore code exactly as the model wrote it.
+    text = re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], text)
     return text.strip()
 
 

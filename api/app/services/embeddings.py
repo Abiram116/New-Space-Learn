@@ -75,7 +75,21 @@ def chunk_text(text: str, *, source_label: str = "text") -> list[Chunk]:
                 Chunk(index=idx, content=piece, locator=f"{source_label} · offset {start}")
             )
             idx += 1
-        start = end - CHUNK_OVERLAP
+        # This was an infinite loop for any document whose final chunk is
+        # <= CHUNK_OVERLAP characters short of a full window: once `end`
+        # hits `len(text)` the truncation branch above stops firing, so
+        # `end` never changes again, and `start = end - CHUNK_OVERLAP`
+        # recomputes to the exact same value forever — the same trailing
+        # chunk gets appended without bound until memory runs out. This is
+        # what "documents stuck at EMBEDDING CHUNKS" actually was; it had
+        # nothing to do with embedding-provider timing. Breaking the moment
+        # the window reaches the end of the text is the real fix; the
+        # `max(..., start + 1)` on the other branch is a second guard so no
+        # future change to the boundary-detection heuristic above can
+        # reintroduce the same failure mode for a non-final chunk.
+        if end >= len(text):
+            break
+        start = max(end - CHUNK_OVERLAP, start + 1)
     return chunks
 
 

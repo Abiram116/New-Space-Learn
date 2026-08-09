@@ -12,7 +12,6 @@ import { Editor, EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
 import Placeholder from '@tiptap/extension-placeholder'
-import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -23,7 +22,13 @@ import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-detai
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
-import { filterCommands, type SlashCommand } from './slashMenu'
+import { ImageBlock } from './ImageBlock'
+import {
+  availableCommands,
+  readContext,
+  type SlashCommand,
+  type SlashContext,
+} from './slashMenu'
 import {
   createNote,
   deleteNote,
@@ -59,6 +64,11 @@ type Filter = 'all' | 'ai' | 'mine'
  * every grammar each time a note is opened.
  */
 const lowlight = createLowlight(common)
+
+/** Shown at the cursor while an AI command is in flight, then taken back out.
+    A constant because two separate places have to agree on it exactly — the
+    insert and the removal — and they drifted apart once already. */
+const AI_PLACEHOLDER = 'Thinking…'
 
 /** Offered in the code block's language picker, in the order students reach for them. */
 const CODE_LANGUAGES = [
@@ -376,7 +386,9 @@ function NoteEditor({
      re-deriving "is the cursor sitting in a paragraph that starts with /"
      from the document on every update is the only version that stays correct
      through all of those. */
-  const [slash, setSlash] = useState<{ query: string; from: number; to: number } | null>(null)
+  const [slash, setSlash] = useState<
+    { query: string; from: number; to: number; ctx: SlashContext } | null
+  >(null)
   const [slashIndex, setSlashIndex] = useState(0)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
@@ -407,11 +419,17 @@ function NoteEditor({
     // `setDetails()` had no block to convert and silently did nothing.
     // `start()`→`pos` is just the typed characters, leaving an empty paragraph
     // for the command to act on.
-    setSlash({ query, from: $from.start(), to: $from.pos })
+    // Context is read here, with the editor in hand, so the menu can hide
+    // commands the document can't support — "Summarise" on a blank note used
+    // to sit there fully enabled and return an apology from the model.
+    setSlash({ query, from: $from.start(), to: $from.pos, ctx: readContext(ed) })
     setSlashIndex(0)
   }, [])
 
-  const matches = useMemo(() => (slash ? filterCommands(slash.query) : []), [slash])
+  const matches = useMemo(
+    () => (slash ? availableCommands(slash.query, slash.ctx) : []),
+    [slash],
+  )
 
   /** Reads files as data URLs and drops them in as images. */
   const insertImageFiles = useCallback(
@@ -450,18 +468,41 @@ function NoteEditor({
       const editor = editorRef.current
       if (!editor) return
       setAiBusy(true)
-      editor.chain().deleteRange({ from, to }).insertContentAt(from, 'Thinking…').run()
+      editor.chain().deleteRange({ from, to }).insertContentAt(from, AI_PLACEHOLDER).run()
+
+      /**
+       * Take the placeholder back out, and only the placeholder.
+       *
+       * Two things this has to survive. **A failed request:** the old version
+       * removed the placeholder on the success path only, so any error left a
+       * literal "Thinking…" sitting in the student's note forever, saved to
+       * the database with everything else. **A student who keeps typing:** the
+       * request is async, so by the time it returns the text at `from` may no
+       * longer be the placeholder at all — deleting blindly would eat words
+       * they just wrote. So the range is verified before anything is removed,
+       * and if it doesn't match we leave the document alone.
+       */
+      const clearPlaceholder = () => {
+        const end = from + AI_PLACEHOLDER.length
+        if (end > editor.state.doc.content.size) return false
+        if (editor.state.doc.textBetween(from, end) !== AI_PLACEHOLDER) return false
+        editor.chain().deleteRange({ from, to: end }).run()
+        return true
+      }
+
       try {
         const { content_md } = await noteAiInline(subspaceId, prompt)
-        const placeholderLen = 'Thinking…'.length
         // @ts-expect-error — the Markdown extension's storage isn't in @tiptap/core's base Storage type
         const parsed = editor.storage.markdown.parser.parse(content_md)
-        editor
-          .chain()
-          .deleteRange({ from, to: from + placeholderLen })
-          .insertContentAt(from, parsed)
-          .run()
+        if (clearPlaceholder()) {
+          editor.chain().insertContentAt(from, parsed).focus().run()
+        } else {
+          // The anchor moved under us, so append at the caret instead of
+          // guessing — losing the position is not a reason to lose the answer.
+          editor.chain().focus().insertContent(parsed).run()
+        }
       } catch (err) {
+        clearPlaceholder()
         showError(err)
       } finally {
         setAiBusy(false)
@@ -491,7 +532,11 @@ function NoteEditor({
       // whole note self-contained with no storage bucket, no upload endpoint
       // and nothing to clean up when a note is deleted — at the cost of note
       // size, which is why the editor caps what it will accept.
-      Image.configure({ inline: false, allowBase64: true }),
+      //
+      // ImageBlock, not the stock Image: resize handles, alignment and a
+      // caption, all encoded back into standard markdown image syntax so the
+      // note stays a real markdown document. See ImageBlock.tsx.
+      ImageBlock.configure({ inline: false, allowBase64: true }),
       TableKit.configure({ table: { resizable: true } }),
       // Toggle blocks. A long revision note is mostly things you already know
       // — being able to fold a section away is what keeps it usable in week
@@ -764,8 +809,16 @@ function NoteEditor({
                   </p>
                 )}
                 {matches.map((cmd, i) => (
+                  <div key={cmd.id}>
+                  {/* One section label at each group boundary. `availableCommands`
+                      returns AI first, then inserts, so a boundary is simply
+                      the first item whose group differs from the one above. */}
+                  {(i === 0 || matches[i - 1].group !== cmd.group) && (
+                    <div className="setcode px-2 pb-1 pt-2 first:pt-1">
+                      {cmd.group === 'ai' ? 'Ask the tutor' : 'Insert'}
+                    </div>
+                  )}
                   <button
-                    key={cmd.id}
                     type="button"
                     onMouseEnter={() => setSlashIndex(i)}
                     onMouseDown={(e) => {
@@ -797,6 +850,7 @@ function NoteEditor({
                     </span>
                     {cmd.ai && <span className="setcode shrink-0 text-sky-deep">AI</span>}
                   </button>
+                  </div>
                 ))}
               </div>
             )}

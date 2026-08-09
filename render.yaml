@@ -36,14 +36,19 @@ services:
       # docs/adr/0012-local-embeddings-bge-small.md.
       - key: EMBEDDING_MODEL
         value: BAAI/bge-small-en-v1.5
-      # Still "true" because supabase/migrations/20260810090000_embedding_dim_384.sql
-      # hasn't been applied yet — the column is vector(1536), BGE-small
-      # outputs 384. Under the stub, retrieval is NOT semantically
-      # meaningful — see docs/AI_ENGINE.md §4. To go live: apply that
-      # migration by hand in the Supabase SQL editor, flip this to "false",
-      # redeploy, then run scripts/reembed_documents.py once.
+      # "false" as of 2026-08-09. The vector(1536)->vector(384) migration
+      # (supabase/migrations/20260810090000_embedding_dim_384.sql) is applied
+      # on the live database, and the pipeline is verified end-to-end against
+      # it: a real upload chunked, embedded with the real BGE-small model,
+      # inserted, and retrieved with a correct citation. See
+      # docs/adr/0012-local-embeddings-bge-small.md and the chunk_text fix in
+      # this same change — a real infinite-loop bug, not a timing issue, was
+      # the actual cause of documents hanging at "embedding chunks" before
+      # this was verified. document_chunks was empty at the time this flag
+      # flipped, so no re-embed was needed; if that's no longer true when you
+      # read this, run api/scripts/reembed_documents.py once after deploying.
       - key: USE_STUB_EMBEDDINGS
-        value: "true"
+        value: "false"
       # No endpoint map in production.
       - key: EXPOSE_API_DOCS
         value: "false"

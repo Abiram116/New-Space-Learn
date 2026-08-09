@@ -46,6 +46,9 @@ export type IconName =
   | 'sparkle'
   | 'offline'
   | 'alert'
+  | 'alignLeft'
+  | 'alignCenter'
+  | 'alignRight'
 
 type Props = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   name: IconName
@@ -158,6 +161,27 @@ function paths(name: IconName, filled: boolean) {
       return <path d="M12 5.5v13M5.5 12h13" />
     case 'minus':
       return <path d="M5.5 12h13" />
+    /* Alignment: ruled lines whose ragged edge shows the alignment, the way
+       the text itself would sit. Long/short pairs rather than four equal
+       rules, because equal rules read as a list, not as alignment. */
+    case 'alignLeft':
+      return (
+        <>
+          <path d="M4 6.5h16M4 11h10M4 15.5h16M4 20h10" />
+        </>
+      )
+    case 'alignCenter':
+      return (
+        <>
+          <path d="M4 6.5h16M7 11h10M4 15.5h16M7 20h10" />
+        </>
+      )
+    case 'alignRight':
+      return (
+        <>
+          <path d="M4 6.5h16M10 11h10M4 15.5h16M10 20h10" />
+        </>
+      )
     case 'search':
       return (
         <>

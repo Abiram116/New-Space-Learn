@@ -119,6 +119,15 @@ def build_prompt(
     # Chat is the surface a student spends the most time in, so it draws on
     # the same shared voice as the agents rather than defining its own — the
     # "sounds like one mentor everywhere" property has to be structural.
+    #
+    # Four rules below, each stated exactly once, in the order a model needs
+    # them: who it's talking to, how to write, how to cite, how to behave
+    # when the sources run out. Standard grounded-RAG practice is to put the
+    # citation *format* and the *refuse-rather-than-guess* instruction next
+    # to each other, since together they're the one thing this product's
+    # honesty claim actually depends on — split apart or vague, a model
+    # reliably drifts toward answering from general knowledge without saying
+    # so.
     system_parts = [
         COMPANION_VOICE,
         f"You are working with the student on the topic '{subspace_name}'.",
@@ -126,18 +135,25 @@ def build_prompt(
     ]
     if always_show_citations and retrieved:
         system_parts.append(
-            "When you use a fact from a source, cite it inline using [[n]] where n is "
-            "the source number. Do not invent citations."
+            "Every factual claim that comes from a source must end with that "
+            "source's marker, written [[n]] with no space, where n is the number "
+            "in the Sources list below — not a footnote, inline at the point of "
+            "the claim. A sentence combining two sources gets two markers. Never "
+            "invent a marker number that isn't in the list."
         )
     if answer_only_from_docs:
         if retrieved:
             system_parts.append(
-                "Only answer using the provided sources. If they don't cover the question, "
-                "say so plainly instead of guessing."
+                "Answer only using the Sources below — not outside knowledge, even if "
+                "you're confident it's correct. If the sources only partly cover the "
+                "question, answer the part they cover and say plainly what's missing, "
+                "rather than filling the gap yourself."
             )
         else:
             system_parts.append(
-                "No sources were retrieved. Say that no relevant material was indexed yet."
+                "No sources were retrieved for this question. Say plainly that nothing "
+                "indexed in this topic covers it yet — do not answer from outside "
+                "knowledge instead."
             )
     for extra in active_skill_instructions:
         if extra.strip():
@@ -196,3 +212,11 @@ def strip_invalid_citations(text: str, valid_count: int) -> tuple[str, list[int]
         cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
         cleaned = re.sub(r" +\n", "\n", cleaned)
     return cleaned.strip(), sorted(dropped)
+
+
+def cited_markers(text: str) -> list[int]:
+    """Every `[[n]]` actually present in the final answer, for the audit log
+    — lets a log line show which retrieved sources the model actually used
+    versus which it was merely given."""
+
+    return [int(n) for n in _CITATION_MARKER.findall(text)]
