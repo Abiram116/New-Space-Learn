@@ -13,6 +13,10 @@ dependencies = [
   "python-multipart>=0.0.12,<0.1",
   "python-jose[cryptography]>=3.3,<4",
   "pypdf>=5.0,<6",
+  # Local embeddings (BGE-small-en-v1.5, quantized ONNX) — see
+  # docs/adr/0012-local-embeddings-bge-small.md. Pulls in onnxruntime, not
+  # torch; benchmarked at ~200MB resident, ~10ms/chunk on this machine.
+  "fastembed>=0.8,<0.9",
 ]
 
 [project.optional-dependencies]

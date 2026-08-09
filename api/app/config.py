@@ -38,18 +38,18 @@ class Settings(BaseSettings):
     groq_timeout_s: float = 60.0
 
     # Embeddings.
-    # Groq hosts no embedding endpoint, so this is the one place the backend
-    # talks to a second provider (see docs/adr/0005-groq-single-provider.md —
-    # an acknowledged exception, not a reversal). Any OpenAI-compatible
-    # `/embeddings` endpoint works; point `embedding_base_url` elsewhere to
-    # switch vendors without touching code.
-    embedding_api_key: str = ""
-    embedding_base_url: str = "https://api.openai.com/v1"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_timeout_s: float = 30.0
-    # How many chunks per request. The provider accepts far more, but a
-    # smaller batch keeps peak memory down on a 512MB instance and bounds how
-    # much work is lost if one request fails mid-document.
+    # Local, not hosted — see docs/adr/0012-local-embeddings-bge-small.md.
+    # A hosted OpenAI-compatible provider was built and benchmarked, then
+    # replaced: this is $0 marginal cost with no external API dependency,
+    # measured to fit Render free tier's 512MB with real headroom. BGE-M3
+    # was evaluated as a quality benchmark and rejected for production —
+    # its own model weights alone (~2.2GB) exceed the entire RAM ceiling.
+    # No API key, no base URL, no network dependency: the model runs
+    # in-process, loaded once per worker on first use.
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # How many chunks per inference call. The model can take a bigger batch,
+    # but bounding it keeps peak memory predictable on a 512MB instance and
+    # limits how much work is lost if a batch fails mid-document.
     embedding_batch_size: int = 64
 
     # Feature flags
@@ -63,9 +63,18 @@ class Settings(BaseSettings):
     expose_api_docs: bool = True
 
     # Embedding dimension must match the vector column in the DB migration.
-    # 1536 is both pgvector's column width here and text-embedding-3-small's
-    # native size — changing this requires a migration, not just a setting.
-    embedding_dim: int = 1536
+    # 384 is BGE-small-en-v1.5's native output size AND the target of
+    # supabase/migrations/20260810090000_embedding_dim_384.sql.
+    #
+    # THAT MIGRATION MUST BE APPLIED BEFORE FLIPPING USE_STUB_EMBEDDINGS TO
+    # FALSE. The column is still vector(1536) until you run it by hand in
+    # the Supabase SQL editor (this repo's standing convention — nothing
+    # applies migrations automatically). Flipping the flag first doesn't
+    # corrupt anything: the dimension check below still passes (384==384),
+    # but Postgres then rejects the insert outright — a loud failure on that
+    # upload, not silent corruption, since pgvector enforces exact column
+    # width. Still: apply the migration first.
+    embedding_dim: int = 384
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -81,15 +90,13 @@ class Settings(BaseSettings):
 
     @property
     def real_embeddings_enabled(self) -> bool:
-        """Real embeddings need both the flag off *and* a key present.
-
-        Deliberately not just `not use_stub_embeddings`: flipping the flag
-        without a key would fail every upload at the point of embedding,
-        after the file is already stored and the row says `processing`.
-        Requiring both means a half-finished config degrades to the stub
-        (with a warning) instead of breaking ingestion.
-        """
-        return not self.use_stub_embeddings and bool(self.embedding_api_key)
+        """Just the flag, now. A hosted provider needed a second condition
+        here (a key might be missing) — a local model has no key to be
+        missing. If loading it ever fails (corrupt cache, blocked network on
+        first download), that surfaces as a loud failure on the one upload
+        that triggered it, not a silent fallback — see
+        `LocalBgeEmbeddingProvider` in `services/embeddings.py`."""
+        return not self.use_stub_embeddings
 
 
 @lru_cache

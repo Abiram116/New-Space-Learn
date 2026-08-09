@@ -31,19 +31,17 @@ services:
         value: qwen/qwen3.6-27b
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
-      # Embeddings — the one second provider (Groq hosts no embedding model).
-      - key: EMBEDDING_API_KEY
-        sync: false
-      - key: EMBEDDING_BASE_URL
-        value: https://api.openai.com/v1
+      # Embeddings — local (BGE-small-en-v1.5, quantized ONNX), no API key,
+      # no second provider account. See
+      # docs/adr/0012-local-embeddings-bge-small.md.
       - key: EMBEDDING_MODEL
-        value: text-embedding-3-small
-      # Still "true" because no EMBEDDING_API_KEY is provisioned yet. Under the
-      # stub, retrieval is NOT semantically meaningful — see docs/AI_ENGINE.md
-      # §4. To go live: set EMBEDDING_API_KEY in the Render dashboard, flip
-      # this to "false", redeploy, then run scripts/reembed_documents.py once.
-      # Setting the flag without the key logs a warning and keeps the stub,
-      # rather than failing every upload.
+        value: BAAI/bge-small-en-v1.5
+      # Still "true" because supabase/migrations/20260810090000_embedding_dim_384.sql
+      # hasn't been applied yet — the column is vector(1536), BGE-small
+      # outputs 384. Under the stub, retrieval is NOT semantically
+      # meaningful — see docs/AI_ENGINE.md §4. To go live: apply that
+      # migration by hand in the Supabase SQL editor, flip this to "false",
+      # redeploy, then run scripts/reembed_documents.py once.
       - key: USE_STUB_EMBEDDINGS
         value: "true"
       # No endpoint map in production.

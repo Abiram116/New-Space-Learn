@@ -199,7 +199,14 @@ export function CTA({
         <Icon
           name="arrowRight"
           size={size === 'lg' ? 17 : 15}
+          // Its two sibling transitions on this button (the lift, the wipe fill)
+          // both pin transitionTimingFunction to EASE_CSS; this one didn't, so it
+          // fell back to Tailwind's default ease — a different curve firing
+          // alongside two correct ones on the same hover. Language.ts is
+          // explicit that the button-fill case is exactly what this system
+          // exists to cover.
           className="relative z-10 transition-transform duration-500 group-hover:translate-x-1"
+          style={{ transitionTimingFunction: EASE_CSS }}
         />
       </Link>
     </Magnetic>

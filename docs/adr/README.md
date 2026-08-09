@@ -29,3 +29,4 @@ explains how reality got that way.
 | [0009](0009-markdown-note-storage.md) | Store notes as markdown, not structured editor JSON | Accepted |
 | [0010](0010-evidence-only-relationships.md) | Relationships must be evidenced, never model-inferred | Accepted |
 | [0011](0011-gap-map-derived-concept-visualization.md) | The Gap Map is a derived concept-level visualization, not stored structure | Accepted |
+| [0012](0012-local-embeddings-bge-small.md) | Local embeddings (BGE-small-en-v1.5, quantized ONNX), not a hosted API | Accepted |

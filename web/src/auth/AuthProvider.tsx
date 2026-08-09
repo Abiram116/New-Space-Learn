@@ -13,6 +13,7 @@ import { getSession, onAuthChange, signOut, type Session } from '../api/auth'
 import { setAuthTokenProvider } from '../api/client'
 import { setUploadTokenProvider } from '../api/documents'
 import { SUPABASE_CONFIGURED } from '../lib/env'
+import { warmApi } from '../lib/warmApi'
 
 type AuthValue = {
   session: Session | null
@@ -35,6 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthTokenProvider(() => tokenRef.current)
     setUploadTokenProvider(() => tokenRef.current)
   }, [])
+
+  // This wraps the whole app above the router (see main.tsx), so it mounts on
+  // every load — including a student who bookmarks straight into `/home` and
+  // never sees Landing or the auth pages. That path previously got zero
+  // warm-up at all. Firing here means the free-tier backend's cold start
+  // overlaps with getSession() below rather than starting only once AppShell
+  // mounts and immediately races the real data fetch it triggers — see
+  // PERFORMANCE.md §6 for why a ping *inside* AppShell doesn't help.
+  useEffect(warmApi, [])
 
   useEffect(() => {
     if (!SUPABASE_CONFIGURED) return

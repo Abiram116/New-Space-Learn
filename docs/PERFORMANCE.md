@@ -128,12 +128,26 @@ where the wake-up actually overlaps with something the user is already doing:
 
 Verified live: `GET /api/v1/health → 200` fires on both.
 
-**Deliberately not added to `AppShell`.** `OfflineBanner` already pings on
-mount, and by that point the page's real data requests are in flight against
-the same cold server — a ping racing them warms nothing. **A student who
-bookmarks the app directly still pays the cold start**, and no client-side
-trick fixes that; only a paid instance does. Worth stating plainly rather
-than implying it's covered.
+**Updated 2026-08-09 (D6).** The direct-bookmark gap above is closed, in the
+one place that actually reaches it: `AuthProvider` (`main.tsx` wraps it above
+the router, so it mounts on every load, signed in or not). Moved the single
+`useEffect(warmApi, [])` there and removed the now-redundant copies in
+`Landing.tsx` and `AuthShell.tsx` — `warmApi()` de-dupes internally, so
+leaving all three would have cost nothing extra, but three call sites with
+one doing all the work is exactly the kind of duplication worth deleting.
+
+Still true, and still the reason `AppShell` itself is not the fix: by the time
+`AppShell` mounts, its own children's data-fetching effects (`Home`'s
+`/me/stats`) are already firing in the same tick — a ping there races the real
+request instead of preceding it. `AuthProvider` mounts strictly earlier, in
+parallel with `getSession()`'s own async resolution, so the backend gets
+whatever head start that takes — genuine for a cold/uncached session, closer
+to zero for an already-cached one, never negative.
+
+**What this does not fix:** the actual ~30s cold-start cost. No client-side
+trick removes it; this only decides whether the student watches it happen or
+it happens invisibly during something they were already doing (reading,
+typing, or now: auth resolving).
 
 ---
 
@@ -154,28 +168,52 @@ both stand unreconciled:
   idealized model, not a wall-clock measurement of the real gather call the
   way `_bulk_counts` was.
 
-**Both directional calls are very likely still correct** — going from 8
-sequential calls to gathering them is almost certainly a large win even
-accounting for TLS contention, and 4-way contention costing more than
-4-way's benefit doesn't mean 8-way necessarily follows the same curve.
-But "~150ms" is a planning estimate dressed as a measurement, sitting next
-to a genuinely measured number in a sibling file. **Recommended fix, small:**
-add one timing log line around `/me/stats`'s handler and replace the estimate
-with a real number. Local against the real remote Supabase is sufficient —
-the round trips being measured go to Supabase, not to Render, so this doesn't
-require a live deployment. This is exactly the "measurement over intuition"
-principle this codebase already prides itself on in `SOUL.md §14` — worth
-holding every performance claim to it, including ones already written down.
+**Resolved 2026-08-09.** Measured for real: `api/scripts/measure_me_stats.py`
+calls the actual, unmodified `stats()` handler directly against the real
+remote Supabase (a real account with settings, activity, subjects, quiz
+results and flashcards — not an empty one), 20 runs.
+
+| | ms |
+|---|---|
+| Run 1 (cold connection pool) | 2758.0 |
+| Runs 2–20 (individual) | 718.2, 752.4, 695.6, 717.5, 719.6, 676.7, 450.6, 686.0, 434.4, 562.1, 440.3, 720.1, 463.6, 427.4, 455.2, 430.7, 475.6, 453.4, 439.7 |
+| Median, all 20 | 518.8 |
+| Median, excluding run 1 | 475.6 |
+| Mean, all 20 | 673.8 (skewed by run 1) |
+| Min / max | 427.4 / 2758.0 |
+
+**"~150ms" was wrong — steady-state is ~430–750ms, roughly 3–4x higher.**
+It was never a measurement (the section's own header said so: "a 150ms
+*simulated* round trip"), and this replaces it with one. The first-run
+spike (2758ms) is a one-time `httpx.AsyncClient` connection-pool/TLS cost
+that every request after it stops paying — consistent with the same
+mechanism `_bulk_counts` documents, not a sign anything is wrong.
+
+**Does the implementation need to change? No.** `asyncio.gather` is already
+correctly applied to all 8 independent reads (confirmed in code before
+measuring, then consistent with the numbers: a sequential baseline at
+~200–300ms/round-trip × 8 would land in the 1600–2400ms range every call,
+not 430–750ms). The measured latency is what 8 genuinely concurrent reads
+against a remote Postgres cost on this connection — there's no un-gathered
+read left to fix, and nothing here demonstrates a real problem worth a code
+change. If this specific number ever needs to come down further, the next
+lever is reducing *how many* reads `/me/stats` makes (e.g. a single
+PostgREST call with embedded `select`s across a few of the eight), not the
+concurrency strategy — but that's a real problem to solve when it's
+observed as one, not pre-emptively.
 
 ---
 
 ## 8. Recommendations, ranked by effort ÷ impact
 
-1. **Warm the app shell, not just the landing page** (§6) — a few lines,
-   closes the highest-impact remaining cold-start gap.
-2. **Measure `/me/stats` for real** (§7) — a log line or a `curl` timing,
-   resolves a real internal inconsistency in this codebase's own
-   performance claims.
+1. ~~**Warm the app shell, not just the landing page**~~ (§6) — **done,
+   2026-08-09 (D6).** Moved to `AuthProvider`, the one mount point that
+   actually covers a direct-bookmark visitor.
+2. ~~**Measure `/me/stats` for real**~~ (§7) — **done, 2026-08-09.** 20 real
+   runs against the live database: median 518.8ms (475.6ms excluding a
+   one-time connection warm-up on run 1), not the ~150ms simulated estimate.
+   `asyncio.gather` already covers all 8 reads; no code change is justified
+   by these numbers.
 3. **Budget the Gap Map's rendering approach as its own lazy chunk from day
    one** (§2) — costs nothing extra if done from the start; costly to
    retrofit if a graphing library quietly lands in the main bundle first.

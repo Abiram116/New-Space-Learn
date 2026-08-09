@@ -24,6 +24,7 @@ import { Icon, type IconName } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
 import { mapRange, useScrollProgress } from '../../lib/useScrollProgress'
 import { useReducedMotion } from '../../components/ui/motion'
+import { EASE_CSS } from './language'
 
 export type SequenceCard = {
   icon: IconName
@@ -77,6 +78,7 @@ export function CardSequence({ cards }: { cards: SequenceCard[] }) {
                   'h-1 rounded-full transition-all duration-300',
                   on ? 'w-9 bg-brand' : 'w-4 bg-line',
                 )}
+                style={{ transitionTimingFunction: EASE_CSS }}
               />
             )
           })}

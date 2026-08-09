@@ -3,22 +3,30 @@
 Chunking is deterministic and character-based (works for PDFs and plain text
 without pulling tokenizer weights).
 
-Embeddings run against any OpenAI-compatible `/embeddings` endpoint, or fall
-back to a deterministic stub when no key is configured. **The stub is not
-semantically meaningful** — it exists so the RAG plumbing is exercisable
-without a provider account, and retrieval under it returns chunks in an
+Embeddings run **locally** — BGE-small-en-v1.5, quantized ONNX, via
+`fastembed` — or fall back to a deterministic stub when disabled. No API key,
+no external network dependency, no recurring cost. See
+`docs/adr/0012-local-embeddings-bge-small.md` for the full investigation: a
+hosted OpenAI-compatible provider was built, benchmarked, and replaced;
+BGE-M3 was evaluated and rejected for production (its own weights alone are
+~2.2GB, several times Render free tier's entire 512MB ceiling) and kept only
+as an offline quality reference.
+
+**The stub is not semantically meaningful** — it exists so the RAG plumbing
+is exercisable with zero setup, and retrieval under it returns chunks in an
 arbitrary-but-consistent order rather than by relevance. Set
-`EMBEDDING_API_KEY` and `USE_STUB_EMBEDDINGS=false` to switch to real
-retrieval; both are required (see `Settings.real_embeddings_enabled`).
+`USE_STUB_EMBEDDINGS=false` to switch to the real local model — but only
+after applying `supabase/migrations/20260810090000_embedding_dim_384.sql`
+(BGE-small outputs 384 dims; the column is 1536 until that migration runs).
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass
-
-import httpx
+from typing import Protocol
 
 from ..config import settings
 from ..errors import UpstreamUnavailable
@@ -85,109 +93,118 @@ def _stub_embedding(text: str) -> list[float]:
     return vec
 
 
-# Module-level singleton, same pattern as `llm.py` — one connection pool per
-# process, reused across requests so we don't pay a TLS handshake per upload.
-_client: httpx.AsyncClient | None = None
+class EmbeddingProvider(Protocol):
+    """One method, swappable. `llm.py`'s `LLM` Protocol is the precedent —
+    same shape, same reason: the call site (`embed_texts`, below) never
+    needs to know or care which concrete provider is behind it."""
+
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
-def _get_client() -> httpx.AsyncClient:
-    global _client
-    if _client is None:
-        _client = httpx.AsyncClient(
-            base_url=settings.embedding_base_url.rstrip("/"),
-            headers={
-                "Authorization": f"Bearer {settings.embedding_api_key}",
-                "Content-Type": "application/json",
-            },
-            timeout=httpx.Timeout(settings.embedding_timeout_s, connect=5.0),
-        )
-    return _client
+class StubEmbeddingProvider:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [_stub_embedding(t) for t in texts]
 
 
-async def close_client() -> None:
-    """Called from the app's lifespan so the process exits promptly."""
-    global _client
-    if _client is not None:
-        await _client.aclose()
-        _client = None
+class LocalBgeEmbeddingProvider:
+    """BGE-small-en-v1.5, quantized ONNX, via `fastembed`. Runs in-process —
+    no network call, no API key.
+
+    Two things this class exists specifically to get right:
+
+    1. **Lazy load.** The model isn't built in `__init__` — building it costs
+       real time (≈0.6s warm, longer on a cold cache) and ≈170-200MB RSS, and
+       most requests (chat, auth, everything that isn't a document upload)
+       never touch embeddings at all. Paying that cost at import time would
+       tax every cold start, including ones that never need it.
+    2. **Runs off the event loop.** `fastembed`'s `.embed()` is synchronous,
+       CPU-bound inference — unlike the async HTTP call this replaced. Calling
+       it directly inside an `async def` handler would block this
+       single-worker process's *entire* event loop for the duration (tens to
+       hundreds of ms per batch): every other concurrent request — a chat
+       stream, an auth check, anything — would stall until it returned.
+       `asyncio.to_thread` moves the blocking call to a worker thread so the
+       loop stays responsive. This is the same class of constraint that
+       already governs `ratelimit.py` and the sequential-vs-gather choices in
+       `spaces.py` — one worker, so what blocks it matters.
+    """
+
+    def __init__(self) -> None:
+        self._model = None  # type: ignore[var-annotated]
+
+    def _get_model(self):
+        if self._model is None:
+            from fastembed import TextEmbedding  # deferred: heavy import
+
+            log.info("loading local embedding model %s (first use this process)", settings.embedding_model)
+            self._model = TextEmbedding(model_name=settings.embedding_model)
+        return self._model
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        return await asyncio.to_thread(self._embed_sync, texts)
+
+    def _embed_sync(self, texts: list[str]) -> list[list[float]]:
+        try:
+            model = self._get_model()
+            vectors = [v.tolist() for v in model.embed(texts)]
+        except Exception as e:
+            # Model load or inference failed (corrupt cache, blocked network
+            # on a first-ever download, OOM). Surface it — a silent fallback
+            # to meaningless vectors is exactly the failure mode this
+            # project has already spent a phase eliminating once.
+            log.exception("local embedding inference failed")
+            raise UpstreamUnavailable("Couldn't embed the document locally.") from e
+
+        for v in vectors:
+            if len(v) != settings.embedding_dim:
+                # Would otherwise fail later at the Postgres insert, or worse,
+                # silently poison the index if the check weren't here. Fail
+                # loudly with the actual cause instead.
+                raise UpstreamUnavailable(
+                    f"Embedding model returned {len(v)} dimensions, but the "
+                    f"database column expects {settings.embedding_dim}. Has "
+                    f"the vector(384) migration been applied?"
+                )
+        return vectors
 
 
-# Logged once per process, not per call — a warning on every upload would be
-# noise, but silence would hide a misconfiguration that quietly degrades every
-# search result in the product.
-_warned_stub_fallback = False
+_provider: EmbeddingProvider | None = None
+
+
+def _get_provider() -> EmbeddingProvider:
+    global _provider
+    if _provider is None:
+        _provider = StubEmbeddingProvider() if settings.use_stub_embeddings else LocalBgeEmbeddingProvider()
+    return _provider
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
     """Embed a batch of strings.
 
     Returns one vector per input, in order. Callers treat these as opaque
-    floats, so switching providers never reaches beyond this function.
+    floats, so switching providers never reaches beyond this function —
+    `documents.py` and `rag.py` haven't changed at all across three different
+    providers now (stub, hosted HTTP, local ONNX).
     """
 
     if not texts:
         return []
 
-    if not settings.real_embeddings_enabled:
-        global _warned_stub_fallback
-        if not settings.use_stub_embeddings and not _warned_stub_fallback:
-            # The operator asked for real embeddings but gave us no key. Say so
-            # loudly once: silently serving stubs would look like working
-            # retrieval while returning arbitrary passages.
-            log.warning(
-                "USE_STUB_EMBEDDINGS=false but EMBEDDING_API_KEY is empty — "
-                "falling back to stub embeddings. Retrieval will NOT be "
-                "semantically meaningful until a key is set."
-            )
-            _warned_stub_fallback = True
-        return [_stub_embedding(t) for t in texts]
-
+    provider = _get_provider()
     out: list[list[float]] = []
     for start in range(0, len(texts), settings.embedding_batch_size):
         batch = texts[start : start + settings.embedding_batch_size]
-        out.extend(await _embed_batch(batch))
+        out.extend(await provider.embed(batch))
     return out
 
 
-async def _embed_batch(batch: list[str]) -> list[list[float]]:
-    # The provider rejects empty strings; chunking shouldn't produce them, but
-    # a defensive placeholder is cheaper than a failed document ingest.
-    payload = {
-        "model": settings.embedding_model,
-        "input": [t if t.strip() else " " for t in batch],
-    }
-    try:
-        r = await _get_client().post("/embeddings", json=payload)
-    except httpx.TimeoutException as e:
-        raise UpstreamUnavailable("Embedding the document timed out.") from e
-    except httpx.HTTPError as e:
-        raise UpstreamUnavailable("Couldn't reach the embedding service.") from e
-
-    if r.status_code >= 400:
-        # Provider text goes to the log, never to the user — it can carry
-        # account and quota details (same rule as `llm.py`).
-        log.warning("embeddings %s: %s", r.status_code, r.text[:300])
-        raise UpstreamUnavailable("The embedding service rejected the request.")
-
-    data = r.json().get("data") or []
-    if len(data) != len(batch):
-        raise UpstreamUnavailable("The embedding service returned an unexpected response.")
-
-    # Sort by index rather than trusting response order — the API documents
-    # that it may not match the input order.
-    ordered = sorted(data, key=lambda d: d.get("index", 0))
-    vectors = [d["embedding"] for d in ordered]
-
-    for v in vectors:
-        if len(v) != settings.embedding_dim:
-            # A dimension mismatch would be silently accepted by Postgres only
-            # to fail at insert, or worse, poison the index. Fail loudly here
-            # with the actual cause.
-            raise UpstreamUnavailable(
-                f"Embedding model returned {len(v)} dimensions, but the database "
-                f"column expects {settings.embedding_dim}. Check EMBEDDING_MODEL."
-            )
-    return vectors
+async def close_client() -> None:
+    """Kept so `main.py`'s lifespan doesn't need to change per provider.
+    The local model holds no network connection — nothing to close — but a
+    future hosted provider would need this hook again, which is the point of
+    keeping it a stable no-op rather than deleting it."""
 
 
 def extract_pdf_text(data: bytes) -> str:

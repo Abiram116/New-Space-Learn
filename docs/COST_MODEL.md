@@ -14,34 +14,49 @@ shaving tokens off a path that runs twice does not.
 
 ---
 
-## 1. Embeddings — the one line item that's currently $0 and shouldn't be
+## 1. Embeddings — now $0 permanently, not just cheap
 
-**Today: $0.** `USE_STUB_EMBEDDINGS=true` in `render.yaml` means no embedding
+**Updated 2026-08-10 — superseded the hosted-provider plan below (kept
+struck through for the reasoning trail, since the "cents is nothing" analysis
+is still correct — it just wasn't the deciding factor).** Per
+[ADR-0012](adr/0012-local-embeddings-bge-small.md), embeddings run locally —
+BGE-small-en-v1.5, quantized ONNX, in-process, no API key, no external
+provider account of any kind. **This isn't a cost optimization on top of the
+plan below; it replaces the plan below.** No line item, no per-token rate,
+no dollar figure to track here at all.
+
+What it costs instead: ~200MB of RAM in the same worker (measured in
+ADR-0012, comfortably inside Render's 512MB free-tier ceiling) and a few
+seconds of added cold-start time. Real trade-offs — just not financial ones,
+which is the entire point of this section existing.
+
+<details>
+<summary>Original analysis (hosted OpenAI provider) — superseded, kept for the reasoning trail</summary>
+
+~~**Today: $0.** `USE_STUB_EMBEDDINGS=true` in `render.yaml` means no embedding
 provider is called at all (`AI_ENGINE.md §4`). This is not a cost saving —
-it's the reason retrieval doesn't actually work semantically.
+it's the reason retrieval doesn't actually work semantically.~~
 
-**Once real.** Groq doesn't host an embedding endpoint on this account, so
-this means a second provider (the `TODO` in `embeddings.py` names OpenAI's
-`text-embedding-3-small`, which is the right first choice: cheapest
-credible option, 1536 dimensions matching the existing `vector(1536)` column
-exactly — no migration needed).
-
-Volume, derived from real chunking parameters (`CHUNK_SIZE = 900` chars,
-~200 tokens per chunk):
+~~**Once real.** Groq doesn't host an embedding endpoint on this account, so
+this means a second provider (`text-embedding-3-small`, cheapest credible
+option, 1536 dimensions matching the existing `vector(1536)` column exactly
+— no migration needed).~~
 
 | Scenario | Chunks | Tokens to embed | Est. cost @ ~$0.02/1M tokens |
 |---|---|---|---|
-| One 20-page lecture PDF (~40k chars) | ~50 | ~10k | **~$0.0002** |
-| A semester's material, one subject (20 such PDFs) | ~1,000 | ~200k | **~$0.004** |
-| Heavy user, 5 subjects, a full semester | ~5,000 | ~1M | **~$0.02** |
-| Every question asked (query-side embedding) | 1 short string each | ~20 tokens | **negligible — ~$0.0000004/question** |
+| One 20-page lecture PDF (~40k chars) | ~50 | ~10k | ~$0.0002 |
+| A semester's material, one subject (20 such PDFs) | ~1,000 | ~200k | ~$0.004 |
+| Heavy user, 5 subjects, a full semester | ~5,000 | ~1M | ~$0.02 |
+| Every question asked (query-side embedding) | 1 short string each | ~20 tokens | negligible — ~$0.0000004/question |
 
-**Conclusion: embedding is effectively free at this product's scale.** The
-entire semester of a heavy user costs about two cents. There is no cost
-argument for keeping stub embeddings — the only reason it's still stubbed is
-that the provider was never wired up. **This is the single highest-value fix
-in the whole cost/quality picture: it costs cents and it's the difference
-between retrieval working and not working.**
+~~**Conclusion: embedding is effectively free at this product's scale.**~~
+Correct as analysis, but the product owner's actual requirement was $0 and
+no external dependency, not "cheap enough" — cents-per-semester doesn't
+satisfy "don't default to a paid API" regardless of how small the cents are.
+That's a legitimate requirement a cost analysis alone can't override; see
+ADR-0012 for how it was actually resolved.
+
+</details>
 
 Note the asymmetry that makes this cheap: documents are embedded **once, at
 upload**. Questions embed one short string per ask. Nothing re-embeds on a
@@ -84,7 +99,7 @@ study sessions/month, 10 chat turns each, 8 quizzes, 8 decks, 10 notes):
 | Flashcard generation | 8 | ~14k in, ~5k out | ~$0.01 |
 | Note generation + inline AI | ~30 calls | ~50k in, ~12k out | ~$0.04 |
 | Home brief | 20 | ~10k in, ~2k out | ~$0.01 (fast tier, cheaper still) |
-| Embeddings | a semester's docs | ~200k | ~$0.004 |
+| Embeddings | a semester's docs | ~200k (irrelevant now — local, $0) | **$0** |
 | **Total** | | | **well under $1/student/month** |
 
 **The headline:** at single-digit user counts this product costs cents per
@@ -99,7 +114,7 @@ exactly where §6's optimizations should be aimed if that day comes.
 
 | Resource | Free-tier limit | What consumes it | Projection |
 |---|---|---|---|
-| Supabase Postgres | 500MB | `document_chunks` dominates — each row is a `vector(1536)` (~6KB) plus its ~900 chars of text | ~7KB/chunk → **~70,000 chunks before the ceiling**, i.e. roughly 1,400 lecture-sized PDFs total across all users |
+| Supabase Postgres | 500MB | `document_chunks` dominates — each row is a `vector(384)` (~1.5KB, since ADR-0012 — was `vector(1536)`/~6KB) plus its ~900 chars of text | ~2.4KB/chunk → **~210,000 chunks before the ceiling**, roughly 4,200 lecture-sized PDFs total across all users. **A real, unplanned side-benefit of the local-embedding decision:** the smaller vector is ~3x more storage-efficient than the OpenAI-sized one would have been — not why BGE-small was chosen, but worth knowing |
 | Supabase Storage | 1GB | Original uploaded files, kept so `reprocess` works without re-upload | ~50 × 20MB files, or many more typical-sized ones |
 | Vercel bandwidth | 100GB/mo | Static assets, 245KB gzipped per cold visit | Effectively unreachable at this scale |
 | Render | 750 instance-hours/mo | One service, spins down when idle | Sufficient for one always-warm-ish service |
@@ -156,9 +171,12 @@ one. There is no automated check enforcing this today.
 
 ## 6. Optimization recommendations, ranked by value
 
-1. **Wire real embeddings (~2¢/semester/user).** Not an optimization — a
-   correctness fix that happens to be nearly free. Highest priority in this
-   document and in `AI_ENGINE.md`.
+1. ~~**Wire real embeddings (~2¢/semester/user).**~~ **Superseded —
+   `AI_ENGINE.md §4`, ADR-0012.** Local BGE-small, not a hosted provider:
+   $0 rather than 2¢, at the cost of ~200MB RAM (measured, fits) and a few
+   seconds of cold start. What remains is applying one migration
+   (`vector(1536)`→`vector(384)`) — still the highest-priority open item,
+   now for "flip the switch," not "find a provider."
 2. **Reconsider the large tier for inline `/ai` in notes.** It currently uses
    `groq_model` (70B) for what is often a short continuation or a
    reformatting request. The fast tier may be sufficient for a large share of

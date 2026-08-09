@@ -1,9 +1,8 @@
-import { useEffect, type CSSProperties, type ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
 import { cn } from '../../lib/cn'
-import { warmApi } from '../../lib/warmApi'
 import { LitGrid, ParallaxLayer, usePointerParallax } from '../landing/motion'
 
 /**
@@ -33,11 +32,10 @@ export function AuthShell({
   children: ReactNode
   footer: ReactNode
 }) {
-  // Typing credentials is ~10–20s of cover to wake the free-tier backend, so
-  // the data fetch immediately after login lands on a warm server instead of
-  // paying the cold start in front of a spinner. Covers sign-in and sign-up,
-  // which both render through here.
-  useEffect(warmApi, [])
+  // The warm-up ping moved to AuthProvider (mounts above the router, fires on
+  // every load) so it also covers a student who bookmarks straight into an
+  // authenticated page and never renders this component at all. See
+  // AuthProvider.tsx and PERFORMANCE.md §6.
 
   return (
     <div className="grid min-h-full bg-canvas text-ink xl:grid-cols-[minmax(0,520px)_1fr]">

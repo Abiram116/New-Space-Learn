@@ -29,8 +29,8 @@ import { Icon } from '../../components/ui/Icon'
 import { Logo, LogoMark } from '../../components/ui/Logo'
 import { cn } from '../../lib/cn'
 import { mapRange, useScrollProgress } from '../../lib/useScrollProgress'
-import { warmApi } from '../../lib/warmApi'
 import { HeroReveal } from './HeroReveal'
+import { EASE_CSS } from './language'
 import { SmoothScroll } from './SmoothScroll'
 import {
   attractor,
@@ -42,10 +42,10 @@ import {
 } from './wow'
 
 export function Landing() {
-  // Wake the free-tier backend while the visitor reads. By the time they reach
-  // "Start free" the API is usually up, so sign-up doesn't eat a ~30s cold
-  // start. Costs one fetch; see lib/warmApi.
-  useEffect(warmApi, [])
+  // The warm-up ping moved to AuthProvider (mounts above the router, fires on
+  // every load including this one) so it also covers a student who bookmarks
+  // straight into an authenticated page and never sees this component. See
+  // AuthProvider.tsx and PERFORMANCE.md §6.
 
   return (
     <SmoothScroll>
@@ -571,6 +571,7 @@ function Film() {
                     'h-px flex-1 transition-colors duration-300',
                     i === active ? 'bg-brand' : 'bg-line',
                   )}
+                  style={{ transitionTimingFunction: EASE_CSS }}
                 />
               ))}
             </div>
@@ -710,7 +711,10 @@ function DeckStage({ o, origin }: { o: number; origin?: Origin }) {
                   zIndex: 10 - Math.abs(Math.round(off)),
                 }}
               >
-                <div className="cardstock group flex h-full w-full flex-col justify-between rounded-xl p-4 transition-transform duration-300 ease-out hover:-translate-y-2.5 hover:rotate-[-1.5deg]">
+                <div
+                  className="cardstock group flex h-full w-full flex-col justify-between rounded-xl p-4 transition-transform duration-300 hover:-translate-y-2.5 hover:rotate-[-1.5deg]"
+                  style={{ transitionTimingFunction: EASE_CSS }}
+                >
                   <span className="setcode text-sun">Card {i + 1}</span>
                   <p className="text-[13.5px] font-semibold leading-snug text-ink">{q}</p>
                   <span className="setcode transition-colors group-hover:text-sun-deep">
@@ -748,11 +752,12 @@ function TestStage({ o, origin }: { o: number; origin?: Origin }) {
                 'flex items-center gap-2.5 rounded-[10px] border px-3 py-2 text-[13px]',
                 // Options lift on hover. A quiz answer is a thing you pick up,
                 // so it should move under the cursor before you commit.
-                'transition-transform duration-200 ease-out hover:-translate-y-0.5',
+                'transition-transform duration-200 hover:-translate-y-0.5',
                 i === 0
                   ? 'border-mint/40 bg-mint-soft text-mint-deep'
                   : 'border-line text-muted hover:border-line-dash',
               )}
+              style={{ transitionTimingFunction: EASE_CSS }}
             >
               <span
                 className={cn(

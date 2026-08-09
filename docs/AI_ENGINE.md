@@ -98,43 +98,47 @@ stage — see §11 for why.
   comment). Revisit only if chunk-boundary quality is ever measured as a
   real retrieval problem, not preemptively.
 
-## 4. Embedding — the pipeline's actual weak point
+## 4. Embedding — real, local, and off pending one migration
 
-**Code:** `api/app/services/embeddings.py::embed_texts`, `_stub_embedding`
+**Code:** `api/app/services/embeddings.py::embed_texts`, `EmbeddingProvider`,
+`LocalBgeEmbeddingProvider`, `StubEmbeddingProvider`
 
 - **Purpose:** turn each chunk into a vector that captures its meaning, so
   semantically similar text is geometrically close.
 - **Input:** a batch of chunk strings.
-- **Output:** a `vector(1536)` per chunk.
-- **Status (updated 2026-08-09): the provider is wired; the switch is off.**
-  Phase 0.1 replaced the `TODO` with a real OpenAI-compatible client
-  (batching, index-ordered results, dimension checking, typed errors), but
-  `USE_STUB_EMBEDDINGS=true` remains set in the local `.env`, `.env.example`,
-  and `render.yaml` because **no `EMBEDDING_API_KEY` is provisioned in any
-  environment**. Until one is, every call still routes through
-  `_stub_embedding()` — a deterministic hash, explicitly "not semantically
-  meaningful" — so **retrieval returns chunks in an arbitrary-but-consistent
-  order, not by relevance.**
-- **Turning it on:** set `EMBEDDING_API_KEY`, set `USE_STUB_EMBEDDINGS=false`,
-  then run `api/scripts/reembed_documents.py` once — documents ingested under
-  the stub keep their meaningless vectors otherwise, and nothing about them
-  looks broken from the outside.
-- **Fails safe by design:** `Settings.real_embeddings_enabled` requires the
-  flag *and* a key. Flipping the flag alone logs a loud one-time warning and
-  keeps using the stub, rather than failing every upload after the file is
-  already stored.
-- **Latency (stub):** microseconds, pure hashing. **Latency (real, once
-  wired):** a network call to an embedding provider — **estimated
-  100–300ms** for a small batch, run once per uploaded document (not per
-  chat turn — only the *question* needs embedding at query time, which is a
-  single short string).
-- **Cost (stub):** $0. **Cost (real):** priced in `COST_MODEL.md` §1 — this
-  is the one stage where "free" and "real" are currently in direct tension,
-  because Groq doesn't host an embedding endpoint on this account.
-- **Alternatives rejected:** none yet seriously evaluated in-repo beyond the
-  `TODO` pointing at OpenAI's `text-embedding-3-small` — the right first
-  move, priced in `COST_MODEL.md`, not an architecture decision requiring
-  its own ADR.
+- **Output:** a `vector(384)` per chunk (was `vector(1536)` — see below).
+- **Status (updated 2026-08-10): local model wired, benchmarked, and
+  measured to fit — one migration away from live.** [ADR-0012](adr/0012-local-embeddings-bge-small.md)
+  replaced the Phase-0.1 hosted OpenAI provider entirely, per an explicit
+  product decision: $0 recurring cost, no external API dependency. Now
+  **BGE-small-en-v1.5, quantized ONNX, via `fastembed`**, running
+  in-process — no API key, nothing to provision. `USE_STUB_EMBEDDINGS=true`
+  still holds, because `document_chunks.embedding` is still `vector(1536)`
+  and BGE-small outputs 384 dims — flipping the flag before the migration
+  runs would fail every real upload at the Postgres insert (loudly, not
+  silently — see the dimension check in `LocalBgeEmbeddingProvider`).
+- **Measured, not estimated, this time:** app baseline ~57–60MB, model
+  marginal ~170–200MB loaded / ~230MB peak while embedding, combined
+  ~250–290MB of Render's 512MB ceiling — full numbers and method in
+  ADR-0012. ~10ms/chunk, ~3ms/query — not a bottleneck.
+- **BGE-M3 evaluated and rejected for production, kept as an offline
+  quality benchmark only.** ~2.2GB model weights alone — 4–8x the entire
+  memory ceiling before the app is counted. Not a close call.
+- **Turning it on:** apply `supabase/migrations/20260810090000_embedding_dim_384.sql`
+  by hand in the Supabase SQL editor **first**, then set
+  `USE_STUB_EMBEDDINGS=false`, then run `api/scripts/reembed_documents.py`
+  once. (Low-stakes right now: `document_chunks` has zero rows in the live
+  database — there's nothing to re-embed yet.)
+- **Cold start:** a real, one-time cost this design accepts — ~15–24s on
+  the very first run after a fresh deploy (import + model download), ~3.4s
+  on subsequent cold-start wake-ups once the model is cached on disk.
+  Measured, in ADR-0012.
+- **Cost:** $0, permanently. No longer "in tension" with "free" — that
+  tension is what this decision closed.
+- **Alternatives rejected:** the hosted OpenAI provider (built, benchmarked,
+  removed — see ADR-0012's "Alternatives considered"); BGE-M3 in production;
+  a separate embedding microservice; offline/batch embedding (not needed —
+  measured latency fits the existing 25s inline budget with room to spare).
 
 ## 5. Retrieval
 
@@ -347,7 +351,7 @@ codebase uses instead (tagged evidence rows, not a unified object).
 | Upload | Yes | ~200–800ms (est.) | $0 |
 | Parsing | Yes (text); vision path costs an LLM call | 50–300ms text / LLM-call latency for images | $0 text / metered for images |
 | Chunking | Yes | <10ms (est.) | $0 |
-| Embedding | Provider wired; **flag off pending a key** | µs (stub) | $0 (stub); real cost priced in `COST_MODEL.md` |
+| Embedding | Local (BGE-small ONNX) wired; **flag off pending the vector(384) migration** | µs (stub) / ~10ms/chunk (real, measured) | $0, permanently |
 | Retrieval | Yes | ~300–700ms (2–3 sequential round trips, est.) | $0 |
 | Hybrid search | **Not built — sequenced after real embeddings** | — | — |
 | Reranking | **Not built — not justified at current scale** | — | — |
