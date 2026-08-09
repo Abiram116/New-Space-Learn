@@ -68,7 +68,7 @@ landing rebuild.
 
 Only the toasts. All three kinds failed WCAG AA — success 1.21:1, error
 1.97:1, and info **1.16:1** (white text on the near-white `--color-ink`,
-which `plan-frontend.md §14` had never noticed). Now 8.5–12.2:1 using the
+which `IMPLEMENTATION_PLAN.md` had never noticed). Now 8.5–12.2:1 using the
 `-soft`/`-deep` pairing the flashcard grade buttons already use. Verified by
 computing resolved contrast in a live browser.
 
@@ -80,7 +80,7 @@ Two documented claims turned out to be false, and are fixed in the docs:
   the mitigation and `PERFORMANCE.md §6` called it "already mitigated," but no
   ping existed outside `OfflineBanner` (which is behind auth). Now real, at
   Landing and the auth pages.
-- **`plan-frontend.md §15` was stale.** The display font is Archivo, not Big
+- **`IMPLEMENTATION_PLAN.md` was stale.** The display font is Archivo, not Big
   Shoulders Display, and `CodeMarquee` no longer exists — that half of the
   item is obsolete. The font race is real; axes were narrowed to what's
   actually used, which shortens the swap window without closing it.
@@ -90,7 +90,7 @@ Two documented claims turned out to be false, and are fixed in the docs:
 - `subspaces.py` keeps private copies of the `guards.py` helpers, and one
   raises `Forbidden` (403) where the shared guard raises `NotFound` (404) —
   contradicting the documented anti-enumeration choice. In
-  [backlog.md](backlog.md).
+  [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 - No frontend test runner is configured at all. Backend coverage now exists;
   `web/` has none.
 

@@ -32,8 +32,8 @@ saving.
 
 **What's not built:** password change and account deletion are absent by
 design-for-now, and Settings says so plainly rather than showing a button
-that does nothing (`architecture.md`'s intentional-gaps list). Account
-deletion is scoped in `plan-backend.md §7`.
+that does nothing (`ARCHITECTURE.md`'s intentional-gaps list). Account
+deletion is scoped in `IMPLEMENTATION_PLAN.md`.
 
 ---
 
@@ -66,9 +66,9 @@ right pattern to copy.
 
 **Consequence, stated plainly:** a single forgotten `assert_*` call is a
 silent cross-user data leak with no second line of defense in the request
-path. `architecture.md` records that this has already happened once and was
+path. `ARCHITECTURE.md` records that this has already happened once and was
 fixed. **There is currently no automated test preventing its recurrence** —
-this is the top-ranked item in `backlog.md`'s engineering-health list, and
+this is the top-ranked item in `IMPLEMENTATION_PLAN.md`'s engineering-health list, and
 the highest-value security work available in this codebase.
 
 **One notable subtlety** (`subspace_chat.py::_active_skills`): that helper
@@ -302,7 +302,7 @@ deployment, where §4's cross-tenant analysis also has to be redone.
 5. **Align `subspaces.py` with `guards.py`** — it keeps private copies of the
    ownership helpers, and one raises `Forbidden` (403) where the shared guard
    raises `NotFound` (404), contradicting the documented anti-enumeration
-   choice. See `backlog.md`.
+   choice. See `IMPLEMENTATION_PLAN.md`.
 6. **Cover the rate limiter with tests** — refill and exhaustion behaviour is
    still unverified.
 5. **Rate-limit non-LLM endpoints** (§7) — matters only once there's traffic

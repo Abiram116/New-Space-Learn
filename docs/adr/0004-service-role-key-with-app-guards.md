@@ -43,7 +43,7 @@ status code to confirm another user's row exists.
 
 **The cost is severe and must be stated without softening: a single forgotten
 `assert_*` call is a silent cross-user data leak with no second line of
-defense in the request path.** `architecture.md` records that this has
+defense in the request path.** `ARCHITECTURE.md` records that this has
 already happened once and was fixed by hand.
 
 **The benefit:** router code stays simple and readable; one request can span

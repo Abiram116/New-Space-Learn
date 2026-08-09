@@ -91,7 +91,7 @@ Visible in the map rather than hidden, which is the right failure mode.
 
 ## Consequences
 
-- `SOUL.md §8.3`/§11, `plan-backend.md §13`, `plan-frontend.md §19`, and
+- `SOUL.md §8.3`/§11, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`, and
   `IMPLEMENTATION_PLAN.md` Phase 4 were corrected to this specification.
 - Phase 4 now depends on Phase 2 for a stronger reason than before: confusion
   pairs aren't just edge *weights*, they're the only edge *source*. With no

@@ -115,7 +115,7 @@ outcomes. All the raw evidence is in the database. It is simply never assembled.
 The original draft asked whether to replace Subspace-as-folder with a first-class
 `Concepts` entity (hybrid or full-graph). **Neither.** A third option beats both:
 keep Subject → Subspace exactly as it is — it is RLS's ownership boundary, it is
-what students already think in, and `v2-review.md` already independently
+what students already think in, and `0002-reject-concept-graph-schema.md` already independently
 confirmed it shouldn't move — and treat a "concept" as **a short, normalized tag
 string**, not a row with a UUID and a resolution problem.
 
@@ -276,7 +276,7 @@ product:
   isn't, and the payoff doesn't clear the real cost. See §6.
 - **`co-failed` edge derivation.** Low signal even at zero cost.
 - **Any LLM-driven concept/entity extraction or resolution pipeline.** This is
-  the same "months of work, research-grade" problem `v2-review.md` already
+  the same "months of work, research-grade" problem `0002-reject-concept-graph-schema.md` already
   rejected once, for the auto-organized-knowledge-graph proposal. It does not
   become a good idea the second time it's proposed, under a different name.
 - **A pretty force-directed graph.** Beautiful, unreadable, universally
@@ -308,7 +308,7 @@ table at all beyond a couple of columns.
 | Cold start ~30s | **Warm the API from the landing page.** Fire a `/health` ping on load. Unrelated to this document's scope, but still the single highest-value performance trick available, and still costs one `fetch`. |
 | 500MB database | No new tables means no new storage budget spent on this work at all — the entire redesign fits inside a few added columns. |
 | Inline work only | Every new query here is O(rows for one user), read-only, no LLM call except the two structured-output tweaks (choice concept tags, subtopic-on-flashcards) that already happen inside an existing generation call. |
-| Single worker | Follow the standing rule from `plan-backend.md`: independent reads go through `asyncio.gather`; a chain of reads against the *same* remote Postgres from one request does not, per the measured 1566ms-vs-1114ms lesson in `spaces.py`. |
+| Single worker | Follow the standing rule from `IMPLEMENTATION_PLAN.md`: independent reads go through `asyncio.gather`; a chain of reads against the *same* remote Postgres from one request does not, per the measured 1566ms-vs-1114ms lesson in `spaces.py`. |
 
 ---
 
@@ -322,8 +322,8 @@ table at all beyond a couple of columns.
 | **D** | The Gap Map — concept-level, derived at render time (ADR-0011) | "Here's your revision plan, and here's why." |
 | **E** | Cross-subject transfer via subtopic string-match | "This is about to hurt you in another module." |
 
-Concrete backend/frontend task breakdowns for A–E live in `plan-backend.md` and
-`plan-frontend.md` (same numbering convention as every other epic there) —
+Concrete backend/frontend task breakdowns for A–E live in `IMPLEMENTATION_PLAN.md` and
+`IMPLEMENTATION_PLAN.md` (same numbering convention as every other epic there) —
 this document states the architecture; those state the work.
 
 **RAG and agents are not a phase.** They are the substrate all of this runs on
@@ -334,11 +334,11 @@ and they already exist.
 ## 12. The landing page
 
 The original draft proposed a 3D/SVG rendering of the concept graph as the
-landing hero. **Dropped** — not on merit, but because `plan-frontend.md` §16
+landing hero. **Dropped** — not on merit, but because `IMPLEMENTATION_PLAN.md` §16
 already scoped a different, more concrete hero (a looping video scene) that
 went through its own review and is already approved and sequenced. Two sibling
 documents proposing two different hero mechanisms is exactly the kind of
-drift `retrospective.md` already warns about. Defer to §16.
+drift `IMPLEMENTATION_PLAN.md` already warns about. Defer to §16.
 
 The instinct behind the original proposal — *make the moat visible, don't just
 claim it* — is still worth keeping, just aimed at the right place: the **Gap

@@ -23,7 +23,7 @@ cd api && uv sync && uv run uvicorn app.main:app --reload --port 8000
 
 Nothing else is required. If a key is missing, the feature that needs it
 degrades to a friendly placeholder instead of erroring — see
-[architecture.md](architecture.md#missing-configuration-never-crashes-the-app).
+[ARCHITECTURE.md](ARCHITECTURE.md#missing-configuration-never-crashes-the-app).
 
 **One `.env` at the repo root serves both apps.** The API points Pydantic
 Settings at it directly; `web/vite.config.ts` sets `envDir: '..'` so Vite

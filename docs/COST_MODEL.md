@@ -56,7 +56,7 @@ Model tiering (`config.py`) is the primary cost control already in place:
 | Tier | Model | Used for | Why this tier |
 |---|---|---|---|
 | Large | `llama-3.3-70b-versatile` | RAG chat, quiz/flashcard/note generation | Reasoning over real retrieved context and producing structured output — quality-sensitive work |
-| Fast | `llama-3.1-8b-instant` | Home brief, subspace-name suggestion | Short, low-stakes, template-shaped output. Explicitly *not* used for artifact generation without quality-checking first (`plan-backend.md §2`) |
+| Fast | `llama-3.1-8b-instant` | Home brief, subspace-name suggestion | Short, low-stakes, template-shaped output. Explicitly *not* used for artifact generation without quality-checking first (`IMPLEMENTATION_PLAN.md`) |
 | Vision | `qwen/qwen3.6-27b` | Image document ingestion only | The only image-capable model on the account |
 
 Per-request token estimates, from the actual prompt construction in
@@ -122,7 +122,7 @@ for storage reasons without acknowledging the retrieval cost.
 | Grading a card | $0 | Arithmetic + one write |
 | Submitting a quiz | $0 | Server-side comparison, no LLM |
 | Streak/heatmap/stats | $0 | SQL aggregation |
-| **Confusion pairs (`plan-backend.md §11`)** | **$0** | `GROUP BY` over existing rows, no LLM call — worth restating, since this is the product's flagship differentiator and it costs *nothing* per use |
+| **Confusion pairs (`IMPLEMENTATION_PLAN.md`)** | **$0** | `GROUP BY` over existing rows, no LLM call — worth restating, since this is the product's flagship differentiator and it costs *nothing* per use |
 | **Exam-aware scheduling (§12)** | **$0** | Arithmetic |
 | **Gap Map (§13)** | **$0** | Aggregation over existing rows |
 | Home brief | ~$0.0005 | Fast tier |
@@ -163,7 +163,7 @@ one. There is no automated check enforcing this today.
    `groq_model` (70B) for what is often a short continuation or a
    reformatting request. The fast tier may be sufficient for a large share of
    these. **Test output quality before switching** — the same caution
-   `plan-backend.md §2` applies to agents applies here; don't downgrade a
+   `IMPLEMENTATION_PLAN.md` applies to agents applies here; don't downgrade a
    tier on cost reasoning alone.
 3. **Watch `memory_scope: all` Skills.** A 40-turn history window builds the
    largest prompt in the product (~3–5k input tokens per turn) on the

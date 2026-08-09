@@ -27,7 +27,6 @@ import type { Settings as Prefs, StudentModel } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { PageSpinner } from '../../components/ui/PageSpinner'
@@ -174,12 +173,6 @@ export function Settings() {
             {name}
           </button>
         ))}
-        <button
-          onClick={doSignOut}
-          className="mt-auto rounded-[9px] px-2.5 py-2 text-left text-[13px] font-bold text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
-        >
-          Sign out
-        </button>
       </nav>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -195,7 +188,7 @@ export function Settings() {
           {prefs && active === 'Account' && (
             <>
               <SectionLabel>ACCOUNT</SectionLabel>
-              <Card className="flex items-center gap-3 p-4">
+              <div className="rounded-xl border border-line bg-surface flex items-center gap-3 p-4">
                 <span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-coral-soft text-xs font-semibold text-coral-deep">
                   {initials}
                 </span>
@@ -203,9 +196,9 @@ export function Settings() {
                   <b className="truncate block">{displayName}</b>
                   <div className="truncate text-xs text-muted">{email}</div>
                 </div>
-              </Card>
+              </div>
 
-              <Card className="flex flex-col gap-3 p-4">
+              <div className="rounded-xl border border-line bg-surface flex flex-col gap-3 p-4">
                 <div className="text-[13px] font-semibold text-ink">Change password</div>
                 <Input
                   type="password"
@@ -221,14 +214,14 @@ export function Settings() {
                 >
                   {passwordBusy ? 'Updating…' : 'Update password'}
                 </Button>
-              </Card>
+              </div>
             </>
           )}
 
           {prefs && active === 'Study' && (
             <>
               <SectionLabel>STUDY</SectionLabel>
-              <Card className="overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
                 <RowWithNumber
                   label="Daily goal"
                   suffix="cards"
@@ -263,7 +256,7 @@ export function Settings() {
                   saving={savingKey === 'spaced_pace'}
                   last
                 />
-              </Card>
+              </div>
               <p className="text-xs text-faint">
                 Reminders will resume when the notifier is live — your time is
                 saved either way.
@@ -280,7 +273,7 @@ export function Settings() {
                 strong areas are computed from your real quiz scores, not
                 something you set.
               </p>
-              <Card className="overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
                 <RowWithText
                   label="Learning style"
                   placeholder="e.g. visual, worked examples, analogies"
@@ -307,8 +300,8 @@ export function Settings() {
                   saving={savingKey === 'exam_context'}
                   last
                 />
-              </Card>
-              <Card className="p-3.5 text-[13px]">
+              </div>
+              <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
                 <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
                 <textarea
                   value={student.teaching_preference ?? ''}
@@ -324,10 +317,10 @@ export function Settings() {
                     <SavingDot />
                   </div>
                 )}
-              </Card>
+              </div>
 
               {(student.weak_areas.length > 0 || student.strong_areas.length > 0) && (
-                <Card className="p-3.5 text-[13px]">
+                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
                   <div className="mb-2 text-ink-3">From your quiz history</div>
                   <div className="flex flex-col gap-1.5">
                     {student.weak_areas.map((a) => (
@@ -343,7 +336,7 @@ export function Settings() {
                       </div>
                     ))}
                   </div>
-                </Card>
+                </div>
               )}
             </>
           )}
@@ -351,7 +344,7 @@ export function Settings() {
           {prefs && active === 'AI & sources' && (
             <>
               <SectionLabel>AI &amp; SOURCES</SectionLabel>
-              <Card className="overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
                 <RowWithToggle
                   label="Answer only from my docs"
                   hint="Refuses to guess when the sources don't cover a question."
@@ -369,14 +362,14 @@ export function Settings() {
                   }
                   last
                 />
-              </Card>
+              </div>
             </>
           )}
 
           {prefs && active === 'Skills' && (
             <>
               <SectionLabel>SKILLS</SectionLabel>
-              <Card className="flex flex-col gap-2 p-4">
+              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4">
                 <p className="text-sm text-muted">
                   Manage custom AI personas from any space's Skills tab. The
                   ones you turn on there are what the chat here will use.
@@ -394,14 +387,14 @@ export function Settings() {
                     subspace.
                   </p>
                 )}
-              </Card>
+              </div>
             </>
           )}
 
           {prefs && active === 'Privacy' && (
             <>
               <SectionLabel>PRIVACY</SectionLabel>
-              <Card className="flex flex-col gap-2 p-4 text-sm">
+              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4 text-sm">
                 <p className="text-muted">
                   Sign out on this device. Your data stays in your account.
                 </p>
@@ -411,10 +404,10 @@ export function Settings() {
                 >
                   Sign out
                 </Button>
-              </Card>
+              </div>
 
               <SectionLabel className="mt-1">DANGER ZONE</SectionLabel>
-              <Card className="flex flex-col gap-2 p-4 text-sm">
+              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4 text-sm">
                 <p className="text-muted">
                   Permanently delete your account and everything in it — every
                   subject, document, chat, note, deck, and quiz. This can't be
@@ -426,7 +419,7 @@ export function Settings() {
                 >
                   Delete account
                 </Button>
-              </Card>
+              </div>
             </>
           )}
         </div>

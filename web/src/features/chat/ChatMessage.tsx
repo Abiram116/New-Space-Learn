@@ -1,6 +1,7 @@
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
+import { Leaf } from '../../components/ui/Surface'
 import { MarkdownMessage } from './MarkdownMessage'
 
 export function ChatMessage({ message }: { message: Message }) {
@@ -20,7 +21,12 @@ export function ChatMessage({ message }: { message: Message }) {
 
   return (
     <Rise distance={6} className="max-w-[88%]">
-    <div className="flex flex-col gap-2.5 rounded-[16px_16px_16px_4px] border-[1.5px] border-line bg-surface p-3.5 text-[13.5px] leading-[1.55]">
+    {/* LEAF, not a bubble. The user's turn stays a bubble because it is a
+        thing they said; the answer is a thing they *read*, often several
+        paragraphs with citations under it. Giving both the same rounded
+        border made a long grounded answer look like a text message.
+        `p-0 pr-4` keeps the leaf's own left gutter as the margin rule. */}
+    <Leaf className="flex flex-col gap-2.5 py-1 pr-4 text-[13.5px] leading-[1.55]">
       {citations.length > 0 && (
         <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
           <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
@@ -54,7 +60,7 @@ export function ChatMessage({ message }: { message: Message }) {
           ))}
         </div>
       )}
-    </div>
+    </Leaf>
     </Rise>
   )
 }

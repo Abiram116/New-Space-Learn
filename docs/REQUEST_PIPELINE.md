@@ -1,10 +1,10 @@
 # Request Pipeline
 
 Every core user action, traced end to end — frontend trigger through backend
-processing through database write back to rendered UI. `SYSTEM_ARCHITECTURE.md
+processing through database write back to rendered UI. `ARCHITECTURE.md
 §3` already walks chat and upload in sequence-diagram form; this document
 covers the remaining surfaces and doesn't repeat those two. Caching
-(`MEMORY_ENGINE.md §2`) and the error envelope (`architecture.md`'s
+(`MEMORY_ENGINE.md §2`) and the error envelope (`ARCHITECTURE.md`'s
 "Error handling contract") are referenced, not re-explained.
 
 ---
@@ -26,7 +26,7 @@ origins."
    returns a markdown *fragment* (`NoteAiInlineOut.content_md`), not a new
    note. The frontend inserts it at the cursor inside the same note the
    student is already editing — origin is never special-cased in storage or
-   in the editor, matching `plan-frontend.md §10`'s "one editor, two
+   in the editor, matching `IMPLEMENTATION_PLAN.md`'s "one editor, two
    authors" requirement.
 
 **A defensive step worth knowing about if you touch this path:** the model
@@ -38,7 +38,7 @@ per its own comment. If you change the inline-AI prompt, keep this function;
 it's cheap insurance against a regression that's already happened once.
 
 **Storage shape:** `body_md` stayed a markdown string (see the correction
-logged in `plan-backend.md §9b`) — rendered through `tiptap-markdown`, not a
+logged in `IMPLEMENTATION_PLAN.md`) — rendered through `tiptap-markdown`, not a
 structured `jsonb` document. Every write path above produces markdown.
 
 ---
@@ -73,7 +73,7 @@ Two independent lifecycles share one table: **authoring** a deck, and
    optimistic UI, not an oversight. `flashcards.py`'s own docstring flags
    it: "kept in one place because they double as the client-side optimistic
    update. Keep the two in sync." **Anyone implementing exam-aware
-   scheduling (`plan-backend.md §12`) must update both copies** — adding
+   scheduling (`IMPLEMENTATION_PLAN.md`) must update both copies** — adding
    interval compression only server-side would make every compressed card
    flash the *uncompressed* interval for one round trip before correcting,
    a visible regression of the exact property this comment protects.
@@ -92,7 +92,7 @@ optimistically show.
 1. `POST /subspaces/{id}/quiz/generate` — same grounding discipline as
    flashcards (real retrieval, real history, typed `NothingIndexed` on empty
    retrieval). Each question is generated with `answer_index`, `source`, and
-   `subtopic` in one shot — `subtopic` is the field `plan-backend.md §10`
+   `subtopic` in one shot — `subtopic` is the field `IMPLEMENTATION_PLAN.md`
    already shipped and `§11`'s confusion-pair work will read from.
 2. Student answers client-side, no request per answer.
 3. `POST /quizzes/{id}/submit` — the **only** point of server contact after
@@ -118,7 +118,7 @@ list_decks()'s _bulk_counts computes { due, total, known_pct } per deck
 /me/stats (and the Home brief) read the same underlying tables fresh —
 never a cached "due count" that could drift from the actual due_at values
         ↓
-Home surfaces "N cards due" and, once plan-backend.md §1 ships fully,
+Home surfaces "N cards due" and, once IMPLEMENTATION_PLAN.md §1 ships fully,
 a specific suggested next action
 ```
 
@@ -126,7 +126,7 @@ Nothing here is pushed — every layer re-reads the tables it needs on its own
 request. The only thing that makes this feel instant rather than
 recomputed-every-time is the session cache (`MEMORY_ENGINE.md §2`), and that
 cache is explicitly cleared on exactly the two writes that would make it
-lie: card grading and quiz submission (`plan-backend.md`'s Responsiveness
+lie: card grading and quiz submission (`IMPLEMENTATION_PLAN.md`'s Responsiveness
 note). This is worth stating as a rule for any new write path: **if a new
 endpoint changes a number `/me/stats` or the brief surfaces, it must clear
 that cache key, or a student will see a stale number for up to the TTL.**
@@ -136,7 +136,7 @@ that cache key, or a student will see a stale number for up to the TTL.**
 ## Error handling, as it actually surfaces per flow
 
 The envelope itself (`{ "error": { "code", "message" } }`) is specified once
-in `architecture.md` and not repeated here. What's specific to each flow
+in `ARCHITECTURE.md` and not repeated here. What's specific to each flow
 above:
 
 - **Notes generation / inline AI:** `NothingIndexed` for generation (empty

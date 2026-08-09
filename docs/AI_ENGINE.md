@@ -7,7 +7,7 @@ with the reasoning, per `SOUL.md`'s standing rule: don't build the
 impressive-sounding thing without a real, current consumer for it.
 
 Latency figures marked "measured" come from comments already in the code
-(`plan-backend.md`'s responsiveness work). Figures marked "estimated" are
+(`IMPLEMENTATION_PLAN.md`'s responsiveness work). Figures marked "estimated" are
 reasoned from Groq's published inference characteristics and this stack's
 known request shape, not measured in this project — treat them as planning
 numbers, not SLAs, until someone times them for real.
@@ -151,12 +151,12 @@ stage — see §11 for why.
   + one `documents` lookup for names. **Measured pattern elsewhere in this
   codebase puts one warm Supabase round trip at ~150–257ms**; this stage is
   2–3 such round trips run sequentially (deliberately — see
-  `SYSTEM_ARCHITECTURE.md §5`'s note on why `asyncio.gather` is *slower*
+  `ARCHITECTURE.md`'s note on why `asyncio.gather` is *slower*
   against this specific remote Postgres).
 - **Cost:** $0 beyond the embedding call this stage depends on — pgvector
   search itself has no metered cost on Supabase's free tier.
 - **Alternatives rejected:** a dedicated vector database — see
-  `SYSTEM_ARCHITECTURE.md §4`. Rejected on the same grounds: no measurable
+  `ARCHITECTURE.md`. Rejected on the same grounds: no measurable
   latency win at this data volume, and a second free-tier account to run out
   of.
 
@@ -205,7 +205,7 @@ still a measured problem at that volume.
 - **Alternatives rejected:** letting each Skill define its own full system
   prompt (rather than a shared voice + an appended instruction fragment) was
   rejected during the Skills-as-behavior-package redesign
-  (`plan-backend.md`'s cross-cutting Voice & Identity note) — a shared
+  (`IMPLEMENTATION_PLAN.md`'s cross-cutting Voice & Identity note) — a shared
   `COMPANION_VOICE` fragment is what makes every surface sound like one
   mentor instead of a different assistant per feature.
 
@@ -278,13 +278,13 @@ codebase uses instead (tagged evidence rows, not a unified object).
   study from directly.
 - **Input:** a `subspace_id`, real retrieved context (`rag.retrieve`), recent
   chat history, the Student Model's context — never a bare topic string
-  handed to the model on faith (`plan-backend.md` §2's grounding fix).
+  handed to the model on faith (`IMPLEMENTATION_PLAN.md` §2's grounding fix).
 - **Output:** a full deck (N flashcards), a full quiz (N questions, each with
   `answer_index`, `source`, `subtopic`), or an inline note edit.
 - **Latency:** one LLM call at the `groq_model` (70B) tier — reasoning over
   real context is treated as genuinely different work from the brief's
   template-filling, and deliberately not downgraded to the fast tier for
-  cost reasons without checking output quality first (`plan-backend.md`'s
+  cost reasons without checking output quality first (`IMPLEMENTATION_PLAN.md`'s
   explicit note).
 - **Cost:** metered at `cost=2` (double a chat turn) via
   `consume_llm_quota` — priced in `COST_MODEL.md` §3.
@@ -314,7 +314,7 @@ codebase uses instead (tagged evidence rows, not a unified object).
 ## 14. Scheduling
 
 **Code:** `api/app/routers/flashcards.py::grade_card` (today);
-`plan-backend.md §12` (exam-aware compression, not yet built)
+`IMPLEMENTATION_PLAN.md` (exam-aware compression, not yet built)
 
 - **Purpose:** decide when a card comes due again.
 - **Algorithm today:** SM-2-lite — ease/interval adjustment per grade

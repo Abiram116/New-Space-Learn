@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-03 (original), extended 2026-08-05 (behavior package)
-- **Related:** `PRODUCT.md` "Capabilities and Constraints", `plan-backend.md §5`
+- **Related:** `PRODUCT.md` "Capabilities and Constraints", `IMPLEMENTATION_PLAN.md`
 
 ## Context
 
@@ -52,7 +52,7 @@ how the AI talks; an Agent makes you something.**
   in `notes`/`decks`/`quizzes`.
 
 **Extension (2026-08-05):** a Skill was originally a single `instructions`
-text blob. `plan-backend.md §5` upgraded it to a behavior package —
+text blob. `IMPLEMENTATION_PLAN.md` upgraded it to a behavior package —
 `instructions` kept its meaning as *reasoning style*, and `memory_scope`
 (`session`/`topic`/`all`) plus `output_format` were added. `capabilities`
 already served as the allowed-tools dimension. Existing rows migrated with no
@@ -69,7 +69,7 @@ real behavioral dimension rather than a longer prompt for its own sake.
   tokens/turn) on its highest-volume operation — noted as the primary cost
   lever in `COST_MODEL.md §6` if chat spend ever needs reducing.
 - Agent endpoints must ground themselves in real retrieved context, never a
-  bare topic string (`plan-backend.md §2`).
+  bare topic string (`IMPLEMENTATION_PLAN.md`).
 
 ## Future migration path
 

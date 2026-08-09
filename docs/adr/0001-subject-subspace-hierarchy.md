@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-08-05
 - **Supersedes:** nothing
-- **Related:** [ADR-0002](0002-reject-concept-graph-schema.md), `docs/v2-review.md`
+- **Related:** [ADR-0002](0002-reject-concept-graph-schema.md)
 
 ## Context
 
@@ -65,11 +65,11 @@ decision held on the remaining two.
 
 - `subspace_links` (a small join table), AI-suggested subspace naming on
   first upload, and concept tags on citations were built instead —
-  `plan-backend.md §4`.
+  `IMPLEMENTATION_PLAN.md`.
 - Cross-subject insight is reachable through tag matching rather than a
   resolved entity graph (see ADR-0002).
 - Anyone proposing this rearchitecture again needs to engage with
-  `v2-review.md` rather than restating the original case.
+  `0002-reject-concept-graph-schema.md` rather than restating the original case.
 
 ## Future migration path
 

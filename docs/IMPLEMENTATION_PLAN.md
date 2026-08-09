@@ -4,11 +4,16 @@ The sequenced build order for everything approved in this audit. Each phase
 compiles, deploys, and demos independently — no phase leaves the product in a
 half-migrated state.
 
-**Scope note:** this plan covers the approved SOUL.md redesign
-(`plan-backend.md §11–14` / `plan-frontend.md §17–19`) plus the engineering-
-health fixes this audit surfaced. It does **not** re-plan the already-shipped
-V1 epics, and it does not cover `plan-frontend.md §16` (the Higgsfield
-cinematic pass), which is deliberately its own asset-generation session.
+**Scope note:** this plan covers the approved SOUL.md redesign plus the
+engineering-health fixes the 2026-08-09 audit surfaced, and the design track
+below. It does **not** re-plan the already-shipped V1 epics.
+
+**This is the only plan.** `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`,
+`IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`, `0002-reject-concept-graph-schema.md` and `IMPLEMENTATION_PLAN.md` were
+five overlapping lists of the same work with a cross-referencing numbering
+scheme between them. Everything in them was either shipped or is restated
+here; they were deleted rather than left to drift. Their durable decisions
+live in [adr/](adr/README.md).
 
 **Team assumption:** two developers. Phases are sized to ≤1 week each. Where
 two tracks can genuinely run in parallel, that's called out — but note that
@@ -30,7 +35,7 @@ would produce a plan that breaks on contact.
 > | 0.4 citation validation | Done — 9 tests; the canonical text is also returned on the `done` event so the client reconciles. |
 > | 0.5 warm-up | Done, **and a doc error corrected**: the landing page never actually pinged. Now warms from Landing and the auth pages. Verified live (`GET /api/v1/health → 200`). |
 > | 0.6 docs gate | Done — `EXPOSE_API_DOCS`, off in `render.yaml`. Verified both states. |
-> | 0.7 browser verification | **Partially blocked.** Toast contrast and the landing font race are fixed and verified in-browser. The Notes editor and Profile empty state sit behind sign-in, which needs your credentials. |
+> | 0.7 browser verification | **Still partially blocked.** Toast contrast and the landing font race are fixed and verified in-browser. The Notes editor and Profile empty state sit behind sign-in and have *never been opened in a browser by anyone*. This is the oldest unpaid item in the plan. |
 
 **Why first:** two of these are correctness problems, not features, and one
 of them (embeddings) invalidates any retrieval-quality measurement taken
@@ -45,7 +50,7 @@ mean demoing confusion pairs over quizzes generated from arbitrary chunks.
 | 0.4 | **Validate citation markers server-side.** Post-stream regex range-check, dropping/flagging out-of-range `[[n]]` before persisting (`AI_ENGINE.md §10`, `SECURITY.md §4.2`). | Dev A | half day |
 | 0.5 | **Warm the app shell**, not just the landing page (`PERFORMANCE.md §6`) — fire the `/health` ping from `AppShell` mount too. | Dev A | 1 hour |
 | 0.6 | **Gate `/api/v1/docs` behind an env flag** (`SECURITY.md §9`). | Dev A | 1 hour |
-| 0.7 | **Click through the Notes editor in a real browser.** Rebuilt on Tiptap and **never visually verified** — flagged as the top priority by both `CHECKPOINT.md` and `design-plan.md §5`. Verify inline `/ai`, the toolbar, markdown round-tripping, and that no raw HTML or `**` reaches the screen. Also: Profile empty state, toast contrast (`plan-frontend.md §14`), landing font race + marquee gap (§15). | Dev B | 1 day |
+| 0.7 | **Click through the Notes editor in a real browser.** Rebuilt on Tiptap and **never visually verified** — flagged as the top priority by both `CHECKPOINT.md` and `IMPLEMENTATION_PLAN.md`. Verify inline `/ai`, the toolbar, markdown round-tripping, and that no raw HTML or `**` reaches the screen. Also: Profile empty state, toast contrast (`IMPLEMENTATION_PLAN.md`), landing font race + marquee gap (§15). | Dev B | 1 day |
 
 **Exit criteria:** real embeddings live and previously-ingested documents
 re-embedded; `pytest` green with guard + SM-2 coverage; a chat answer's
@@ -69,12 +74,14 @@ shape. Doing it alone, first, keeps the risky part small and isolated.
 
 | # | Task | Owner | Est. |
 |---|---|---|---|
-| 1.1 | **Extend `subtopic` tagging to flashcard generation** (`plan-backend.md §11`, part 1) — same pattern already shipped for quiz questions. | Dev A | half day |
+| 1.1 | **Extend `subtopic` tagging to flashcard generation** (`IMPLEMENTATION_PLAN.md`, part 1) — same pattern already shipped for quiz questions. | Dev A | half day |
 | 1.2 | **Change quiz `choices` to carry per-choice concept labels** — `list[str]` → `list[{text, concept}]` in the generation prompt and `QuizQuestion` schema. | Dev A | 1 day |
 | 1.3 | **Backward-compatible read path.** Existing `quizzes.questions` rows hold bare-string choices. The quiz-taking UI and scoring must handle both shapes — this is the one place in the redesign where a migration-shaped problem exists, and the answer is a tolerant reader, not a data migration (old quizzes simply won't contribute to confusion pairs). | Dev A | 1 day |
-| 1.4 | **Split `me.py`** (679 lines, largest backend file) into `me_brief.py` / `me_stats.py` / `me_student_model.py` **before** Phase 2 adds two more endpoints to it (`backlog.md`). | Dev B | 1 day |
-| 1.5 | **Split `FlashcardsView.tsx`** (1046 lines, 9 components) — extract `Review`/`CardFace`/`Summary` and the modals into sibling files, before Phase 3 adds the exam-countdown surface. | Dev B | 1–2 days |
-| 1.6 | **Measure `/me/stats` for real** and replace the simulated estimate (`PERFORMANCE.md §7`). | Dev B | 1 hour |
+| 1.4 | **Split `me.py`** (679 lines, largest backend file) into `me_brief.py` / `me_stats.py` / `me_student_model.py` **before** Phase 2 adds two more endpoints to it (`IMPLEMENTATION_PLAN.md`). | Dev B | 1 day |
+| 1.5 | **Split the three fat frontend files**, before new surfaces land in them. `FlashcardsView.tsx` (~1050 lines, 9 components) — extract `Review`/`CardFace`/`Summary` and the modals. `NotesView.tsx` (~850 lines) — extract the ~500-line `NoteEditor`. `Settings.tsx` (~660 lines) — its six `Row*` primitives (`RowShell`, `RowWithToggle`, `RowWithNumber`, `RowWithTime`, `RowWithText`, `RowWithSelect`) aren't settings-specific and belong in `components/ui/`. | Dev B | 2–3 days |
+| 1.6 | **Measure `/me/stats` for real** and replace the simulated estimate (`PERFORMANCE.md §7`). Note the endpoint has since been parallelized with `asyncio.gather` (8 round trips → 1), so the old estimate is doubly stale. | Dev B | 1 hour |
+| 1.7 | **Delete `subspaces.py`'s private guard copies.** It defines its own `_get_owned_subspace` / `_assert_space_owned` instead of calling `guards.py`, and `_assert_space_owned` raises `Forbidden` (403) where `guards.assert_space` raises `NotFound` (404). `guards.py` documents the 404 as deliberate: a 403 confirms the row exists and belongs to *somebody*, which is an enumeration oracle. Two behaviours, one contradicting a documented security decision. Still unfixed as of 2026-08-09. | Dev A | 2 hours |
+| 1.8 | **Configure a frontend test runner.** `web/` has no test tooling at all. The backend's 34 tests came out of Phase 0; the frontend has nothing equivalent, and `schedule.ts` is currently only covered indirectly by the backend's parity test. | Dev B | half day |
 
 **Exit criteria:** new quizzes generate tagged choices; old quizzes still
 take and score correctly; typecheck and tests green.
@@ -96,8 +103,8 @@ it costs $0 per use.
 |---|---|---|---|
 | 2.1 | **`GET /me/confusion-pairs`** — aggregate `(correct_concept, chosen_concept)` from `quiz_results` × `quizzes`, normalized, `count >= 3` (`KNOWLEDGE_MODEL.md §4`). | Dev A | 2 days |
 | 2.2 | **Feed it into the Home brief's suggestion** as one more candidate signal alongside lowest quiz average and overdue decks — reusing the existing selection logic, not adding a parallel one. | Dev A | 1 day |
-| 2.3 | **Quiz-results confusion card** (`plan-frontend.md §17`) — "You've confused X with Y four times," wired to the existing per-question `source` so it links to the passage that separates them (the "backward edge" from `SOUL.md §7`). | Dev B | 2 days |
-| 2.4 | **Empty/thin-data states.** With `count >= 3` gating, a new user sees nothing here for weeks. The card must be absent, not empty — and the brief must fall back cleanly. This is the `retrospective.md` standing-checklist item most likely to be skipped under demo pressure. | Dev B | half day |
+| 2.3 | **Quiz-results confusion card** (`IMPLEMENTATION_PLAN.md`) — "You've confused X with Y four times," wired to the existing per-question `source` so it links to the passage that separates them (the "backward edge" from `SOUL.md §7`). | Dev B | 2 days |
+| 2.4 | **Empty/thin-data states.** With `count >= 3` gating, a new user sees nothing here for weeks. The card must be absent, not empty — and the brief must fall back cleanly. This is the `IMPLEMENTATION_PLAN.md` standing-checklist item most likely to be skipped under demo pressure. | Dev B | half day |
 
 **Exit criteria:** a seeded account with real repeated wrong answers surfaces
 a real confusion pair, traced to a real passage; a fresh account shows no
@@ -129,7 +136,7 @@ parallelism note below.
 | 3.2 | **Interval compression in `grade_card()`** — when a computed `due_at` would land past the exam, compress to fit the runway. | Dev A | 1–2 days |
 | 3.3 | **Mirror the compression in the frontend's optimistic SM-2 copy** — non-negotiable, per `REQUEST_PIPELINE.md`: server-only compression would make every compressed card flash the wrong interval for one round trip. | Dev A | half day |
 | 3.4 | **Honest-cram UI** — visible "compressed to fit your exam" indicator and an explanation of what got sacrificed. `SOUL.md §8.2` calls the honesty load-bearing, not optional. | Dev B | 2 days |
-| 3.5 | **Flashcard grade-button interaction redesign** — flagged as "doesn't feel good" three times across `backlog.md`, `plan-frontend.md §7`, and `design-plan.md §3.5`, still unaddressed. This phase already touches the review surface; do it here rather than logging it a fourth time. | Dev B | 2 days |
+| ~~3.5~~ | ~~**Flashcard grade-button interaction redesign**~~ — **done 2026-08-09** in the design track below. Four bevelled chips in four hues became figures on a rule; see Design Phase 2. |
 
 **Exit criteria:** a subject with an exam 9 days out visibly compresses
 intervals, server and client agree, and the UI explains the trade.
@@ -151,8 +158,8 @@ request.
 
 | # | Task | Owner | Est. |
 |---|---|---|---|
-| 4.1 | **`GET /me/gap-map?subject_id=`** — nodes per normalized tag (size = question + flashcard count; colour = quiz average by tag), edges reusing Phase 2's confusion aggregation, plus a cross-subject flag per tag. All `GROUP BY`, no new table (`plan-backend.md §13`). | Dev A | 2 days |
-| 4.2 | **The view** (`plan-frontend.md §19`) — deliberately boring and readable. **Must be its own lazy route chunk** (`PERFORMANCE.md §2`: 245KB against a 250KB ceiling leaves ~5KB of headroom; a rendering library in a shared module blows the budget). | Dev B | 3 days |
+| 4.1 | **`GET /me/gap-map?subject_id=`** — nodes per normalized tag (size = question + flashcard count; colour = quiz average by tag), edges reusing Phase 2's confusion aggregation, plus a cross-subject flag per tag. All `GROUP BY`, no new table (`IMPLEMENTATION_PLAN.md`). | Dev A | 2 days |
+| 4.2 | **The view** (`IMPLEMENTATION_PLAN.md`) — deliberately boring and readable. **Must be its own lazy route chunk** (`PERFORMANCE.md §2`: 245KB against a 250KB ceiling leaves ~5KB of headroom; a rendering library in a shared module blows the budget). | Dev B | 3 days |
 | 4.3 | **The nodes-only state.** Before a student has three repeated confusions the map has no edges at all. This is correct, not empty — it must read as "nothing's gone wrong yet." Easiest thing to skip and most likely thing a fresh account sees. | Dev B | half day |
 | 4.4 | **Verify the "five-second scan" goal** — if the eye doesn't go straight to the worst edge, it has failed its own design brief and needs another pass, not a prettier one. | Both | half day |
 
@@ -166,7 +173,7 @@ identifiable at a glance; a fresh account sees a coherent nodes-only map.
 ## Phase 5 — Cross-subject transfer (3 days)
 
 Only startable once Phase 2 has produced real repeated tags across more than
-one subject (`plan-backend.md §14` — postponed deliberately, not forgotten).
+one subject (`IMPLEMENTATION_PLAN.md` — postponed deliberately, not forgotten).
 
 | # | Task | Est. |
 |---|---|---|
@@ -176,7 +183,59 @@ one subject (`plan-backend.md §14` — postponed deliberately, not forgotten).
 **Risk:** genuinely dependent on real usage data existing. If tags haven't
 accumulated across subjects yet, **this phase should slip rather than be
 demoed on synthetic data** — a fabricated cross-subject insight is exactly
-the invented-metric mistake `retrospective.md §4` warns about.
+the invented-metric mistake `IMPLEMENTATION_PLAN.md` warns about.
+
+---
+
+## Design track — the three materials (2026-08-09)
+
+Runs alongside the feature phases above and shares no files with them, so it
+parallelizes cleanly. It exists because of one complaint that turned out to
+be exactly right: *"you designed everything in a card approach — that is
+fine, but it's not great, and it doesn't match the theme."*
+
+The cause was not a missing idea. `components/ui/Surface.tsx` already defined
+three materials with a written rationale — **Card** (things you own), **Leaf**
+(things you read), **Ledger** (things you're measured against) — and was
+imported by zero files. Every screen rendered everything as cardstock, which
+is why nothing read as distinguished: when every object is the same material,
+being one means nothing.
+
+The one-line test, from `Surface.tsx`: *cardstock is a thing you HAVE; a leaf
+is a thing you're INSIDE; a ledger is a thing you're MEASURED AGAINST.*
+
+### Done
+
+| # | Phase | What changed |
+|---|---|---|
+| D1 | **Adopt the three materials** | Every screen audited against "is this owned, read, or measured?" Notes editor and chat answers → `Leaf`; quiz stems → `Leaf`; streak, quiz score panel, profile stat tiles, flashcard session summary → `Ledger`; flashcard faces and topic/source cards deliberately **stay** `Card`. Settings got no material at all — it has no owned, read, or measured objects, so its panels are plain. |
+| D2 | **Button purpose audit** | One pass per screen answering *why does this button exist here, and what pain does it solve?* Outcome was demotions and deletions, as expected. Sign out went from three places to one (Settings › Account, the only one with an explanation next to it). The flashcard grade row — flagged as feeling wrong three separate times — was rebuilt: four bevelled chips in four hues became figures on a rule, because grading is one ordered scale, not four categories, and the ascending intervals already say so in real numbers. `bevel3d` stopped being exported. Quiz "Back" demoted to ghost. The "keys 1–4" caption was deleted by folding the digit into each button. |
+| D3 | **Home as one composition** | Was four stacked sections and twelve borders. Now four bands on one sheet: streak, cards due, quiz average and weekly minutes as **four figures sharing one rule**, with the fortnight chart beneath them as evidence; the schedule and composition panels as ledgers; topic cards as the only cardstock left on the page. `foil` removed from every figure — an average is not something you won. `StreakLedger.tsx` became `Fortnight.tsx` and gave up its own surface. |
+
+### Open — pick up here
+
+| # | Phase | What it is |
+|---|---|---|
+| D4 | **Auth responsiveness** | Verify `features/auth/AuthShell.tsx` at 375px, 768px, 1024px and 1440px. The iPad-portrait case broke here once before, so 768px is the one to check first. |
+| D5 | **Landing motion consistency** | `features/landing/language.ts` defines one motion language and states nothing may invent its own. Audit `Landing.tsx`, `HeroReveal.tsx`, `wow.tsx` and `CardSequence.tsx` for durations and curves that bypass it. **Constraint, learned from a real bug — do not regress it:** none of `wow.tsx`'s wrappers may contain a `sticky` or `fixed` descendant. A transform on an ancestor re-parents both and silently unpins the scene. |
+| D6 | **Performance, cost, and repo standards** | Fold in `PERFORMANCE.md`'s own top two recommendations — warm the app shell rather than only the landing page (also task 0.5), and measure `/me/stats` for real (task 1.6). Then the broader pass: request-shape review against `COST_MODEL.md`, dependency audit, and the frontend test runner from task 1.8. |
+
+### The rules this track established
+
+Anything built after this point is held to them, because the whole point was
+to stop the app being a pile of undifferentiated objects:
+
+- **Pick the material before writing the markup.** If a new component doesn't
+  obviously fit Card, Leaf, or Ledger, the material question hasn't been
+  answered yet — that's the signal, not a reason to add a fourth material.
+- **`Card` is not the default.** It means *you own this*. Using it for a
+  figure or a paragraph is what caused this whole track.
+- **`foil` is for collectibles only.** Never on a measurement.
+- **A button earns its place or it goes.** Same action in two places means one
+  of them is wrong. Prefer demotion to deletion only when the demoted version
+  still does real work.
+- **Don't animate numbers.** One counting figure on a page is a focal point;
+  five is a slot machine.
 
 ---
 
@@ -231,19 +290,25 @@ shared files, no shared data.
 | SM-2 duplication drifts between Python and TypeScript | Medium | Medium — visibly wrong intervals | Phase 0.3's cross-implementation test, plus keeping 3.1–3.3 with one owner |
 | Gap Map blows the 250KB bundle ceiling | Medium | Medium | Lazy chunk from the first commit (4.2), verify bundle size in the phase's exit criteria |
 | Old bare-string quiz `choices` break scoring | Low | High — breaks a shipped feature | Phase 1.3's tolerant reader, explicitly tested against a pre-change quiz row |
-| Refactors (1.4, 1.5) introduce regressions in untested UI | Medium | Medium | Sequence them *before* new features land in those files, so a regression is attributable to one change |
-| Scope creep from `plan-frontend.md §16` (Higgsfield) | Medium | Medium — it's a whole session of asset work | Explicitly out of scope for this plan; schedule separately |
+| Refactors (1.4, 1.5) introduce regressions in untested UI | **High** — `web/` has no test runner (1.8) | Medium | Do 1.8 first, then sequence refactors *before* new features land in those files, so a regression is attributable to one change |
+| Landing/asset work re-opening as a time sink | Medium | Medium — asset generation is a whole session, not a task | The cinematic pass shipped 2026-08-09. Treat further landing work as a new, separately scheduled piece, not a tweak |
 
 ---
 
 ## Definition of done, per phase
 
-Inherited from the engineering constitution and `retrospective.md`'s standing
-checklist — a phase is not done until: it compiles and typechecks; its tests
-pass; **it has been clicked through in a real browser** (the single most
-repeated lesson in `retrospective.md` — "verify against the actual rendered
-output, never against 'it typechecks'"); every number on screen traces to a
-stored row; the empty/first-run and single-item states are handled; the
-relevant living doc (`plan-backend.md`, `plan-frontend.md`, or the doc set
-this audit produced) is updated in the same pass; and no known technical debt
-is introduced without being logged in `backlog.md`.
+A phase is not done until:
+
+1. It compiles and typechecks (`npx tsc -b --noEmit`, `ruff`).
+2. Its tests pass (`cd api && uv run pytest`).
+3. **It has been clicked through in a real browser.** This is the single most
+   repeated lesson this project has learned: verify against the actual
+   rendered output, never against "it typechecks." Every mistake worth
+   recording came from skipping it.
+4. Every number on screen traces to a stored row. No invented metrics.
+5. The empty, first-run, and single-item states are handled — a fresh account
+   is the state most likely to be shipped broken.
+6. The main bundle is still under the 250 KB gzipped ceiling
+   (`PERFORMANCE.md`).
+7. The relevant doc is updated in the same pass, and any technical debt
+   introduced is written into this plan rather than left in someone's head.

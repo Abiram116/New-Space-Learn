@@ -19,23 +19,24 @@ import type {
   Stats,
   StudyComposition,
   Subspace,
+  Tone,
 } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Tip } from '../../components/ui/Tip'
-import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { Stagger } from '../../components/ui/motion'
+import { CountUp, Stagger } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { Ledger } from '../../components/ui/Surface'
 import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
 import { subspacePath } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
-import { toneDot, toneSoft, toneText } from '../../lib/tone'
+import { toneDot, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
 import { useSpaces } from '../spaces/SpacesProvider'
-import { StreakLedger } from './StreakLedger'
+import { Fortnight } from './Fortnight'
 
 export function Home() {
   const { spaces, loading: spacesLoading } = useSpaces()
@@ -54,16 +55,16 @@ export function Home() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-7 px-4 py-7 sm:px-7 sm:py-9">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
         {/* ── The brief ── */}
-        <header className="flex flex-col gap-4">
+        <header className="flex flex-col gap-5 pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
           {brief.loading ? (
             <div className="flex flex-col gap-3">
               <Skeleton className="h-11 w-2/3 rounded-lg" />
               <Skeleton className="h-4 w-1/2 rounded" />
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex min-w-0 flex-col gap-2">
               <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
                 {brief.data?.headline ?? 'Ready when you are'}
               </h1>
@@ -75,7 +76,7 @@ export function Home() {
           )}
 
           {anySubspaces && first && (
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5">
               {brief.data?.suggestion ? (
                 /* This is the one action the product is actually
                    recommending, computed from real weak-signal data — it
@@ -108,6 +109,7 @@ export function Home() {
              companion introducing itself and what it will do, not a
              database reporting zero rows. */
           <EmptyState
+            className="my-6"
             icon="sparkle"
             title="Let's start with what you're studying"
             description="Give me a subject and a topic inside it, then drop in your lecture notes or a PDF. From there I'll answer from your own material, and turn what you cover into cards, notes and quizzes."
@@ -115,12 +117,32 @@ export function Home() {
           />
         )}
 
-        {/* ── Standing: the ledger leads, the two live counts flank it ── */}
+        {/* ── Standing: four figures on one rule, the fortnight as evidence ──
+
+            This was four separately-bordered cards in a 1.6fr/1tfr split, which
+            is what made Home read as a pile rather than a page. None of these
+            are objects you own, so none of them is cardstock: they are figures
+            you are measured against, and figures belong on a rule. The chart
+            sits directly beneath the rule they share, as the evidence for the
+            two of them that are time-based. */}
         {anySpaces && (
-          <section className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
-            <StreakLedger stats={stats.data} loading={stats.loading} />
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <StandingCard
+          <section className="flex flex-col gap-5 border-t border-line pt-7">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
+              <Figure
+                icon="flame"
+                label="Current streak"
+                value={stats.loading ? null : `${stats.data?.streak_days ?? 0}`}
+                unit={stats.data?.streak_days === 1 ? 'day' : 'days'}
+                tone="brand"
+                lit={(stats.data?.streak_days ?? 0) > 0}
+                detail={
+                  (stats.data?.streak_days ?? 0) > 0
+                    ? 'Consecutive days with something logged.'
+                    : 'Log anything today to start one.'
+                }
+                countUp
+              />
+              <Figure
                 icon="deck"
                 label="Cards due"
                 value={stats.loading ? null : `${due}`}
@@ -130,7 +152,7 @@ export function Home() {
                 detail={due > 0 ? 'Ready to review now.' : 'Nothing waiting. Nice.'}
                 to={first && due > 0 ? `${first.link}/flashcards` : undefined}
               />
-              <StandingCard
+              <Figure
                 icon="target"
                 label="Quiz average"
                 value={
@@ -150,23 +172,28 @@ export function Home() {
                 }
                 to={first ? `${first.link}/quizzes` : undefined}
               />
+              <Figure
+                icon="clock"
+                label="This week"
+                value={stats.loading ? null : `~${stats.data?.study_minutes_this_week ?? 0}`}
+                unit="min"
+                tone="mint"
+                lit={(stats.data?.study_minutes_this_week ?? 0) > 0}
+                detail="Estimated from what you completed."
+              />
             </div>
+            <Fortnight stats={stats.data} loading={stats.loading} />
           </section>
         )}
 
         {/* ── What's coming, and what you actually did ──
             Both read from the same `/me/stats` payload Home already waits on,
-            so neither costs a request. */}
+            so neither costs a request. Both are ledgers: a schedule and a
+            proportion are measurements, and the rule under each closes the
+            band before the topic cards below. */}
         {anySpaces && !stats.loading && stats.data && (
-          <section className="grid gap-3 lg:grid-cols-2">
-            <div className="flex flex-col gap-3">
-              <Tip id="home-forecast-v1" icon="clock">
-                Cards return on a schedule, not all at once. Today's column is
-                what's actually waiting — the rest is what's coming, so you can
-                see a heavy day before it lands.
-              </Tip>
-              <DueForecast days={stats.data.due_forecast} />
-            </div>
+          <section className="grid gap-x-10 gap-y-7 border-t border-line pt-7 lg:grid-cols-2">
+            <DueForecast days={stats.data.due_forecast} />
             <Composition
               data={stats.data.composition}
               dailyGoal={stats.data.daily_goal}
@@ -174,9 +201,11 @@ export function Home() {
           </section>
         )}
 
-        {/* ── Topics as face-up cards ── */}
+        {/* ── Topics as face-up cards ── ── the only cardstock on this page.
+            Everything above is a figure; a topic is a thing you own, so it is
+            the one object here that gets to sit on the table. */}
         {anySubspaces && (
-          <section className="flex flex-col gap-3">
+          <section className="flex flex-col gap-3 pt-8">
             <div className="flex items-baseline gap-3">
               <h2 className="nameplate text-[22px] text-ink">Your topics</h2>
               <span className="setcode">{entries.length} in play</span>
@@ -211,6 +240,7 @@ export function Home() {
 
         {anySpaces && !anySubspaces && (
           <EmptyState
+            className="my-6"
             icon="target"
             title="Your subject has no topics yet"
             description="Open it in the rail and add a topic — that's where documents, chat, and cards live."
@@ -225,7 +255,16 @@ export function Home() {
 
 // ── Pieces ─────────────────────────────────────────────────────────────
 
-function StandingCard({
+/**
+ * One measured figure on the standing rule.
+ *
+ * LEDGER, not cardstock — and deliberately not `foil`. The old `StandingCard`
+ * gave a quiz average the sheen of a collectible, which is exactly the wrong
+ * read: an average is not something you won, it is something you are measured
+ * against. `.ruled` gives it a rule to sit on and tabular digits so the four
+ * figures line up as a row rather than four boxes that happen to be adjacent.
+ */
+function Figure({
   icon,
   label,
   value,
@@ -234,57 +273,66 @@ function StandingCard({
   lit,
   detail,
   to,
+  countUp = false,
 }: {
   icon: IconName
   label: string
   value: string | null
   unit: string
-  tone: 'sun' | 'sky'
+  tone: Tone
   lit: boolean
   detail: string
   to?: string
+  countUp?: boolean
 }) {
+  const numeric = countUp && value !== null ? Number(value) : NaN
   const body = (
-    <Card
-      foil={lit}
+    <div
       className={cn(
-        'flex h-full flex-col gap-2.5 p-4 transition-transform duration-200',
-        to && 'hover:-translate-y-0.5',
-        lit && 'ring-1',
-        lit && { sun: 'ring-sun/30', sky: 'ring-sky/30' }[tone],
+        'ruled group flex h-full flex-col gap-1.5 pb-3',
+        to && 'cursor-pointer transition-colors hover:border-b-brand/50',
       )}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className={cn(
-            'grid h-6 w-6 place-items-center rounded-md',
-            toneSoft[tone],
-            lit ? toneText[tone] : 'text-faint',
-          )}
-        >
-          <Icon3D name={icon} size={14} lifted={lit} />
-        </span>
+      <span className="flex items-center gap-1.5">
+        <Icon
+          name={icon}
+          size={13}
+          filled={lit}
+          className={lit ? toneText[tone] : 'text-faint'}
+        />
         <span className="setcode">{label}</span>
-      </div>
+      </span>
 
       {value === null ? (
-        <Skeleton className="h-9 w-16 rounded" />
+        <Skeleton className="h-8 w-16 rounded" />
       ) : (
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className={cn(
-              'nameplate text-[40px] leading-none tabular-nums',
-              lit ? toneText[tone] : 'text-ink-3',
-            )}
-          >
-            {value}
-          </span>
+        <span className="flex items-baseline gap-1.5">
+          {/* Only the streak counts up. Everything else snaps — a page of
+              animating numbers reads as a slot machine, not a study app. */}
+          {countUp && Number.isFinite(numeric) ? (
+            <CountUp
+              value={numeric}
+              className={cn(
+                'nameplate text-[38px] leading-none tabular-nums',
+                lit ? toneText[tone] : 'text-ink-3',
+              )}
+            />
+          ) : (
+            <span
+              className={cn(
+                'nameplate text-[38px] leading-none tabular-nums',
+                lit ? toneText[tone] : 'text-ink-3',
+              )}
+            >
+              {value}
+            </span>
+          )}
           {unit && <span className="setcode">{unit}</span>}
-        </div>
+        </span>
       )}
 
       <p className="mt-auto text-[12px] leading-snug text-muted">{detail}</p>
-    </Card>
+    </div>
   )
   return to ? <Link to={to} className="contents">{body}</Link> : body
 }
@@ -372,7 +420,7 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
   const total = safe.reduce((n, d) => n + d.count, 0)
 
   return (
-    <Card className="flex flex-col gap-4 p-5">
+    <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
         <span className="setcode-strong">Coming due</span>
         <span className="setcode">next 7 days · {total} total</span>
@@ -408,7 +456,16 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
           ))}
         </div>
       )}
-    </Card>
+
+      {/* The mechanic behind the chart, once. Dismissible by id, and placed
+          under the bars rather than above them so it explains something the
+          reader has already seen. */}
+      <Tip id="home-forecast-v1" icon="clock">
+        Cards return on a schedule, not all at once. Today's column is what's
+        actually waiting — the rest is what's coming, so you can see a heavy
+        day before it lands.
+      </Tip>
+    </Ledger>
   )
 }
 
@@ -438,7 +495,7 @@ function Composition({
   const total = parts.reduce((n, p) => n + p.n, 0)
 
   return (
-    <Card className="flex flex-col gap-4 p-5">
+    <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
         <span className="setcode-strong">This week</span>
         <span className="setcode">what you did</span>
@@ -495,7 +552,7 @@ function Composition({
           ) : null}
         </>
       )}
-    </Card>
+    </Ledger>
   )
 }
 

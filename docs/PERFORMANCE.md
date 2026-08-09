@@ -13,12 +13,12 @@ before it's trusted further.
 | Landing page first paint | <1s | Static on Vercel, no backend dependency — should already meet this |
 | App shell interactive, backend warm | <500ms | Not independently measured; depends on auth verify + first data fetch |
 | App shell interactive, backend cold | Best-effort — Render free tier costs ~30s here, not a target to hit | Mitigated for landing visitors (health-ping warm-up per `SOUL.md §10`); **not mitigated for a student who bookmarks the app directly and lands past the landing page** — see §6 |
-| Simple list/get API call, warm | <300ms | One measured warm round trip to remote Supabase is ~150–257ms (`plan-backend.md`); most list endpoints are 1–2 round trips deep after the responsiveness pass |
+| Simple list/get API call, warm | <300ms | One measured warm round trip to remote Supabase is ~150–257ms (`IMPLEMENTATION_PLAN.md`); most list endpoints are 1–2 round trips deep after the responsiveness pass |
 | Chat time-to-first-token, warm | <1.5s | Retrieval (2–3 round trips) + Groq TTFT (estimated 300–600ms) — not independently measured end-to-end |
 | Quiz/flashcard generation (full artifact) | <6s | One 70B call generating N structured items — the slowest routine user-facing wait in the product; must always show a real loading state, never a bare spinner with no explanation |
 | Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | Not independently measured; falls back to "still processing, tap reprocess" on timeout rather than hanging |
 | First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-09: 147KB** entry (app), **~209KB** for a landing visit (entry + the lazy `Landing` chunk). The 245KB previously recorded here predates the landing rebuild and further splitting. |
-| Any in-app animation | ≤320ms (`design-plan.md §2`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
+| Any in-app animation | ≤320ms (`IMPLEMENTATION_PLAN.md`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
 
 These are planning targets, not SLAs verified by a monitoring system —
 this product has no APM. Treat every "not independently measured" note
@@ -30,15 +30,15 @@ above as a to-do, not a claim.
 
 - **Bundle:** route-level code splitting already moved Tiptap, Landing,
   Flashcards, and Quizzes out of the main chunk, cutting first load from
-  451KB to 245KB gzipped (`plan-backend.md`'s Responsiveness work). Split
+  451KB to 245KB gzipped (`IMPLEMENTATION_PLAN.md`'s Responsiveness work). Split
   chunks prefetch on idle so opening Notes/Cards/Quizzes for the first time
   doesn't cost a cold fetch on top of the click.
 - **Headroom is thin.** 245KB against a 250KB self-imposed ceiling leaves
-  ~5KB. The Gap Map (`plan-frontend.md §19`) will need a rendering approach
+  ~5KB. The Gap Map (`IMPLEMENTATION_PLAN.md`) will need a rendering approach
   — **budget it as its own lazy-loaded route chunk from the start**, the
   same way Tiptap is isolated today. Do not import a charting/graph library
   into a shared module that the main chunk pulls in.
-- **Motion:** governed by `design-plan.md §2`'s six rules (nothing over
+- **Motion:** governed by `IMPLEMENTATION_PLAN.md`'s six rules (nothing over
   ~320ms, stagger capped at ~240ms total, `prefers-reduced-motion` renders
   the final state, etc.) — not repeated here, just the pointer. Any new
   epic that adds motion (confusion-pair reveal, exam countdown) inherits
@@ -53,7 +53,7 @@ above as a to-do, not a claim.
 ## 3. Backend
 
 - **Round-trip discipline:** the standing rule is "independent awaits in one
-  handler are a latency bug" (`plan-backend.md`) — reach for
+  handler are a latency bug" (`IMPLEMENTATION_PLAN.md`) — reach for
   `asyncio.gather` when two reads don't depend on each other. This is
   correctly applied throughout the routers reviewed for this document
   (`notes.py`, `documents.py`, `flashcards.py`, `quizzes.py` all gather the
@@ -67,7 +67,7 @@ above as a to-do, not a claim.
   *other* gather-based optimization in this codebase (`/me/stats`, §5) was
   verified the same way or only reasoned about.
 - **In-process rate limiting** (`ratelimit.py`) costs nothing and is correct
-  for exactly one worker — see `SYSTEM_ARCHITECTURE.md §5` for when this
+  for exactly one worker — see `ARCHITECTURE.md` for when this
   stops being true.
 - **Inline document processing**, capped at 25s, is the direct performance
   consequence of "no background workers" — a document that can't finish in
@@ -147,7 +147,7 @@ both stand unreconciled:
   wall-clock numbers: 4 gathered calls (1566ms) lost to 4 sequential calls
   (1114ms) against this remote Postgres, because of TLS handshake overhead.
   Kept sequential.
-- `/me/stats` (`plan-backend.md`'s Responsiveness section) — went from 8
+- `/me/stats` (`IMPLEMENTATION_PLAN.md`'s Responsiveness section) — went from 8
   sequential round trips to `asyncio.gather`, reporting "8 deep (~1200ms) →
   1 deep (~150ms)." But that section's own header states the numbers are
   from "a 150ms *simulated* round trip, counting round-trip depth" — an

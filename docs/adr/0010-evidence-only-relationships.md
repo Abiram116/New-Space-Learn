@@ -33,7 +33,7 @@ Concretely, the permitted evidence types:
 | Relationship | Evidence | Status |
 |---|---|---|
 | `declared` — the student linked two topics | a `subspace_links` row | Built |
-| `confused-with` — you reliably pick B when the answer is A | a distractor tally over `quiz_results` | Approved, `plan-backend.md §11` |
+| `confused-with` — you reliably pick B when the answer is A | a distractor tally over `quiz_results` | Approved, `IMPLEMENTATION_PLAN.md` |
 | Weak/strong area | real quiz averages grouped from `quiz_results` | Built |
 | Citation | `document_id` + `locator` written at retrieval time | Built |
 
@@ -83,8 +83,8 @@ the implementation stays "evidence."* Both survive because understanding is
   this student struggles with" in Learning memory, for this reason.
 - Every computed signal is recalculated from raw rows on read, never cached as
   a derived value that could drift — a corollary of the same principle, and
-  the direct lesson from `retrospective.md §4`'s invented-metric mistake.
-- `retrospective.md`'s standing checklist enforces this at feature-review
+  the direct lesson from `IMPLEMENTATION_PLAN.md`'s invented-metric mistake.
+- `IMPLEMENTATION_PLAN.md`'s standing checklist enforces this at feature-review
   time: "Does every number/bar/chart point at something real and stored?"
 
 ## Future migration path

@@ -66,7 +66,7 @@ extraction pipeline; and no new attack surface.
 ## Consequences
 
 - `SOUL.md` was rewritten to reflect this; its duplicate draft was deleted.
-- `plan-backend.md §11–14` / `plan-frontend.md §17–19` carry the redesigned
+- `IMPLEMENTATION_PLAN.md` / `IMPLEMENTATION_PLAN.md` carry the redesigned
   epics; `IMPLEMENTATION_PLAN.md` sequences them.
 - The Gap Map was initially rescoped to **subspace-level** nodes here, to
   avoid needing a concept entity. That rescoping turned out not to be
@@ -79,7 +79,7 @@ extraction pipeline; and no new attack surface.
 - `co-failed` will never be built: low signal (two questions wrong in one
   attempt correlates with quiz difficulty and rushing at least as much as
   with a conceptual relationship).
-- `v2-review.md` gained a "Round 3" entry recording that this is the second
+- `0002-reject-concept-graph-schema.md` gained a "Round 3" entry recording that this is the second
   independent rejection of a concept graph on this stack.
 
 ## Future migration path

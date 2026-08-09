@@ -8,12 +8,13 @@ custom AI personas ("skills").
 
 Full docs live in [`docs/`](docs/README.md):
 
-- [**docs/architecture.md**](docs/architecture.md) — how the pieces fit
+- [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — how the pieces fit
   together, the data model, the AI layer, the design system.
+- [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) — the only
+  plan: what's left to build, in what order, and the definition of done
+  every phase is held to.
 - [**docs/setup.md**](docs/setup.md) — local dev, Supabase, Render, Vercel.
-- [**docs/retrospective.md**](docs/retrospective.md) — lessons from building
-  this, and the standing checklist every feature is held to.
-- [**docs/backlog.md**](docs/backlog.md) — open, unscheduled product ideas.
+- [**docs/adr/**](docs/adr/README.md) — the settled decisions, one per file.
 
 ## Quick start
 

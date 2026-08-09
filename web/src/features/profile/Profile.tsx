@@ -20,7 +20,7 @@ import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon, type IconName } from '../../components/ui/Icon'
 
 import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
+import { Ledger } from '../../components/ui/Surface'
 import { getCachedStats } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
@@ -30,8 +30,7 @@ import { toneSoft, toneText } from '../../lib/tone'
 const INTENSITY = ['bg-line-soft', 'bg-brand/25', 'bg-brand/55', 'bg-brand']
 
 export function Profile() {
-  const { user, signOut } = useAuth()
-  const { showError } = useToast()
+  const { user } = useAuth()
   const navigate = useNavigate()
   // Shared cache with Home — Profile was refetching the same payload on
   // every visit, which is the exact back-navigation cost fixed elsewhere.
@@ -49,15 +48,6 @@ export function Profile() {
         year: 'numeric',
       })
     : ''
-
-  const doSignOut = async () => {
-    try {
-      await signOut()
-      navigate('/signin', { replace: true })
-    } catch (err) {
-      showError(err)
-    }
-  }
 
   const d = stats.data
 
@@ -78,14 +68,11 @@ export function Profile() {
               {joined ? ` · collecting since ${joined}` : ''}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
-              <Icon name="settings" size={14} /> Settings
-            </Button>
-            <Button variant="danger" size="sm" onClick={doSignOut}>
-              Sign out
-            </Button>
-          </div>
+          {/* Only one action here. Profile is where you read your record;
+              signing out lives with the account it belongs to, in Settings. */}
+          <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
+            <Icon name="settings" size={14} /> Settings
+          </Button>
         </header>
 
         {stats.error && !stats.loading && (
@@ -143,8 +130,12 @@ export function Profile() {
         </section>
 
         <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
-          {/* Activity ledger */}
-          <Card className="flex flex-col gap-3 p-5">
+          {/* Activity ledger — and now actually a Ledger. This was already
+              named one in the markup while rendering as cardstock. Six months
+              of your own activity is the thing you are measured against; the
+              badge case beside it stays a Card because badges are things you
+              own. Those two being the same material was the confusion. */}
+          <Ledger className="flex flex-col gap-3 p-5 pt-0">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Activity</h2>
               <span className="setcode ml-auto">
@@ -165,9 +156,9 @@ export function Profile() {
               </div>
               <span className="setcode">More</span>
             </div>
-          </Card>
+          </Ledger>
 
-          {/* Badge case */}
+          {/* Badge case — stays a Card. Badges are earned objects you keep. */}
           <Card className="flex flex-col gap-3 p-5">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Badges</h2>
@@ -214,7 +205,10 @@ function StatTile({
 }) {
   const lit = value !== null && value !== '—' && value !== '0'
   return (
-    <Card foil={lit} className="flex flex-col gap-2 p-4">
+    // LEDGER — a streak count or a quiz average is a figure about you, not an
+    // object you hold. It also loses `foil`: foil is the collectible cue, and
+    // spending it on a statistic is what made every number look like loot.
+    <Ledger className="flex flex-col gap-2 p-4 pt-3">
       <span
         className={cn(
           'grid h-7 w-7 place-items-center rounded-md',
@@ -222,9 +216,6 @@ function StatTile({
           lit ? toneText[tone] : 'text-faint',
         )}
       >
-        {/* Badges are the one thing on Profile that genuinely IS an owned
-            object, so they get real relief — earned ones lift, locked ones sit
-            flat against the seal. */}
         <Icon3D name={icon} size={15} lifted={lit} />
       </span>
       {loading ? (
@@ -243,7 +234,7 @@ function StatTile({
         </div>
       )}
       <span className="setcode">{label}</span>
-    </Card>
+    </Ledger>
   )
 }
 

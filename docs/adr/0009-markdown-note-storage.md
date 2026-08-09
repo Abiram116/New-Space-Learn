@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-05
-- **Related:** `api/app/routers/notes.py`, `plan-frontend.md §10`, `plan-backend.md §9b`
+- **Related:** `api/app/routers/notes.py`, `IMPLEMENTATION_PLAN.md`, `IMPLEMENTATION_PLAN.md`
 
 ## Context
 
@@ -29,7 +29,7 @@ as ProseMirror JSON.
 1. **Hand-rolled `contentEditable` editor.** Rejected: the toolbar requirement
    (bold/italic/underline/strikethrough/lists at minimum) became explicit and
    non-negotiable, and hand-rolling a correct undo stack, keyboard shortcuts,
-   and list handling is substantial, high-risk work. `plan-frontend.md §10`
+   and list handling is substantial, high-risk work. `IMPLEMENTATION_PLAN.md`
    reasoned this through and landed on "whichever gets a correct, accessible
    toolbar with the least hand-rolled risk."
 2. **Tiptap with `jsonb` ProseMirror storage.** Rejected: it would require
@@ -72,7 +72,7 @@ enforcement mechanism.** The same principle applies to citation markers
 
 - Tiptap and its extensions are a real dependency weight — isolated into its
   own lazy route chunk, which is part of how first load got to 245KB gzipped.
-- `plan-backend.md §9b`, which framed this as an open question, was corrected
+- `IMPLEMENTATION_PLAN.md`, which framed this as an open question, was corrected
   to record the resolution.
 - If a future feature needs a node type markdown can't express (a rich
   embedded diagram, say), that's the trigger to revisit — not a reason to

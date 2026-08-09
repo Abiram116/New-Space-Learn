@@ -20,6 +20,7 @@ import { Icon } from '../../components/ui/Icon'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { CountUp, Stagger } from '../../components/ui/motion'
+import { Leaf, Ledger } from '../../components/ui/Surface'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -303,7 +304,10 @@ function QuizRunner({
             />
           </div>
         </div>
-        <div className="rounded-2xl border-[1.5px] border-line bg-surface p-6">
+        {/* LEAF — a question stem is prose you read before you can answer it,
+            not an object you own. The choices below stay as pressable
+            controls; only the stem changes material. */}
+        <Leaf className="py-2 pr-6">
           <div className="text-[15px] font-medium leading-relaxed">{q.q}</div>
           <div className="mt-4 flex flex-col gap-2">
             {q.choices.map((choice, i) => (
@@ -335,10 +339,14 @@ function QuizRunner({
               </button>
             ))}
           </div>
-        </div>
+        </Leaf>
         <div className="flex justify-between">
+          {/* Ghost, not secondary. Going back is a correction, not a step in
+              the task — and on wide screens the question grid already jumps
+              anywhere. Giving it equal weight to Next made every question
+              look like a two-way decision. */}
           <Button
-            variant="secondary"
+            variant="ghost"
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
             disabled={index === 0}
           >
@@ -406,7 +414,10 @@ function QuizResults({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-6">
-      <Card className="flex shrink-0 flex-col gap-3 p-5 lg:sticky lg:top-6 lg:w-64">
+      {/* LEDGER — a score is the definitive "measured against" object. As a
+          Card it sat next to the reviewed questions looking like another
+          artifact you'd collected, rather than the verdict on them. */}
+      <Ledger className="flex shrink-0 flex-col gap-3 p-5 pt-0 lg:sticky lg:top-6 lg:w-64">
         {/* The score is the moment this screen exists for — it counts up. */}
         <div className={cn('font-display text-5xl font-semibold', scoreClass)}>
           <CountUp value={result.score} />%
@@ -425,7 +436,7 @@ function QuizResults({
             Back to all quizzes
           </Button>
         </div>
-      </Card>
+      </Ledger>
 
       {/* Reviewed questions arrive in order rather than all at once, so the
           eye has somewhere to start. Capped stagger — see ui/motion. */}

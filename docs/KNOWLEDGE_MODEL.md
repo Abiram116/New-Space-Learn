@@ -67,8 +67,8 @@ never affects matching.
 | Artifact | Tag column | Status |
 |---|---|---|
 | Quiz question | `subtopic` (inside the `questions` jsonb array) | Shipped — generation prompt already requests it, frontend already renders it |
-| Flashcard | *(none yet)* | Planned, `plan-backend.md §11` — same pattern, one more field on the generation prompt |
-| Quiz choice (distractor) | *(none yet)* | Planned, `plan-backend.md §11` — required specifically for confusion pairs, see §4 below |
+| Flashcard | *(none yet)* | Planned, `IMPLEMENTATION_PLAN.md` — same pattern, one more field on the generation prompt |
+| Quiz choice (distractor) | *(none yet)* | Planned, `IMPLEMENTATION_PLAN.md` — required specifically for confusion pairs, see §4 below |
 | Note | *(none yet)* | Not scheduled — no current feature needs a note-level tag; add only if one emerges |
 
 **What this deliberately gives up, restated from `SOUL.md §5`:** "Bayes'
@@ -85,7 +85,7 @@ This is the one relationship in the model that needs slightly more schema
 than "a tag on a row" — a wrong quiz answer needs to know *which concept the
 wrong choice represented*, not just which concept the question was about.
 
-**Planned schema change** (`plan-backend.md §11`, not yet built):
+**Planned schema change** (`IMPLEMENTATION_PLAN.md`, not yet built):
 
 ```jsonc
 // quizzes.questions[i], before:
@@ -100,8 +100,7 @@ wrong choice represented*, not just which concept the question was about.
   "answer_index": 0, "source": str, "subtopic": "Attention Mechanisms" }
 ```
 
-**The read-time query this enables** (conceptually — see `plan-backend.md
-§11` for the endpoint):
+**The read-time query this enables** (conceptually — see `IMPLEMENTATION_PLAN.md` Phase 2 for the endpoint):
 
 ```sql
 -- For every wrong answer this user has ever given, pair the concept they
@@ -191,7 +190,7 @@ under time pressure:
 |---|---|---|
 | "You've studied N days in a row" | `daily_activity` | `streaks.py::compute_streak` over `day` rows |
 | "You're weak on X" (subspace-level) | `quiz_results` joined through `quizzes` | `student_model.py::_quiz_signals`, min. 2 attempts |
-| "You're weak on X" (concept-level, planned) | Same tables, grouped by normalized `subtopic` | `plan-backend.md §11` |
+| "You're weak on X" (concept-level, planned) | Same tables, grouped by normalized `subtopic` | `IMPLEMENTATION_PLAN.md` |
 | "You've confused X with Y N times" (planned) | `quiz_results.answers` + tagged `choices` | §4 above |
 | A card is due today | `flashcards.due_at` | Direct column read, no derivation |
 | A citation's source | `chat_messages.citations[i]` / an artifact's `source` field | Written at generation time, never after |
@@ -201,5 +200,5 @@ under time pressure:
 
 If a future feature wants to show a number that isn't in this table, the
 first question is which existing row it derives from — per
-`retrospective.md`'s standing rule, if the honest answer requires inventing
+`IMPLEMENTATION_PLAN.md`'s standing rule, if the honest answer requires inventing
 a weighting formula, it doesn't ship until this table can name a row for it.

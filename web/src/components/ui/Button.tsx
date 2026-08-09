@@ -11,11 +11,9 @@ type Size = 'sm' | 'md' | 'lg' | 'xl'
  */
 /**
  * The `outline3d` press physics with no background of its own: a lit top bevel,
- * a 5px base edge, and real travel on :active. Exported so a tone-tinted
- * control (the flashcard grade row) can be the same object under the finger
- * without re-deriving the shadow stack or fighting the variant's gradient.
+ * a 5px base edge, and real travel on :active.
  */
-export const bevel3d = [
+const bevel3d = [
   'shadow-[inset_0_1.5px_0_rgba(255,237,220,0.12),0_5px_0_#191411,0_10px_20px_-8px_rgba(0,0,0,0.8)]',
   'hover:brightness-110',
   'active:translate-y-[5px]',

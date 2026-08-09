@@ -1,10 +1,14 @@
 /**
- * The streak ledger — Home's centrepiece.
+ * The fortnight — the evidence under Home's standing figures.
  *
- * Replaces three flat stat boxes with one thing worth looking at: your last
- * fortnight as a row of bars you can actually interrogate. Hovering a day
- * pulls its numbers up; the current streak reads as a run of lit bars rather
- * than a number you have to trust.
+ * Your last fourteen days as a row of bars you can interrogate. Hovering a day
+ * pulls its real number up; the current streak reads as a run of lit bars
+ * rather than a figure you have to take on trust.
+ *
+ * This used to own the streak number too, inside its own `Ledger` box. Home is
+ * one composition now: the streak sits on the standing rule above with the
+ * other three figures, and this is what stands underneath them as proof. So it
+ * draws no surface of its own — the band around it carries the rules.
  *
  * Everything here is measured. Bar height comes from logged study seconds and
  * nothing is invented to make the chart look fuller — an untouched day is a
@@ -13,14 +17,12 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { Stats } from '../../api/types'
-import { Icon } from '../../components/ui/Icon'
-import { CountUp } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
 
 const DAYS = 14
 
-export function StreakLedger({
+export function Fortnight({
   stats,
   loading,
 }: {
@@ -58,77 +60,50 @@ export function StreakLedger({
     return i
   }, [cells])
 
-  if (loading) return <Skeleton className="h-56 rounded-xl" />
+  if (loading) return <Skeleton className="h-36 rounded-xl" />
   if (!stats) return null
 
   const active = hover !== null ? cells[hover] : null
-  const streak = stats.streak_days
 
   return (
-    <section className="cardstock relative overflow-hidden rounded-xl p-5">
+    <div className="relative">
       {/* A warm wash behind the live run, so a streak literally glows. */}
-      {streak > 0 && (
+      {stats.streak_days > 0 && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0"
+          className="pointer-events-none absolute inset-x-0 bottom-0 top-6"
           style={{
             background:
-              'radial-gradient(60% 90% at 88% 100%, rgba(255,90,60,0.13), transparent 70%)',
+              'radial-gradient(55% 90% at 92% 100%, rgba(255,90,60,0.13), transparent 70%)',
           }}
         />
       )}
 
-      <div className="relative flex flex-wrap items-end gap-x-6 gap-y-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Icon
-              name="flame"
-              size={16}
-              filled={streak > 0}
-              className={streak > 0 ? 'text-brand' : 'text-faint'}
-            />
-            <span className="setcode">Current streak</span>
-          </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            {/* The streak is the one figure on Home worth a beat of its
-                own — it counts up rather than snapping. Everything else
-                stays still; a page of animating numbers reads as a slot
-                machine, not a study app. */}
-            <CountUp
-              value={streak}
-              className={cn(
-                'nameplate text-[56px] leading-none tabular-nums',
-                streak > 0 ? 'text-brand' : 'text-ink-3',
-              )}
-            />
-            <span className="setcode">{streak === 1 ? 'day' : 'days'}</span>
-          </div>
-        </div>
+      {/* Hovering a bar names the day and its real figure. Idle it prompts,
+          because the week's total already sits on the rule above — repeating
+          it here would be the same number twice in 100px.
 
-        {/* Hovering a bar swaps this readout; otherwise it shows the week.
-            This used to repeat a '▮' glyph per intensity step — a character
-            the display face doesn't carry, so it rendered as empty boxes,
-            and even correct it told you nothing. It shows the real figure
-            now. The '~' is honest: see the study-time model in
-            api/app/services/activity.py — these are estimates from completed
-            actions, not measured wall-clock time. */}
-        <div className="ml-auto text-right">
-          <span className="setcode">
-            {active ? formatDay(active.day) : 'This week'}
+          This readout used to repeat a '▮' glyph per intensity step: a
+          character the display face doesn't carry, so it rendered as empty
+          boxes, and even correct it told you nothing. The '~' is honest — see
+          the study-time model in api/app/services/activity.py; these are
+          estimates from completed actions, not measured wall-clock time. */}
+      <div className="relative flex h-6 items-baseline justify-between">
+        <span className="setcode">Last {DAYS} days</span>
+        {active ? (
+          <span className="flex items-baseline gap-2">
+            <span className="setcode">{formatDay(active.day)}</span>
+            <span className="text-[15px] font-bold tabular-nums text-ink">
+              {active.minutes > 0 ? `~${active.minutes}m` : 'Nothing'}
+            </span>
           </span>
-          <div className="mt-1 nameplate text-[26px] leading-none tabular-nums text-ink">
-            {active
-              ? active.minutes > 0
-                ? `~${active.minutes}m`
-                : 'Nothing'
-              : `~${stats.study_minutes_this_week}m`}
-          </div>
-        </div>
+        ) : (
+          <span className="setcode">Hover a day</span>
+        )}
       </div>
 
-      {/* The bars. */}
       <div
-        className="relative mt-5 flex h-28 items-end gap-1.5"
+        className="relative mt-2 flex h-24 items-end gap-1.5"
         onMouseLeave={() => setHover(null)}
       >
         {/* NO goal line here, deliberately. `daily_goal` is measured in CARDS
@@ -175,12 +150,7 @@ export function StreakLedger({
           )
         })}
       </div>
-
-      <div className="mt-2 flex items-center justify-between">
-        <span className="setcode">{DAYS} days ago</span>
-        <span className="setcode">Today</span>
-      </div>
-    </section>
+    </div>
   )
 }
 

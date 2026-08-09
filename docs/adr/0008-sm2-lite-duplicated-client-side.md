@@ -30,7 +30,7 @@ once in TypeScript.**
 
 1. **Full SM-2 / SM-17 / FSRS.** Rejected for now: materially more complex
    state per card, and the product's differentiating scheduling idea is
-   *exam-awareness* (ADR pending, `plan-backend.md §12`), which is a genuine
+   *exam-awareness* (ADR pending, `IMPLEMENTATION_PLAN.md`), which is a genuine
    improvement over vanilla SM-2 for students and is orthogonal to the base
    algorithm's sophistication. FSRS would be a better algorithm; it would not
    be a better *product* differentiator, and it's a heavier lift.

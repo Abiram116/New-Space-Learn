@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-03
-- **Related:** `api/app/services/supabase.py`, `docs/SYSTEM_ARCHITECTURE.md §5`
+- **Related:** `api/app/services/supabase.py`, `docs/ARCHITECTURE.md` (Trade-offs)
 
 ## Context
 

@@ -49,13 +49,13 @@ swapping providers or degrading gracefully never touches router code.
 
 **Cost:** total dependence on one provider's availability and model lifecycle.
 Groq retires model ids periodically, so the ids in `config.py` and
-`render.yaml` are a maintenance surface — `architecture.md` explicitly says to
+`render.yaml` are a maintenance surface — `ARCHITECTURE.md` explicitly says to
 confirm current ids against `GET /openai/v1/models` before changing them.
 
 **Benefit:** tiering *is* the primary cost control (`COST_MODEL.md`), and the
 `LLM` protocol means provider risk is contained to one file.
 
-**A deliberate restraint worth recording:** `plan-backend.md §2` explicitly
+**A deliberate restraint worth recording:** `IMPLEMENTATION_PLAN.md` explicitly
 forbids downgrading agent generation to the fast tier "for cost reasons
 without checking output quality first." Reasoning over real retrieved context
 is a genuinely different job from template-filling, and the cheaper tier is

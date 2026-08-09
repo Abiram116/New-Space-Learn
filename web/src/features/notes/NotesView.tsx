@@ -41,6 +41,7 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { Leaf } from '../../components/ui/Surface'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
@@ -703,7 +704,13 @@ function NoteEditor({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-8">
-        <div className="mx-auto flex h-full max-w-3xl flex-col gap-4">
+        {/* LEAF — the canonical case. A note is the one thing in this app you
+            are *inside* rather than holding, so it gets the margin rule and a
+            measure instead of a card's border and lift. `measure` caps the
+            line at 66ch, which replaces the arbitrary `max-w-3xl`: 3xl is a
+            width, 66ch is a reading length, and only one of those is about
+            the text. */}
+        <Leaf measure className="mx-auto flex h-full flex-col gap-4">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -809,7 +816,7 @@ function NoteEditor({
               if (files.length) void insertImageFiles(files)
             }}
           />
-        </div>
+        </Leaf>
       </div>
     </div>
   )

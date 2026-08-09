@@ -24,8 +24,9 @@ import {
 } from '../../api/flashcards'
 import type { Deck, Flashcard, Grade } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
-import { Button, bevel3d } from '../../components/ui/Button'
+import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
+import { Ledger } from '../../components/ui/Surface'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
@@ -45,23 +46,23 @@ import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
 /**
- * Grades read as a difficulty ramp, cold → hot, so the row is scannable.
+ * Grades read as a difficulty ramp, cold → hot.
  *
- * `text` is always the `-deep` ink and `bg` its matching `-soft` well — the
- * pure hue on the dark ground doesn't clear contrast. See lib/tone.
+ * `text` is the `-deep` ink — the pure hue on the dark ground doesn't clear
+ * contrast (see lib/tone). It tints the session tallies, where four figures
+ * do need telling apart at a glance. The grade row itself no longer uses it:
+ * see the note there.
  */
 const GRADES: {
   key: Grade
   label: string
   hotkey: string
   text: string
-  bg: string
-  border: string
 }[] = [
-  { key: 'again', label: 'Again', hotkey: '1', text: 'text-coral-deep', bg: 'bg-coral-soft', border: 'border-coral/30' },
-  { key: 'hard', label: 'Hard', hotkey: '2', text: 'text-sun-deep', bg: 'bg-sun-soft', border: 'border-sun/30' },
-  { key: 'good', label: 'Good', hotkey: '3', text: 'text-sky-deep', bg: 'bg-sky-soft', border: 'border-sky/30' },
-  { key: 'easy', label: 'Easy', hotkey: '4', text: 'text-mint-deep', bg: 'bg-mint-soft', border: 'border-mint/30' },
+  { key: 'again', label: 'Again', hotkey: '1', text: 'text-coral-deep' },
+  { key: 'hard', label: 'Hard', hotkey: '2', text: 'text-sun-deep' },
+  { key: 'good', label: 'Good', hotkey: '3', text: 'text-sky-deep' },
+  { key: 'easy', label: 'Easy', hotkey: '4', text: 'text-mint-deep' },
 ]
 
 type Mode =
@@ -696,9 +697,17 @@ function Review({
 
           {/* The grade row is always here — dimmed and out of the tab order
               until the card is flipped — so the card never jumps a row's
-              height at the moment you're reading the answer. */}
+              height at the moment you're reading the answer.
+
+              LEDGER, not cardstock. Grading is a measurement of your own
+              recall, so it sits on a rule with its interval as a figure. It
+              used to be four bevelled chips in four hues, which reads as four
+              unrelated categories — but grading is one ordered scale, and the
+              ascending intervals underneath already say so in real numbers.
+              Colour is left to carry the only categorical split there is:
+              Again means you didn't know it, the other three mean you did. */}
           <div className="flex w-full flex-col gap-3 pb-[5px]">
-            <div className="grid grid-cols-4 gap-2" aria-hidden={!mode.flipped}>
+            <div className="ruled-datum grid grid-cols-4" aria-hidden={!mode.flipped}>
               {GRADES.map((g) => (
                 <button
                   key={g.key}
@@ -706,28 +715,31 @@ function Review({
                   onClick={() => mode.flipped && grade(g.key)}
                   aria-disabled={!mode.flipped}
                   tabIndex={mode.flipped ? 0 : -1}
-                  aria-label={`${g.label} — next in ${previews[g.key]}`}
+                  aria-label={`${g.label} — press ${g.hotkey} — next in ${previews[g.key]}`}
                   className={cn(
-                    'flex flex-col items-center gap-0.5 rounded-[11px] border py-2.5',
-                    'text-[12.5px] font-bold transition-all duration-100 cursor-pointer',
-                    bevel3d,
-                    g.bg,
-                    g.text,
-                    g.border,
+                    'ruled group flex cursor-pointer flex-col items-center gap-1 px-1 py-3',
+                    'transition-colors duration-100 hover:bg-line-soft active:translate-y-px',
+                    'focus-visible:bg-line-soft focus-visible:outline-none',
                     !mode.flipped && 'pointer-events-none opacity-30',
                   )}
                 >
-                  {g.label}
-                  <span className="setcode tabular-nums">{previews[g.key]}</span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span
+                      className={cn(
+                        'text-[13px] font-bold',
+                        g.key === 'again' ? 'text-coral-deep' : 'text-ink-3',
+                        'group-hover:text-ink',
+                      )}
+                    >
+                      {g.label}
+                    </span>
+                    <span className="setcode tabular-nums">{g.hotkey}</span>
+                  </span>
+                  <span className="text-[12px] tabular-nums text-faint">
+                    {previews[g.key]}
+                  </span>
                 </button>
               ))}
-            </div>
-            {/* Held at height whether or not it says anything — the card face
-                carries the "Space to flip" hint on the other side of the flip. */}
-            <div className="flex h-4 justify-center">
-              <span className={cn('setcode', !mode.flipped && 'invisible')}>
-                keys 1–4
-              </span>
             </div>
 
             {/* The number under each grade is the single least obvious thing
@@ -863,7 +875,12 @@ function Summary({
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader title="Session complete" />
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
-        <Card foil className="flex w-full max-w-md flex-col gap-5 p-7 text-center">
+        {/* LEDGER — the session verdict, not a trophy. `foil` in particular
+            had to go: foil is this system's cue for a collectible, and putting
+            it on a score turned "you got 60%" into something that looked like
+            a reward for getting 60%. The card faces you just reviewed stay
+            Cards, because those genuinely are objects you own. */}
+        <Ledger className="flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center">
           <div>
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
             <p className="setcode mt-1">solid on {deckName}</p>
@@ -902,7 +919,7 @@ function Summary({
               </Link>
             )}
           </div>
-        </Card>
+        </Ledger>
       </div>
     </div>
   )

@@ -11,8 +11,8 @@ wrong without its context. Routine choices (a library version, a file
 layout) do not.
 
 **Relationship to the other docs:** ADRs are the immutable record of *why a
-choice was made at a point in time*. The living documents (`architecture.md`,
-`plan-backend.md`, `SOUL.md`, and the rest) describe *how the system works
+choice was made at a point in time*. The living documents (`ARCHITECTURE.md`,
+`IMPLEMENTATION_PLAN.md`, `SOUL.md`, and the rest) describe *how the system works
 now*. When they disagree, the living docs describe reality and the ADR
 explains how reality got that way.
 

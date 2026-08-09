@@ -4,7 +4,7 @@ This is the north star every future feature gets measured against. It came
 from a conversation the founder had exploring a rename (candidate: "Neura")
 — **the rename is undecided and not happening now**, but the identity shift
 underneath it is real and durable regardless of what the product ends up
-called. Read this before scoping anything in [backlog.md](backlog.md).
+called. Read this before scoping anything in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## The core shift
 
@@ -71,7 +71,7 @@ of this pattern — it doesn't greet with "Good evening," it says something
 specific to what the student actually did, grounded in real stored data
 (streak, cards due, last topic touched), with a hard guard against
 inventing numbers. **This is the prototype for the whole vision, not a
-one-off widget.** The `docs/backlog.md` item "Home brief as a recommendation
+one-off widget.** The "Home brief as a recommendation
 engine" is the most direct next step toward this — extending the brief from
 one re-entry line into an actual mentor's opening move (identify a weak
 area, name it, suggest the specific next action), the same shape as the
@@ -110,5 +110,5 @@ once the underlying data-grounding is real.
 
 Recorded as the durable vision, not an active task. No renaming, no new
 build work triggered by this note alone — it's the lens for evaluating and
-prioritizing everything already in [backlog.md](backlog.md), and for
+prioritizing everything already in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), and for
 judging any new feature proposal from here forward.
