@@ -17,8 +17,12 @@
 -- re-embedded, not just retyped. Check `select count(*) from
 -- document_chunks` first if any real uploads have happened since.
 --
--- NOT APPLIED AUTOMATICALLY. Run this by hand in the Supabase SQL editor,
--- per this repo's standing convention. After it succeeds:
+-- HOW TO APPLY: from the repo root, `npm run db:push` (Supabase CLI, pinned
+-- as a dev dependency). Run `npm run db:list` first and read docs/setup.md —
+-- migrations applied by hand in the SQL Editor are invisible to the CLI and
+-- need `supabase migration repair` before a push will do the right thing.
+--
+-- After it succeeds:
 --   1. Set USE_STUB_EMBEDDINGS=false in .env / the Render dashboard.
 --   2. From api/: uv run python scripts/reembed_documents.py
 --      (re-embeds anything that exists; safe to run even if nothing does).

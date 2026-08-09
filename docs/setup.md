@@ -34,21 +34,60 @@ once already, so it's called out here deliberately.
 ## Supabase setup
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. **Link the GitHub repo**: Dashboard → Database → Migrations → connect
-   this repo. In practice, this integration only reacts to *new* pushes
-   after it's connected — it won't retroactively run migrations that were
-   already in the repo when you connected it. If you connect it after the
-   fact, apply the existing migrations manually once via the SQL Editor:
-   paste each file in `supabase/migrations/`, in filename order, and run
-   them one at a time.
-   - The first migration enables `pgvector` and `pgcrypto`, creates every
-     table, and inserts a private Storage bucket named `documents`.
-   - The second migration enables RLS on every table and pins ownership to
+2. **Apply migrations with the CLI**, not the dashboard SQL Editor.
+
+   The SQL Editor's tabs live in *your browser's* local storage — they are
+   not stored in the project and a collaborator cannot see them. That is why
+   this repo keeps every schema change as a file in `supabase/migrations/`
+   and applies it from the terminal: the migration is the shared artifact,
+   the dashboard is not.
+
+   The CLI is pinned as a dev dependency (`npm i` at the repo root installs
+   it), so nobody needs a global binary and everyone runs the same version.
+
+   ```bash
+   npx supabase login                       # opens a browser once
+   npx supabase link --project-ref <ref>    # <ref> is in your project URL
+   npm run db:list                          # local vs remote — read this first
+   npm run db:push                          # applies everything not yet applied
+   ```
+
+   **Read `db:list` before you push.** It prints every migration with a
+   `Local` and a `Remote` column. The CLI decides what to apply by reading
+   `supabase_migrations.schema_migrations` on the remote — so any migration
+   that was applied *by hand* in the SQL Editor is invisible to it, shows a
+   blank `Remote`, and `db:push` will try to run it a second time. Most of
+   these files are not idempotent (`create table` without `if not exists`),
+   so that fails partway and leaves you guessing.
+
+   Fix it by telling the CLI what is already there, once, per version:
+
+   ```bash
+   npx supabase migration repair --status applied 20260803120000
+   ```
+
+   That only writes a bookkeeping row; it runs no SQL against your schema.
+   Repeat for each migration that is genuinely already applied, then
+   `db:list` again — every old one should show in both columns, and only
+   genuinely new work should remain to push.
+
+   What the base migrations do, if you need to reason about them:
+   - The first enables `pgvector` and `pgcrypto`, creates every table, and
+     inserts a private Storage bucket named `documents`.
+   - The second enables RLS on every table and pins ownership to
      `auth.uid()`.
-   - The third migration installs the `match_document_chunks` RPC (used by
-     RAG) and seeds four library Skills every user can add to their space.
-   - Later migrations are additive (e.g. widening the tone-color check
-     constraint) — apply them the same way.
+   - The third installs the `match_document_chunks` RPC (used by RAG) and
+     seeds four library Skills every user can add to their space.
+   - Later ones are additive (widening a check constraint, changing the
+     embedding vector width, and so on).
+
+   To write a new one: `npm run db:new -- some_change_name` creates a
+   correctly-timestamped empty file in `supabase/migrations/`. Commit it in
+   the same PR as the code that needs it.
+
+   If the dashboard's GitHub integration is also connected, pick one or the
+   other. Running both means a migration can be applied twice — once on push
+   to `main`, once by whoever runs `db:push` locally.
 3. **Google OAuth**: Dashboard → Authentication → Providers → Google. Paste
    the client id/secret from Google Cloud Console. Add
    `https://<your-vercel>.vercel.app/auth/callback` and

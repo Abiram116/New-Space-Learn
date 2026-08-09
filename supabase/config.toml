@@ -16,7 +16,15 @@ additional_redirect_urls = [
 
 [auth.external.google]
 enabled = true
-# Set client_id + secret in the Supabase dashboard, not here.
+# The real values live in the Supabase dashboard (Authentication →
+# Providers → Google), not here — this file is committed to the repo.
+# `env(...)` is the CLI's own convention for keeping secrets out of
+# config.toml while still satisfying its schema, which validates this
+# section even for commands that have nothing to do with auth (e.g.
+# `migration list`). Point both at names that don't need to resolve to
+# anything real for db-only commands to work.
+client_id = "env(SUPABASE_AUTH_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_GOOGLE_SECRET)"
 
 [storage]
 enabled = true

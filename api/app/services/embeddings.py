@@ -200,6 +200,48 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     return out
 
 
+async def warm_provider() -> None:
+    """Load the embedding model before the first upload needs it.
+
+    Why this exists: `documents.py` caps inline processing at
+    `PROCESSING_BUDGET_S` (25s) via `asyncio.wait_for`. On the first embed call
+    in a fresh process, `LocalBgeEmbeddingProvider._get_model()` pays ~15s of
+    `fastembed` import plus ~9s of model download on a cold cache (measured in
+    ADR-0012) *inside* that budget, before a single vector exists. It blows the
+    cap, `documents.py` catches `TimeoutError`, and the row is left at
+    `status: "processing"` — the "stuck at embedding chunks" symptom.
+
+    It's confusing to diagnose because `asyncio.wait_for` cannot cancel an OS
+    thread: the load finishes in the background anyway and populates
+    `self._model`, so a retry succeeds instantly and the failure looks
+    intermittent. On Render the container spins down and takes the disk cache
+    with it, so production pays the full cost on every cold start and fails far
+    more consistently than local does.
+
+    Raising the budget would only move where it hurts — the student would wait
+    40s on an upload instead of failing at 25. Loading here means the cost is
+    paid once, off the request path, while nobody is waiting.
+
+    Deliberately best-effort: this must never stop the API from starting. If
+    the model can't load, uploads fail loudly at `_embed_sync` with a real
+    cause, which is the behaviour that already exists.
+    """
+
+    if settings.use_stub_embeddings:
+        return
+
+    provider = _get_provider()
+    get_model = getattr(provider, "_get_model", None)
+    if get_model is None:
+        return
+
+    try:
+        await asyncio.to_thread(get_model)
+        log.info("embedding model warm and ready")
+    except Exception:
+        log.exception("embedding model warm-up failed; uploads will retry on demand")
+
+
 async def close_client() -> None:
     """Kept so `main.py`'s lifespan doesn't need to change per provider.
     The local model holds no network connection — nothing to close — but a

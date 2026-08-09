@@ -7,6 +7,7 @@ on Render's periodic restarts.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -44,7 +45,15 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Load the embedding model off the request path. Fired as a task rather
+    # than awaited: startup must not block on it, or Render's health check
+    # times out waiting for a model download. See embeddings.warm_provider for
+    # why the first upload can't be allowed to pay this cost itself.
+    warm = asyncio.create_task(embeddings.warm_provider())
+
     yield
+
+    warm.cancel()
     await supabase.close_client()
     await llm.close_llm()
     await embeddings.close_client()
