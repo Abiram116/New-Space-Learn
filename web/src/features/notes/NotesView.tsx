@@ -23,6 +23,7 @@ import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-detai
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
+import { healEscapedHtml } from './healHtml'
 import { ImageBlock } from './ImageBlock'
 import {
   availableCommands,
@@ -389,6 +390,33 @@ const MARKS: {
 /** Heading level, as a real choice rather than three separate toggles. */
 const HEADINGS = [1, 2, 3] as const
 
+/**
+ * Block shapes that are worth reaching for with text already selected.
+ *
+ * These were dropped when the permanent toolbar went, which was wrong: turning
+ * a paragraph you just wrote into a quote or a list is a thing you do *to
+ * existing text*, so a selection is exactly the right moment for it. `/` only
+ * helps at the start of an empty block, which is the other half of the job.
+ */
+const BLOCKS: {
+  key: string
+  label: string
+  title: string
+  run: (e: Editor) => void
+  active: (e: Editor) => boolean
+}[] = [
+  { key: 'bulletList', label: '••', title: 'Bulleted list', run: (e) => e.chain().focus().toggleBulletList().run(), active: (e) => e.isActive('bulletList') },
+  { key: 'orderedList', label: '1.', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive('orderedList') },
+  { key: 'taskList', label: '', title: 'To-do list', run: (e) => e.chain().focus().toggleTaskList().run(), active: (e) => e.isActive('taskList') },
+  { key: 'blockquote', label: '', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run(), active: (e) => e.isActive('blockquote') },
+]
+
+/** Icons for the two blocks whose glyph would otherwise be a guess. */
+const BLOCK_ICON: Record<string, IconName> = {
+  taskList: 'check',
+  blockquote: 'note',
+}
+
 function NoteEditor({
   note,
   subspaceId,
@@ -405,7 +433,10 @@ function NoteEditor({
   const [title, setTitle] = useState(note.title)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [aiBusy, setAiBusy] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  /** Set when "Ask AI" fires with nothing to work from — holds the range the
+      answer should replace while the student types what they actually want. */
+  const [askAi, setAskAi] = useState<{ from: number; to: number } | null>(null)
+  const [askText, setAskText] = useState('')
   // Title and body debounce separately. They used to share one timer, which meant
   // touching the title inside the 800ms window cleared the pending body save — the
   // edit was dropped while the header still reported "saved".
@@ -603,7 +634,12 @@ function NoteEditor({
       DetailsContent,
       Markdown.configure({ html: false, transformPastedText: true }),
     ],
-    content: note.body_md,
+    // Healed on the way in. Notes written before the backend stopped
+    // emitting escaped HTML have `&amp;lt;p&amp;gt;` saved in them, and every
+    // save added another layer — see healHtml.ts. Repairing here means
+    // opening the note fixes it, and the effect below writes the clean
+    // version back so it stays fixed.
+    content: healEscapedHtml(note.body_md),
     editorProps: {
       attributes: {
         // `notes-doc` ONLY — `chat-md` used to be applied alongside it and the
@@ -614,6 +650,12 @@ function NoteEditor({
         // headings, prose, lists, code, tables, images, toggles and the hljs
         // token palette are all defined there.
         class: 'notes-doc min-h-full text-[15px] leading-[1.75] outline-none',
+        // The browser's own spell checker — red underline, right-click for
+        // suggestions, the same behaviour as every other text field on the
+        // machine. ProseMirror leaves this off by default.
+        spellcheck: 'true',
+        autocorrect: 'on',
+        autocapitalize: 'sentences',
       },
       // Drop an image straight into the note, at the point you dropped it.
       handleDrop(view, event) {
@@ -660,6 +702,19 @@ function NoteEditor({
     editorRef.current = editor
   }, [editor])
 
+  /* Make the repair stick.
+     `healEscapedHtml` fixes what's on screen the moment the note opens, but
+     the database still holds the broken text until something writes. Saving
+     it here means opening an affected note once is enough — without this, a
+     note you read but don't edit would look fine and then come back broken. */
+  useEffect(() => {
+    if (!editor) return
+    const healed = healEscapedHtml(note.body_md)
+    if (healed !== note.body_md) saveBody(healed)
+    // Runs once per opened note; saveBody is stable per note id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, note.id])
+
   /** Runs a chosen slash command and clears the `/query` that triggered it. */
   const applyCommand = useCallback(
     (cmd: SlashCommand) => {
@@ -676,6 +731,14 @@ function NoteEditor({
           ed.state.selection.to,
           '\n',
         )
+        // "Ask AI" with nothing to go on is not a command, it's a question.
+        // Firing it straight at the model meant a blank note answered a
+        // prompt the student never wrote ("continue from where it leaves
+        // off" — from nothing), so it invented a topic. Ask them instead.
+        if (cmd.id === 'ai' && !sel.trim() && !slash.ctx.hasText) {
+          setAskAi({ from, to })
+          return
+        }
         void runInlineAi(cmd.ai(sel), from, to)
         return
       }
@@ -774,41 +837,20 @@ function NoteEditor({
           )}
         </span>
 
-        <div className="relative ml-auto">
-          <button
-            type="button"
-            aria-label="Note actions"
-            aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((v) => !v)}
-            className="grid h-7 w-7 place-items-center rounded-[8px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
-          >
-            <Icon name="settings" size={14} />
-          </button>
-          {menuOpen && (
-            <>
-              {/* Click-away sits behind the menu, not over it. */}
-              <button
-                type="button"
-                aria-hidden
-                tabIndex={-1}
-                onClick={() => setMenuOpen(false)}
-                className="fixed inset-0 z-30 cursor-default"
-              />
-              <div className="absolute right-0 top-9 z-40 w-44 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onDelete()
-                  }}
-                  className="flex w-full items-center gap-2 rounded-[7px] px-2 py-1.5 text-left text-[12.5px] text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
-                >
-                  <Icon name="trash" size={12} /> Delete note
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {/* One click, labelled, and it says what it deletes.
+            Burying this behind a gear was the wrong correction: it turned a
+            one-click action into three (gear, menu item, confirm). The
+            original problem was only that it was styled as loudly as a
+            primary action — so it stays visible and stays one click, just
+            quiet until you reach for it. The confirm dialog is the actual
+            safety net. */}
+        <button
+          type="button"
+          onClick={onDelete}
+          className="ml-auto flex items-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12.5px] text-muted transition-colors cursor-pointer hover:bg-coral-soft hover:text-coral-deep"
+        >
+          <Icon name="trash" size={13} /> Delete
+        </button>
       </div>
 
       {/* Formatting follows the selection. Nothing on screen until there is
@@ -858,6 +900,28 @@ function NoteEditor({
             </button>
           ))}
           <span className="mx-0.5 h-4 w-px bg-line" />
+          {BLOCKS.map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              title={b.title}
+              aria-label={b.title}
+              onClick={() => b.run(editor)}
+              className={cn(
+                'grid h-7 w-7 place-items-center rounded-md text-[11.5px] font-bold transition-colors cursor-pointer',
+                b.active(editor)
+                  ? 'bg-brand-soft text-brand-deep'
+                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
+              )}
+            >
+              {BLOCK_ICON[b.key] ? (
+                <Icon name={BLOCK_ICON[b.key]} size={12} />
+              ) : (
+                b.label
+              )}
+            </button>
+          ))}
+          <span className="mx-0.5 h-4 w-px bg-line" />
           {/* The one AI action worth reaching for mid-sentence. Everything
               else is a `/` away and doesn't need permanent real estate. */}
           <button
@@ -892,10 +956,19 @@ function NoteEditor({
             line at 66ch, which replaces the arbitrary `max-w-3xl`: 3xl is a
             width, 66ch is a reading length, and only one of those is about
             the text. */}
-        <Leaf
-          measure
-          className="mx-auto flex min-h-full flex-col gap-3 px-5 py-10 sm:py-14"
-        >
+        {/* The writing column is LEFT-aligned inside a centred page, not
+            centred itself.
+            Dead-centring a 66ch measure in a 1900px pane put the leaf's margin
+            rule in the middle of the screen with several hundred pixels of
+            empty gutter to its left — the rule read as a stray vertical line
+            rather than as the margin of a page. Anchoring the column to the
+            left of a bounded page puts the rule where a margin belongs and
+            moves the slack to the right, where a reader expects it. */}
+        <div className="mx-auto w-full max-w-5xl px-4 sm:px-8">
+          <Leaf
+            measure
+            className="flex min-h-full flex-col gap-3 py-10 pr-4 sm:py-14"
+          >
           {/* A title, not a form field. The bordered input made the first line
               of a note look like something to fill in rather than something to
               write. */}
@@ -939,6 +1012,45 @@ function NoteEditor({
                 the bottom of the page. A fixed anchor is always readable, and
                 the list is short enough that it never obscures the line being
                 written. */}
+            {/* Asking, not guessing. Appears in the same place the command
+                list was, so the interaction reads as one continuous step:
+                press /, pick Ask AI, say what you want. */}
+            {askAi && (
+              <div className="absolute left-0 right-0 top-0 z-30 rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <Icon name="sparkle" size={12} className="text-sky-deep" />
+                  <span className="setcode">What should I write?</span>
+                </div>
+                <input
+                  autoFocus
+                  value={askText}
+                  onChange={(e) => setAskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Escape') {
+                      setAskAi(null)
+                      setAskText('')
+                      editorRef.current?.commands.focus()
+                    }
+                    if (e.key === 'Enter' && askText.trim()) {
+                      e.preventDefault()
+                      const { from, to } = askAi
+                      const prompt = askText.trim()
+                      setAskAi(null)
+                      setAskText('')
+                      void runInlineAi(prompt, from, to)
+                    }
+                  }}
+                  placeholder="e.g. an overview of value iteration, with the update rule"
+                  className="w-full rounded-[9px] border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
+                />
+                <p className="mt-2 text-[11.5px] text-muted">
+                  Answers come from this topic’s material.{' '}
+                  <span className="text-faint">Enter to write · Esc to cancel</span>
+                </p>
+              </div>
+            )}
+
             {slash && (
               <div className="absolute left-0 right-0 top-0 z-30 max-h-[340px] overflow-y-auto rounded-xl border border-line bg-raised p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
                 <div className="setcode px-2 py-1.5">
@@ -1000,7 +1112,8 @@ function NoteEditor({
             )}
           </div>
 
-        </Leaf>
+          </Leaf>
+        </div>
       </div>
     </div>
   )
