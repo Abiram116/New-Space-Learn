@@ -16,6 +16,9 @@ import { Link } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../../api/documents'
 import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
+import { RelatedTopics } from '../spaces/RelatedTopics'
+import { DockPanelBody, type DockPanel } from './DockPanels'
+import { useDockWidth } from './useDockWidth'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
 import { SectionLabel } from '../../components/ui/Bits'
@@ -85,10 +88,15 @@ export function ContextDock({
   subspaceId,
   base,
   onRunAgent,
+  panel,
+  onClosePanel,
 }: {
   subspaceId: string
   base: string
   onRunAgent: (agent: AgentKey) => void
+  /** Which workspace panel is open, or null for the overview. */
+  panel: DockPanel
+  onClosePanel: () => void
 }) {
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId])
   const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
@@ -96,6 +104,13 @@ export function ContextDock({
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const {
+    width,
+    ref: dockRef,
+    dragging: resizing,
+    onPointerDown,
+    onKeyDown,
+  } = useDockWidth()
 
   const docList = docs.data ?? []
   const skillList = skills.data ?? []
@@ -118,7 +133,60 @@ export function ContextDock({
   )
 
   return (
-    <aside className="hidden w-[268px] shrink-0 flex-col gap-5 overflow-y-auto overflow-x-hidden border-l border-line bg-surface p-3.5 lg:flex">
+    <aside
+      ref={dockRef as React.RefObject<HTMLElement>}
+      style={{ width }}
+      className={cn(
+        'relative hidden shrink-0 flex-col border-l border-line bg-surface lg:flex',
+        // No width transition while dragging, or the panel lags the pointer.
+        !resizing && 'transition-[width] duration-200 ease-out',
+      )}
+    >
+      {/* Drag to resize. A wide hit area over a hairline rule: the rule is
+          what you see, the 9px is what you can actually grab. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panel"
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+        className={cn(
+          'absolute inset-y-0 -left-1 z-30 w-2.5 cursor-col-resize',
+          'after:absolute after:inset-y-0 after:left-1 after:w-px after:transition-colors',
+          resizing ? 'after:bg-brand' : 'after:bg-transparent hover:after:bg-brand/40',
+          'focus-visible:outline-none focus-visible:after:bg-brand',
+        )}
+      />
+
+      {/* The panel slides over the overview rather than replacing it, so
+          going back is a slide-out and the overview never has to re-mount or
+          refetch. `translate-x-full` parks it off to the right when closed. */}
+      {panel && (
+        <div
+          key={panel}
+          className={cn(
+            'absolute inset-0 z-20 flex flex-col bg-surface',
+            'motion-safe:animate-[dockIn_220ms_cubic-bezier(0.22,1,0.36,1)]',
+          )}
+        >
+          <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+            <button
+              type="button"
+              onClick={onClosePanel}
+              className="flex items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+            >
+              <Icon name="arrowLeft" size={13} /> Overview
+            </button>
+            <span className="setcode ml-auto">{PANEL_TITLE[panel]}</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+            <DockPanelBody panel={panel} subspaceId={subspaceId} base={base} />
+          </div>
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5">
       {/* ── Actions ── */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Do something with this</SectionLabel>
@@ -215,16 +283,47 @@ export function ContextDock({
         )}
       </section>
 
+      {/* ── Related topics ──
+          Here rather than only on the Docs page, because deciding that this
+          question also needs your linear-algebra notes happens *while* you
+          are asking it. Behind a page navigation, it was a setup-time
+          decision that in practice nobody revisited. */}
+      <section className="flex flex-col gap-2">
+        <SectionLabel>Related topics</SectionLabel>
+        <RelatedTopics subspaceId={subspaceId} layout="stack" />
+      </section>
+
       {/* ── Sources ── */}
       <section className="flex min-h-0 flex-col gap-2">
+        {/* One input for the whole section. It used to live inside the empty
+            state, which is why "+ Add" could not reach it the moment a first
+            document existed. */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files) void upload(e.target.files)
+            // Reset, or choosing the same file twice in a row fires nothing.
+            e.target.value = ''
+          }}
+        />
         <div className="flex items-center gap-2">
           <SectionLabel>Sources</SectionLabel>
-          <Link
-            to={`${base}/docs`}
-            className="setcode ml-auto transition-colors hover:text-brand-deep"
+          {/* Adding a source is the point of this panel, so it is a button
+              here rather than a trip to another page. Uploading already
+              worked in the dock — but only from the empty state, so the
+              moment you had one document the only way to add a second was to
+              leave chat entirely. */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="setcode ml-auto transition-colors cursor-pointer hover:text-brand-deep disabled:cursor-default disabled:opacity-50"
           >
-            Manage
-          </Link>
+            {uploading ? 'Uploading…' : '+ Add'}
+          </button>
         </div>
 
         {docs.loading ? (
@@ -253,27 +352,9 @@ export function ContextDock({
               if (e.dataTransfer.files.length > 0) void upload(e.dataTransfer.files)
             }}
           >
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
-              className="hidden"
-              onChange={(e) => e.target.files && upload(e.target.files)}
-            />
             <p className="text-[11.5px] leading-snug text-muted">
-              {uploading
-                ? 'Uploading…'
-                : 'Nothing indexed yet. Drop a file here, or'}
+              {uploading ? 'Uploading…' : 'Drop a PDF here, or click to choose one.'}
             </p>
-            {!uploading && (
-              <Link
-                to={`${base}/docs`}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-deep"
-              >
-                browse the Docs tab
-              </Link>
-            )}
           </DashedCard>
         ) : (
           <div className="flex flex-col gap-2">
@@ -283,6 +364,15 @@ export function ContextDock({
           </div>
         )}
       </section>
+      </div>
     </aside>
   )
+}
+
+/** Titles for the panel header — one place, so they cannot drift from tabs. */
+const PANEL_TITLE: Record<NonNullable<DockPanel>, string> = {
+  docs: 'Sources',
+  notes: 'Notes',
+  quizzes: 'Quizzes',
+  flashcards: 'Cards',
 }

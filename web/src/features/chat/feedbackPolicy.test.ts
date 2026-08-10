@@ -5,125 +5,225 @@
  * direction and the chips never appear, in the other and they appear under
  * every answer until the student stops seeing them. Neither throws, neither
  * shows up in a typecheck, and both destroy the feature.
+ *
+ * What these pin is a product rule rather than an implementation detail:
+ * **asking must be caused by an event, never by a clock.** The first version
+ * offered chips every fifth assistant turn, which interrupts a student who has
+ * given the system nothing new to learn. The suite is written so that
+ * reintroducing a turn-count trigger fails loudly.
  */
 
 import { describe, expect, it } from 'vitest'
 import type { Preference } from '../../api/feedback'
 import {
   AFTER_FEEDBACK_GAP,
-  CONFIDENT_ENOUGH,
-  ENOUGH_EVIDENCE,
+  CONTESTED_BELOW,
   LONG_ANSWER_CHARS,
-  TURN_GAP,
+  MIN_TURNS_BETWEEN_OFFERS,
+  askReason,
   chipsFor,
+  isContested,
   isSettled,
-  shouldAsk,
+  readSignal,
+  type AskInput,
 } from './feedbackPolicy'
 
-const base = {
-  chars: LONG_ANSWER_CHARS + 100,
-  assistantTurns: 10,
-  lastOfferedAt: null,
-  lastGivenAt: null,
-  preferences: [] as Preference[],
-  complete: true,
-}
-
-const pref = (over: Partial<Preference>): Preference => ({
+const pref = (over: Partial<Preference> = {}): Preference => ({
   key: 'explanation.length',
   value: 'concise',
   source: 'feedback',
-  confidence: 0.4,
-  evidence_count: 2,
-  because: 'x',
+  confidence: 0.9,
+  evidence_count: 8,
+  because: 'you said so',
   actionable: true,
   ...over,
 })
 
-describe('shouldAsk', () => {
+/** A turn where nothing notable happened and nothing blocks an ask. */
+const base = (over: Partial<AskInput> = {}): AskInput => ({
+  chars: 200,
+  signal: 'none',
+  regenerations: 0,
+  turnsSinceOffered: null,
+  turnsSinceGiven: null,
+  assistantTurns: 5,
+  preferences: [],
+  complete: true,
+  ...over,
+})
+
+describe('time alone never triggers an ask', () => {
+  it('stays silent on an ordinary turn, however many have passed', () => {
+    for (const assistantTurns of [2, 5, 10, 25, 100]) {
+      expect(askReason(base({ assistantTurns }))).toBeNull()
+    }
+  })
+
+  it('stays silent even long after the last offer', () => {
+    expect(askReason(base({ turnsSinceOffered: 50 }))).toBeNull()
+  })
+
+  it('is the regression guard — no counter may become a trigger', () => {
+    // If someone reintroduces "every N turns", this is the test that fails.
+    const quiet = Array.from({ length: 40 }, (_, i) =>
+      askReason(base({ assistantTurns: i + 2, turnsSinceOffered: i })),
+    )
+    expect(quiet.every((r) => r === null)).toBe(true)
+  })
+})
+
+describe('events trigger an ask', () => {
+  it('asks when the student is confused and gave no direction', () => {
+    expect(askReason(base({ signal: 'confusion' }))).toBe('confusion')
+  })
+
+  it('asks after a second consecutive regeneration, not the first', () => {
+    expect(askReason(base({ signal: 'regenerated', regenerations: 1 }))).toBeNull()
+    expect(askReason(base({ signal: 'regenerated', regenerations: 2 }))).toBe(
+      'repeated_regenerate',
+    )
+  })
+
+  it('asks when a dimension that matters here is contested', () => {
+    const contested = pref({ confidence: 0.2, evidence_count: 3 })
+    expect(askReason(base({ preferences: [contested] }))).toBe('contested')
+  })
+})
+
+describe('a directed request is answered, not re-asked', () => {
+  it('never asks after the student said which way to move', () => {
+    // The strongest rule in the policy: "explain simpler" IS the feedback.
+    expect(askReason(base({ signal: 'directed' }))).toBeNull()
+  })
+
+  it('outranks every trigger, including a contested dimension', () => {
+    const contested = pref({ confidence: 0.1, evidence_count: 4 })
+    expect(
+      askReason(base({ signal: 'directed', preferences: [contested], regenerations: 5 })),
+    ).toBeNull()
+  })
+})
+
+describe('floors gate the triggers', () => {
+  it('will not ask twice inside the offer gap, even on confusion', () => {
+    expect(
+      askReason(base({ signal: 'confusion', turnsSinceOffered: MIN_TURNS_BETWEEN_OFFERS - 1 })),
+    ).toBeNull()
+    expect(
+      askReason(base({ signal: 'confusion', turnsSinceOffered: MIN_TURNS_BETWEEN_OFFERS })),
+    ).toBe('confusion')
+  })
+
+  it('stays quiet for longer after the student actually gave feedback', () => {
+    expect(
+      askReason(base({ signal: 'confusion', turnsSinceGiven: AFTER_FEEDBACK_GAP - 1 })),
+    ).toBeNull()
+    expect(askReason(base({ signal: 'confusion', turnsSinceGiven: AFTER_FEEDBACK_GAP }))).toBe(
+      'confusion',
+    )
+  })
+
   it('never interrupts a stream', () => {
     // Chips under a growing answer move as it grows, and a control that moves
     // under the cursor is one that gets mis-tapped.
-    expect(shouldAsk({ ...base, complete: false })).toBe(false)
+    expect(askReason(base({ signal: 'confusion', complete: false }))).toBeNull()
   })
 
-  it('stays quiet on the first answer', () => {
-    // Nothing to compare against yet, so the opinion would be uncalibrated.
-    expect(shouldAsk({ ...base, assistantTurns: 1 })).toBe(false)
-  })
-
-  it('leaves a gap between offers', () => {
-    expect(shouldAsk({ ...base, lastOfferedAt: base.assistantTurns - 1 })).toBe(false)
-    expect(shouldAsk({ ...base, lastOfferedAt: base.assistantTurns - TURN_GAP })).toBe(true)
-  })
-
-  it('goes quiet for longer after feedback is actually given', () => {
-    // Evidence was just collected; asking again immediately spends attention
-    // for something already known.
-    expect(shouldAsk({ ...base, lastGivenAt: base.assistantTurns - 1 })).toBe(false)
-    expect(
-      shouldAsk({ ...base, assistantTurns: 30, lastGivenAt: 30 - AFTER_FEEDBACK_GAP }),
-    ).toBe(true)
+  it('never asks about the very first answer', () => {
+    expect(askReason(base({ signal: 'confusion', assistantTurns: 1 }))).toBeNull()
   })
 })
 
-describe('chipsFor', () => {
-  it('offers length complaints only when there is length to complain about', () => {
-    const long = chipsFor({ ...base, chars: LONG_ANSWER_CHARS + 1 })
-    const short = chipsFor({ ...base, chars: 80 })
-    expect(long).toContain('too_long')
-    // Offering "too long" under a two-line answer is how a feedback UI teaches
-    // people it isn't paying attention.
-    expect(short).not.toContain('too_long')
-    expect(short).toContain('want_detail')
+describe('readSignal', () => {
+  it('reads a direction as directed, so nothing is asked', () => {
+    for (const m of [
+      'can you explain simpler',
+      'give me more detail',
+      'too long, be concise',
+      'show me an example',
+      'go deeper on that',
+    ]) {
+      expect(readSignal(m), m).toBe('directed')
+    }
   })
 
-  it('always includes the positive option', () => {
-    // A row of complaints with no way to say "that was good" collects a biased
-    // sample and reads as an invitation to gripe.
-    expect(chipsFor(base)).toContain('useful')
+  it('reads being stuck as confusion, which does warrant asking', () => {
+    for (const m of ["i don't get it", 'I am lost', 'this makes no sense', "i'm confused"]) {
+      expect(readSignal(m), m).toBe('confusion')
+    }
   })
 
-  it('drops dimensions that are already settled', () => {
-    const chips = chipsFor({
-      ...base,
-      preferences: [pref({ confidence: CONFIDENT_ENOUGH })],
-    })
-    expect(chips).not.toContain('too_long')
-    // The rest of the row survives — one useful chip is still worth showing.
+  it('treats an ordinary follow-up as nothing to act on', () => {
+    expect(readSignal('what about the discount factor?')).toBe('none')
+  })
+
+  it('prefers direction over confusion when a message has both', () => {
+    // "I don't get it, can you simplify" states the fix — no need to ask.
+    expect(readSignal("i don't get it, can you simplify")).toBe('directed')
+  })
+})
+
+describe('chipsFor — what gets offered', () => {
+  it('offers nothing when there is no reason to ask', () => {
+    expect(chipsFor(base())).toEqual([])
+  })
+
+  it('offers length and depth options under a long answer', () => {
+    const chips = chipsFor(base({ signal: 'confusion', chars: LONG_ANSWER_CHARS }))
+    expect(chips).toContain('too_long')
     expect(chips).toContain('too_complex')
   })
 
-  it('stops asking entirely once every offered dimension is known', () => {
-    // The anti-nag mechanism, and the reason a cooldown alone isn't enough:
-    // this is what makes the asking fade out permanently rather than cycle.
-    const chips = chipsFor({
-      ...base,
-      preferences: [
-        pref({ key: 'explanation.length', confidence: 0.9 }),
-        pref({ key: 'explanation.depth', confidence: 0.9 }),
-        pref({ key: 'explanation.opens_with', confidence: 0.9 }),
-      ],
-    })
-    expect(chips).toEqual([])
+  it('does not offer "too long" under a short answer', () => {
+    const chips = chipsFor(base({ signal: 'confusion', chars: 50 }))
+    expect(chips).not.toContain('too_long')
+    expect(chips).toContain('want_detail')
   })
 
-  it('returns nothing when the policy says do not ask', () => {
-    expect(chipsFor({ ...base, complete: false })).toEqual([])
+  it('always ends with the positive option when it offers anything', () => {
+    expect(chipsFor(base({ signal: 'confusion' })).at(-1)).toBe('useful')
+  })
+
+  it('drops settled dimensions but keeps the rest of the row', () => {
+    const settled = pref({ key: 'explanation.length', confidence: 0.95 })
+    const chips = chipsFor(base({ signal: 'confusion', chars: 50, preferences: [settled] }))
+    expect(chips).not.toContain('want_detail')
+    expect(chips).toContain('need_example')
+  })
+
+  it('offers nothing at all once every candidate is settled', () => {
+    const all = [
+      pref({ key: 'explanation.length', confidence: 0.9 }),
+      pref({ key: 'explanation.opens_with', confidence: 0.9 }),
+    ]
+    expect(chipsFor(base({ signal: 'confusion', chars: 50, preferences: all }))).toEqual([])
   })
 })
 
-describe('isSettled', () => {
-  it('counts either confidence or accumulated evidence', () => {
-    expect(isSettled('too_long', [pref({ confidence: CONFIDENT_ENOUGH })])).toBe(true)
-    expect(
-      isSettled('too_long', [pref({ confidence: 0.1, evidence_count: ENOUGH_EVIDENCE })]),
-    ).toBe(true)
-    expect(isSettled('too_long', [pref({ confidence: 0.1, evidence_count: 1 })])).toBe(false)
+describe('isSettled and isContested are different questions', () => {
+  it('unknown is neither settled nor contested', () => {
+    expect(isSettled('too_long', [])).toBe(false)
+    expect(isContested('too_long', [])).toBe(false)
   })
 
-  it('treats an unknown dimension as unsettled', () => {
-    // `useful` carries no dimension, so it can never be "already known".
-    expect(isSettled('useful', [pref({ confidence: 0.99 })])).toBe(false)
+  it('confident is settled, not contested', () => {
+    const p = [pref({ confidence: 0.9, evidence_count: 2 })]
+    expect(isSettled('too_long', p)).toBe(true)
+    expect(isContested('too_long', p)).toBe(false)
+  })
+
+  it('low confidence with evidence on both sides is contested', () => {
+    const p = [pref({ confidence: CONTESTED_BELOW - 0.05, evidence_count: 3 })]
+    expect(isContested('too_long', p)).toBe(true)
+    expect(isSettled('too_long', p)).toBe(false)
+  })
+
+  it('low confidence with a single data point is early, not contested', () => {
+    expect(isContested('too_long', [pref({ confidence: 0.1, evidence_count: 1 })])).toBe(false)
+  })
+
+  it('treats a chip with no dimension as never settled', () => {
+    // `useful` carries no key; it must not be filtered out as "known".
+    expect(isSettled('useful', [pref()])).toBe(false)
   })
 })

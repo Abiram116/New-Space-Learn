@@ -130,7 +130,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
         const open = isOpen(space.id)
         return (
           <div key={space.id} className="group/space flex min-w-0 flex-col gap-0.5">
-            <div className="flex min-w-0 items-center">
+            <div className="group/row flex min-w-0 items-center">
               {renamingSpace === space.id ? (
                 <input
                   autoFocus
@@ -223,7 +223,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
             {open && (
               <div className="ml-4 flex min-w-0 flex-col gap-0.5 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
-                  <div key={sub.id} className="group/sub flex min-w-0 items-center">
+                  <div key={sub.id} className="group/row flex min-w-0 items-center">
                     {renamingSubspace === sub.id ? (
                       <input
                         autoFocus
@@ -394,8 +394,20 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
         aria-label={`Actions for ${name}`}
         title={`Actions for ${name}`}
         className={cn(
-          'grid h-7 w-7 place-items-center rounded-md transition-colors cursor-pointer',
+          'grid h-7 w-7 place-items-center rounded-md cursor-pointer',
+          'transition-[opacity,background-color,color] duration-150',
           open ? 'bg-line-soft text-ink' : 'text-muted hover:bg-line-soft hover:text-ink',
+          /* Quiet until you reach for it — but only where "reaching for it"
+             is a thing that exists. A plain `opacity-0` is what made this
+             control unreachable on a phone twice: no hover, no button, no way
+             to rename or delete anything. `@media (hover: hover)` scopes the
+             hiding to pointer devices; a touch screen keeps it visible. Focus
+             and the open state both override, so keyboard users are fine too.
+             `group-hover/row` is the shared hook both row types set. */
+          '[@media(hover:hover)]:opacity-0',
+          '[@media(hover:hover)]:group-hover/row:opacity-100',
+          '[@media(hover:hover)]:focus-visible:opacity-100',
+          open && '[@media(hover:hover)]:opacity-100',
         )}
       >
         <Icon name="more" size={15} />

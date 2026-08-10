@@ -72,3 +72,71 @@ export const BLOCK_ICON: Record<string, IconName> = {
   taskList: 'listTodo',
   blockquote: 'quote',
 }
+
+/**
+ * What AI can do to a piece of the document you have selected.
+ *
+ * The document-first idea: these do not open a panel or return a read-only
+ * answer — each one replaces or extends the selection *in place*, so the
+ * result is note content the student can immediately edit, reword or delete
+ * like anything else they wrote. An answer you cannot edit is a chat message
+ * that happens to be nearby.
+ *
+ * `replaces: true` means the selection is consumed (rewrite, simplify);
+ * `false` means the result is added after it (example, quiz), because
+ * destroying the passage you asked a question about is never what you meant.
+ */
+export type SelectionAction = {
+  id: string
+  label: string
+  /** Built from the selected text. */
+  prompt: (selection: string) => string
+  replaces: boolean
+}
+
+export const SELECTION_ACTIONS: SelectionAction[] = [
+  {
+    id: 'rewrite',
+    label: 'Rewrite',
+    replaces: true,
+    prompt: (s) =>
+      `Rewrite this more clearly, keeping the meaning and every fact exactly ` +
+      `as stated. Return only the rewritten passage:\n\n${s}`,
+  },
+  {
+    id: 'simplify',
+    label: 'Simplify',
+    replaces: true,
+    prompt: (s) =>
+      `Rewrite this so a student meeting the idea for the first time could ` +
+      `follow it. Keep every fact; drop jargon that isn't load-bearing and ` +
+      `explain the jargon that is. Return only the rewritten passage:\n\n${s}`,
+  },
+  {
+    id: 'example',
+    label: 'Add example',
+    replaces: false,
+    prompt: (s) =>
+      `Give one concrete worked example of this, grounded in the indexed ` +
+      `material. Return only the example, starting with "**Example.**":` +
+      `\n\n${s}`,
+  },
+  {
+    id: 'expand',
+    label: 'Expand',
+    replaces: false,
+    prompt: (s) =>
+      `Add the detail this passage leaves out — the conditions, the ` +
+      `mechanism, the exception — grounded in the indexed material. Return ` +
+      `only the additional prose, not a restatement:\n\n${s}`,
+  },
+  {
+    id: 'quiz',
+    label: 'Quiz me',
+    replaces: false,
+    prompt: (s) =>
+      `Write two questions that test whether someone understands this, with ` +
+      `the answer under each as a nested bullet. Return only the ` +
+      `questions:\n\n${s}`,
+  },
+]

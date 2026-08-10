@@ -309,7 +309,18 @@ function isAvailable(cmd: SlashCommand, ctx: SlashContext): boolean {
  * `doc.textContent` is a single walk ProseMirror already has to do, and the
  * heading count stops at two because that is all the threshold needs.
  */
-export function readContext(editor: Editor): SlashContext {
+export function readContext(
+  editor: Editor,
+  /**
+   * The range holding the `/query` the student is currently typing.
+   *
+   * **Load-bearing.** Without it, `hasText` is true the instant someone types
+   * `/ai` into an empty note — because "/ai" *is* text in the document — so
+   * every "is this note blank" check silently answers no, and a blank note is
+   * never treated as blank. That is a command being counted as content.
+   */
+  typing?: { from: number; to: number },
+): SlashContext {
   const { state } = editor
   const { from, to } = state.selection
   let headings = 0
@@ -317,8 +328,16 @@ export function readContext(editor: Editor): SlashContext {
     if (node.type.name === 'heading') headings += 1
     return headings < 2
   })
+  // Subtract by length rather than by string-replace: the typed query is a
+  // subset of the document text, but the same characters may legitimately
+  // appear elsewhere in the note, and removing the wrong copy would be worse
+  // than not removing one at all.
+  const total = state.doc.textContent.trim().length
+  const typed = typing
+    ? state.doc.textBetween(typing.from, typing.to, '').trim().length
+    : 0
   return {
-    hasText: state.doc.textContent.trim().length > 0,
+    hasText: total - typed > 0,
     hasSelection: from !== to,
     hasHeadings: headings >= 2,
   }

@@ -26,8 +26,17 @@ export const generateNote = (
 
 /** Backs the `/ai <prompt>` inline command — returns a markdown fragment
  *  to insert at the cursor, not a new note. */
+/** What an inline AI request was actually built from. */
+export type NoteCitation = {
+  marker: number
+  document_id: string
+  document_name: string
+  locator: string
+  snippet: string
+}
+
 export const noteAiInline = (subspaceId: string, prompt: string) =>
-  apiFetch<{ content_md: string }>(`/subspaces/${subspaceId}/notes/ai-inline`, {
-    method: 'POST',
-    body: { prompt },
-  })
+  apiFetch<{ content_md: string; citations: NoteCitation[] }>(
+    `/subspaces/${subspaceId}/notes/ai-inline`,
+    { method: 'POST', body: { prompt } },
+  )

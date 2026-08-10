@@ -170,6 +170,13 @@ def build_prompt(
     return messages, citations_meta
 
 
+def snippet(text: str, *, limit: int = 90) -> str:
+    """Public: notes cite the same way chat does, so they truncate the same
+    way too. Duplicating this would let the two drift into showing different
+    previews of the same chunk."""
+    return _snippet(text, limit=limit)
+
+
 def _snippet(text: str, *, limit: int = 90) -> str:
     text = " ".join(text.split())
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"

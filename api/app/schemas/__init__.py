@@ -140,6 +140,14 @@ class NoteAiInline(BaseModel):
 
 class NoteAiInlineOut(BaseModel):
     content_md: str
+    #: What the answer was actually built from.
+    #:
+    #: The retrieval already happened to build the prompt — throwing the
+    #: provenance away afterwards is what made an AI paragraph in a note
+    #: indistinguishable from one the student wrote, in a product whose whole
+    #: claim is that every statement traces to a source. Chat has carried
+    #: these since it shipped; notes did not.
+    citations: list[Citation] = []
 
 
 # ── Flashcards ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { FeedbackKind } from '../../api/feedback'
+import type { AskReason } from './feedbackPolicy'
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
@@ -9,12 +10,16 @@ import { MarkdownMessage } from './MarkdownMessage'
 
 export type MessageFeedback = {
   chips: FeedbackKind[]
+  /** Why the policy wants to ask, or null when it is only showing thumbs. */
+  reason: AskReason
   messageId: string
   subspaceId: string
   onRecorded: () => void
-  /** Fired when a non-empty row is actually shown, so the policy's turn
-   *  counter advances on display rather than on the decision to display —
-   *  otherwise a suppressed row would still start the cooldown. */
+  /** Fired only when an *ask* is actually shown, so the cooldown tracks
+   *  interruptions rather than renders. The passive thumbs appear on every
+   *  answer and must not start a cooldown — if they did, the one control that
+   *  is supposed to always be available would suppress the rare one that
+   *  isn't. */
   onOffered: () => void
 }
 
@@ -29,8 +34,12 @@ export function ChatMessage({
   // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
     return (
-      <Rise distance={6} className="max-w-[70%] self-end">
-        <div className="rounded-[16px_16px_4px_16px] bg-brand px-3.5 py-3 text-[13.5px] text-white whitespace-pre-wrap">
+      <Rise distance={10} className="max-w-[70%] self-end">
+        {/* Tinted, not saturated. A full-brand fill made every question the
+            loudest thing on screen — brighter than the answer it was asking
+            about, which inverts the hierarchy. `brand-soft` still reads as
+            "this one is mine" without shouting it. */}
+        <div className="rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-3.5 py-2.5 text-[14px] leading-relaxed text-ink whitespace-pre-wrap">
           {message.content}
         </div>
       </Rise>
@@ -46,7 +55,7 @@ export function ChatMessage({
         paragraphs with citations under it. Giving both the same rounded
         border made a long grounded answer look like a text message.
         `p-0 pr-4` keeps the leaf's own left gutter as the margin rule. */}
-    <Leaf className="flex flex-col gap-2.5 py-1 pr-4 text-[13.5px] leading-[1.55]">
+    <Leaf className="flex flex-col gap-2.5 py-1 pr-4 text-[14px] leading-[1.65]">
       {citations.length > 0 && (
         <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
           <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
@@ -85,7 +94,7 @@ export function ChatMessage({
         A `srv-` id means the server sent no message_id (an older backend), so
         there is nothing to attach feedback to — the row is skipped rather than
         posting against an id the server would reject. */}
-    {feedback && feedback.chips.length > 0 && !feedback.messageId.startsWith('srv-') && (
+    {feedback && !feedback.messageId.startsWith('srv-') && (
       <FeedbackRow feedback={feedback} />
     )}
     </Rise>
@@ -93,18 +102,20 @@ export function ChatMessage({
 }
 
 function FeedbackRow({ feedback }: { feedback: MessageFeedback }) {
-  const { onOffered } = feedback
+  const { onOffered, reason } = feedback
+  const asked = reason !== null && feedback.chips.length > 0
   // Reported on mount, not during render: telling the parent to advance its
   // counter while it is rendering is a setState-during-render warning and, in
   // StrictMode, a double count.
   useEffect(() => {
-    onOffered()
-  }, [onOffered])
+    if (asked) onOffered()
+  }, [asked, onOffered])
 
   return (
     <div className="mt-2">
       <FeedbackChips
         chips={feedback.chips}
+        reason={reason}
         messageId={feedback.messageId}
         subspaceId={feedback.subspaceId}
         onRecorded={feedback.onRecorded}

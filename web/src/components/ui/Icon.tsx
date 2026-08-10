@@ -44,18 +44,21 @@ export type IconName =
   | 'target'
   | 'clock'
   | 'sparkle'
-  | 'thumbUp'
-  | 'thumbDown'
   | 'offline'
   | 'alert'
   | 'more'
   | 'pin'
+  | 'thumbUp'
+  | 'thumbDown'
   | 'listBullet'
   | 'listOrdered'
   | 'listTodo'
   | 'quote'
   | 'code'
   | 'pencil'
+  | 'wrapLeft'
+  | 'wrapNone'
+  | 'wrapRight'
   | 'alignLeft'
   | 'alignCenter'
   | 'alignRight'
@@ -177,6 +180,34 @@ function paths(name: IconName, filled: boolean) {
       return <path d="M12 5.5v13M5.5 12h13" />
     case 'minus':
       return <path d="M5.5 12h13" />
+    /* Image placement, drawn as the layout it produces: a filled block for the
+       picture and ruled lines for the text around it. The previous controls
+       reused the text-alignment glyphs, which describe where a *paragraph*
+       sits and say nothing about how text flows around a picture — the actual
+       question. Word and Docs both draw the result rather than the alignment;
+       so does this. */
+    case 'wrapLeft':
+      return (
+        <>
+          <rect x="3.5" y="7" width="8" height="10" rx="1.2" fill="currentColor" stroke="none" opacity="0.85" />
+          <path d="M13.5 8.5h7M13.5 12h7M13.5 15.5h7" />
+        </>
+      )
+    case 'wrapNone':
+      return (
+        <>
+          <path d="M4 4.5h16" />
+          <rect x="6" y="8" width="12" height="8" rx="1.2" fill="currentColor" stroke="none" opacity="0.85" />
+          <path d="M4 19.5h16" />
+        </>
+      )
+    case 'wrapRight':
+      return (
+        <>
+          <path d="M3.5 8.5h7M3.5 12h7M3.5 15.5h7" />
+          <rect x="12.5" y="7" width="8" height="10" rx="1.2" fill="currentColor" stroke="none" opacity="0.85" />
+        </>
+      )
     /* Alignment: ruled lines whose ragged edge shows the alignment, the way
        the text itself would sit. Long/short pairs rather than four equal
        rules, because equal rules read as a list, not as alignment. */
@@ -412,6 +443,32 @@ function paths(name: IconName, filled: boolean) {
         <>
           <path d="m8.5 8.5-4 3.5 4 3.5" />
           <path d="m15.5 8.5 4 3.5-4 3.5" />
+        </>
+      )
+    /* Thumbs.
+       Redrawn simpler: the first version packed a cuff, a curled fist and a
+       tapered arm into 24px, and at the 13px these actually render it
+       collapsed into a smudge. This is two shapes — a squared-off cuff and a
+       plain paddle for the hand — which stays legible small, which is the
+       only size it is ever used at. */
+    case 'thumbUp':
+      return (
+        <>
+          <rect x="2.8" y="10" width="4.4" height="9.5" rx="1" fill={filled ? 'currentColor' : 'none'} />
+          <path
+            d="M7.2 10.6 11 3.4a1.9 1.9 0 0 1 3.5 1.4l-1 4.2h4.9a2 2 0 0 1 1.95 2.5l-1.4 5.9a2 2 0 0 1-1.95 1.5H7.2Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
+        </>
+      )
+    case 'thumbDown':
+      return (
+        <>
+          <rect x="2.8" y="4.5" width="4.4" height="9.5" rx="1" fill={filled ? 'currentColor' : 'none'} />
+          <path
+            d="M7.2 13.4 11 20.6a1.9 1.9 0 0 0 3.5-1.4l-1-4.2h4.9a2 2 0 0 0 1.95-2.5l-1.4-5.9A2 2 0 0 0 17 5.1H7.2Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
         </>
       )
     case 'pin':

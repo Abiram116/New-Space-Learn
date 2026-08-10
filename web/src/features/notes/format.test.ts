@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { labelFor, notePreview, originLabel, relativeTime } from './format'
+import { labelFor, notePreview, originLabel, relativeTime, sourceLine } from './format'
 import type { Note } from '../../api/types'
 
 const note = (over: Partial<Note> = {}): Note => ({
@@ -87,5 +87,54 @@ describe('relativeTime', () => {
 
   it('does not crash on an unparseable date', () => {
     expect(() => relativeTime('not-a-date')).not.toThrow()
+  })
+})
+
+describe('sourceLine', () => {
+  const base = '/s/space-1/topic-1'
+  const src = (over: Partial<Parameters<typeof sourceLine>[0][number]> = {}) => ({
+    document_id: 'doc-1',
+    document_name: 'RL Lecture.pdf',
+    locator: 'p. 43',
+    ...over,
+  })
+
+  it('renders nothing when the answer had no sources', () => {
+    // "Source:" with nothing after it states the opposite of the truth.
+    expect(sourceLine([], base)).toBe('')
+  })
+
+  it('links the document at its locator', () => {
+    const out = sourceLine([src()], base)
+    expect(out).toContain('RL Lecture.pdf · p. 43')
+    expect(out).toContain(`${base}/docs?d=doc-1`)
+  })
+
+  it('collapses repeated chunks from one document', () => {
+    // Six chunks from one PDF is one source to a reader.
+    const out = sourceLine([src(), src(), src()], base)
+    expect(out.match(/RL Lecture\.pdf/g)).toHaveLength(1)
+  })
+
+  it('keeps genuinely different documents', () => {
+    const out = sourceLine([src(), src({ document_id: 'doc-2', document_name: 'Notes.pdf' })], base)
+    expect(out).toContain('RL Lecture.pdf')
+    expect(out).toContain('Notes.pdf')
+  })
+
+  it('omits the separator when a source has no locator', () => {
+    expect(sourceLine([src({ locator: '' })], base)).toContain('[RL Lecture.pdf]')
+  })
+
+  it('escapes a bracket in a filename so the link cannot break', () => {
+    const out = sourceLine([src({ document_name: 'Week [3].pdf' })], base)
+    expect(out).toContain('Week [3\\].pdf')
+  })
+
+  it('is valid markdown that survives the note round-trip', () => {
+    // Plain italic text plus links — no custom node, nothing to serialise.
+    const out = sourceLine([src()], base)
+    expect(out.trim().startsWith('*Source:')).toBe(true)
+    expect(out.trim().endsWith('*')).toBe(true)
   })
 })

@@ -29,8 +29,15 @@ import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
 import { ActiveSkillStrip, ContextDock } from './ContextDock'
+import type { DockPanel } from './DockPanels'
 import { NoteBriefDialog } from './NoteBriefDialog'
-import { chipsFor } from './feedbackPolicy'
+import {
+  askReason,
+  chipsFor,
+  readSignal,
+  type AskInput,
+  type TurnSignal,
+} from './feedbackPolicy'
 import type { AgentKey } from './agents'
 
 export function ChatView() {
@@ -202,10 +209,28 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     lastGivenAt: number | null
   }>({ lastOfferedAt: null, lastGivenAt: null })
 
+  /* Consecutive regenerations of the current answer.
+     Hardcoded to zero, deliberately and visibly: **there is no regenerate
+     control in the app yet.** The `regenerate` feedback kind exists in the
+     taxonomy and the backend already knows what to do with it — it lowers
+     every leading preference a little, dissatisfaction with no stated
+     direction — but nothing can send one. `feedbackPolicy` supports the
+     trigger so wiring a regenerate button is a one-line change here rather
+     than a policy change; tracked as N18 in docs/plan.md. A `useState` that
+     nothing ever sets would just be dead state pretending to be a feature. */
+  const regenerations = 0
+
   /* Preferences drive the expected-value gate. Fetched once per mount and
      deliberately NOT refetched after each tap: one tap cannot move a
      preference past the threshold on its own, and a round trip per chip press
      would put latency inside the interaction the chips exist to keep cheap. */
+  /* Which workspace panel the dock is showing. `null` is the overview.
+     Held here rather than in the URL: it is a view preference inside one
+     page, not a location — putting it in the URL would add a history entry
+     per glance at your sources and make Back mean "close the panel" instead
+     of "leave the chat". */
+  const [dockPanel, setDockPanel] = useState<DockPanel>(null)
+
   const [prefs, setPrefs] = useState<Preference[]>([])
   useEffect(() => {
     let live = true
@@ -227,10 +252,44 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   const isEmpty = !history.loading && messages.length === 0 && !pending
   const assistantTurns = messages.filter((m) => m.role === 'assistant').length
 
+  /* What the student's most recent message signalled, if anything.
+     This is the event the ask policy keys off — a counter told us only that
+     time had passed, which is not a reason to interrupt anyone. */
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user')
+  const turnSignal: TurnSignal =
+    regenerations > 0 ? 'regenerated' : readSignal(lastUserMessage?.content ?? '')
+
+  /* Built once, used by both `chipsFor` and `askReason`. Calling them with
+     independently-assembled inputs is how the row ends up showing chips with
+     no reason, or a reason with no chips. */
+  const askInput = (chars: number): AskInput => ({
+    chars,
+    signal: turnSignal,
+    regenerations,
+    assistantTurns,
+    turnsSinceOffered:
+      offerState.lastOfferedAt === null ? null : assistantTurns - offerState.lastOfferedAt,
+    turnsSinceGiven:
+      offerState.lastGivenAt === null ? null : assistantTurns - offerState.lastGivenAt,
+    preferences: prefs,
+    complete: true,
+  })
+
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <SubspaceHeader />
+        <SubspaceHeader
+          activeTab={dockPanel ?? 'chat'}
+          onSelectTab={(tab) => {
+            // Chat closes whatever is open; the others swap the dock. Only
+            // intercepted on wide screens — below `lg` the dock is not
+            // rendered at all, so these must stay real navigation or the tabs
+            // would silently do nothing on a phone.
+            if (window.innerWidth < 1024) return false
+            setDockPanel(tab === 'chat' ? null : tab)
+            return true
+          }}
+        />
 
         {/* Messages sit in a centred, measured column — the scroller stays
             full-width so the scrollbar hugs the window edge rather than
@@ -239,7 +298,11 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             three times the line length the eye can track without losing
             its place on the return sweep. */}
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3.5 px-5 py-5">
+          {/* `justify-end` with `min-h-full`: a short conversation sits just
+              above the composer instead of pinned to the top with a screen of
+              empty space beneath it. Once the thread is long enough to scroll,
+              this has no effect at all. */}
+          <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-5 px-5 pb-2 pt-6">
           {history.loading && <PageSpinner />}
           {history.error && !history.loading && (
             <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
@@ -265,14 +328,8 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
               feedback={
                 i === messages.length - 1 && m.role === 'assistant' && !streaming
                   ? {
-                      chips: chipsFor({
-                        chars: m.content.length,
-                        assistantTurns,
-                        lastOfferedAt: offerState.lastOfferedAt,
-                        lastGivenAt: offerState.lastGivenAt,
-                        preferences: prefs,
-                        complete: true,
-                      }),
+                      chips: chipsFor(askInput(m.content.length)),
+                      reason: askReason(askInput(m.content.length)),
                       messageId: m.id,
                       subspaceId,
                       onRecorded: () =>
@@ -315,7 +372,13 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
         />
       </div>
 
-      <ContextDock subspaceId={subspaceId} base={base} onRunAgent={runAgent} />
+      <ContextDock
+        subspaceId={subspaceId}
+        base={base}
+        onRunAgent={runAgent}
+        panel={dockPanel}
+        onClosePanel={() => setDockPanel(null)}
+      />
 
       <NoteBriefDialog
         open={noteBrief !== null}

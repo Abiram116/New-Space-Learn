@@ -24,8 +24,15 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
 import { healEscapedHtml } from './healHtml'
-import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS } from './toolbar'
-import { labelFor, notePreview, originLabel, relativeTime, type Filter } from './format'
+import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS, SELECTION_ACTIONS } from './toolbar'
+import {
+  labelFor,
+  notePreview,
+  originLabel,
+  relativeTime,
+  sourceLine,
+  type Filter,
+} from './format'
 import { ImageBlock } from './ImageBlock'
 import {
   availableCommands,
@@ -79,12 +86,21 @@ const CODE_LANGUAGES = [
 ]
 
 export function NotesView() {
-  const { space, subspace } = useActiveSubspace()
+  const { space, subspace, base } = useActiveSubspace()
   if (!space || !subspace) return <SubspaceMissing />
-  return <Inner subspaceId={subspace.id} subspaceName={subspace.name} />
+  return <Inner subspaceId={subspace.id} subspaceName={subspace.name} base={base} />
 }
 
-function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName: string }) {
+function Inner({
+  subspaceId,
+  subspaceName,
+  base,
+}: {
+  subspaceId: string
+  subspaceName: string
+  /** Route prefix for this topic — citation links point inside it. */
+  base: string
+}) {
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
   const [notes, setNotes] = useState<Note[] | null>(null)
@@ -348,6 +364,7 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
           key={current.id}
           note={current}
           subspaceId={subspaceId}
+          base={base}
           onPatch={(patch) => applyPatch(current.id, patch)}
           onDelete={() => setConfirmDelete(current.id)}
           onBack={() => select(null)}
@@ -370,12 +387,14 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
 function NoteEditor({
   note,
   subspaceId,
+  base,
   onPatch,
   onDelete,
   onBack,
 }: {
   note: Note
   subspaceId: string
+  base: string
   onPatch: (patch: Partial<Note>) => void
   onDelete: () => void
   onBack: () => void
@@ -458,7 +477,10 @@ function NoteEditor({
     // Context is read here, with the editor in hand, so the menu can hide
     // commands the document can't support — "Summarise" on a blank note used
     // to sit there fully enabled and return an apology from the model.
-    setSlash({ query, from: $from.start(), to: $from.pos, ctx: readContext(ed) })
+    // The range is passed to `readContext` so the `/query` itself is not
+    // counted as note content — see the note on its `typing` parameter.
+    const range = { from: $from.start(), to: $from.pos }
+    setSlash({ query, ...range, ctx: readContext(ed, range) })
     setSlashIndex(0)
   }, [])
 
@@ -527,9 +549,11 @@ function NoteEditor({
       }
 
       try {
-        const { content_md } = await noteAiInline(subspaceId, prompt)
+        const { content_md, citations } = await noteAiInline(subspaceId, prompt)
         // @ts-expect-error — the Markdown extension's storage isn't in @tiptap/core's base Storage type
-        const parsed = editor.storage.markdown.parser.parse(content_md)
+        const parsed = editor.storage.markdown.parser.parse(
+          content_md + sourceLine(citations, base),
+        )
         if (clearPlaceholder()) {
           editor.chain().insertContentAt(from, parsed).focus().run()
         } else {
@@ -874,23 +898,36 @@ function NoteEditor({
           <span className="mx-0.5 h-4 w-px bg-line" />
           {/* The one AI action worth reaching for mid-sentence. Everything
               else is a `/` away and doesn't need permanent real estate. */}
-          <button
-            type="button"
-            title="Rewrite this with AI"
-            onClick={() => {
-              const { from, to } = editor.state.selection
-              const sel = editor.state.doc.textBetween(from, to, '\n')
-              if (!sel.trim()) return
-              void runInlineAi(
-                `Rewrite this more clearly, keeping the meaning and any facts exactly:\n\n${sel}`,
-                from,
-                to,
-              )
-            }}
-            className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
-          >
-            <Icon name="sparkle" size={12} /> Rewrite
-          </button>
+          {/* AI acting on the document, not beside it.
+              Each action rewrites or extends the selection in place, so the
+              result is note content the student can edit like anything else
+              they wrote — the difference between a notebook and a chat
+              window that happens to be next to one. `replaces` decides
+              whether the passage is consumed or added to; consuming the text
+              you asked a question *about* is never the intent. */}
+          {SELECTION_ACTIONS.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              title={`${action.label} — with AI, in place`}
+              onClick={() => {
+                const { from, to } = editor.state.selection
+                const sel = editor.state.doc.textBetween(from, to, '\n')
+                if (!sel.trim()) return
+                // Non-replacing actions insert *after* the selection, so the
+                // range handed to runInlineAi is the empty point at its end.
+                void runInlineAi(
+                  action.prompt(sel),
+                  action.replaces ? from : to,
+                  to,
+                )
+              }}
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
+            >
+              {action.id === 'rewrite' && <Icon name="sparkle" size={12} />}
+              {action.label}
+            </button>
+          ))}
         </BubbleMenu>
       )}
 

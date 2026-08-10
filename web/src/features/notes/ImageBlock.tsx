@@ -59,6 +59,13 @@ function buildTitle(width: number | null, align: Align): string | null {
   return parts.length ? parts.join(';') : null
 }
 
+/** What each placement actually does, said plainly. */
+const WRAP_LABEL: Record<Align, string> = {
+  left: 'Wrap text on the right',
+  center: 'Break the text — image on its own line',
+  right: 'Wrap text on the left',
+}
+
 function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const src = node.attrs.src as string
   const caption = (node.attrs.alt as string) ?? ''
@@ -122,10 +129,17 @@ function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewPr
   return (
     <NodeViewWrapper
       className={cn(
-        'notes-image group relative my-4 flex flex-col',
-        align === 'left' && 'items-start',
-        align === 'center' && 'items-center',
-        align === 'right' && 'items-end',
+        'notes-image group relative flex flex-col',
+        // `float`, not flex alignment. Aligning a block-level image left still
+        // reserves the whole line for it, so text sits above and below and
+        // never beside — which is not what "put it on the left" means to
+        // anyone who has used a word processor. Floating lets the paragraph
+        // wrap around it, which is the behaviour being asked for.
+        align === 'left' && 'float-left mr-5 mb-3 mt-1 max-w-[60%]',
+        align === 'right' && 'float-right ml-5 mb-3 mt-1 max-w-[60%]',
+        // Centre stays in the flow and clears any float above it, so a
+        // full-width image after a wrapped one starts on a clean line.
+        align === 'center' && 'clear-both my-4 items-center',
       )}
       data-drag-handle
     >
@@ -177,16 +191,16 @@ function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewPr
             >
               {(
                 [
-                  ['left', 'alignLeft'],
-                  ['center', 'alignCenter'],
-                  ['right', 'alignRight'],
+                  ['left', 'wrapLeft'],
+                  ['center', 'wrapNone'],
+                  ['right', 'wrapRight'],
                 ] as const
               ).map(([value, icon]) => (
                 <button
                   key={value}
                   type="button"
-                  title={`Align ${value}`}
-                  aria-label={`Align ${value}`}
+                  title={WRAP_LABEL[value]}
+                  aria-label={WRAP_LABEL[value]}
                   aria-pressed={align === value}
                   onClick={() => updateAttributes({ align: value })}
                   className={cn(
@@ -230,7 +244,10 @@ function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewPr
           onKeyDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
           className={cn(
-            'mt-2 max-w-full border-0 bg-transparent p-0 text-center text-[12.5px] text-muted',
+            // `mt-1`, not `mt-2`: the caption belongs to the image, and a gap
+            // as large as the paragraph spacing made it read as a separate
+            // line of prose that happened to follow.
+            'mt-1 max-w-full border-0 bg-transparent p-0 text-center text-[12px] leading-snug text-muted',
             'outline-none placeholder:text-faint focus:text-ink-3',
             align === 'left' && 'text-left',
             align === 'right' && 'text-right',

@@ -297,6 +297,15 @@
   }
 }
 
+/* The dock panel sliding in over the overview. Short and eased-out: this
+   fires on a tab click, and anything longer than ~220ms turns a navigation
+   into a wait. `motion-safe:` on the call site means reduced-motion users
+   simply get the panel. */
+@keyframes dockIn {
+  from { transform: translateX(14px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .foil::after {
     display: none;
@@ -577,6 +586,18 @@
 .notes-doc h2:first-child,
 .notes-doc h3:first-child { margin-top: 0; }
 .notes-doc p { line-height: 1.75; }
+
+/* Floated images must be contained by the document, or one placed near the
+   end hangs past the last paragraph and overlaps whatever follows — the
+   editor chrome, the next note. `flow-root` establishes a block formatting
+   context, which is the modern clearfix and costs nothing when no image is
+   floated. */
+.notes-doc { display: flow-root; }
+
+/* Headings and rules always start on a clean line. Text wrapping beside a
+   picture is the point; a section title wrapping beside one is an accident,
+   and it reads as broken rather than as layout. */
+.notes-doc :is(h1, h2, h3, hr, table, pre, blockquote) { clear: both; }
 .notes-doc ul, .notes-doc ol { padding-left: 1.35rem; }
 .notes-doc li + li { margin-top: 0.28rem; }
 

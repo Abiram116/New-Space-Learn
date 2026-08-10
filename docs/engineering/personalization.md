@@ -231,9 +231,38 @@ Two things that must never trigger a question: **a new chat, and a new topic.**
 New chat ≠ new student; new topic ≠ new preference. The model is global and
 carries over.
 
-> **Status:** the implicit half is built. The UI half is not — the shipped chip
-> row is still turn-counted, which is the survey behaviour this section rejects.
-> See `plan.md` P-0.
+Concretely, in `web/src/features/chat/feedbackPolicy.ts`:
+
+| Trigger | Why it earns the interruption |
+|---|---|
+| **Confusion with no direction** — "I don't get it", "I'm lost" | They are stuck and haven't said *how*. Which dimension is wrong is genuinely unknown. |
+| **A second consecutive regeneration** | Asking again says the settings are wrong without saying what to change. One is noise; two is signal. |
+| **A contested dimension** | Evidence exists and disagrees with itself, so it will not resolve on its own — more of the same signal keeps cancelling. |
+
+And what must never trigger one:
+
+| Non-trigger | Why |
+|---|---|
+| **A directed request** — "explain simpler", "more detail" | Already said, already recorded by `_resolve_implicit`. Asking after would be asking a question the student just answered. |
+| **A new chat, topic or subject** | New chat ≠ new student; new topic ≠ new preference. Nothing in the policy observes these events, so they cannot become triggers by accident. |
+| **Time passing** | Named explicitly because it was the original rule. |
+
+`MIN_TURNS_BETWEEN_OFFERS` and `AFTER_FEEDBACK_GAP` survive as **floors** under
+those triggers — they can suppress an ask, never cause one. `isSettled` retires
+a dimension once another tap would not move it, so asking fades out as the model
+gets sure.
+
+> **Status:** built, both halves. The passive thumbs render under every
+> completed answer and record on one tap; the reason chips appear only on a
+> thumbs-down (an ask the student invited) or on one of the three triggers
+> above. A thumbs-down deliberately records *nothing* by itself — "wrong" with
+> no direction would lower every leading preference on no information — it
+> opens the chips, and the chip carries the signal.
+>
+> Not built: the A/B experiment arm (`source: "experiment"`), and the
+> regenerate control itself. The `regenerate` kind exists in the taxonomy and
+> the backend already knows what to do with it, but no UI can send one — see
+> `plan.md` N18.
 
 ### Interpretability
 

@@ -7,7 +7,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { availableCommands, SLASH_COMMANDS, type SlashContext } from './slashMenu'
+import {
+  availableCommands,
+  readContext,
+  SLASH_COMMANDS,
+  type SlashContext,
+} from './slashMenu'
 
 const EMPTY: SlashContext = { hasText: false, hasSelection: false, hasHeadings: false }
 const WRITTEN: SlashContext = { hasText: true, hasSelection: false, hasHeadings: false }
@@ -67,6 +72,50 @@ describe('availableCommands — ordering and search', () => {
 
   it('returns nothing for a query that matches nothing', () => {
     expect(availableCommands('zzzzz', STRUCTURED)).toHaveLength(0)
+  })
+})
+
+describe('the command being typed is not note content', () => {
+  // Regression: on a blank note, typing `/ai` puts the literal text "/ai" in
+  // the document, so `hasText` came back true and the note was never treated
+  // as blank. Ask-AI then generated on an invented topic instead of asking
+  // what to write.
+  //
+  // Exercises the real `readContext` against a stub with the surface it
+  // actually touches — testing my own arithmetic inline would pass whether or
+  // not the function used it.
+  const fakeEditor = (text: string) =>
+    ({
+      state: {
+        selection: { from: text.length, to: text.length },
+        doc: {
+          textContent: text,
+          textBetween: (from: number, to: number) => text.slice(from, to),
+          descendants: () => undefined,
+        },
+      },
+    }) as unknown as Parameters<typeof readContext>[0]
+
+  it('a blank note plus a typed command still reads as blank', () => {
+    const doc = '/ai'
+    expect(readContext(fakeEditor(doc), { from: 0, to: doc.length }).hasText).toBe(false)
+  })
+
+  it('a note with real content still reads as having content', () => {
+    const doc = 'Some notes./ai'
+    expect(readContext(fakeEditor(doc), { from: 11, to: 14 }).hasText).toBe(true)
+  })
+
+  it('without the range it regresses — which is what broke', () => {
+    // Documents the failure mode: omit `typing` and a bare command counts.
+    expect(readContext(fakeEditor('/ai')).hasText).toBe(true)
+  })
+
+  it('so a blank note offers Ask AI and no content-dependent command', () => {
+    const doc = '/ai'
+    const ctx = readContext(fakeEditor(doc), { from: 0, to: doc.length })
+    const ai = availableCommands('', ctx).filter((c) => c.group === 'ai')
+    expect(ai.map((c) => c.id)).toEqual(['ai'])
   })
 })
 

@@ -15,6 +15,7 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
 from ..guards import assert_subspace, subspace_label
 from ..schemas import (
+    Citation,
     NoteAiInline,
     NoteAiInlineOut,
     NoteCreate,
@@ -327,7 +328,22 @@ async def note_ai_inline(
     content = _demote_html(content)
     if not content:
         raise UpstreamUnavailable("Came back empty. Try rephrasing.")
-    return NoteAiInlineOut(content_md=content)
+    # Carry the provenance back with the text. The retrieval already ran to
+    # build the prompt above; discarding it here is what left an AI paragraph
+    # in a note untraceable — see the note on `NoteAiInlineOut.citations`.
+    # Only sources that actually reached the model are returned, so a claim
+    # can never cite something the answer was not built from.
+    citations = [
+        Citation(
+            marker=i,
+            document_id=r.document_id,
+            document_name=r.document_name,
+            locator=r.locator,
+            snippet=rag.snippet(r.content),
+        )
+        for i, r in enumerate(retrieved, start=1)
+    ]
+    return NoteAiInlineOut(content_md=content, citations=citations)
 
 
 # Block-level tags the model reaches for most, mapped to their markdown
@@ -386,8 +402,22 @@ def _demote_html(text: str) -> str:
 
     # Entity-encoded tags become real tags so the maps below can see them.
     # Done after stashing so `&lt;` written inside a code fence stays literal.
-    if "&" in text:
-        text = html.unescape(text)
+    # Peel escaping layers, not just one.
+    #
+    # `html.unescape` is a single pass: `&amp;lt;p&amp;gt;` becomes `&lt;p&gt;`
+    # and stops there — still an entity, so the tag substitutions below never
+    # see a `<` and the text ships with `&lt;p&gt;` visible. Double-escaping is
+    # not hypothetical: it is what a save round-trip produces, and it is what a
+    # student reported seeing twice. Bounded rather than `while changed`, so
+    # malformed input cannot spin here. Matches `healEscapedHtml` on the
+    # frontend, which had this right and this side did not.
+    for _ in range(4):
+        if "&" not in text:
+            break
+        unescaped = html.unescape(text)
+        if unescaped == text:
+            break
+        text = unescaped
 
     if "<" in text:
         for pattern, replacement in _HTML_BLOCK_MAP:

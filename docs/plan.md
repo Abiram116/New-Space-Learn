@@ -8,10 +8,10 @@ half-migrated state.
 engineering-health fixes the 2026-08-09 audit surfaced, and the design track
 below. It does **not** re-plan the already-shipped V1 epics.
 
-**This is the only plan.** `docs/plan.md`, `docs/plan.md`,
-`docs/plan.md`, `docs/plan.md`, `0002-reject-concept-graph-schema.md` and `docs/plan.md` were
-five overlapping lists of the same work with a cross-referencing numbering
-scheme between them. Everything in them was either shipped or is restated
+**This is the only plan.** `plan-frontend.md`, `plan-backend.md`,
+`design-plan.md`, `backlog.md`, `v2-review.md` and `retrospective.md` were six
+overlapping lists of the same work with a cross-referencing numbering scheme
+between them. Everything in them was either shipped or is restated
 here; they were deleted rather than left to drift. Their durable decisions
 live in [decisions.md](decisions.md).
 
@@ -319,7 +319,7 @@ What is left, in order:
 
 | # | Item | Gated on |
 |---|---|---|
-| **P-0** | **Finish the event-driven feedback UX.** Replace the turn-counted chip row with a *passive* control: a quiet 👍/👎 on the last answer that is always available and never asks a question. A 👎 then reveals the reason chips — an ask the student invited, not one imposed. Delete the `TURN_GAP` / `AFTER_FEEDBACK_GAP` counting from `feedbackPolicy.ts`; keep `isSettled`, which is the part that was right. **New chat ≠ new student and new topic ≠ new preference** — the model is global and must not re-ask on either. Any *active* prompt (the A/B "which helped more?") fires only on genuine uncertainty: the dimension is unknown OR the evidence is contradictory, AND it matters for what is happening right now. Not on a timer. | — |
+| ~~P-0~~ | ~~Finish the event-driven feedback UX~~ — **done.** Asking is now caused by an event, never a clock. Three triggers: confusion with no direction, a second consecutive regeneration, a dimension whose evidence contradicts itself. A *directed* request ("explain simpler") suppresses asking outright, because it was already said and already recorded. `TURN_GAP` is gone; `MIN_TURNS_BETWEEN_OFFERS` and `AFTER_FEEDBACK_GAP` survive only as floors that can suppress an ask, never cause one. The passive thumbs render under every completed answer and never ask anything; a thumbs-down opens the chips rather than recording a bare negative, since "wrong" with no direction would lower every leading preference on no information. New chat and new topic are not observed by the policy at all, so they cannot become triggers by accident. 27 tests, including one that fails if any counter is reinstated as a trigger. | — |
 | **P-1** | **Scoped preferences** — subject/topic-level, not just global. `response_feedback.concept` is already recorded so this needs no backfill. Only worth doing if the collected data shows preferences actually diverge by subject; precedence is cheap to define and expensive to populate. | real feedback data |
 | **P-2** | **A/B teaching-strategy experiments.** Two strategies for the same struggling concept, compared on what happens next (quiz movement, fewer clarifications, recall). Needs a `strategy` label on `chat_messages.meta` — the column already exists — and a `teaching_experiments` table. **Deliberately not started:** two generations per question doubles token cost on the highest-traffic endpoint and burns the rate limiter's budget (chat costs 1 of 20/min). Justify it with evidence that single-signal feedback is insufficient. | P-1 evidence |
 | **P-3** | **Confusion pairs into the model.** "You've mixed up self-attention and cross-attention four times" needs the *chosen* concept, not just the correct one. | tasks 1.2 + Phase 2 below |
@@ -346,6 +346,8 @@ What is left, in order:
 | ~~N13~~ | ~~`me.py` is the largest backend file~~ — **done.** Now a package: `account` (who you are), `stats` (what you've done), `brief` (what to do next), `_common` (the two helpers with real second callers). 679 → largest module 362. All nine routes still register; `main.py` unchanged. |
 | ~~N14~~ | ~~58 ruff errors, 93% false positives~~ — **done.** `B008` ignored with the reasoning recorded in `api/pyproject.toml`; the four real errors fixed. Zero now, and it immediately earned its keep — the `me.py` split broke four names and ruff named all of them. |
 | **N15** | **No component-render tests.** Coverage is pure logic only. Nothing asserts that a component mounts, that the slash menu opens on `/`, or that the AI placeholder is removed when a request fails — all three have shipped bugs. Needs `@testing-library/react` and `jsdom`; deliberately deferred rather than half-added. |
+| **N17** | **No regenerate control exists.** The `regenerate` feedback kind is in the taxonomy and `_apply_directionless` already knows what to do with it — lower every leading preference a little, dissatisfaction with no stated direction — but nothing in the UI can send one. `feedbackPolicy` supports the trigger and `ChatView` hardcodes `regenerations = 0` with a comment saying so, rather than carrying a `useState` nothing ever sets. Wiring a regenerate button is a one-line change at that call site. |
+| **N18** | **`readSignal` duplicates `_IMPLICIT_PATTERNS`.** The frontend copy only decides whether to *stay quiet*; the backend copy is what actually records the preference. The asymmetry makes the duplication survivable — a miss on the frontend costs one unnecessary offer, not a lost signal — but they will drift. Worth either a shared fixture both sides test against, or an endpoint that classifies the turn once. Not urgent; noted so the drift is a known cost rather than a surprise. |
 | **N16** | **Untested pure logic worth covering next**, roughly in value order: `lib/retention.ts` (a formula shown to students as a percentage), `lib/sessionCache.ts` (the TTL/versioning that already served a stale payload once and took Home down behind the error boundary), `ImageBlock`'s `parseTitle`/`buildTitle` round-trip, and `rag.strip_invalid_citations`' frontend counterpart. |
 
 ### The end-to-end audit

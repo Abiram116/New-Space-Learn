@@ -46,6 +46,40 @@ def test_mixed_raw_and_entity_tags():
     assert "one" in out and "two" in out
 
 
+def test_double_escaped_tags_are_demoted():
+    """Regression: this shipped twice.
+
+    `html.unescape` is a single pass, so `&amp;lt;p&amp;gt;` became
+    `&lt;p&gt;` and stopped — still an entity, so the tag substitutions never
+    ran and the note rendered a literal `&lt;p&gt;`. Double-escaping is what a
+    save round-trip produces, so it is the *normal* case once a note has been
+    through the editor once, not an exotic one.
+
+    The frontend's `healEscapedHtml` already peeled layers in a loop; this side
+    did not. Two implementations of one repair that disagreed on how much
+    damage they handle.
+    """
+    out = _demote_html(
+        "&amp;lt;p&amp;gt;the value function V(s) and the Q function "
+        "Q(s,a) are related&amp;lt;/p&amp;gt;"
+    )
+    assert "&lt;" not in out
+    assert "&amp;" not in out
+    assert "<p" not in out
+    assert out.startswith("the value function V(s)")
+
+
+def test_triple_escaping_also_resolves():
+    out = _demote_html("&amp;amp;lt;p&amp;amp;gt;x")
+    assert "lt;" not in out
+    assert out.strip().endswith("x")
+
+
+def test_a_lone_ampersand_survives():
+    # Peeling must not eat ordinary prose. "R&D" is not an escape sequence.
+    assert _demote_html("Covers R&D spending") == "Covers R&D spending"
+
+
 def test_clean_markdown_is_left_alone():
     md = "# Title\n\n- a\n- b\n\n**bold** and *em*"
     assert _demote_html(md) == md

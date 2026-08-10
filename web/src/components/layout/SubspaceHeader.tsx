@@ -13,12 +13,30 @@ import { useActiveSubspace } from '../../lib/nav'
  * — Docs, Cards, deck detail, review, summary, quiz list, quiz runner, skills.
  * Nine screens with no way back except the browser button.
  */
+/** The tab keys, so callers can intercept by name rather than by URL. */
+export type SubspaceTab = 'chat' | 'docs' | 'notes' | 'quizzes' | 'flashcards'
+
 export function SubspaceHeader({
   title,
   actions,
+  onSelectTab,
+  activeTab,
 }: {
   title?: string
   actions?: ReactNode
+  /**
+   * Handle a tab locally instead of navigating. Return `true` to say "I dealt
+   * with it" and the link is suppressed.
+   *
+   * Chat uses this to swap the right-hand dock rather than replacing the whole
+   * page: opening Docs to add one PDF should not throw away the conversation
+   * you are having, and coming back should not be a browser-back away.
+   * Everywhere else these stay ordinary links, so deep links and the back
+   * button keep working exactly as before.
+   */
+  onSelectTab?: (tab: SubspaceTab) => boolean
+  /** Which tab reads as current when the caller is handling them itself. */
+  activeTab?: SubspaceTab
 }) {
   const { space, subspace, base } = useActiveSubspace()
 
@@ -26,12 +44,12 @@ export function SubspaceHeader({
   const subspaceName = subspace?.name ?? '—'
   const displayTitle = title ?? subspaceName
 
-  const tabs = [
-    { to: base, label: 'Chat', end: true },
-    { to: `${base}/docs`, label: 'Docs' },
-    { to: `${base}/notes`, label: 'Notes' },
-    { to: `${base}/quizzes`, label: 'Quizzes' },
-    { to: `${base}/flashcards`, label: 'Cards' },
+  const tabs: { key: SubspaceTab; to: string; label: string; end?: boolean }[] = [
+    { key: 'chat', to: base, label: 'Chat', end: true },
+    { key: 'docs', to: `${base}/docs`, label: 'Docs' },
+    { key: 'notes', to: `${base}/notes`, label: 'Notes' },
+    { key: 'quizzes', to: `${base}/quizzes`, label: 'Quizzes' },
+    { key: 'flashcards', to: `${base}/flashcards`, label: 'Cards' },
   ]
 
   return (
@@ -51,10 +69,15 @@ export function SubspaceHeader({
             key={tab.label}
             to={tab.to}
             end={tab.end}
+            onClick={(e) => {
+              if (onSelectTab?.(tab.key)) e.preventDefault()
+            }}
             className={({ isActive }) =>
               cn(
                 'shrink-0 rounded-[9px] px-2.5 py-1.5 transition-colors',
-                isActive
+                // When the caller is driving, its state decides what is
+                // current — the router still thinks we are on /chat.
+                (activeTab ? activeTab === tab.key : isActive)
                   ? 'bg-brand-soft font-semibold text-brand'
                   : 'text-ink-3 hover:bg-line-soft',
               )

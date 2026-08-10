@@ -56,3 +56,41 @@ export function relativeTime(iso: string): string {
   return d.toLocaleDateString()
 }
 
+
+/** One retrieved source, as the inline-AI endpoint returns it. */
+export type SourceRef = {
+  document_id: string
+  document_name: string
+  locator: string
+}
+
+/**
+ * The provenance line appended under AI-written content.
+ *
+ * Written as ordinary markdown links so it survives the save like anything
+ * else in the note — no custom node, no schema change, and the note is still
+ * a valid markdown document that reads correctly anywhere else. The link
+ * points at the Docs tab with the document preselected, so a claim is one
+ * click from the material it came from.
+ *
+ * Returns an empty string when nothing was retrieved. An AI paragraph with no
+ * sources should carry no source line at all rather than an empty label —
+ * "Sources:" followed by nothing states the opposite of the truth.
+ *
+ * Duplicate documents are collapsed: six chunks from one PDF is one source to
+ * a reader, and listing it six times is noise that makes the line unreadable
+ * at exactly the moment retrieval worked well.
+ */
+export function sourceLine(sources: SourceRef[], base: string): string {
+  if (sources.length === 0) return ''
+  const seen = new Set<string>()
+  const links: string[] = []
+  for (const s of sources) {
+    if (seen.has(s.document_id)) continue
+    seen.add(s.document_id)
+    const label = s.locator ? `${s.document_name} · ${s.locator}` : s.document_name
+    // Escape `]` so a bracket in a filename cannot break the link syntax.
+    links.push(`[${label.replace(/\]/g, '\\]')}](${base}/docs?d=${s.document_id})`)
+  }
+  return `\n\n*Source: ${links.join(' · ')}*\n`
+}
