@@ -8,6 +8,8 @@ export type Space = {
   id: string
   name: string
   tone: Tone
+  /** Pinned subjects sort to the top of the rail. Server-ordered. */
+  pinned: boolean
   subspaces: Subspace[]
 }
 

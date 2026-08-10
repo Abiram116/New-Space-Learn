@@ -6,7 +6,7 @@ without pulling tokenizer weights).
 Embeddings run **locally** — BGE-small-en-v1.5, quantized ONNX, via
 `fastembed` — or fall back to a deterministic stub when disabled. No API key,
 no external network dependency, no recurring cost. See
-`docs/adr/0012-local-embeddings-bge-small.md` for the full investigation: a
+`docs/decisions.md` for the full investigation: a
 hosted OpenAI-compatible provider was built, benchmarked, and replaced;
 BGE-M3 was evaluated and rejected for production (its own weights alone are
 ~2.2GB, several times Render free tier's entire 512MB ceiling) and kept only
@@ -221,7 +221,7 @@ async def warm_provider() -> None:
     `PROCESSING_BUDGET_S` (25s) via `asyncio.wait_for`. On the first embed call
     in a fresh process, `LocalBgeEmbeddingProvider._get_model()` pays ~15s of
     `fastembed` import plus ~9s of model download on a cold cache (measured in
-    ADR-0012) *inside* that budget, before a single vector exists. It blows the
+    docs/decisions.md) *inside* that budget, before a single vector exists. It blows the
     cap, `documents.py` catches `TimeoutError`, and the row is left at
     `status: "processing"` — the "stuck at embedding chunks" symptom.
 

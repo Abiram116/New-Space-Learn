@@ -1,72 +1,59 @@
 # Space Learn — documentation
 
-> ## Architecture v1 — **FROZEN** (2026-08-09)
->
-> The architecture has been audited end to end, checked for internal
-> consistency, and frozen. **The next phase is implementation, not design.**
->
-> What frozen means in practice:
-> - The decisions in [adr/](adr/README.md) are settled. Don't re-litigate one
->   without new evidence that it's *wrong* — not merely that something else
->   would also work.
-> - [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) is the single authority on
->   what to build next and in what order. `CHECKPOINT.md` records state, not
->   sequence, and defers to it.
-> - Two rejections stay rejected: an auto-organized knowledge graph
->   ([ADR-0001](adr/0001-subject-subspace-hierarchy.md)) and a
->   `concepts`/`concept_edges` schema or any stored graph structure
->   ([ADR-0002](adr/0002-reject-concept-graph-schema.md),
->   [ADR-0011](adr/0011-gap-map-derived-concept-visualization.md)).
-> - The relational database is the single source of truth. Anything
->   graph-shaped is a projection derived at render time.
-> - New *product* ideas belong in
->   [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md). New *architectural*
->   changes need a new ADR that explicitly supersedes the one it replaces.
->
-> Unfreezing is allowed — it just has to be deliberate and recorded, not
-> incidental.
+Six documents and a folder of decisions. Read the one that matches what you
+are trying to do.
 
-Start here if you're new to this codebase. Each doc below answers one kind of
-question — read the one that matches what you're trying to do, not all of
-them front to back.
+```
+docs/
+├── plan.md                    what's left to build, in order
+├── product/
+│   └── vision.md              what this is trying to be, and why
+├── engineering/
+│   ├── architecture.md        how the system fits together
+│   ├── ai-pipeline.md         retrieval, prompts, memory, request flows
+│   └── security.md            auth, guards, injection, open gaps
+├── operations/
+│   ├── setup.md               run it locally, deploy it
+│   └── performance-and-cost.md  latency budgets and what it costs
+└── decisions.md               why things are the way they are
+```
 
-## Product & direction
-
-| Doc | Read this when you want to know... |
+| Doc | Read it when you want to know… |
 |---|---|
-| [vision.md](vision.md) | What this product is trying to *be* — a companion with memory and initiative, not a tool. Read this first; it's the lens every other doc and every future feature gets judged through. |
-| [SOUL.md](SOUL.md) | The deeper thesis — "a syllabus is a list, an exam is a graph" — and the approved architecture for acting on it (normalized tags, not a concept graph). Read with `vision.md`. |
-| [adr/0002](adr/0002-reject-concept-graph-schema.md) | Why a knowledge-graph rearchitecture was rejected — twice, independently. Read before scoping anything graph- or personalization-shaped. |
+| [plan.md](plan.md) | What to build next and in what order. **Start here to pick up work.** |
+| [product/vision.md](product/vision.md) | What the product is for, and the thesis behind the design. Everything else is judged against this. |
+| [engineering/architecture.md](engineering/architecture.md) | Repo shape, the Subjects → Subspaces model, the error contract, service boundaries, what breaks first under scale. |
+| [engineering/ai-pipeline.md](engineering/ai-pipeline.md) | How a question becomes a grounded answer: retrieval, prompt construction, what's remembered, and each feature's request lifecycle. |
+| [engineering/security.md](engineering/security.md) | The guards-over-RLS model, prompt injection, upload validation, and the ranked list of known gaps. |
+| [operations/setup.md](operations/setup.md) | Getting it running, and applying migrations with the Supabase CLI. |
+| [operations/performance-and-cost.md](operations/performance-and-cost.md) | Latency budgets, cold starts, and real per-operation cost. |
+| [decisions.md](decisions.md) | Why a major choice was made — including the ones that were rejected, so settled arguments stay settled. |
 
-## Building it
+## What happened to the other files
 
-| Doc | Read this when you want to know... |
-|---|---|
-| [setup.md](setup.md) | How to run this locally, wire up Supabase, and deploy to Render + Vercel. |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | The whole system: repo shape, the Subjects → Subspaces model, the error contract and design system, then the component diagrams, service boundaries, trade-offs, and what breaks first under scale. The practical onboarding doc. |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | **The only plan.** What's left to build, in what order, with dependencies, risks, the design track, and the definition of done every phase is held to. **Start here to pick up work.** |
+This was twenty-seven files. Most of the reduction was structural rather
+than deletion:
 
-## Architecture reference (from the 2026-08-09 audit)
+- **Four documents described one subsystem.** `AI_ENGINE`,
+  `KNOWLEDGE_MODEL`, `MEMORY_ENGINE` and `REQUEST_PIPELINE` each opened by
+  explaining which of the other three it did not repeat, which costs a
+  reader four decisions before they learn anything. They are now the four
+  parts of `engineering/ai-pipeline.md`.
+- **`SOUL.md` and `vision.md`** were always read and edited together — one
+  held the north star, the other the argument for reaching it. They are
+  `product/vision.md`.
+- **`PERFORMANCE.md` and `COST_MODEL.md`** trade against each other on
+  nearly every decision, so they sit in one document.
+- **`CHECKPOINT.md` was deleted outright.** It was a dated snapshot of
+  project state, which means its job was to become wrong — and it had,
+  within a day. Its live findings moved into `plan.md`, which is the only
+  place work should be tracked.
 
-| Doc | Read this when you want to know... |
-|---|---|
-| [AI_ENGINE.md](AI_ENGINE.md) | Every stage of the AI pipeline — purpose, inputs, latency, cost, alternatives rejected — including which conventional stages are deliberately *not* built. |
-| [MEMORY_ENGINE.md](MEMORY_ENGINE.md) | The five memory layers (conversation, session, learning, project, review), each one's lifecycle, storage, and expiry rules. |
-| [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md) | The normalized-tag knowledge model, evidence/provenance per artifact, confusion relationships, and the single-source-of-truth table for every number the app may show. |
-| [REQUEST_PIPELINE.md](REQUEST_PIPELINE.md) | End-to-end request lifecycles per feature: notes, flashcards, quizzes, review, caching, optimistic UI, error surfacing. |
-| [PERFORMANCE.md](PERFORMANCE.md) | Explicit latency budgets, per-layer mechanisms, cold starts, and one unresolved measurement discrepancy worth fixing. |
-| [COST_MODEL.md](COST_MODEL.md) | Real per-operation cost estimates, monthly projections, and why all three flagship features cost $0 per use. |
-| [SECURITY.md](SECURITY.md) | Auth, the guards-over-RLS authorization model, prompt injection, upload validation, rate limiting, and the ranked list of open gaps. |
-| [adr/](adr/README.md) | Architecture Decision Records — the immutable record of *why* each major choice was made, including the ones that were rejected. |
-
-## The one-paragraph version
-
-Space Learn is a study app built around one idea: a student uploads their own
-material into a **Subject → Subspace** (e.g. "Reinforcement Learning" →
-"Markov decision processes"), asks it questions, and every answer can become
-something to study from later — a flashcard, a note, a quiz — each still
-pointing back at the page it came from. The frontend is React on Vercel, the
-backend is FastAPI on Render (free tier, so it's built to a strict memory and
-CPU budget), and Postgres+pgvector on Supabase is the single source of truth.
-Nothing shown in the app is invented — every number, chart, and streak is
-computed from something actually stored.
+- **Thirteen ADRs became one `decisions.md`.** The ADR format — context,
+  alternatives, consequences, status, one file per decision — is built for
+  teams where the people who made a choice will have left before it is
+  questioned. This is two people on a capstone; the ceremony cost more than
+  it returned. The *reasons* were kept, because without them someone
+  re-litigates "why not a vector database" every few weeks. The originals
+  are in git history if the long form is ever wanted:
+  `git show HEAD:docs/adr/0012-local-embeddings-bge-small.md`.

@@ -2,7 +2,7 @@
 --
 -- Enables BGE-small-en-v1.5 (quantized ONNX, local, $0 marginal cost) as the
 -- production embedding model, replacing the OpenAI-dependent design. See
--- docs/adr/0012-local-embeddings-bge-small.md for the full investigation —
+-- docs/decisions.md for the full investigation —
 -- including why BGE-M3 (1024 dims, ~2.2GB model) was rejected for
 -- production and kept only as an offline quality benchmark.
 --
@@ -18,7 +18,7 @@
 -- document_chunks` first if any real uploads have happened since.
 --
 -- HOW TO APPLY: from the repo root, `npm run db:push` (Supabase CLI, pinned
--- as a dev dependency). Run `npm run db:list` first and read docs/setup.md —
+-- as a dev dependency). Run `npm run db:list` first and read docs/operations/setup.md —
 -- migrations applied by hand in the SQL Editor are invisible to the CLI and
 -- need `supabase migration repair` before a push will do the right thing.
 --

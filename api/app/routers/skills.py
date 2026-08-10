@@ -4,6 +4,7 @@ apply per subspace so the chat prompt reflects them."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
 
 from fastapi import APIRouter, Depends
 
@@ -144,13 +145,12 @@ async def activate_skill(
 ) -> OkOut:
     await assert_subspace(user.id, subspace_id)
     await _assert_can_use_skill(user.id, skill_id)
-    try:
+    # Duplicate key just means it's already active, so activating twice is a
+    # no-op rather than an error — the endpoint is idempotent by design.
+    with contextlib.suppress(Exception):
         await supabase.db_insert(
             "subspace_skills", {"subspace_id": subspace_id, "skill_id": skill_id}
         )
-    except Exception:
-        # Duplicate key just means it's already active — treat as OK.
-        pass
     return OkOut()
 
 

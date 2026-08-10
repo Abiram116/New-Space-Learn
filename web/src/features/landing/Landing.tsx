@@ -45,7 +45,7 @@ export function Landing() {
   // The warm-up ping moved to AuthProvider (mounts above the router, fires on
   // every load including this one) so it also covers a student who bookmarks
   // straight into an authenticated page and never sees this component. See
-  // AuthProvider.tsx and PERFORMANCE.md §6.
+  // AuthProvider.tsx and docs/operations/performance-and-cost.md §6.
 
   return (
     <SmoothScroll>

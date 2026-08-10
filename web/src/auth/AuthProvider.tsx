@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react'
 import { clearBriefCache } from '../lib/briefCache'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { getSession, onAuthChange, signOut, type Session } from '../api/auth'
+import { getSession, onAuthChange, signOut, updateDisplayName, type Session } from '../api/auth'
 import { setAuthTokenProvider } from '../api/client'
 import { setUploadTokenProvider } from '../api/documents'
 import { SUPABASE_CONFIGURED } from '../lib/env'
@@ -18,6 +18,8 @@ import { warmApi } from '../lib/warmApi'
 type AuthValue = {
   session: Session | null
   user: Session['user'] | null
+  /** Rename yourself. The rail, Profile and the brief all read this. */
+  setDisplayName: (name: string) => Promise<void>
   loading: boolean
   ready: boolean
   supabaseConfigured: boolean
@@ -43,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // warm-up at all. Firing here means the free-tier backend's cold start
   // overlaps with getSession() below rather than starting only once AppShell
   // mounts and immediately races the real data fetch it triggers — see
-  // PERFORMANCE.md §6 for why a ping *inside* AppShell doesn't help.
+  // docs/operations/performance-and-cost.md §6 for why a ping *inside* AppShell doesn't help.
   useEffect(warmApi, [])
 
   useEffect(() => {
@@ -84,6 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       ready: !loading,
       supabaseConfigured: SUPABASE_CONFIGURED,
+      setDisplayName: async (name) => {
+        await updateDisplayName(name)
+        // No manual refresh: Supabase emits USER_UPDATED, and the
+        // `onAuthChange` subscription above already writes the new session
+        // into state. Setting it here too would just race with that.
+      },
       signOut: async () => {
         // The next person to sign in on this browser must not inherit the
         // previous user's personalised brief.

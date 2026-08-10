@@ -1,36 +1,25 @@
-"""Subspace CRUD + membership queries."""
+"""Subspace CRUD + membership queries.
+
+Ownership checks come from `guards.py` — this module kept private copies of
+them until 2026-08-10, and they had drifted: the local space check raised
+`Forbidden` (403) where the shared guard raises `NotFound` (404). That
+difference matters. A 403 confirms the row exists and belongs to somebody,
+which turns the endpoint into an enumeration oracle; the 404 is a deliberate
+anti-enumeration choice documented in `docs/decisions.md`. Two
+implementations of one security rule is one implementation too many.
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
-from ..errors import Forbidden, NotFound, ValidationFailed
+from ..errors import NotFound, ValidationFailed
+from ..guards import assert_space, assert_subspace
 from ..schemas import OkOut, SubspaceCreate, SubspaceLinkCreate, SubspaceOut, SubspaceUpdate
 from ..services import supabase
 
 router = APIRouter()
-
-
-async def _get_owned_subspace(user_id: str, subspace_id: str) -> dict:
-    rows = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise NotFound("Subspace not found.")
-    return rows[0]
-
-
-async def _assert_space_owned(user_id: str, space_id: str) -> None:
-    rows = await supabase.db_select(
-        "subjects",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{space_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise Forbidden("You don't own that space.")
 
 
 @router.post(
@@ -41,7 +30,7 @@ async def create_subspace(
     body: SubspaceCreate,
     user: CurrentUser = Depends(get_current_user),
 ) -> SubspaceOut:
-    await _assert_space_owned(user.id, space_id)
+    await assert_space(user.id, space_id)
     # No `slug` field — the slug columns were dropped from the database.
     inserted = await supabase.db_insert(
         "subspaces",
@@ -84,7 +73,7 @@ async def update_subspace(
 async def delete_subspace(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> OkOut:
-    await _get_owned_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     await supabase.db_delete(
         "subspaces",
         filters={"user_id": f"eq.{user.id}", "id": f"eq.{subspace_id}"},
@@ -103,7 +92,7 @@ async def delete_subspace(
 async def list_links(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> list[SubspaceOut]:
-    await _get_owned_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     links = await supabase.db_select(
         "subspace_links",
         filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
@@ -136,8 +125,8 @@ async def create_link(
 ) -> OkOut:
     if body.linked_subspace_id == subspace_id:
         raise ValidationFailed("A topic can't link to itself.")
-    await _get_owned_subspace(user.id, subspace_id)
-    await _get_owned_subspace(user.id, body.linked_subspace_id)
+    await assert_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, body.linked_subspace_id)
     await supabase.db_insert(
         "subspace_links",
         [
@@ -162,7 +151,7 @@ async def delete_link(
     linked_subspace_id: str,
     user: CurrentUser = Depends(get_current_user),
 ) -> OkOut:
-    await _get_owned_subspace(user.id, subspace_id)
+    await assert_subspace(user.id, subspace_id)
     await supabase.db_delete(
         "subspace_links",
         filters={

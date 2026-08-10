@@ -37,6 +37,7 @@ type Ctx = {
   refresh: () => Promise<void>
   createSpace: (input: { name: string; tone: Tone }) => Promise<Space>
   renameSpace: (id: string, name: string) => Promise<void>
+  setPinned: (id: string, pinned: boolean) => Promise<void>
   changeTone: (id: string, tone: Tone) => Promise<void>
   deleteSpace: (id: string) => Promise<void>
   addSubspace: (spaceId: string, name: string) => Promise<Subspace>
@@ -110,6 +111,19 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
         const created = await createSpace(input)
         setSpaces((prev) => [...prev, { ...created, subspaces: [] }])
         return created
+      },
+      setPinned: async (id, pinned) => {
+        await updateSpace(id, { pinned })
+        // Refetch rather than re-sort in place.
+        //
+        // Sorting locally on `pinned` alone cannot restore the original
+        // position on UNPIN: once the row has been moved to the top, a
+        // stable sort sees it as equal to its neighbours and leaves it
+        // exactly where it is. Putting it back needs the `created_at` tie-
+        // breaker the server orders by, which the client never receives.
+        // One request on a rare, deliberate action is the honest price for
+        // the rail agreeing with the database.
+        await refresh()
       },
       renameSpace: async (id, name) => {
         await updateSpace(id, { name })

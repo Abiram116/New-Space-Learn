@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { Icon } from '../../components/ui/Icon'
@@ -11,7 +11,8 @@ import { useSpaces } from './SpacesProvider'
 
 export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { spaceId, subspaceId } = useParams()
-  const { spaces, addSubspace, deleteSpace, deleteSubspace } = useSpaces()
+  const { spaces, addSubspace, deleteSpace, deleteSubspace, renameSpace, setPinned } =
+    useSpaces()
   const { show } = useToast()
   const navigate = useNavigate()
 
@@ -21,13 +22,19 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [confirmDeleteSpace, setConfirmDeleteSpace] = useState<string | null>(null)
   const [confirmDeleteSubspace, setConfirmDeleteSubspace] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [renamingSpace, setRenamingSpace] = useState<string | null>(null)
+  const [renameText, setRenameText] = useState('')
 
   const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }))
 
   const isOpen = (id: string) => {
     const explicit = collapsed[id]
     if (explicit !== undefined) return !explicit
-    return id === spaceId
+    const space = spaces.find((s) => s.id === id)
+    // Defaults open when there's nothing to collapse — an empty subject's
+    // only useful state is "show me how to add a topic", not a closed row
+    // that gives no hint anything is missing.
+    return id === spaceId || space?.subspaces.length === 0
   }
 
   const commitTopic = async (spaceId: string) => {
@@ -42,6 +49,18 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       setNewTopic('')
       const parent = spaces.find((s) => s.id === spaceId)
       navigate(parent ? subspacePath(parent, created) : `/s/${spaceId}/${created.id}`)
+    } catch (e) {
+      show(friendlyMessage(e), 'error')
+    }
+  }
+
+  const commitRename = async (id: string) => {
+    const name = renameText.trim()
+    setRenamingSpace(null)
+    const current = spaces.find((s) => s.id === id)
+    if (!name || name === current?.name) return
+    try {
+      await renameSpace(id, name)
     } catch (e) {
       show(friendlyMessage(e), 'error')
     }
@@ -89,11 +108,32 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
         const open = isOpen(space.id)
         return (
           <div key={space.id} className="group/space flex min-w-0 flex-col gap-0.5">
-            <div className="flex items-center">
+            <div className="flex min-w-0 items-center">
+              {renamingSpace === space.id ? (
+                <input
+                  autoFocus
+                  value={renameText}
+                  onChange={(e) => setRenameText(e.target.value)}
+                  onBlur={() => commitRename(space.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename(space.id)
+                    if (e.key === 'Escape') setRenamingSpace(null)
+                  }}
+                  aria-label={`Rename ${space.name}`}
+                  className="min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-2.5 py-1.5 text-[14px] font-semibold text-ink outline-none"
+                />
+              ) : (
               <button
                 onClick={() => toggle(space.id)}
                 className={cn(
-                  'flex flex-1 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors cursor-pointer',
+                  // `min-w-0` is load-bearing, not decoration. A flex item
+                  // defaults to `min-width: auto`, so without it this button
+                  // refuses to shrink below its own text width — `truncate`
+                  // never engages, and a long subject name pushes the ⋯ menu
+                  // straight past the rail's `overflow-x-hidden` edge. That
+                  // is why the menu appeared on "dfcs" and not on
+                  // "Reinforcment Learning": the bug was name length.
+                  'flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors cursor-pointer',
                   space.id === spaceId
                     ? 'bg-brand-tint font-bold text-ink'
                     : cn('font-semibold hover:bg-line-soft', toneText[space.tone]),
@@ -110,25 +150,39 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                 <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
                 <span className="truncate">{space.name}</span>
               </button>
-              <button
-                onClick={() => setConfirmDeleteSpace(space.id)}
-                title="Delete space"
-                aria-label={`Delete space ${space.name}`}
-                /* Faint, not invisible. `opacity-0` until hover meant this
-                   button did not exist at all on a touch screen — there is no
-                   hover to trigger it, so a phone or tablet had no way to
-                   delete a subject. It now sits quietly at 40% and comes up
-                   on hover, focus, or a tap target that is always there. */
-                className="shrink-0 rounded-md p-1 text-faint opacity-40 transition-opacity hover:text-coral hover:opacity-100 focus-visible:opacity-100 group-hover/space:opacity-100 cursor-pointer"
-              >
-                <Icon name="trash" size={13} />
-              </button>
+              )}
+              {/* A `⋯` menu, not a bare bin.
+                  Two earlier attempts at this button both failed the same
+                  way — `opacity-0` until hover meant it did not exist on a
+                  touch screen, and the `opacity-40` replacement measured
+                  1.89:1 against this background, under half the 3:1 WCAG
+                  floor for an icon: present in the DOM, invisible in
+                  practice. A `⋯` is the one affordance every user already
+                  reads as "more actions here", it holds Rename as well as
+                  Delete, and it stays legible because it is drawn in a solid
+                  colour rather than faded into the background. */}
+              <SpaceMenu
+                name={space.name}
+                pinned={space.pinned}
+                onTogglePin={async () => {
+                  try {
+                    await setPinned(space.id, !space.pinned)
+                  } catch (e) {
+                    show(friendlyMessage(e), 'error')
+                  }
+                }}
+                onRename={() => {
+                  setRenamingSpace(space.id)
+                  setRenameText(space.name)
+                }}
+                onDelete={() => setConfirmDeleteSpace(space.id)}
+              />
             </div>
 
             {open && (
               <div className="ml-4 flex min-w-0 flex-col gap-0.5 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
-                  <div key={sub.id} className="group/sub flex items-center">
+                  <div key={sub.id} className="group/sub flex min-w-0 items-center">
                     <NavLink
                       to={subspacePath(space, sub)}
                       onClick={onNavigate}
@@ -147,7 +201,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       onClick={() => setConfirmDeleteSubspace(sub.id)}
                       aria-label={`Delete topic ${sub.name}`}
                       /* Same reasoning as the subject delete above. */
-                      className="shrink-0 rounded-md p-1 text-faint opacity-40 transition-opacity hover:text-coral hover:opacity-100 focus-visible:opacity-100 group-hover/sub:opacity-100 cursor-pointer"
+                      className="shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-coral-soft hover:text-coral-deep focus-visible:bg-coral-soft focus-visible:text-coral-deep cursor-pointer"
                     >
                       <Icon name="trash" size={12} />
                     </button>
@@ -207,6 +261,114 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
         destructive
         loading={busy}
       />
+    </div>
+  )
+}
+
+/**
+ * The `⋯` actions menu on a subject row.
+ *
+ * Its own component so the open/close state is per-row rather than one shared
+ * "which menu is open" id threaded through the tree — with one shared value,
+ * opening a second menu has to remember to close the first, and that is the
+ * bug this shape makes impossible.
+ */
+function SpaceMenu({
+  name,
+  pinned,
+  onTogglePin,
+  onRename,
+  onDelete,
+}: {
+  name: string
+  pinned: boolean
+  onTogglePin: () => void
+  onRename: () => void
+  onDelete: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    // `mousedown`, not `click`: a click that lands on another row would
+    // otherwise activate that row *and* leave this menu open behind it.
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Actions for ${name}`}
+        title={`Actions for ${name}`}
+        className={cn(
+          'grid h-7 w-7 place-items-center rounded-md transition-colors cursor-pointer',
+          open ? 'bg-line-soft text-ink' : 'text-muted hover:bg-line-soft hover:text-ink',
+        )}
+      >
+        <Icon name="more" size={15} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-8 z-50 w-40 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onTogglePin()
+            }}
+            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-ink-2 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+          >
+            {/* The label says what the click DOES, not what the current
+                state is — "Pin" on an unpinned subject, "Unpin" on a pinned
+                one. A menu item labelled with its state makes you work out
+                the verb yourself. */}
+            <Icon name="pin" size={13} filled={pinned} />
+            {pinned ? 'Unpin' : 'Pin to top'}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onRename()
+            }}
+            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-ink-2 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+          >
+            <Icon name="pencil" size={13} /> Rename
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onDelete()
+            }}
+            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
+          >
+            <Icon name="trash" size={13} /> Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 }

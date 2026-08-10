@@ -35,7 +35,7 @@ export function AuthShell({
   // The warm-up ping moved to AuthProvider (mounts above the router, fires on
   // every load) so it also covers a student who bookmarks straight into an
   // authenticated page and never renders this component at all. See
-  // AuthProvider.tsx and PERFORMANCE.md §6.
+  // AuthProvider.tsx and docs/operations/performance-and-cost.md §6.
 
   return (
     <div className="grid min-h-full bg-canvas text-ink xl:grid-cols-[minmax(0,520px)_1fr]">

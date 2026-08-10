@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends
 
@@ -20,11 +20,27 @@ from ...schemas import BriefOut, BriefSuggestion
 from ...services import student_model as student_model_service
 from ...services import supabase
 from ...services.llm import get_llm
-from ...services.streaks import compute_streak, to_date
 from ...services.voice import COMPANION_VOICE
-from ._common import _count
 
 log = logging.getLogger("space_learn.me.brief")
+
+
+def _short(name: str, limit: int = 34) -> str:
+    """Trim a name to something a button can hold, at a word boundary.
+
+    Decks generated from a chat reply take their name from the topic, and the
+    chat agent passes the first sentence of the answer — so a deck can be
+    called "The transformer is a neural network architecture used for natural
+    language processing". Dropped into "Review {name}" that produced a CTA
+    that ran off the end of the button and got clipped mid-word by the
+    browser. Cutting on a space keeps it readable instead of truncating to
+    "...used for na".
+    """
+    clean = " ".join((name or "").split())
+    if len(clean) <= limit:
+        return clean
+    cut = clean[:limit].rsplit(" ", 1)[0]
+    return f"{cut or clean[:limit]}…"
 
 router = APIRouter()
 

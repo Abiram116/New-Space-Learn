@@ -6,7 +6,10 @@ export const listSpaces = () => apiFetch<Space[]>('/spaces', { method: 'GET' })
 export const createSpace = (input: { name: string; tone?: Tone }) =>
   apiFetch<Space>('/spaces', { method: 'POST', body: input })
 
-export const updateSpace = (id: string, input: { name?: string; tone?: Tone }) =>
+export const updateSpace = (
+  id: string,
+  input: { name?: string; tone?: Tone; pinned?: boolean },
+) =>
   apiFetch<Space>(`/spaces/${id}`, { method: 'PATCH', body: input })
 
 export const deleteSpace = (id: string) =>

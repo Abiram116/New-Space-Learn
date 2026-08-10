@@ -33,7 +33,7 @@ services:
         value: https://api.groq.com/openai/v1
       # Embeddings — local (BGE-small-en-v1.5, quantized ONNX), no API key,
       # no second provider account. See
-      # docs/adr/0012-local-embeddings-bge-small.md.
+      # docs/decisions.md.
       - key: EMBEDDING_MODEL
         value: BAAI/bge-small-en-v1.5
       # "false" as of 2026-08-09. The vector(1536)->vector(384) migration
@@ -41,7 +41,7 @@ services:
       # on the live database, and the pipeline is verified end-to-end against
       # it: a real upload chunked, embedded with the real BGE-small model,
       # inserted, and retrieved with a correct citation. See
-      # docs/adr/0012-local-embeddings-bge-small.md and the chunk_text fix in
+      # docs/decisions.md and the chunk_text fix in
       # this same change — a real infinite-loop bug, not a timing issue, was
       # the actual cause of documents hanging at "embedding chunks" before
       # this was verified. document_chunks was empty at the time this flag

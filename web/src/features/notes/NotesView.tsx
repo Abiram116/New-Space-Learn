@@ -24,6 +24,8 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
 import { healEscapedHtml } from './healHtml'
+import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS } from './toolbar'
+import { labelFor, notePreview, originLabel, relativeTime, type Filter } from './format'
 import { ImageBlock } from './ImageBlock'
 import {
   availableCommands,
@@ -42,19 +44,16 @@ import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Chip } from '../../components/ui/Bits'
-import { Icon, type IconName } from '../../components/ui/Icon'
+import { Icon } from '../../components/ui/Icon'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { Leaf } from '../../components/ui/Surface'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
-import { stripMarkdown } from '../../lib/text'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
-type Filter = 'all' | 'ai' | 'mine'
 
 /**
  * Syntax highlighting for code blocks.
@@ -359,63 +358,6 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
   )
 }
 
-/**
- * Formatting, shown only while text is selected.
- *
- * This replaced a permanent strip of twelve buttons labelled `H1 B I U S </>
- * •— 1. ☑ ❝`. Two things were wrong with it. It was always on screen, so every
- * note paid for chrome it wasn't using — and the glyphs were guesses: `•—` and
- * `❝` are not words, and `☑` renders differently on every platform.
- *
- * Marks belong on a selection because that is the only time they apply. Block
- * structure (headings, quote, code, table, to-do, image, divider) stays in the
- * `/` menu, because you only ever want those at the START of a block, which is
- * exactly when your hands are free to type `/`.
- */
-const MARKS: {
-  key: string
-  label: string
-  icon?: IconName
-  title: string
-  run: (e: Editor) => void
-  active: (e: Editor) => boolean
-}[] = [
-  { key: 'bold', label: 'B', title: 'Bold', run: (e) => e.chain().focus().toggleBold().run(), active: (e) => e.isActive('bold') },
-  { key: 'italic', label: 'I', title: 'Italic', run: (e) => e.chain().focus().toggleItalic().run(), active: (e) => e.isActive('italic') },
-  { key: 'underline', label: 'U', title: 'Underline', run: (e) => e.chain().focus().toggleUnderline().run(), active: (e) => e.isActive('underline') },
-  { key: 'strike', label: 'S', title: 'Strikethrough', run: (e) => e.chain().focus().toggleStrike().run(), active: (e) => e.isActive('strike') },
-  { key: 'code', label: '', icon: 'agent', title: 'Inline code', run: (e) => e.chain().focus().toggleCode().run(), active: (e) => e.isActive('code') },
-]
-
-/** Heading level, as a real choice rather than three separate toggles. */
-const HEADINGS = [1, 2, 3] as const
-
-/**
- * Block shapes that are worth reaching for with text already selected.
- *
- * These were dropped when the permanent toolbar went, which was wrong: turning
- * a paragraph you just wrote into a quote or a list is a thing you do *to
- * existing text*, so a selection is exactly the right moment for it. `/` only
- * helps at the start of an empty block, which is the other half of the job.
- */
-const BLOCKS: {
-  key: string
-  label: string
-  title: string
-  run: (e: Editor) => void
-  active: (e: Editor) => boolean
-}[] = [
-  { key: 'bulletList', label: '••', title: 'Bulleted list', run: (e) => e.chain().focus().toggleBulletList().run(), active: (e) => e.isActive('bulletList') },
-  { key: 'orderedList', label: '1.', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive('orderedList') },
-  { key: 'taskList', label: '', title: 'To-do list', run: (e) => e.chain().focus().toggleTaskList().run(), active: (e) => e.isActive('taskList') },
-  { key: 'blockquote', label: '', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run(), active: (e) => e.isActive('blockquote') },
-]
-
-/** Icons for the two blocks whose glyph would otherwise be a guess. */
-const BLOCK_ICON: Record<string, IconName> = {
-  taskList: 'check',
-  blockquote: 'note',
-}
 
 function NoteEditor({
   note,
@@ -956,19 +898,23 @@ function NoteEditor({
             line at 66ch, which replaces the arbitrary `max-w-3xl`: 3xl is a
             width, 66ch is a reading length, and only one of those is about
             the text. */}
-        {/* The writing column is LEFT-aligned inside a centred page, not
-            centred itself.
-            Dead-centring a 66ch measure in a 1900px pane put the leaf's margin
-            rule in the middle of the screen with several hundred pixels of
-            empty gutter to its left — the rule read as a stray vertical line
-            rather than as the margin of a page. Anchoring the column to the
-            left of a bounded page puts the rule where a margin belongs and
-            moves the slack to the right, where a reader expects it. */}
-        <div className="mx-auto w-full max-w-5xl px-4 sm:px-8">
-          <Leaf
-            measure
-            className="flex min-h-full flex-col gap-3 py-10 pr-4 sm:py-14"
-          >
+        {/* The note gets the whole surface.
+            Three things were fighting the writing here and all three are
+            gone. `.leaf`'s `border-left` drew a rule that had nothing to
+            divide, because on a full-page editor the page already IS the
+            leaf — it read as a stray vertical line. `mx-auto` on a narrow
+            column then stranded that line mid-screen behind a dead gutter.
+            And `leaf-measure` capped the text at 66ch, which is the right
+            call for a chat answer sitting among other content and the wrong
+            one for a canvas the student is working inside.
+
+            What replaces them: a generous max width so a line still doesn't
+            run to 1900px and become unreadable, but wide enough that images,
+            tables and code have somewhere to live. Padding scales with the
+            viewport instead of centring a fixed column, so the writing
+            starts near the left the way a page does. */}
+        <div className="w-full px-6 pb-24 pt-10 sm:px-12 lg:px-16 xl:px-24">
+          <div className="flex min-h-full w-full max-w-[68rem] flex-col gap-3">
           {/* A title, not a form field. The bordered input made the first line
               of a note look like something to fill in rather than something to
               write. */}
@@ -1112,7 +1058,7 @@ function NoteEditor({
             )}
           </div>
 
-          </Leaf>
+          </div>
         </div>
       </div>
     </div>
@@ -1120,47 +1066,3 @@ function NoteEditor({
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
-
-/**
- * First line or so of a note, for the list.
- *
- * Images are dropped **before** anything else runs. They are stored as data
- * URLs inside the markdown, so a note that opens with a screenshot would
- * otherwise preview as several thousand characters of base64 — and
- * `stripMarkdown` has no reason to know that.
- */
-function notePreview(bodyMd: string, limit = 110): string {
-  const withoutImages = bodyMd.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-  const text = stripMarkdown(withoutImages).replace(/\s+/g, ' ').trim()
-  if (text.length <= limit) return text
-  return `${text.slice(0, limit - 1).trimEnd()}…`
-}
-
-function labelFor(f: Filter, notes: Note[] | null): string {
-  if (!notes) return f === 'all' ? 'All' : f === 'ai' ? 'AI' : 'Mine'
-  const all = notes.length
-  const mine = notes.filter((n) => n.origin === 'user').length
-  const ai = all - mine
-  if (f === 'all') return `All ${all}`
-  if (f === 'ai') return `AI ${ai}`
-  return `Mine ${mine}`
-}
-
-function originLabel(origin: Note['origin']): string {
-  if (origin === 'user') return 'Written by me'
-  if (origin === 'doc') return 'From a document'
-  return 'Notes agent'
-}
-
-function relativeTime(iso: string): string {
-  const d = new Date(iso)
-  const diffMs = Date.now() - d.getTime()
-  const min = Math.floor(diffMs / 60_000)
-  if (min < 1) return 'just now'
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  if (hr < 24) return `${hr}h ago`
-  const day = Math.floor(hr / 24)
-  if (day < 7) return `${day}d ago`
-  return d.toLocaleDateString()
-}

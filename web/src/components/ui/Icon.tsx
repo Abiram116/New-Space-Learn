@@ -46,6 +46,14 @@ export type IconName =
   | 'sparkle'
   | 'offline'
   | 'alert'
+  | 'more'
+  | 'pin'
+  | 'listBullet'
+  | 'listOrdered'
+  | 'listTodo'
+  | 'quote'
+  | 'code'
+  | 'pencil'
   | 'alignLeft'
   | 'alignCenter'
   | 'alignRight'
@@ -111,12 +119,18 @@ function paths(name: IconName, filled: boolean) {
           <path d="M12 11.5h4.5M12 14.5h3" />
         </>
       )
+    /* Quiz: an answer sheet with one option marked.
+       It used to be a question mark in a circle, which is the universal glyph
+       for HELP — every support widget on the internet uses it. A quiz in this
+       app is specifically multiple-choice, so the sheet says what it is: three
+       options, the middle one chosen. */
     case 'quiz':
       return (
         <>
-          <circle cx="12" cy="12" r="8.5" />
-          <path d="M9.6 9.6a2.4 2.4 0 1 1 3.2 2.26c-.5.18-.8.66-.8 1.19v.45" />
-          <path d="M12 16.6h.01" />
+          <rect x="4" y="3.5" width="16" height="17" rx="2" />
+          <circle cx="8.5" cy="9" r="1.4" />
+          <circle cx="8.5" cy="14.5" r="1.4" fill={filled ? 'currentColor' : 'none'} />
+          <path d="M12 9h4.5M12 14.5h4.5" />
         </>
       )
     case 'doc':
@@ -315,6 +329,81 @@ function paths(name: IconName, filled: boolean) {
           <path d="M5.2 9.4a11 11 0 0 1 3.1-2M15 7.6a11 11 0 0 1 3.8 1.8" />
           <path d="M8.4 13a6.5 6.5 0 0 1 2-1.2M13.6 11.9a6.5 6.5 0 0 1 2 1.1" />
           <path d="M12 17.2h.01" />
+        </>
+      )
+    /* Three dots — the universal "there are more actions here" affordance.
+       Filled circles rather than stroked rings: at 14px a stroked circle is
+       mostly hole and reads as three tiny o's. */
+    case 'more':
+      return (
+        <>
+          <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+          <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        </>
+      )
+    /* Pushpin, drawn head-on and tilted — the shape people actually picture.
+       `seal` was standing in for this, which is a rosette: right for a badge
+       you earned, wrong for a thing you stuck to the top of a list. */
+    /* Editor block shapes. Each one draws the thing it makes, so the button
+       is legible without a tooltip — the row previously used `••`, `1.`, a
+       tick and a page glyph, three of which are not pictures of anything. */
+    case 'listBullet':
+      return (
+        <>
+          <circle cx="5" cy="7" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+          <circle cx="5" cy="17" r="1.5" fill="currentColor" stroke="none" />
+          <path d="M9.5 7h10M9.5 12h10M9.5 17h10" />
+        </>
+      )
+    case 'listOrdered':
+      return (
+        <>
+          <path d="M9.5 7h10M9.5 12h10M9.5 17h10" />
+          <path d="M3.4 5.6 4.8 5v3.4M3.3 15.2a1.2 1.2 0 1 1 2 .85L3.3 18.4h2.2" />
+        </>
+      )
+    case 'listTodo':
+      return (
+        <>
+          <rect x="3.2" y="4.6" width="5" height="5" rx="1.2" />
+          <path d="m4.4 7.1 1.1 1.1 1.9-2" />
+          <rect x="3.2" y="14.4" width="5" height="5" rx="1.2" />
+          <path d="M11 7h9M11 17h9" />
+        </>
+      )
+    /* Quote: the mark itself, not a page with lines on it. */
+    case 'quote':
+      return (
+        <>
+          <path d="M9.5 6.5C7 7.6 5.5 9.7 5.5 12.4v5.1h5.2v-5.1H8.1c0-1.9.6-3.2 2.2-4.1Z" fill={filled ? 'currentColor' : 'none'} />
+          <path d="M18 6.5c-2.5 1.1-4 3.2-4 5.9v5.1h5.2v-5.1h-2.6c0-1.9.6-3.2 2.2-4.1Z" fill={filled ? 'currentColor' : 'none'} />
+        </>
+      )
+    /* Code: angle brackets, which is what everyone already reads as code. */
+    case 'code':
+      return (
+        <>
+          <path d="m8.5 8.5-4 3.5 4 3.5" />
+          <path d="m15.5 8.5 4 3.5-4 3.5" />
+        </>
+      )
+    case 'pin':
+      return (
+        <>
+          <path
+            d="M14.5 3.2 20.8 9.5l-2.3.6a3 3 0 0 0-1.6 1l-2.6 3.2.9.9a1 1 0 0 1 0 1.4l-.5.5-6.4-6.4.5-.5a1 1 0 0 1 1.4 0l.9.9 3.2-2.6a3 3 0 0 0 1-1.6Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
+          <path d="m8.3 15.7-4.1 4.1" />
+        </>
+      )
+    case 'pencil':
+      return (
+        <>
+          <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
+          <path d="M14.5 6.5 17.5 9.5" />
         </>
       )
     case 'alert':

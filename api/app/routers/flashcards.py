@@ -29,7 +29,7 @@ from ..schemas import (
 )
 from ..services import activity, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import get_llm
+from ..services.llm import get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
 from ..services.voice import CARDS_AGENT_VOICE
 
@@ -214,12 +214,15 @@ async def generate_cards(
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
     context = body.source_text or ""
+    history = await recent_history(user.id, subspace_id)
     if not context:
         retrieved = await rag.retrieve(subspace_id, topic, k=6)
-        if not retrieved:
+        # Chat counts as material — see the note in quizzes.generate_quiz.
+        # `history` is passed to `_generate_pairs` below either way, so
+        # refusing here while using it there was the same contradiction.
+        if not retrieved and not history:
             raise NothingIndexed()
-        context = "\n\n".join(f"- {r.content}" for r in retrieved)
-    history = await recent_history(user.id, subspace_id)
+        context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
     student_context = student_model.format_for_prompt(await student_model.get(user.id))
 
     if settings.llm_configured:
@@ -373,7 +376,7 @@ async def _generate_pairs(
     if start == -1 or end <= start:
         return []
     try:
-        data = json.loads(raw[start : end + 1])
+        data = loads_lenient(raw[start : end + 1])
     except json.JSONDecodeError:
         return []
 

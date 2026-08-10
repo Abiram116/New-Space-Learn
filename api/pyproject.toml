@@ -40,7 +40,15 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+ignore = [
+  "E501",
+  # `Depends(...)` in a default argument is how FastAPI dependency injection
+  # is written — it is the framework's documented idiom, not a mistake, and
+  # it accounted for 54 of 58 reported errors. A lint run that is 93% false
+  # positives trains everyone to ignore lint, which costs more than the rule
+  # was ever going to catch.
+  "B008",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

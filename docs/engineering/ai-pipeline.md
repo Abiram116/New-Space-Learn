@@ -3,8 +3,8 @@
 Everything between a student's question and what comes back: retrieval,
 prompt construction, generation, and what is remembered afterwards.
 
-This was four documents — `AI_ENGINE.md`, `KNOWLEDGE_MODEL.md`,
-`MEMORY_ENGINE.md` and `REQUEST_PIPELINE.md` — describing one subsystem from
+This was four documents — `docs/engineering/ai-pipeline.md`, `docs/engineering/ai-pipeline.md`,
+`docs/engineering/ai-pipeline.md` and `docs/engineering/ai-pipeline.md` — describing one subsystem from
 four angles, each opening by explaining which of the other three it did not
 repeat. That is a structure that costs a reader four decisions before they
 learn anything, so they are one document with four parts.
@@ -14,7 +14,7 @@ learn anything, so they are one document with four parts.
 ## Part 1 — The engine
 
 Latency figures marked "measured" come from comments already in the code
-(`IMPLEMENTATION_PLAN.md`'s responsiveness work). Figures marked "estimated" are
+(`docs/plan.md`'s responsiveness work). Figures marked "estimated" are
 reasoned from Groq's published inference characteristics and this stack's
 known request shape, not measured in this project — treat them as planning
 numbers, not SLAs, until someone times them for real.
@@ -115,7 +115,7 @@ stage — see §11 for why.
 - **Input:** a batch of chunk strings.
 - **Output:** a `vector(384)` per chunk (was `vector(1536)` — see below).
 - **Status (updated 2026-08-10): local model wired, benchmarked, and
-  measured to fit — one migration away from live.** [ADR-0012](adr/0012-local-embeddings-bge-small.md)
+  measured to fit — one migration away from live.** [docs/decisions.md](../decisions.md)
   replaced the Phase-0.1 hosted OpenAI provider entirely, per an explicit
   product decision: $0 recurring cost, no external API dependency. Now
   **BGE-small-en-v1.5, quantized ONNX, via `fastembed`**, running
@@ -127,7 +127,7 @@ stage — see §11 for why.
 - **Measured, not estimated, this time:** app baseline ~57–60MB, model
   marginal ~170–200MB loaded / ~230MB peak while embedding, combined
   ~250–290MB of Render's 512MB ceiling — full numbers and method in
-  ADR-0012. ~10ms/chunk, ~3ms/query — not a bottleneck.
+  docs/decisions.md. ~10ms/chunk, ~3ms/query — not a bottleneck.
 - **BGE-M3 evaluated and rejected for production, kept as an offline
   quality benchmark only.** ~2.2GB model weights alone — 4–8x the entire
   memory ceiling before the app is counted. Not a close call.
@@ -139,11 +139,11 @@ stage — see §11 for why.
 - **Cold start:** a real, one-time cost this design accepts — ~15–24s on
   the very first run after a fresh deploy (import + model download), ~3.4s
   on subsequent cold-start wake-ups once the model is cached on disk.
-  Measured, in ADR-0012.
+  Measured, in docs/decisions.md.
 - **Cost:** $0, permanently. No longer "in tension" with "free" — that
   tension is what this decision closed.
 - **Alternatives rejected:** the hosted OpenAI provider (built, benchmarked,
-  removed — see ADR-0012's "Alternatives considered"); BGE-M3 in production;
+  removed — see docs/decisions.md's "Alternatives considered"); BGE-M3 in production;
   a separate embedding microservice; offline/batch embedding (not needed —
   measured latency fits the existing 25s inline budget with room to spare).
 
@@ -162,12 +162,12 @@ stage — see §11 for why.
   + one `documents` lookup for names. **Measured pattern elsewhere in this
   codebase puts one warm Supabase round trip at ~150–257ms**; this stage is
   2–3 such round trips run sequentially (deliberately — see
-  `ARCHITECTURE.md`'s note on why `asyncio.gather` is *slower*
+  `docs/engineering/architecture.md`'s note on why `asyncio.gather` is *slower*
   against this specific remote Postgres).
 - **Cost:** $0 beyond the embedding call this stage depends on — pgvector
   search itself has no metered cost on Supabase's free tier.
 - **Alternatives rejected:** a dedicated vector database — see
-  `ARCHITECTURE.md`. Rejected on the same grounds: no measurable
+  `docs/engineering/architecture.md`. Rejected on the same grounds: no measurable
   latency win at this data volume, and a second free-tier account to run out
   of.
 
@@ -216,7 +216,7 @@ still a measured problem at that volume.
 - **Alternatives rejected:** letting each Skill define its own full system
   prompt (rather than a shared voice + an appended instruction fragment) was
   rejected during the Skills-as-behavior-package redesign
-  (`IMPLEMENTATION_PLAN.md`'s cross-cutting Voice & Identity note) — a shared
+  (`docs/plan.md`'s cross-cutting Voice & Identity note) — a shared
   `COMPANION_VOICE` fragment is what makes every surface sound like one
   mentor instead of a different assistant per feature.
 
@@ -235,12 +235,12 @@ still a measured problem at that volume.
   faster still. Not measured in this repo, but consistent with Groq's
   published throughput for these model families.
 - **Cost:** the real recurring cost of the product. Priced per-tier in
-  `COST_MODEL.md` §2.
+  `docs/operations/performance-and-cost.md` §2.
 - **Alternatives rejected:** a single model tier for everything was rejected
   early — `GROQ_MODEL_FAST` (8B) exists specifically so the Home brief and
   subspace-naming calls (short, low-stakes output) don't pay 70B latency
   and quota for work an 8B model handles fine. This tiering *is* the cost
-  optimization; see `COST_MODEL.md`.
+  optimization; see `docs/operations/performance-and-cost.md`.
 
 ### 10. Citation validation — built (Phase 0.4)
 
@@ -277,7 +277,7 @@ question array vs. rich-text content) and different enough in how they're
 queried that forcing them through one polymorphic table would be a premature
 unification with no current consumer needing to query across artifact
 types generically. Each artifact keeps its own table and its own lifecycle.
-See `KNOWLEDGE_MODEL.md` for the actual single-source-of-truth model this
+See `docs/engineering/ai-pipeline.md` for the actual single-source-of-truth model this
 codebase uses instead (tagged evidence rows, not a unified object).
 
 ### 12. Artifact generation
@@ -289,16 +289,16 @@ codebase uses instead (tagged evidence rows, not a unified object).
   study from directly.
 - **Input:** a `subspace_id`, real retrieved context (`rag.retrieve`), recent
   chat history, the Student Model's context — never a bare topic string
-  handed to the model on faith (`IMPLEMENTATION_PLAN.md` §2's grounding fix).
+  handed to the model on faith (`docs/plan.md` §2's grounding fix).
 - **Output:** a full deck (N flashcards), a full quiz (N questions, each with
   `answer_index`, `source`, `subtopic`), or an inline note edit.
 - **Latency:** one LLM call at the `groq_model` (70B) tier — reasoning over
   real context is treated as genuinely different work from the brief's
   template-filling, and deliberately not downgraded to the fast tier for
-  cost reasons without checking output quality first (`IMPLEMENTATION_PLAN.md`'s
+  cost reasons without checking output quality first (`docs/plan.md`'s
   explicit note).
 - **Cost:** metered at `cost=2` (double a chat turn) via
-  `consume_llm_quota` — priced in `COST_MODEL.md` §3.
+  `consume_llm_quota` — priced in `docs/operations/performance-and-cost.md` §3.
 - **Alternatives rejected:** generating one card per chat reply (the
   original behavior) was rejected and replaced with whole-deck generation —
   "an agent asked for cards should produce a deck," per `PRODUCT.md`'s own
@@ -310,12 +310,12 @@ codebase uses instead (tagged evidence rows, not a unified object).
 
 - **Purpose:** the durable record of what a student is good at, weak at, and
   how each card is scheduled — the substrate the "twenty-minute verdict"
-  (`SOUL.md §3`) is computed from.
+  (`docs/product/vision.md §3`) is computed from.
 - **Where it lives:** distributed across existing tables, not centralized —
   `flashcards.ease/interval_days/reps/due_at` (SM-2 state), `quiz_results`
   (grouped into `TopicSignal` weak/strong areas at read time), `user_settings
   .student_model` (explicit preferences), `daily_activity` (streak). See
-  `MEMORY_ENGINE.md` for the full lifecycle of each.
+  `docs/engineering/ai-pipeline.md` for the full lifecycle of each.
 - **Update rule:** every value is computed fresh from stored facts on every
   read (`student_model.get()`) — nothing here is cached in a way that could
   drift from the underlying rows, per the same discipline that keeps
@@ -325,7 +325,7 @@ codebase uses instead (tagged evidence rows, not a unified object).
 ### 14. Scheduling
 
 **Code:** `api/app/routers/flashcards.py::grade_card` (today);
-`IMPLEMENTATION_PLAN.md` (exam-aware compression, not yet built)
+`docs/plan.md` (exam-aware compression, not yet built)
 
 - **Purpose:** decide when a card comes due again.
 - **Algorithm today:** SM-2-lite — ease/interval adjustment per grade
@@ -363,7 +363,7 @@ codebase uses instead (tagged evidence rows, not a unified object).
 | Hybrid search | **Not built — sequenced after real embeddings** | — | — |
 | Reranking | **Not built — not justified at current scale** | — | — |
 | Context building | Yes | <5ms | $0 |
-| Reasoning | Yes | 300–600ms TTFT + streaming (est.) | Priced in `COST_MODEL.md` |
+| Reasoning | Yes | 300–600ms TTFT + streaming (est.) | Priced in `docs/operations/performance-and-cost.md` |
 | Citation validation | Yes (Phase 0.4) | one regex pass, post-stream | $0 |
 | Artifact generation | Yes | one 70B call | 2x a chat turn's quota cost |
 | Learning state | Yes | computed at read time | $0 |
@@ -380,7 +380,7 @@ codebase uses instead (tagged evidence rows, not a unified object).
 
 The idealized template names a unified `Knowledge Object` that generation
 produces and persistence stores. This model rejects that abstraction for the
-same reason `AI_ENGINE.md §11` gives: a flashcard (SM-2 state), a quiz
+same reason `docs/engineering/ai-pipeline.md §11` gives: a flashcard (SM-2 state), a quiz
 question (a jsonb array element with `answer_index`), and a note (rich text)
 are shaped too differently, and queried too differently, to benefit from a
 shared polymorphic parent. **Each artifact type keeps its own table.** What
@@ -435,11 +435,11 @@ never affects matching.
 | Artifact | Tag column | Status |
 |---|---|---|
 | Quiz question | `subtopic` (inside the `questions` jsonb array) | Shipped — generation prompt already requests it, frontend already renders it |
-| Flashcard | *(none yet)* | Planned, `IMPLEMENTATION_PLAN.md` — same pattern, one more field on the generation prompt |
-| Quiz choice (distractor) | *(none yet)* | Planned, `IMPLEMENTATION_PLAN.md` — required specifically for confusion pairs, see §4 below |
+| Flashcard | *(none yet)* | Planned, `docs/plan.md` — same pattern, one more field on the generation prompt |
+| Quiz choice (distractor) | *(none yet)* | Planned, `docs/plan.md` — required specifically for confusion pairs, see §4 below |
 | Note | *(none yet)* | Not scheduled — no current feature needs a note-level tag; add only if one emerges |
 
-**What this deliberately gives up, restated from `SOUL.md §5`:** "Bayes'
+**What this deliberately gives up, restated from `docs/product/vision.md §5`:** "Bayes'
 theorem" and "Bayes' rule" are different concepts to this model until a
 human writes them identically, or a small curated synonym list is added
 later. That is an honest, visible limitation of a cheap mechanism — not a
@@ -453,7 +453,7 @@ This is the one relationship in the model that needs slightly more schema
 than "a tag on a row" — a wrong quiz answer needs to know *which concept the
 wrong choice represented*, not just which concept the question was about.
 
-**Planned schema change** (`IMPLEMENTATION_PLAN.md`, not yet built):
+**Planned schema change** (`docs/plan.md`, not yet built):
 
 ```jsonc
 // quizzes.questions[i], before:
@@ -468,7 +468,7 @@ wrong choice represented*, not just which concept the question was about.
   "answer_index": 0, "source": str, "subtopic": "Attention Mechanisms" }
 ```
 
-**The read-time query this enables** (conceptually — see `IMPLEMENTATION_PLAN.md` Phase 2 for the endpoint):
+**The read-time query this enables** (conceptually — see `docs/plan.md` Phase 2 for the endpoint):
 
 ```sql
 -- For every wrong answer this user has ever given, pair the concept they
@@ -506,7 +506,7 @@ The Gap Map looks like a graph and is worth being precise about, because
 easy to conflate — and this model stores neither a `concepts` table (§3) nor
 any adjacency structure.
 
-Per [ADR-0011](adr/0011-gap-map-derived-concept-visualization.md), every part
+Per [docs/decisions.md](../decisions.md), every part
 of the map is computed at render time from rows that already exist:
 
 | Visual property | Derived from | Query shape |
@@ -537,8 +537,8 @@ implementation time:**
 
 ### 5. Learning state and scheduling
 
-Both are fully specified in `MEMORY_ENGINE.md §3` (Learning memory) and
-`AI_ENGINE.md §14` (Scheduling) respectively — not repeated here. The one
+Both are fully specified in `docs/engineering/ai-pipeline.md §3` (Learning memory) and
+`docs/engineering/ai-pipeline.md §14` (Scheduling) respectively — not repeated here. The one
 fact worth restating in a knowledge-model context: **learning state is
 always computed from evidence (§2) and tags (§3), never stored as its own
 independent opinion.** A "weak area" is a `GROUP BY` over `quiz_results`
@@ -558,7 +558,7 @@ under time pressure:
 |---|---|---|
 | "You've studied N days in a row" | `daily_activity` | `streaks.py::compute_streak` over `day` rows |
 | "You're weak on X" (subspace-level) | `quiz_results` joined through `quizzes` | `student_model.py::_quiz_signals`, min. 2 attempts |
-| "You're weak on X" (concept-level, planned) | Same tables, grouped by normalized `subtopic` | `IMPLEMENTATION_PLAN.md` |
+| "You're weak on X" (concept-level, planned) | Same tables, grouped by normalized `subtopic` | `docs/plan.md` |
 | "You've confused X with Y N times" (planned) | `quiz_results.answers` + tagged `choices` | §4 above |
 | A card is due today | `flashcards.due_at` | Direct column read, no derivation |
 | A citation's source | `chat_messages.citations[i]` / an artifact's `source` field | Written at generation time, never after |
@@ -568,7 +568,7 @@ under time pressure:
 
 If a future feature wants to show a number that isn't in this table, the
 first question is which existing row it derives from — per
-`IMPLEMENTATION_PLAN.md`'s standing rule, if the honest answer requires inventing
+`docs/plan.md`'s standing rule, if the honest answer requires inventing
 a weighting formula, it doesn't ship until this table can name a row for it.
 
 ---
@@ -627,7 +627,7 @@ store (Redis, or a Postgres table) for no benefit — the free-tier
 ### 3. Learning memory
 
 **What it is:** the durable, per-student model of understanding — the thing
-`SOUL.md §4` calls "the mechanism," implemented exactly as tagged evidence
+`docs/product/vision.md §4` calls "the mechanism," implemented exactly as tagged evidence
 rows, never as a cached derived value.
 
 | | |
@@ -635,7 +635,7 @@ rows, never as a cached derived value.
 | **Storage** | Distributed, not centralized: `flashcards.ease/interval_days/reps/due_at` (SM-2 scheduling state, one row per card); `user_settings.student_model jsonb` (explicit fields: learning style, session length, exam context, teaching preference); computed-on-read `TopicSignal` (weak/strong areas, grouped from `quiz_results` joined through `quizzes`) |
 | **Lifetime** | Indefinite for explicit fields and SM-2 state (they're the point — this is what "the app remembers you" means). Computed signals have no independent lifetime at all — see Update rule |
 | **Retrieval** | `student_model.py::get()` — three reads (`user_settings`, quiz-grouped signals, activity days) run concurrently via `asyncio.gather`, because unlike the sequential-is-faster pattern elsewhere, these three don't share a request-response dependency chain worth serializing |
-| **Update rule** | **Computed signals are never stored — they're recalculated from raw rows on every single read.** This is the same discipline that keeps `/me/brief` honest (`IMPLEMENTATION_PLAN.md`'s `fullness()` lesson: an invented or cached metric can silently drift from what's actually true; a query can't). Explicit fields update via `set_explicit()`, a targeted `PATCH` merge into the `student_model jsonb` blob |
+| **Update rule** | **Computed signals are never stored — they're recalculated from raw rows on every single read.** This is the same discipline that keeps `/me/brief` honest (`docs/plan.md`'s `fullness()` lesson: an invented or cached metric can silently drift from what's actually true; a query can't). Explicit fields update via `set_explicit()`, a targeted `PATCH` merge into the `student_model jsonb` blob |
 | **Expiration** | None. This is the one memory layer that should never expire — it's the whole product's value proposition compounding over a semester |
 | **Why it exists** | This is what's injected into every chat/agent/brief prompt (`format_for_prompt()`) so the model always has "what you know about this student" without the student re-explaining themselves each session — the literal implementation of `vision.md`'s "a mentor who remembers," built entirely from facts, never from a model's summary of a conversation |
 
@@ -643,7 +643,7 @@ rows, never as a cached derived value.
 of past conversations. The temptation is an LLM-generated "here's what this
 student tends to struggle with" summary, refreshed periodically — rejected,
 because it reintroduces exactly the unfalsifiable-model-opinion problem
-`SOUL.md §6`'s edge doctrine forbids. Every fact in Learning memory traces to
+`docs/product/vision.md §6`'s edge doctrine forbids. Every fact in Learning memory traces to
 a real row (a grade, a quiz answer, a setting the student typed), never to a
 model's inference about the student.
 
@@ -657,9 +657,9 @@ from them, scoped to the Subject → Subspace hierarchy.
 | | |
 |---|---|
 | **Storage** | `documents` + `document_chunks` (source material and its embeddings), `notes`, `decks`/`flashcards`, `quizzes`, `skills` attached via `subspace_skills`, and `subspace_links` (explicit cross-subspace references) |
-| **Lifetime** | Indefinite, and cascades — every one of these tables has `on delete cascade` to its owning subspace/user, confirmed in `20260803120000_init.sql`. Deleting a subspace deletes everything grown from it; deleting a user's account deletes everything they own, in one Admin API call (`IMPLEMENTATION_PLAN.md`'s delete-account note) |
+| **Lifetime** | Indefinite, and cascades — every one of these tables has `on delete cascade` to its owning subspace/user, confirmed in `20260803120000_init.sql`. Deleting a subspace deletes everything grown from it; deleting a user's account deletes everything they own, in one Admin API call (`docs/plan.md`'s delete-account note) |
 | **Retrieval** | Always subspace-scoped by default (`rag.retrieve`); explicitly widened only via `subspace_links` (`retrieve_with_links`) — a student must have drawn the connection themselves |
-| **Update rule** | Documents are write-once-then-reprocessable (a new upload creates a new row; `reprocess` re-derives chunks for an existing one). Notes/cards/quizzes are directly mutable by the student or by an agent call, with no distinction in the editor between the two origins (`IMPLEMENTATION_PLAN.md`'s "one editor, two authors" principle) |
+| **Update rule** | Documents are write-once-then-reprocessable (a new upload creates a new row; `reprocess` re-derives chunks for an existing one). Notes/cards/quizzes are directly mutable by the student or by an agent call, with no distinction in the editor between the two origins (`docs/plan.md`'s "one editor, two authors" principle) |
 | **Expiration** | None — this is the student's actual work product. The only deletions are explicit (student deletes a document/deck/note) or cascading (parent subspace deleted) |
 | **Why it exists** | This is the actual "single source of truth" — every citation, every card, every quiz question traces back to a specific row here, which is what makes the product's central claim (`PRODUCT.md` Principle 3) checkable rather than asserted |
 
@@ -669,13 +669,13 @@ from them, scoped to the Subject → Subspace hierarchy.
 
 **What it is:** the historical record of how a student performed — the raw
 evidence Learning memory's signals are computed from, and the layer the
-SOUL.md-derived confusion-pair feature reads directly.
+../product/vision.md-derived confusion-pair feature reads directly.
 
 | | |
 |---|---|
 | **Storage** | `quiz_results` — one **immutable, append-only** row per attempt (`answers jsonb`, `score`, `submitted_at`); `daily_activity` — one row per user per day, incrementally bumped (`chat_messages`/`cards_reviewed`/`quizzes_taken`/`study_seconds` counts) |
 | **Lifetime** | Indefinite for `quiz_results` — every attempt is kept forever, which is exactly what makes "you've confused these two four times" a real, countable fact rather than an impression. `daily_activity` rows are also kept indefinitely (they're the streak/heatmap's raw material) |
-| **Retrieval** | Grouped and aggregated at read time — `student_model.py`'s `_quiz_signals()` for weak/strong areas, `streaks.py::compute_streak` for the activity heatmap, and (once built) `IMPLEMENTATION_PLAN.md`'s confusion-pair aggregation over the same `quiz_results` rows |
+| **Retrieval** | Grouped and aggregated at read time — `student_model.py`'s `_quiz_signals()` for weak/strong areas, `streaks.py::compute_streak` for the activity heatmap, and (once built) `docs/plan.md`'s confusion-pair aggregation over the same `quiz_results` rows |
 | **Update rule** | Append-only for quiz attempts — a resubmitted quiz creates a new `quiz_results` row, it does not overwrite the old one. **Asymmetry worth stating plainly:** flashcard grading is the opposite — `grade_card()` overwrites `ease`/`interval_days`/`reps`/`due_at` *in place* on the same row, with no log of past grades kept. This is intentional, not an oversight: no current or planned feature needs a flashcard's grade *history*, only its current SM-2 state (even the P3 "predicted-retention estimate" backlog item only needs current ease + interval + time-since-last-review, not a trend line) |
 | **Expiration** | None for either table |
 | **Why it exists** | This is the layer that makes the product's flagship claim possible: "you picked the wrong answer three times" is only a fact because every attempt, right or wrong, was kept — not summarized, not overwritten |
@@ -696,7 +696,7 @@ SOUL.md-derived confusion-pair feature reads directly.
 overwritten with a model's summary or a model's guess. A model can *read*
 any of these five layers to answer a question or write an artifact; it never
 *writes back* a compressed version of them. That boundary is what keeps
-Learning memory honest, and it's the same boundary `SOUL.md`'s edge doctrine
+Learning memory honest, and it's the same boundary `docs/product/vision.md`'s edge doctrine
 states for a different part of the system — one principle, applied twice.
 
 ---
@@ -722,7 +722,7 @@ origins."
    returns a markdown *fragment* (`NoteAiInlineOut.content_md`), not a new
    note. The frontend inserts it at the cursor inside the same note the
    student is already editing — origin is never special-cased in storage or
-   in the editor, matching `IMPLEMENTATION_PLAN.md`'s "one editor, two
+   in the editor, matching `docs/plan.md`'s "one editor, two
    authors" requirement.
 
 **A defensive step worth knowing about if you touch this path:** the model
@@ -734,7 +734,7 @@ per its own comment. If you change the inline-AI prompt, keep this function;
 it's cheap insurance against a regression that's already happened once.
 
 **Storage shape:** `body_md` stayed a markdown string (see the correction
-logged in `IMPLEMENTATION_PLAN.md`) — rendered through `tiptap-markdown`, not a
+logged in `docs/plan.md`) — rendered through `tiptap-markdown`, not a
 structured `jsonb` document. Every write path above produces markdown.
 
 ---
@@ -769,7 +769,7 @@ Two independent lifecycles share one table: **authoring** a deck, and
    optimistic UI, not an oversight. `flashcards.py`'s own docstring flags
    it: "kept in one place because they double as the client-side optimistic
    update. Keep the two in sync." **Anyone implementing exam-aware
-   scheduling (`IMPLEMENTATION_PLAN.md`) must update both copies** — adding
+   scheduling (`docs/plan.md`) must update both copies** — adding
    interval compression only server-side would make every compressed card
    flash the *uncompressed* interval for one round trip before correcting,
    a visible regression of the exact property this comment protects.
@@ -788,13 +788,13 @@ optimistically show.
 1. `POST /subspaces/{id}/quiz/generate` — same grounding discipline as
    flashcards (real retrieval, real history, typed `NothingIndexed` on empty
    retrieval). Each question is generated with `answer_index`, `source`, and
-   `subtopic` in one shot — `subtopic` is the field `IMPLEMENTATION_PLAN.md`
+   `subtopic` in one shot — `subtopic` is the field `docs/plan.md`
    already shipped and `§11`'s confusion-pair work will read from.
 2. Student answers client-side, no request per answer.
 3. `POST /quizzes/{id}/submit` — the **only** point of server contact after
    generation. Scoring happens server-side (`answer_index` comparison,
    never trust a client-computed score), `quiz_results` gets one new,
-   immutable row (never an update — see `MEMORY_ENGINE.md §5`'s append-only
+   immutable row (never an update — see `docs/engineering/ai-pipeline.md §5`'s append-only
    note), `daily_activity` is bumped.
 4. Results render from the response (`score`, `correct[]`) — no second
    fetch needed.
@@ -814,15 +814,15 @@ list_decks()'s _bulk_counts computes { due, total, known_pct } per deck
 /me/stats (and the Home brief) read the same underlying tables fresh —
 never a cached "due count" that could drift from the actual due_at values
         ↓
-Home surfaces "N cards due" and, once IMPLEMENTATION_PLAN.md §1 ships fully,
+Home surfaces "N cards due" and, once ../plan.md §1 ships fully,
 a specific suggested next action
 ```
 
 Nothing here is pushed — every layer re-reads the tables it needs on its own
 request. The only thing that makes this feel instant rather than
-recomputed-every-time is the session cache (`MEMORY_ENGINE.md §2`), and that
+recomputed-every-time is the session cache (`docs/engineering/ai-pipeline.md §2`), and that
 cache is explicitly cleared on exactly the two writes that would make it
-lie: card grading and quiz submission (`IMPLEMENTATION_PLAN.md`'s Responsiveness
+lie: card grading and quiz submission (`docs/plan.md`'s Responsiveness
 note). This is worth stating as a rule for any new write path: **if a new
 endpoint changes a number `/me/stats` or the brief surfaces, it must clear
 that cache key, or a student will see a stale number for up to the TTL.**
@@ -832,7 +832,7 @@ that cache key, or a student will see a stale number for up to the TTL.**
 ### Error handling, as it actually surfaces per flow
 
 The envelope itself (`{ "error": { "code", "message" } }`) is specified once
-in `ARCHITECTURE.md` and not repeated here. What's specific to each flow
+in `docs/engineering/architecture.md` and not repeated here. What's specific to each flow
 above:
 
 - **Notes generation / inline AI:** `NothingIndexed` for generation (empty

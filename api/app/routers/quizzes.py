@@ -15,7 +15,7 @@ from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
 from ..services import activity, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import get_llm
+from ..services.llm import get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
 from ..services.voice import QUIZ_AGENT_VOICE
 
@@ -70,11 +70,18 @@ async def generate_quiz(
     await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
 
     retrieved = await rag.retrieve(subspace_id, body.topic or "core concepts", k=6)
-    if not retrieved and settings.llm_configured:
+    history = await recent_history(user.id, subspace_id)
+    # A conversation IS the student's material. This used to require indexed
+    # documents specifically, which blocked the most natural case in the
+    # product: talk through a topic in chat, then ask to be tested on it.
+    # The inconsistency was visible in this very function — `history` was
+    # already loaded and already passed to the model below, so the code
+    # treated chat as usable material while the gate above it did not.
+    # `notes.py` had it right; flashcards and quizzes did not.
+    if not retrieved and not history and settings.llm_configured:
         raise NothingIndexed()
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
     label = subspace_label(subspace)
-    history = await recent_history(user.id, subspace_id)
     recent = format_history(history) or "(no prior chat in this space)"
     student_context = student_model.format_for_prompt(await student_model.get(user.id))
 
@@ -83,10 +90,12 @@ async def generate_quiz(
         f"'{body.topic or 'the key concepts in this material'}', within the "
         f"subject '{label}' — resolve any ambiguity in the topic name using "
         f"that subject, not a generic reading of the words. "
-        "Use ONLY this material:\n\n"
-        f"{context}\n\n"
-        f"Recent conversation in this space (for context on what's actually "
-        f"being studied — do not quote it directly):\n{recent}\n\n"
+        "Use ONLY the material and conversation below — both are the "
+        "student's own, and when there are no indexed documents the "
+        "conversation is the whole of it. Do not draw on outside knowledge; "
+        "if neither source covers something, leave it out.\n\n"
+        f"Indexed material:\n{context}\n\n"
+        f"Recent conversation in this space:\n{recent}\n\n"
         "Return a JSON array; each item has fields: "
         '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, '
         '"source": str, "subtopic": str}. subtopic is the specific concept '
@@ -161,7 +170,7 @@ async def submit_quiz(
         # Pad or truncate to match — we don't want to reject a partial submit outright.
         body.answers = (body.answers + [-1] * len(questions))[: len(questions)]
 
-    correct = [int(a) == int(q.get("answer_index", -1)) for a, q in zip(body.answers, questions)]
+    correct = [int(a) == int(q.get("answer_index", -1)) for a, q in zip(body.answers, questions, strict=False)]
     score = round(100 * sum(correct) / len(correct)) if correct else 0
 
     await supabase.db_insert(
@@ -196,7 +205,7 @@ def _safe_parse_questions(raw: str, *, want: int) -> list[QuizQuestion]:
     if start == -1 or end == -1 or end <= start:
         return []
     try:
-        data = json.loads(raw[start : end + 1])
+        data = loads_lenient(raw[start : end + 1])
     except json.JSONDecodeError:
         return []
     out: list[QuizQuestion] = []

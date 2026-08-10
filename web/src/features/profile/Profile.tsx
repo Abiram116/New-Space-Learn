@@ -10,12 +10,14 @@
  * endpoint exists — omitting it is honest, showing a dead button is not.
  */
 
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Badge, Stats } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { useToast } from '../../components/ui/Toast'
 import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon, type IconName } from '../../components/ui/Icon'
 
@@ -30,8 +32,11 @@ import { toneSoft, toneText } from '../../lib/tone'
 const INTENSITY = ['bg-line-soft', 'bg-brand/25', 'bg-brand/55', 'bg-brand']
 
 export function Profile() {
-  const { user } = useAuth()
+  const { user, setDisplayName } = useAuth()
   const navigate = useNavigate()
+  const { showError } = useToast()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
   // Shared cache with Home — Profile was refetching the same payload on
   // every visit, which is the exact back-navigation cost fixed elsewhere.
   const stats = useAsync(() => getCachedStats(), [])
@@ -49,6 +54,17 @@ export function Profile() {
       })
     : ''
 
+  const commitName = async () => {
+    const name = draft.trim()
+    setEditing(false)
+    if (!name || name === displayName) return
+    try {
+      await setDisplayName(name)
+    } catch (err) {
+      showError(err)
+    }
+  }
+
   const d = stats.data
 
   return (
@@ -56,13 +72,64 @@ export function Profile() {
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-7 sm:px-7">
         {/* Identity */}
         <header className="flex flex-wrap items-center gap-4">
-          <span className="grid h-16 w-16 shrink-0 place-items-center rounded-2xl bg-brand text-[22px] font-extrabold text-[#1a120f] shadow-[inset_0_2px_0_rgba(255,255,255,0.35),0_8px_20px_-8px_rgba(255,90,60,0.6)]">
-            {initials}
+          {/* A seal, not a coloured square.
+              The flat brand tile read as a placeholder avatar waiting for a
+              photo upload that this app does not have. A foil seal is a thing
+              this product already means something by — it is what a badge is
+              — so the identity mark belongs to the same world as the record
+              underneath it. The ring and inner glow give it depth without a
+              drop shadow, which `Ledger` surfaces never use. */}
+          <span className="relative grid h-16 w-16 shrink-0 place-items-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_25%,var(--color-brand-300),var(--color-brand)_55%,var(--color-brand-deep))] ring-1 ring-brand/40"
+            />
+            <span
+              aria-hidden
+              className="absolute inset-[3px] rounded-full ring-1 ring-[rgba(255,237,220,0.25)]"
+            />
+            <span className="relative nameplate text-[21px] leading-none text-[#1a120f]">
+              {initials}
+            </span>
           </span>
           <div className="min-w-0 flex-1">
-            <h1 className="nameplate truncate text-[clamp(26px,4vw,38px)] leading-none text-ink">
-              {displayName}
-            </h1>
+            {editing ? (
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitName()
+                  if (e.key === 'Escape') setEditing(false)
+                }}
+                aria-label="Your name"
+                maxLength={60}
+                className="nameplate w-full max-w-md rounded-[10px] border border-brand/50 bg-well px-2.5 py-1 text-[clamp(24px,3.6vw,34px)] leading-tight text-ink outline-none"
+              />
+            ) : (
+              <h1 className="group flex min-w-0 items-center gap-2">
+                <span className="nameplate truncate text-[clamp(26px,4vw,38px)] leading-none text-ink">
+                  {displayName}
+                </span>
+                {/* Edit lives on the name itself rather than in a settings
+                    round-trip — this is the one field on the page that is
+                    yours to change, so it should be changeable where you
+                    read it. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(displayName)
+                    setEditing(true)
+                  }}
+                  aria-label="Rename yourself"
+                  title="Rename yourself"
+                  className="shrink-0 rounded-md p-1.5 text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+                >
+                  <Icon name="pencil" size={14} />
+                </button>
+              </h1>
+            )}
             <p className="mt-1 truncate text-[13px] text-muted">
               {email}
               {joined ? ` · collecting since ${joined}` : ''}

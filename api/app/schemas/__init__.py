@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
 
@@ -29,6 +28,9 @@ class SpaceOut(BaseModel):
     id: str
     name: str
     tone: Tone
+    # Pinned subjects sort to the top of the rail. Defaulted rather than
+    # required so a response built before the column existed still validates.
+    pinned: bool = False
     subspaces: list[SubspaceOut] = []
 
 
@@ -40,6 +42,7 @@ class SpaceCreate(BaseModel):
 class SpaceUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     tone: Tone | None = None
+    pinned: bool | None = None
 
 
 class SubspaceCreate(BaseModel):
@@ -120,6 +123,12 @@ class NoteUpdate(BaseModel):
 
 class NoteGenerate(BaseModel):
     topic: str | None = Field(default=None, max_length=140)
+    # Free text, in the student's own words: "just bullet points", "make it a
+    # checklist", "go deep, I have an exam". A fixed enum of styles was the
+    # obvious alternative and the wrong one — it can only ever offer the
+    # shapes someone thought of in advance, and the model handles the long
+    # tail of phrasings fine.
+    instructions: str | None = Field(default=None, max_length=500)
 
 
 class NoteAiInline(BaseModel):

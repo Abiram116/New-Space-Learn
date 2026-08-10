@@ -40,11 +40,22 @@ export function Sidebar({
     'You'
   const initials = displayName.slice(0, 2).toUpperCase()
 
-  const nav: { to: string; icon: IconName; label: string; enabled: boolean; end?: boolean }[] = [
+  // Disabled state needs a reason attached to it, not just a dimmer colour.
+  // A greyed-out nav item with no explanation reads as broken, not as
+  // "do this first" — the dim alone doesn't say what "this" is.
+  const whyDisabled = 'Add a topic to a subject to unlock this'
+  const nav: {
+    to: string
+    icon: IconName
+    label: string
+    enabled: boolean
+    end?: boolean
+    reason?: string
+  }[] = [
     { to: '/home', icon: 'home', label: 'Home', enabled: true, end: true },
-    { to: hasAny ? `${base}/notes` : '#', icon: 'note', label: 'Notes', enabled: hasAny },
-    { to: hasAny ? `${base}/flashcards` : '#', icon: 'deck', label: 'Cards', enabled: hasAny },
-    { to: hasAny ? `${base}/quizzes` : '#', icon: 'quiz', label: 'Quizzes', enabled: hasAny },
+    { to: hasAny ? `${base}/notes` : '#', icon: 'note', label: 'Notes', enabled: hasAny, reason: whyDisabled },
+    { to: hasAny ? `${base}/flashcards` : '#', icon: 'deck', label: 'Cards', enabled: hasAny, reason: whyDisabled },
+    { to: hasAny ? `${base}/quizzes` : '#', icon: 'quiz', label: 'Quizzes', enabled: hasAny, reason: whyDisabled },
   ]
 
   return (
@@ -100,8 +111,21 @@ export function Sidebar({
               key={item.label}
               to={item.to}
               end={item.end}
-              onClick={onNavigate}
-              title={collapsed ? item.label : undefined}
+              onClick={(e) => {
+                // `pointer-events-none` would have been the simpler way to
+                // block a disabled item, but it also blocks :hover — which
+                // means the title tooltip explaining WHY it's disabled would
+                // never fire, and a dimmed item with no explanation just
+                // reads as broken. Pointer events stay on; the click itself
+                // is what's stopped.
+                if (!item.enabled) {
+                  e.preventDefault()
+                  return
+                }
+                onNavigate?.()
+              }}
+              title={collapsed ? item.label : !item.enabled ? item.reason : undefined}
+              aria-disabled={!item.enabled}
               className={({ isActive }) =>
                 cn(
                   'flex min-w-0 items-center gap-2.5 rounded-[9px] px-2.5 py-2 transition-colors',
@@ -109,7 +133,7 @@ export function Sidebar({
                   isActive && item.enabled
                     ? 'bg-brand-soft font-semibold text-brand-deep'
                     : 'font-semibold text-ink-2 hover:bg-line-soft hover:text-ink',
-                  !item.enabled && 'pointer-events-none opacity-35',
+                  !item.enabled && 'cursor-not-allowed text-faint opacity-70 hover:bg-transparent hover:text-faint',
                 )
               }
             >

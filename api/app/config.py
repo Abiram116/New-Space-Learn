@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     groq_timeout_s: float = 60.0
 
     # Embeddings.
-    # Local, not hosted — see docs/adr/0012-local-embeddings-bge-small.md.
+    # Local, not hosted — see docs/decisions.md.
     # A hosted OpenAI-compatible provider was built and benchmarked, then
     # replaced: this is $0 marginal cost with no external API dependency,
     # measured to fit Render free tier's 512MB with real headroom. BGE-M3

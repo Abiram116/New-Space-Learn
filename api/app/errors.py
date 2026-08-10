@@ -83,7 +83,14 @@ class NothingIndexed(ApiError):
 
     code = "nothing_indexed"
     status = 422
-    message = "Nothing indexed on this topic yet. Upload a document first."
+    # Names both ways out, because both work. The old copy said "Upload a
+    # document first", which was wrong advice as soon as the generators
+    # started accepting chat history as material — a student who had talked
+    # the topic through was told to go do something they didn't need to.
+    message = (
+        "Nothing to build from yet. Upload a document or chat about this "
+        "topic first."
+    )
 
 
 def _envelope(code: str, message: str, status: int, extra: Any = None) -> JSONResponse:

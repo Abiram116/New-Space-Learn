@@ -151,3 +151,22 @@ async def close_llm() -> None:
     if isinstance(_llm, GroqLLM) and _llm._client is not None:  # noqa: SLF001
         await _llm._client.aclose()  # noqa: SLF001
     _llm = None
+
+
+def loads_lenient(text: str) -> Any:
+    """`json.loads`, but tolerant of the one thing models reliably get wrong.
+
+    A model asked for `{"title": ..., "body_md": ...}` will happily put real
+    newlines inside the markdown string rather than escaping them as `\\n`.
+    That is invalid JSON — U+000A is a control character and the strict
+    parser rejects it — so a perfectly good note was thrown away with
+    "came back in an unexpected format" for the crime of having more than
+    one line. Which is every note.
+
+    `strict=False` is the documented switch for exactly this: it permits
+    control characters inside strings and changes nothing else. Preferred
+    over regex-repairing the payload, which would risk corrupting content
+    that happens to contain braces or quotes.
+    """
+
+    return json.JSONDecoder(strict=False).decode(text)

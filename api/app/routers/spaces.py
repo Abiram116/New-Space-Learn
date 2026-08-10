@@ -17,7 +17,11 @@ async def list_spaces(user: CurrentUser = Depends(get_current_user)) -> list[Spa
     subjects = await supabase.db_select(
         "subjects",
         filters={"user_id": f"eq.{user.id}"},
-        order="created_at.asc",
+        # Pinned first, then oldest-first as before. Ordering here rather
+        # than in the client so every consumer of /spaces agrees — the rail,
+        # Home's topic grid and the fallback-subspace lookup all read this
+        # list, and a pin that only the rail honoured would be a lie.
+        order="pinned.desc,created_at.asc",
     )
     if not subjects:
         return []
@@ -45,6 +49,7 @@ async def list_spaces(user: CurrentUser = Depends(get_current_user)) -> list[Spa
             id=sub["id"],
             name=sub["name"],
             tone=sub.get("tone", "brand"),
+            pinned=bool(sub.get("pinned", False)),
             subspaces=grouped.get(sub["id"], []),
         )
         for sub in subjects
@@ -62,7 +67,15 @@ async def create_space(
         {"user_id": user.id, "name": body.name, "tone": body.tone},
     )
     row = inserted[0]
-    return SpaceOut(id=row["id"], name=row["name"], tone=row["tone"], subspaces=[])
+    # `pinned` read from the row rather than assumed: the default lives in the
+    # database, and hardcoding False here would quietly diverge if it changed.
+    return SpaceOut(
+        id=row["id"],
+        name=row["name"],
+        tone=row["tone"],
+        pinned=bool(row.get("pinned", False)),
+        subspaces=[],
+    )
 
 
 @router.patch("/spaces/{space_id}", response_model=SpaceOut)

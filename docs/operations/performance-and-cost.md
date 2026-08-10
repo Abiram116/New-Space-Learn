@@ -16,13 +16,13 @@ against the other.
 |---|---|---|
 | Landing page first paint | <1s | Static on Vercel, no backend dependency — should already meet this |
 | App shell interactive, backend warm | <500ms | Not independently measured; depends on auth verify + first data fetch |
-| App shell interactive, backend cold | Best-effort — Render free tier costs ~30s here, not a target to hit | Mitigated for landing visitors (health-ping warm-up per `SOUL.md §10`); **not mitigated for a student who bookmarks the app directly and lands past the landing page** — see §6 |
-| Simple list/get API call, warm | <300ms | One measured warm round trip to remote Supabase is ~150–257ms (`IMPLEMENTATION_PLAN.md`); most list endpoints are 1–2 round trips deep after the responsiveness pass |
+| App shell interactive, backend cold | Best-effort — Render free tier costs ~30s here, not a target to hit | Mitigated for landing visitors (health-ping warm-up per `docs/product/vision.md §10`); **not mitigated for a student who bookmarks the app directly and lands past the landing page** — see §6 |
+| Simple list/get API call, warm | <300ms | One measured warm round trip to remote Supabase is ~150–257ms (`docs/plan.md`); most list endpoints are 1–2 round trips deep after the responsiveness pass |
 | Chat time-to-first-token, warm | <1.5s | Retrieval (2–3 round trips) + Groq TTFT (estimated 300–600ms) — not independently measured end-to-end |
 | Quiz/flashcard generation (full artifact) | <6s | One 70B call generating N structured items — the slowest routine user-facing wait in the product; must always show a real loading state, never a bare spinner with no explanation |
 | Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | Not independently measured; falls back to "still processing, tap reprocess" on timeout rather than hanging |
 | First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-09: 147KB** entry (app), **~209KB** for a landing visit (entry + the lazy `Landing` chunk). The 245KB previously recorded here predates the landing rebuild and further splitting. |
-| Any in-app animation | ≤320ms (`IMPLEMENTATION_PLAN.md`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
+| Any in-app animation | ≤320ms (`docs/plan.md`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
 
 These are planning targets, not SLAs verified by a monitoring system —
 this product has no APM. Treat every "not independently measured" note
@@ -34,20 +34,20 @@ above as a to-do, not a claim.
 
 - **Bundle:** route-level code splitting already moved Tiptap, Landing,
   Flashcards, and Quizzes out of the main chunk, cutting first load from
-  451KB to 245KB gzipped (`IMPLEMENTATION_PLAN.md`'s Responsiveness work). Split
+  451KB to 245KB gzipped (`docs/plan.md`'s Responsiveness work). Split
   chunks prefetch on idle so opening Notes/Cards/Quizzes for the first time
   doesn't cost a cold fetch on top of the click.
 - **Headroom is thin.** 245KB against a 250KB self-imposed ceiling leaves
-  ~5KB. The Gap Map (`IMPLEMENTATION_PLAN.md`) will need a rendering approach
+  ~5KB. The Gap Map (`docs/plan.md`) will need a rendering approach
   — **budget it as its own lazy-loaded route chunk from the start**, the
   same way Tiptap is isolated today. Do not import a charting/graph library
   into a shared module that the main chunk pulls in.
-- **Motion:** governed by `IMPLEMENTATION_PLAN.md`'s six rules (nothing over
+- **Motion:** governed by `docs/plan.md`'s six rules (nothing over
   ~320ms, stagger capped at ~240ms total, `prefers-reduced-motion` renders
   the final state, etc.) — not repeated here, just the pointer. Any new
   epic that adds motion (confusion-pair reveal, exam countdown) inherits
   these rules by default, not by re-deciding them.
-- **Session cache** (`MEMORY_ENGINE.md §2`) is the main lever against
+- **Session cache** (`docs/engineering/ai-pipeline.md §2`) is the main lever against
   redundant refetching — 60s TTL for stats, 30min for the brief, explicit
   invalidation on grading/quiz-submit. This is a caching strategy, not a
   raw-speed one: it makes the *second* visit to a page free, not the first.
@@ -57,7 +57,7 @@ above as a to-do, not a claim.
 ### 3. Backend
 
 - **Round-trip discipline:** the standing rule is "independent awaits in one
-  handler are a latency bug" (`IMPLEMENTATION_PLAN.md`) — reach for
+  handler are a latency bug" (`docs/plan.md`) — reach for
   `asyncio.gather` when two reads don't depend on each other. This is
   correctly applied throughout the routers reviewed for this document
   (`notes.py`, `documents.py`, `flashcards.py`, `quizzes.py` all gather the
@@ -71,7 +71,7 @@ above as a to-do, not a claim.
   *other* gather-based optimization in this codebase (`/me/stats`, §5) was
   verified the same way or only reasoned about.
 - **In-process rate limiting** (`ratelimit.py`) costs nothing and is correct
-  for exactly one worker — see `ARCHITECTURE.md` for when this
+  for exactly one worker — see `docs/engineering/architecture.md` for when this
   stops being true.
 - **Inline document processing**, capped at 25s, is the direct performance
   consequence of "no background workers" — a document that can't finish in
@@ -96,7 +96,7 @@ above as a to-do, not a claim.
   wrong thing.** Query latency for a meaningless-vector search is the same
   as for a real one — the performance characteristics documented here don't
   change once real embeddings ship, but retrieval *quality* does, and
-  that's a correctness fix (`AI_ENGINE.md §4`), not a performance one.
+  that's a correctness fix (`docs/engineering/ai-pipeline.md §4`), not a performance one.
 
 ---
 
@@ -107,7 +107,7 @@ deliberately, so the frontend can render source cards while generation is
 still running rather than waiting for the full reply. This is the one place
 in the product where perceived latency was reduced by *reordering* work, not
 by making anything faster. Quiz/flashcard generation can't use the same
-trick (§ `REQUEST_PIPELINE.md`'s note on why those aren't streamed) — the
+trick (§ `docs/engineering/ai-pipeline.md`'s note on why those aren't streamed) — the
 mitigation there has to be a good loading state, not a streaming response.
 
 ---
@@ -117,7 +117,7 @@ mitigation there has to be a good loading state, not a streaming response.
 Render's free tier spins down after 15 minutes idle; the next request pays
 ~30s.
 
-**Corrected 2026-08-09.** This section previously said `SOUL.md §10`'s
+**Corrected 2026-08-09.** This section previously said `docs/product/vision.md §10`'s
 landing-page warm-up was "already mitigated." It wasn't — no ping existed
 anywhere except `OfflineBanner`, which lives inside `AppShell`, behind auth.
 The design response had been written down but never built.
@@ -165,7 +165,7 @@ both stand unreconciled:
   wall-clock numbers: 4 gathered calls (1566ms) lost to 4 sequential calls
   (1114ms) against this remote Postgres, because of TLS handshake overhead.
   Kept sequential.
-- `/me/stats` (`IMPLEMENTATION_PLAN.md`'s Responsiveness section) — went from 8
+- `/me/stats` (`docs/plan.md`'s Responsiveness section) — went from 8
   sequential round trips to `asyncio.gather`, reporting "8 deep (~1200ms) →
   1 deep (~150ms)." But that section's own header states the numbers are
   from "a 150ms *simulated* round trip, counting round-trip depth" — an
@@ -242,14 +242,14 @@ observed as one, not pre-emptively.
 **Updated 2026-08-10 — superseded the hosted-provider plan below (kept
 struck through for the reasoning trail, since the "cents is nothing" analysis
 is still correct — it just wasn't the deciding factor).** Per
-[ADR-0012](adr/0012-local-embeddings-bge-small.md), embeddings run locally —
+[docs/decisions.md](../decisions.md), embeddings run locally —
 BGE-small-en-v1.5, quantized ONNX, in-process, no API key, no external
 provider account of any kind. **This isn't a cost optimization on top of the
 plan below; it replaces the plan below.** No line item, no per-token rate,
 no dollar figure to track here at all.
 
 What it costs instead: ~200MB of RAM in the same worker (measured in
-ADR-0012, comfortably inside Render's 512MB free-tier ceiling) and a few
+docs/decisions.md, comfortably inside Render's 512MB free-tier ceiling) and a few
 seconds of added cold-start time. Real trade-offs — just not financial ones,
 which is the entire point of this section existing.
 
@@ -257,7 +257,7 @@ which is the entire point of this section existing.
 <summary>Original analysis (hosted OpenAI provider) — superseded, kept for the reasoning trail</summary>
 
 ~~**Today: $0.** `USE_STUB_EMBEDDINGS=true` in `render.yaml` means no embedding
-provider is called at all (`AI_ENGINE.md §4`). This is not a cost saving —
+provider is called at all (`docs/engineering/ai-pipeline.md §4`). This is not a cost saving —
 it's the reason retrieval doesn't actually work semantically.~~
 
 ~~**Once real.** Groq doesn't host an embedding endpoint on this account, so
@@ -277,7 +277,7 @@ Correct as analysis, but the product owner's actual requirement was $0 and
 no external dependency, not "cheap enough" — cents-per-semester doesn't
 satisfy "don't default to a paid API" regardless of how small the cents are.
 That's a legitimate requirement a cost analysis alone can't override; see
-ADR-0012 for how it was actually resolved.
+docs/decisions.md for how it was actually resolved.
 
 </details>
 
@@ -294,7 +294,7 @@ Model tiering (`config.py`) is the primary cost control already in place:
 | Tier | Model | Used for | Why this tier |
 |---|---|---|---|
 | Large | `llama-3.3-70b-versatile` | RAG chat, quiz/flashcard/note generation | Reasoning over real retrieved context and producing structured output — quality-sensitive work |
-| Fast | `llama-3.1-8b-instant` | Home brief, subspace-name suggestion | Short, low-stakes, template-shaped output. Explicitly *not* used for artifact generation without quality-checking first (`IMPLEMENTATION_PLAN.md`) |
+| Fast | `llama-3.1-8b-instant` | Home brief, subspace-name suggestion | Short, low-stakes, template-shaped output. Explicitly *not* used for artifact generation without quality-checking first (`docs/plan.md`) |
 | Vision | `qwen/qwen3.6-27b` | Image document ingestion only | The only image-capable model on the account |
 
 Per-request token estimates, from the actual prompt construction in
@@ -337,7 +337,7 @@ exactly where §6's optimizations should be aimed if that day comes.
 
 | Resource | Free-tier limit | What consumes it | Projection |
 |---|---|---|---|
-| Supabase Postgres | 500MB | `document_chunks` dominates — each row is a `vector(384)` (~1.5KB, since ADR-0012 — was `vector(1536)`/~6KB) plus its ~900 chars of text | ~2.4KB/chunk → **~210,000 chunks before the ceiling**, roughly 4,200 lecture-sized PDFs total across all users. **A real, unplanned side-benefit of the local-embedding decision:** the smaller vector is ~3x more storage-efficient than the OpenAI-sized one would have been — not why BGE-small was chosen, but worth knowing |
+| Supabase Postgres | 500MB | `document_chunks` dominates — each row is a `vector(384)` (~1.5KB, since docs/decisions.md — was `vector(1536)`/~6KB) plus its ~900 chars of text | ~2.4KB/chunk → **~210,000 chunks before the ceiling**, roughly 4,200 lecture-sized PDFs total across all users. **A real, unplanned side-benefit of the local-embedding decision:** the smaller vector is ~3x more storage-efficient than the OpenAI-sized one would have been — not why BGE-small was chosen, but worth knowing |
 | Supabase Storage | 1GB | Original uploaded files, kept so `reprocess` works without re-upload | ~50 × 20MB files, or many more typical-sized ones |
 | Vercel bandwidth | 100GB/mo | Static assets, 245KB gzipped per cold visit | Effectively unreachable at this scale |
 | Render | 750 instance-hours/mo | One service, spins down when idle | Sufficient for one always-warm-ish service |
@@ -360,7 +360,7 @@ for storage reasons without acknowledging the retrieval cost.
 | Grading a card | $0 | Arithmetic + one write |
 | Submitting a quiz | $0 | Server-side comparison, no LLM |
 | Streak/heatmap/stats | $0 | SQL aggregation |
-| **Confusion pairs (`IMPLEMENTATION_PLAN.md`)** | **$0** | `GROUP BY` over existing rows, no LLM call — worth restating, since this is the product's flagship differentiator and it costs *nothing* per use |
+| **Confusion pairs (`docs/plan.md`)** | **$0** | `GROUP BY` over existing rows, no LLM call — worth restating, since this is the product's flagship differentiator and it costs *nothing* per use |
 | **Exam-aware scheduling (§12)** | **$0** | Arithmetic |
 | **Gap Map (§13)** | **$0** | Aggregation over existing rows |
 | Home brief | ~$0.0005 | Fast tier |
@@ -368,14 +368,14 @@ for storage reasons without acknowledging the retrieval cost.
 | Artifact generation | ~$0.002 each | Infrequent per student |
 | Image ingestion | ~$0.002 | Infrequent |
 
-**The strategically important row:** all three SOUL.md-derived flagship
+**The strategically important row:** all three ../product/vision.md-derived flagship
 features cost $0 per use. The redesign that replaced the concept graph with
 tag aggregation didn't just avoid schema complexity — it kept the product's
 most differentiating features entirely off the metered path. A graph that
 needed an LLM call to derive `co-cited` edges during retrieval would have
 added recurring cost to *every single chat turn*, which is precisely the
 highest-volume operation in the product. That's a cost argument for the
-approved architecture that `SOUL.md §6` only made implicitly.
+approved architecture that `docs/product/vision.md §6` only made implicitly.
 
 ---
 
@@ -395,7 +395,7 @@ one. There is no automated check enforcing this today.
 ### 6. Optimization recommendations, ranked by value
 
 1. ~~**Wire real embeddings (~2¢/semester/user).**~~ **Superseded —
-   `AI_ENGINE.md §4`, ADR-0012.** Local BGE-small, not a hosted provider:
+   `docs/engineering/ai-pipeline.md §4`, docs/decisions.md.** Local BGE-small, not a hosted provider:
    $0 rather than 2¢, at the cost of ~200MB RAM (measured, fits) and a few
    seconds of cold start. What remains is applying one migration
    (`vector(1536)`→`vector(384)`) — still the highest-priority open item,
@@ -404,7 +404,7 @@ one. There is no automated check enforcing this today.
    `groq_model` (70B) for what is often a short continuation or a
    reformatting request. The fast tier may be sufficient for a large share of
    these. **Test output quality before switching** — the same caution
-   `IMPLEMENTATION_PLAN.md` applies to agents applies here; don't downgrade a
+   `docs/plan.md` applies to agents applies here; don't downgrade a
    tier on cost reasoning alone.
 3. **Watch `memory_scope: all` Skills.** A 40-turn history window builds the
    largest prompt in the product (~3–5k input tokens per turn) on the
@@ -415,7 +415,7 @@ one. There is no automated check enforcing this today.
 4. **Don't add per-retrieval LLM calls, ever.** Anything that puts a model
    call inside the retrieval path multiplies the product's highest-volume
    operation. This is the concrete cost reason `co-cited` edge derivation was
-   killed (`SOUL.md §6`) and the standing reason to be suspicious of any
+   killed (`docs/product/vision.md §6`) and the standing reason to be suspicious of any
    future "enrich the context automatically" proposal.
 5. **Leave chunk size alone at 900 chars** unless retrieval quality (not
    storage) motivates a change — see §3's note on why smaller chunks cost

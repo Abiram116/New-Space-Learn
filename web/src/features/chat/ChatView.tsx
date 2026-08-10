@@ -165,10 +165,14 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       <div className="flex min-w-0 flex-1 flex-col">
         <SubspaceHeader />
 
-        <div
-          ref={scrollRef}
-          className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-5"
-        >
+        {/* Messages sit in a centred, measured column — the scroller stays
+            full-width so the scrollbar hugs the window edge rather than
+            floating in the middle of the page. On a wide monitor the old
+            full-bleed layout ran an answer to ~1600px, which is roughly
+            three times the line length the eye can track without losing
+            its place on the return sweep. */}
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-3.5 px-5 py-5">
           {history.loading && <PageSpinner />}
           {history.error && !history.loading && (
             <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
@@ -198,6 +202,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
               }}
             />
           )}
+          </div>
         </div>
 
         {/* Only below lg, where the dock isn't there to say it. */}

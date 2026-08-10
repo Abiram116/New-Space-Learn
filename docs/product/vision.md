@@ -2,7 +2,7 @@
 
 What this product is trying to be, and the thesis underneath it.
 
-`vision.md` held the north star and `SOUL.md` held the argument for how to
+`vision.md` held the north star and `docs/product/vision.md` held the argument for how to
 reach it. They were always read together and always edited together, so they
 are one document.
 
@@ -114,7 +114,7 @@ once the underlying data-grounding is real.
 
 Recorded as the durable vision, not an active task. No renaming, no new
 build work triggered by this note alone — it's the lens for evaluating and
-prioritizing everything already in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), and for
+prioritizing everything already in [../plan.md](../plan.md), and for
 judging any new feature proposal from here forward.
 
 ---
@@ -345,7 +345,7 @@ this document** — it never needed concepts or edges at all.
 
 #### 3. The Gap Map — *a diagnostic, not a hairball*
 Concept-level, **derived at render time, never stored** — see
-[ADR-0011](adr/0011-gap-map-derived-concept-visualization.md). Not a
+[docs/decisions.md](../decisions.md). Not a
 force-directed graph. A deliberately **boring, readable** layout where:
 - **node = a normalized concept tag** (§5's tag, not a stored entity); size =
   how heavily the material weights it (count of quiz questions + flashcards
@@ -355,7 +355,7 @@ force-directed graph. A deliberately **boring, readable** layout where:
   finer grain
 - **edge = a confusion pair between two concepts, thickness = the tally**
   (#1 above). This works because both concepts in a confusion pair come from
-  the same question — see ADR-0011 for why the earlier subspace-level version
+  the same question — see docs/decisions.md for why the earlier subspace-level version
   of this was not computable
 - **scope = one subject at a time**, for readability; a tag appearing in more
   than one subject is marked as such, which is how the map exposes §5's
@@ -388,7 +388,7 @@ product:
   would be complexity spent on architecture instead of on the student.
 - **A graph database, or any stored graph structure, to back the Gap Map.**
   The map is a *visualization* derived from relational rows at render time
-  (ADR-0011). Needing to look like a graph is not a reason to store one.
+  (docs/decisions.md). Needing to look like a graph is not a reason to store one.
 - **`co-cited` edge derivation.** Priced as "free" in the original draft; it
   isn't, and the payoff doesn't clear the real cost. See §6.
 - **`co-failed` edge derivation.** Low signal even at zero cost.
@@ -425,7 +425,7 @@ table at all beyond a couple of columns.
 | Cold start ~30s | **Warm the API from the landing page.** Fire a `/health` ping on load. Unrelated to this document's scope, but still the single highest-value performance trick available, and still costs one `fetch`. |
 | 500MB database | No new tables means no new storage budget spent on this work at all — the entire redesign fits inside a few added columns. |
 | Inline work only | Every new query here is O(rows for one user), read-only, no LLM call except the two structured-output tweaks (choice concept tags, subtopic-on-flashcards) that already happen inside an existing generation call. |
-| Single worker | Follow the standing rule from `IMPLEMENTATION_PLAN.md`: independent reads go through `asyncio.gather`; a chain of reads against the *same* remote Postgres from one request does not, per the measured 1566ms-vs-1114ms lesson in `spaces.py`. |
+| Single worker | Follow the standing rule from `docs/plan.md`: independent reads go through `asyncio.gather`; a chain of reads against the *same* remote Postgres from one request does not, per the measured 1566ms-vs-1114ms lesson in `spaces.py`. |
 
 ---
 
@@ -436,11 +436,11 @@ table at all beyond a couple of columns.
 | **A** | `subtopic` tagging extended to flashcards (already shipped for quiz questions) | *(invisible groundwork — nothing breaks)* |
 | **B** | Confused-with: per-choice concept tags + aggregation endpoint, surfaced on quiz results and the Home brief | **"You've confused these four times."** ← lead the demo here |
 | **C** | Exam-aware scheduling: `exam_date` on subjects + interval compression | "Your exam is in 9 days. Here's what fits." |
-| **D** | The Gap Map — concept-level, derived at render time (ADR-0011) | "Here's your revision plan, and here's why." |
+| **D** | The Gap Map — concept-level, derived at render time (docs/decisions.md) | "Here's your revision plan, and here's why." |
 | **E** | Cross-subject transfer via subtopic string-match | "This is about to hurt you in another module." |
 
-Concrete backend/frontend task breakdowns for A–E live in `IMPLEMENTATION_PLAN.md` and
-`IMPLEMENTATION_PLAN.md` (same numbering convention as every other epic there) —
+Concrete backend/frontend task breakdowns for A–E live in `docs/plan.md` and
+`docs/plan.md` (same numbering convention as every other epic there) —
 this document states the architecture; those state the work.
 
 **RAG and agents are not a phase.** They are the substrate all of this runs on
@@ -451,11 +451,11 @@ and they already exist.
 ### 12. The landing page
 
 The original draft proposed a 3D/SVG rendering of the concept graph as the
-landing hero. **Dropped** — not on merit, but because `IMPLEMENTATION_PLAN.md` §16
+landing hero. **Dropped** — not on merit, but because `docs/plan.md` §16
 already scoped a different, more concrete hero (a looping video scene) that
 went through its own review and is already approved and sequenced. Two sibling
 documents proposing two different hero mechanisms is exactly the kind of
-drift `IMPLEMENTATION_PLAN.md` already warns about. Defer to §16.
+drift `docs/plan.md` already warns about. Defer to §16.
 
 The instinct behind the original proposal — *make the moat visible, don't just
 claim it* — is still worth keeping, just aimed at the right place: the **Gap

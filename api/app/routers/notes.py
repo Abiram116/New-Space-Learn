@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import html
-import json
 import logging
 import re
 from datetime import UTC, datetime
@@ -116,18 +115,48 @@ async def generate_note(
     if not settings.llm_configured:
         raise UpstreamUnavailable("Note generation isn't configured yet.")
 
+    # The student's own words about how they want it, when they said anything.
+    # Placed last in the prompt and marked as overriding, because a specific
+    # request ("just a checklist") has to beat the general shape guidance
+    # above it — otherwise the defaults quietly win and the instruction looks
+    # ignored.
+    style = (
+        f"\n\nHOW THIS STUDENT WANTS IT — follow this over the guidance "
+        f"above wherever they conflict:\n{body.instructions.strip()}"
+        if body.instructions and body.instructions.strip()
+        else ""
+    )
+
     prompt = (
         f"Write a study note on '{topic}', within the subject '{label}' — "
         f"resolve any ambiguity in the topic name using that subject, not a "
         f"generic reading of the words.\n\n"
         f"Recent conversation in this space:\n{recent}\n\n"
         f"Material:\n{context}\n\n"
-        'Return ONLY a JSON object: {"title": str, "body_md": str}. '
-        "title is under 8 words, no punctuation at the end. body_md is the "
-        "note itself in markdown — headings, bullets, bold where it earns "
-        "its place. Ground every claim in the material and conversation "
-        "above; do not invent facts not present in either. No prose outside "
-        "the JSON object."
+        "This is the note they will revise from, so it has to carry the "
+        "actual content — not a summary of what the topic is about. Explain "
+        "the mechanism, not just its name. Where the conversation above "
+        "worked something out, keep the reasoning rather than the "
+        "conclusion alone. Where a distinction was drawn, keep both sides "
+        "of it. Include the concrete details that make a thing usable: the "
+        "conditions, the formulas, the worked example, the exception. If "
+        "the student got something wrong in the conversation and was "
+        "corrected, the note should make the correct version unmissable.\n\n"
+        "Length follows the material: several hundred words when there is "
+        "that much to say, short when there genuinely isn't. Do not pad, "
+        "and do not compress a rich conversation into four bullets.\n\n"
+        "Use headings to separate ideas, bullets for lists of things, bold "
+        "for the term being defined, tables when comparing two things, and "
+        "a blockquote for the one idea worth remembering above the rest. "
+        "Never a heading with a single line under it."
+        f"{style}\n\n"
+        "Ground every claim in the material and conversation above; do not "
+        "invent facts not present in either.\n\n"
+        "Reply in exactly this format and nothing else:\n\n"
+        "TITLE: <the title>\n"
+        "---\n"
+        "<the note in markdown>\n\n"
+        "The title is under 8 words with no trailing punctuation."
     )
 
     try:
@@ -152,17 +181,19 @@ async def generate_note(
         log.exception("note generation failed")
         raise UpstreamUnavailable("Couldn't write a note just now.") from e
 
-    start, end = raw.find("{"), raw.rfind("}")
-    title, note_body = None, None
-    if start != -1 and end > start:
-        try:
-            data = json.loads(raw[start : end + 1])
-            title = str(data.get("title", "")).strip()[:140] or None
-            note_body = str(data.get("body_md", "")).strip() or None
-        except json.JSONDecodeError:
-            pass
+    title, note_body, parse_error = _split_titled_note(raw)
 
     if not title or not note_body:
+        # Log the actual payload. Without this the user-facing message is the
+        # only evidence there is, and "came back in an unexpected format" is
+        # undebuggable — it cannot distinguish a truncated stream from bad
+        # JSON from a model that answered in prose. Truncated because a note
+        # body can be long and this is a log line, not an archive.
+        log.warning(
+            "note generation returned unusable output (%s); raw[:400]=%r",
+            parse_error or "missing title or body",
+            raw[:400],
+        )
         raise UpstreamUnavailable(
             "The note came back in an unexpected format. Try again."
         )
@@ -181,6 +212,49 @@ async def generate_note(
     )
     await activity.touch_subspace(subspace_id)
     return _to_note(inserted[0])
+
+
+def _split_titled_note(raw: str) -> tuple[str | None, str | None, str | None]:
+    """Pull `TITLE: …` / `---` / body out of a model response.
+
+    **Why not JSON.** This asked for `{"title": ..., "body_md": ...}` and it
+    failed almost every time in practice. Two separate ways: the model wrote
+    real newlines inside the string (invalid — U+000A is a control
+    character), and more often it dropped the opening quote altogether,
+    emitting `"body_md": \nQ-learning converges...`. The second one is not
+    recoverable by a lenient parser, because the value is not a string at
+    all syntactically.
+
+    The underlying problem is that JSON demands escaping over a long
+    markdown payload, and escaping is exactly the thing a token predictor is
+    worst at maintaining across hundreds of tokens. A line prefix and a
+    delimiter have nothing to escape, so there is nothing to get wrong.
+
+    Returns `(title, body, error)` — `error` is a short reason for the log
+    when either part is missing.
+    """
+
+    text = raw.strip()
+    # Models still sometimes wrap the whole reply in a fence.
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text).strip()
+
+    match = re.search(r"^\s*TITLE:\s*(.+?)\s*$", text, re.MULTILINE)
+    if not match:
+        return None, None, "no TITLE: line in the response"
+    title = match.group(1).strip().strip('"').rstrip(".")[:140] or None
+
+    rest = text[match.end() :]
+    # The --- is the agreed separator, but a model that omits it has still
+    # given us everything we need — the body is simply whatever follows.
+    body = re.sub(r"^\s*-{3,}\s*\n?", "", rest.lstrip("\n"), count=1).strip()
+
+    if not title:
+        return None, None, "TITLE: line was empty"
+    if not body:
+        return None, None, "no body after the title"
+    return title, body, None
 
 
 @router.post(

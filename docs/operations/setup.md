@@ -23,7 +23,7 @@ cd api && uv sync && uv run uvicorn app.main:app --reload --port 8000
 
 Nothing else is required. If a key is missing, the feature that needs it
 degrades to a friendly placeholder instead of erroring — see
-[ARCHITECTURE.md](ARCHITECTURE.md#missing-configuration-never-crashes-the-app).
+[../engineering/architecture.md](../engineering/architecture.md#missing-configuration-never-crashes-the-app).
 
 **One `.env` at the repo root serves both apps.** The API points Pydantic
 Settings at it directly; `web/vite.config.ts` sets `envDir: '..'` so Vite
@@ -151,3 +151,45 @@ curl http://localhost:8000/api/v1/health
 
 If `supabase` or `llm` come back `false`, the corresponding keys aren't
 being read — check they're in the root `.env`, not `web/.env` or `api/.env`.
+
+## Tests
+
+Both suites are fast enough to run on every change — there is no reason to
+push without them.
+
+```bash
+# Backend — 107 tests
+cd api && uv run --extra dev pytest -q
+
+# Frontend — 44 tests
+cd web && npm test
+
+# Lint (must be clean; B008 is ignored deliberately, see api/pyproject.toml)
+cd api && uv run --extra dev ruff check .
+```
+
+**What is covered, and why those things.** The suites are small and aimed at
+the places where a bug is silent rather than loud:
+
+- `guards` and `test_guard_coverage` — the coverage test **fails when a new
+  endpoint forgets an ownership check**, which is the failure mode that
+  actually shipped once. This is the single highest-value test in the repo.
+- `sm2` plus `sm2_parity.mjs` — SM-2 is implemented twice, in Python and
+  TypeScript, so the review screen can preview an interval without a round
+  trip. The parity test runs the real `schedule.ts` over 480 cases and fails
+  if the two ever disagree.
+- `chunking` — a real infinite loop shipped here and hung document uploads.
+- `note_html_demotion`, `healHtml` — escaped HTML reached a student's note
+  twice; these pin both the repair and, just as importantly, that clean notes
+  are left alone.
+- `citations` — a citation marker pointing at a source that does not exist is
+  a broken promise, so out-of-range markers are stripped before saving.
+- `format`, `slashMenu`, `schedule` — the pure logic behind the notes list and
+  editor, which is the part that is cheap to test and easy to break.
+
+**Write tests that can fail.** When adding one, break the implementation on
+purpose and confirm the test goes red. A test written against redundant code
+passes for the wrong reason — that happened here: a `notePreview` test looked
+like it guarded against base64 image previews, but `stripMarkdown` was
+already handling images, so the line it was "protecting" was dead code. The
+mutation check is what found it.

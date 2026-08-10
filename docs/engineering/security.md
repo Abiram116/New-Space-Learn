@@ -4,7 +4,7 @@ The threat model, the controls actually in place, and the open gaps — ranked
 honestly. This product handles a student's own uploaded coursework and their
 performance history; that's not payment data, but "which concepts is this
 person failing" is genuinely sensitive, and an institutional buyer
-(`SOUL.md §13`) would treat it as such.
+(`docs/product/vision.md §13`) would treat it as such.
 
 ---
 
@@ -32,8 +32,8 @@ saving.
 
 **What's not built:** password change and account deletion are absent by
 design-for-now, and Settings says so plainly rather than showing a button
-that does nothing (`ARCHITECTURE.md`'s intentional-gaps list). Account
-deletion is scoped in `IMPLEMENTATION_PLAN.md`.
+that does nothing (`docs/engineering/architecture.md`'s intentional-gaps list). Account
+deletion is scoped in `docs/plan.md`.
 
 ---
 
@@ -66,9 +66,9 @@ right pattern to copy.
 
 **Consequence, stated plainly:** a single forgotten `assert_*` call is a
 silent cross-user data leak with no second line of defense in the request
-path. `ARCHITECTURE.md` records that this has already happened once and was
+path. `docs/engineering/architecture.md` records that this has already happened once and was
 fixed. **There is currently no automated test preventing its recurrence** —
-this is the top-ranked item in `IMPLEMENTATION_PLAN.md`'s engineering-health list, and
+this is the top-ranked item in `docs/plan.md`'s engineering-health list, and
 the highest-value security work available in this codebase.
 
 **One notable subtlety** (`subspace_chat.py::_active_skills`): that helper
@@ -135,12 +135,12 @@ prompt.
    `[[3]]` markers that don't correspond to real sources, undermining the
    product's core traceability claim. **This is the injection consequence
    that actually matters for this product**, and it's the same gap
-   `AI_ENGINE.md §10` identifies from the reliability angle: nothing
+   `docs/engineering/ai-pipeline.md §10` identifies from the reliability angle: nothing
    currently validates that emitted citation markers are in range. One
    post-stream regex range-check closes both the reliability and the
    injection version of this problem — the highest-value AI-security fix
    available, and cheap.
-3. **The multi-user institutional scenario** (`SOUL.md §13`, a department
+3. **The multi-user institutional scenario** (`docs/product/vision.md §13`, a department
    uploading a shared corpus) would change this analysis materially — a
    poisoned document in a shared corpus *would* be cross-tenant. Not a
    current risk; a hard prerequisite to re-examine before that product
@@ -201,7 +201,7 @@ endpoint: 20 burst, 20/min refill, chat costs 1, generation costs 2, idle
 buckets swept after 15 minutes so memory can't grow unbounded.
 
 **What it protects:** primarily the Groq spend/quota (see
-`COST_MODEL.md §5`), secondarily the single worker from being monopolized.
+`docs/operations/performance-and-cost.md §5`), secondarily the single worker from being monopolized.
 
 **Limitations, both documented in the code itself:**
 - In-process, so it resets on deploy and would not work correctly across
@@ -274,7 +274,7 @@ users (`errors.py`, and `_process_inline`'s refusal to persist `str(e)`).
 - **No log aggregation or alerting.** Logs go to Render's stdout and scroll
   away. Nobody is notified when `handle_unexpected` fires.
 - **No metrics.** No error-rate, latency, or LLM-failure-rate tracking —
-  which is also why `PERFORMANCE.md §7` can't resolve its own measurement
+  which is also why `docs/operations/performance-and-cost.md §7` can't resolve its own measurement
   discrepancy without adding instrumentation first.
 
 **Recommendation, proportionate to a pre-launch product with one user:**
@@ -292,7 +292,7 @@ deployment, where §4's cross-tenant analysis also has to be redone.
    15 tests, including a route-coverage test that fails if a future endpoint
    accepts a caller-supplied id without calling a guard or scoping by
    `user_id` — the failure mode that actually shipped once.
-2. ~~**Validate citation markers server-side**~~ (§4.2, `AI_ENGINE.md §10`) —
+2. ~~**Validate citation markers server-side**~~ (§4.2, `docs/engineering/ai-pipeline.md §10`) —
    **done, Phase 0.4.** `rag.strip_invalid_citations()`, 9 tests.
 3. ~~**Gate `/api/v1/docs` behind an env flag**~~ (§9/A05) — **done, Phase
    0.6.** `EXPOSE_API_DOCS`, `"false"` in `render.yaml`.
@@ -302,7 +302,7 @@ deployment, where §4's cross-tenant analysis also has to be redone.
 5. **Align `subspaces.py` with `guards.py`** — it keeps private copies of the
    ownership helpers, and one raises `Forbidden` (403) where the shared guard
    raises `NotFound` (404), contradicting the documented anti-enumeration
-   choice. See `IMPLEMENTATION_PLAN.md`.
+   choice. See `docs/plan.md`.
 6. **Cover the rate limiter with tests** — refill and exhaustion behaviour is
    still unverified.
 5. **Rate-limit non-LLM endpoints** (§7) — matters only once there's traffic

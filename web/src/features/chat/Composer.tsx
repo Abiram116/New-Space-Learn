@@ -48,7 +48,12 @@ export function Composer({
   }
 
   return (
-    <div className="flex shrink-0 flex-col gap-2.5 border-t-[1.5px] border-line bg-surface px-5 py-3.5">
+    /* `max-w-3xl` matches the message column above it. The border-t stays
+       full-bleed so the composer reads as a bar anchored to the window,
+       with the input tracking the text it will produce — the same
+       relationship ChatGPT uses. */
+    <div className="shrink-0 border-t-[1.5px] border-line bg-surface">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5 px-5 py-3.5">
       <div className="flex items-end gap-2.5 rounded-2xl border-[1.5px] border-line px-3.5 py-2.5 focus-within:border-brand-200">
         <textarea
           ref={ref}
@@ -102,6 +107,7 @@ export function Composer({
           </button>
         ))}
       </div>
+    </div>
     </div>
   )
 }

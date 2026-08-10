@@ -68,6 +68,21 @@ export async function resendConfirmation(email: string): Promise<void> {
   if (error) throw fromSupabaseError(error.message)
 }
 
+/**
+ * Change the name shown in the rail, on Profile and in the Home brief.
+ *
+ * Stored in Supabase's `user_metadata` rather than a table of our own: it
+ * already travels with the session, so every screen that reads
+ * `user.user_metadata.display_name` picks it up without a fetch, and there
+ * is no second source of truth to keep in step.
+ */
+export async function updateDisplayName(name: string): Promise<void> {
+  const { error } = await getSupabase().auth.updateUser({
+    data: { display_name: name },
+  })
+  if (error) throw fromSupabaseError(error.message)
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await getSupabase().auth.signOut()
   if (error) throw new ApiError('internal_error', error.message)
