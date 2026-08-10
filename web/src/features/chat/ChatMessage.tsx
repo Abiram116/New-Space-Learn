@@ -4,7 +4,6 @@ import type { AskReason } from './feedbackPolicy'
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
-import { Leaf } from '../../components/ui/Surface'
 import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
 
@@ -49,13 +48,19 @@ export function ChatMessage({
   const citations = message.citations ?? []
 
   return (
-    <Rise distance={6} className="max-w-[88%]">
-    {/* LEAF, not a bubble. The user's turn stays a bubble because it is a
-        thing they said; the answer is a thing they *read*, often several
-        paragraphs with citations under it. Giving both the same rounded
-        border made a long grounded answer look like a text message.
-        `p-0 pr-4` keeps the leaf's own left gutter as the margin rule. */}
-    <Leaf className="flex flex-col gap-2.5 py-1 pr-4 text-[14px] leading-[1.65]">
+    <Rise distance={6}>
+    {/* The answer is the page, not an object on it.
+        This was a `Leaf` — tinted fill, margin rule down the left, capped at
+        88%. A leaf is the right material for a note, where the sheet IS the
+        screen and the rule is its edge. In a chat it is one nesting too many:
+        the column is already centred and measured, so a second bordered,
+        tinted container inside it made every answer read as a pull-quote
+        indented under the question. Two boxes, one idea.
+        So the answer sets plainly in the column. The distinction from the
+        student's turn is already fully carried by *their* turn being a
+        bubble — an answer doesn't need a container to say "not yours" when
+        the only other thing on screen is visibly theirs. */}
+    <div className="flex flex-col gap-2.5 text-[14.5px] leading-[1.7] text-ink-2">
       {citations.length > 0 && (
         <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
           <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
@@ -76,7 +81,7 @@ export function ChatMessage({
           {citations.map((c) => (
             <div
               key={c.marker}
-              className="min-w-40 flex-1 rounded-xl border-[1.5px] border-line px-2.5 py-2 text-[11.5px]"
+              className="min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-2.5 py-2 text-[11.5px]"
             >
               <div className="flex gap-1.5 font-bold">
                 <span className="text-brand">{c.marker}</span>
@@ -89,8 +94,8 @@ export function ChatMessage({
           ))}
         </div>
       )}
-    </Leaf>
-    {/* Outside the Leaf: this is a control, not part of what was written.
+    </div>
+    {/* Outside the answer: this is a control, not part of what was written.
         A `srv-` id means the server sent no message_id (an older backend), so
         there is nothing to attach feedback to — the row is skipped rather than
         posting against an id the server would reject. */}

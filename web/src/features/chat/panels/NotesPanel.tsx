@@ -20,16 +20,25 @@
  * full editor is one click away when the note needs tables and images.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { generateNote, listAllNotes, listNotes, updateNote } from '../../../api/notes'
-import type { Note } from '../../../api/types'
+import { lazy, Suspense, useCallback, useState } from 'react'
+import { generateNote, listAllNotes, listNotes } from '../../../api/notes'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
 import { Rise, Stagger } from '../../../components/ui/motion'
 import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
+
+/* Lazy, deliberately.
+   The editor is the largest chunk in the app (~270KB gzipped — Tiptap,
+   lowlight's grammars, the markdown bridge). Importing it statically made
+   *opening chat* download all of it, for a panel most sessions never open.
+   Split here it costs nothing until a note is actually clicked, and the
+   Suspense fallback is a skeleton rather than a spinner because the panel
+   already has a shape. */
+const NoteEditor = lazy(() =>
+  import('../../notes/NoteEditor').then((m) => ({ default: m.NoteEditor })),
+)
 
 type Scope = 'topic' | 'all'
 
@@ -45,19 +54,43 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
 
   if (open) {
     return (
-      <NoteReader
+      /* The real canvas, not a copy of it.
+         This was a plain textarea, with a comment arguing markdown-as-text
+         was the honest fit for a narrow column. The dock is resizable now,
+         and the argument was really about avoiding the work of sharing the
+         component — so slash commands, the selection menu, image wrapping
+         and escaped-HTML healing were all silently missing in here.
+         `compact` trims gutters and the title size; every behaviour is
+         identical, because it is the same code. */
+      <Suspense
+        fallback={
+          <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
+            <Skeleton className="h-6 w-2/3 rounded" />
+            <Skeleton className="h-3 w-full rounded" />
+            <Skeleton className="h-3 w-5/6 rounded" />
+          </div>
+        }
+      >
+      <NoteEditor
+        key={open.id}
         note={open}
+        subspaceId={subspaceId}
         base={base}
+        compact
         onBack={() => setOpenId(null)}
-        onSaved={(patch) => notes.setData((prev) =>
-          (prev ?? []).map((n) => (n.id === open.id ? { ...n, ...patch } : n)),
-        )}
+        onDelete={() => setOpenId(null)}
+        onPatch={(patch) =>
+          notes.setData((prev) =>
+            (prev ?? []).map((n) => (n.id === open.id ? { ...n, ...patch } : n)),
+          )
+        }
       />
+      </Suspense>
     )
   }
 
   return (
-    <Rise distance={6} className="flex min-h-0 flex-col gap-3">
+    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
       <WriteFromChat subspaceId={subspaceId} onWritten={notes.refresh} />
 
       <div className="flex items-center gap-1">
@@ -121,109 +154,6 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
   )
 }
 
-/* ── Reading and editing, without leaving chat ────────────────────────── */
-
-function NoteReader({
-  note,
-  base,
-  onBack,
-  onSaved,
-}: {
-  note: Note
-  base: string
-  onBack: () => void
-  onSaved: (patch: Partial<Note>) => void
-}) {
-  const [body, setBody] = useState(note.body_md)
-  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const timer = useRef<number | null>(null)
-  const { showError } = useToast()
-
-  // Same 800ms debounce as the full editor, for the same reason: a PATCH per
-  // keystroke is both a wasted request and a way to lose the last one to a
-  // race. Cleared on unmount so closing the panel mid-type doesn't fire a
-  // save into a component that no longer exists.
-  useEffect(() => () => {
-    if (timer.current) window.clearTimeout(timer.current)
-  }, [])
-
-  const edit = useCallback(
-    (next: string) => {
-      setBody(next)
-      setStatus('saving')
-      if (timer.current) window.clearTimeout(timer.current)
-      timer.current = window.setTimeout(async () => {
-        try {
-          const updated = await updateNote(note.id, { body_md: next })
-          onSaved({ body_md: updated.body_md, updated_at: updated.updated_at })
-          setStatus('saved')
-          window.setTimeout(() => setStatus('idle'), 1500)
-        } catch (err) {
-          setStatus('error')
-          showError(err)
-        }
-      }, 800)
-    },
-    [note.id, onSaved, showError],
-  )
-
-  return (
-    <Rise distance={5} className="flex min-h-0 flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onBack}
-          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-ink"
-        >
-          <Icon name="arrowLeft" size={12} /> Notes
-        </button>
-        <span className="setcode ml-auto flex items-center gap-1">
-          {status === 'saving' && (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
-              Saving
-            </>
-          )}
-          {status === 'saved' && (
-            <span className="flex items-center gap-1 text-mint-deep">
-              <Icon name="check" size={10} /> Saved
-            </span>
-          )}
-          {status === 'error' && <span className="text-coral-deep">Couldn’t save</span>}
-        </span>
-      </div>
-
-      <div className="truncate text-[13.5px] font-bold text-ink">
-        {note.title || 'Untitled note'}
-      </div>
-      {note.subspace_name && (
-        <span className="setcode -mt-1">
-          {note.subject_name ? `${note.subject_name} · ` : ''}
-          {note.subspace_name}
-        </span>
-      )}
-
-      {/* Markdown as text, deliberately. The rich editor is a 650KB lazy chunk
-          and the app's second-largest dependency; pulling it into the dock to
-          edit in a 320px column would cost every chat session that weight for
-          a surface too narrow to use it well. */}
-      <textarea
-        value={body}
-        onChange={(e) => edit(e.target.value)}
-        spellCheck
-        placeholder="Empty note — start typing."
-        className="min-h-0 w-full flex-1 resize-none rounded-[10px] border border-line bg-canvas px-2.5 py-2 font-mono text-[12px] leading-relaxed text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/50"
-      />
-
-      <Link
-        to={`${base}/notes?n=${note.id}`}
-        className="flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
-      >
-        Open the full editor <Icon name="arrowRight" size={12} />
-      </Link>
-    </Rise>
-  )
-}
 
 /* ── Write one from the conversation ──────────────────────────────────── */
 

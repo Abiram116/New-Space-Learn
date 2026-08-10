@@ -11,12 +11,14 @@ import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
+import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
 import { GoogleGlyph } from './GoogleGlyph'
 
 export function SignIn() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
+  const { play } = useHandoff()
   const { show } = useToast()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -39,7 +41,11 @@ export function SignIn() {
     setUnconfirmed(false)
     try {
       await signInWithPassword(email, password)
-      navigate(next, { replace: true })
+      // Same door, same transition. Signing back in is the most-repeated
+      // journey in the product, so it is the last place a hard cut belongs.
+      void play('threshold', () => {
+        navigate(next, { replace: true })
+      })
     } catch (err) {
       setErrors({ form: friendlyMessage(err) })
       // "Confirm your email" is dead-end advice without a way to re-send —

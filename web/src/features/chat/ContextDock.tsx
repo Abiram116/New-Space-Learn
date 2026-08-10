@@ -180,7 +180,14 @@ export function ContextDock({
             </button>
             <span className="setcode ml-auto">{PANEL_TITLE[panel]}</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3.5">
+          {/* A flex column whose panel child is `flex-1`, so panels stretch to
+              the dock rather than stacking into a strip at the top over a dead
+              half-screen. The first attempt gave the children `min-h-full`,
+              which looked equivalent and wasn't: a percentage min-height needs
+              every ancestor up the chain to have a definite height, and this
+              scroll container breaks that chain. Growth via flex asks nothing
+              of its ancestors, so it can't regress the same way. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3.5">
             <DockPanelBody panel={panel} subspaceId={subspaceId} base={base} />
           </div>
         </div>

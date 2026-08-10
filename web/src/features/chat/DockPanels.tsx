@@ -49,7 +49,7 @@ export function DockPanelBody({
 
 function DocsPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
   return (
-    <Rise distance={6} className="flex flex-col gap-5">
+    <Rise distance={6} className="flex flex-1 flex-col gap-5">
       <p className="text-[12px] leading-relaxed text-muted">
         Anything here is searched when you ask a question, and answers cite the
         page they came from.

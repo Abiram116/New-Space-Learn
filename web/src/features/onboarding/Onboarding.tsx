@@ -23,14 +23,16 @@
  * goals are not.
  */
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { updateStudentModel } from '../../api/me'
 import { Icon } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
+import { useAuth } from '../../auth/AuthProvider'
 import { cn } from '../../lib/cn'
+import { useHandoff } from '../transitions/Handoff'
 import { markOnboarded } from './state'
 
 type Step = {
@@ -43,13 +45,24 @@ type Step = {
   field: 'learning_style' | 'teaching_preference' | 'session_length_minutes'
   /** Free text instead of options. */
   freeform?: boolean
+  /**
+   * Several answers can be true at once.
+   *
+   * "What makes it click" is genuinely not one thing — an example *and* a
+   * comparison is the honest answer for most people, and forcing a single
+   * pick throws away half of what they would have told us. Single-select
+   * stays the default because most questions really do have one answer, and
+   * a multi-select that only ever takes one tap is a worse single-select.
+   */
+  multi?: boolean
 }
 
 const STEPS: Step[] = [
   {
     id: 'style',
-    ask: "When something's new to you, what usually makes it click first?",
+    ask: "When something's new to you, what makes it click? Pick as many as fit.",
     field: 'learning_style',
+    multi: true,
     options: [
       { label: 'A concrete example', value: 'examples first, then the general rule' },
       { label: 'The idea behind it', value: 'the intuition first, then the detail' },
@@ -92,7 +105,9 @@ type Turn = { role: 'app' | 'me'; text: string }
 export function Onboarding() {
   const navigate = useNavigate()
   const { showError } = useToast()
+  const { session } = useAuth()
   const reduced = useReducedMotion()
+  const { play } = useHandoff()
 
   const [stepIndex, setStepIndex] = useState(0)
   const [turns, setTurns] = useState<Turn[]>([])
@@ -145,15 +160,36 @@ export function Onboarding() {
         // worth blocking first use over.
         showError(err)
       } finally {
-        markOnboarded()
-        navigate('/home', { replace: true })
+        /**
+         * With the user id — without it, Skip did nothing at all.
+         *
+         * `markOnboarded()` falls back to an un-suffixed key, but
+         * `hasSkippedLocally` only ever reads the per-user one. So skipping
+         * wrote a flag nothing reads: the gate re-checked the server, found no
+         * preferences (because you skipped), and sent you straight back to the
+         * intake. "Skip for now" was a button that reloaded the screen it was
+         * trying to leave.
+         */
+        markOnboarded(session?.user?.id ?? null)
+        // The one moment this product gets to feel like an arrival. The
+        // dashboard mounts and fetches underneath the curtain, so it is
+        // finished and painted by the time it is uncovered — the transition
+        // is the loading state, not an animation played next to one.
+        void play('desk', () => {
+          navigate('/home', { replace: true })
+        })
       }
     },
-    [navigate, showError],
+    [navigate, play, session, showError],
   )
+
+  /* Selections for the current multi-select question. Keyed by option label
+     so re-tapping toggles rather than duplicating. Cleared on every step. */
+  const [picked, setPicked] = useState<string[]>([])
 
   const answer = useCallback(
     (label: string, value: string) => {
+      setPicked([])
       setTurns((prev) => [...prev, { role: 'me', text: label }])
       const key = step.freeform ? 'teaching_extra' : step.field
       if (value) answers.current[key] = value
@@ -163,6 +199,19 @@ export function Onboarding() {
     },
     [step, stepIndex, finish],
   )
+
+  /** Commit a multi-select: one turn, one joined preference. */
+  const commitMulti = useCallback(() => {
+    if (picked.length === 0) return
+    const chosen = step.options.filter((o) => picked.includes(o.label))
+    answer(
+      chosen.map((o) => o.label).join(', '),
+      // Joined into one sentence rather than stored as a list: every consumer
+      // of `learning_style` interpolates it into a prompt, and a JSON array
+      // appearing mid-sentence there would read as a bug to the model.
+      chosen.map((o) => o.value).join('; '),
+    )
+  }, [picked, step, answer])
 
   const skip = useCallback(() => {
     void finish(answers.current)
@@ -178,7 +227,7 @@ export function Onboarding() {
           type="button"
           onClick={skip}
           disabled={saving}
-          className="text-[12.5px] text-muted transition-colors cursor-pointer hover:text-ink"
+          className="text-[13.5px] text-muted transition-colors cursor-pointer hover:text-ink"
         >
           Skip for now
         </button>
@@ -197,20 +246,51 @@ export function Onboarding() {
           the question where the eye already is. The empty lower half is not a
           problem to solve with layout — it is the room, and the card field
           behind it is what fills it. */}
-      <main className="relative z-10 mx-auto flex w-full max-w-xl flex-col px-5 pb-10 pt-2">
-        <div className="pb-6">
-          <h1 className="nameplate text-[clamp(26px,5vw,40px)] leading-[1.05] text-ink">
+      {/* Centred in the viewport and set large.
+          This was `max-w-xl` pinned to the top of the page: on a 2000px
+          display it put a 576px column of 13px type in the upper-left eighth
+          of the screen and left the rest black. A previous comment here
+          argued the empty lower half "is the room" — that was a rationalisation
+          of a layout problem, and the screenshot settles it. A first screen
+          with four short questions on it has no reason to hug the top edge.
+          `justify-center` on a `flex-1` main puts the block on the optical
+          centre, and the type scale below is sized for the screen it is
+          actually shown on rather than for a phone that has been stretched. */}
+      <main className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-12">
+        {/* The arrival, settling in three beats: the heading, the line under
+            it, then a rule drawn across. Slow and staggered rather than
+            snappy — this screen is meant to feel like sitting down, and a
+            fast entrance would undo what the backdrop is doing. */}
+        <div className="pb-7">
+          <h1
+            className="nameplate text-[clamp(38px,6vw,72px)] leading-[0.98] text-ink"
+            style={
+              reduced ? undefined : { animation: 'settleIn 720ms 60ms var(--ease-sl) both' }
+            }
+          >
             Before we start
           </h1>
-          <p className="mt-2 text-[13.5px] leading-relaxed text-ink-3">
+          <p
+            className="mt-3 max-w-lg text-[clamp(15px,1.35vw,18px)] leading-relaxed text-ink-3"
+            style={
+              reduced ? undefined : { animation: 'settleIn 720ms 220ms var(--ease-sl) both' }
+            }
+          >
             Four quick questions so answers land the way you like them. You can
             change any of it later in Settings.
           </p>
+          <div
+            aria-hidden
+            className="mt-6 h-px w-full origin-left bg-line"
+            style={
+              reduced ? undefined : { animation: 'ruleSweep 820ms 380ms var(--ease-sl) both' }
+            }
+          />
         </div>
 
         <div
           ref={scroller}
-          className="flex max-h-[44vh] flex-col gap-3 overflow-y-auto py-1"
+          className="flex max-h-[38vh] flex-col gap-3.5 overflow-y-auto py-1"
         >
           {turns.map((t, i) => (
             <Bubble key={i} role={t.role} text={t.text} reduced={reduced} />
@@ -227,7 +307,7 @@ export function Onboarding() {
                   const text = freeText.trim()
                   answer(text || 'Nothing in particular', text)
                 }}
-                className="flex items-end gap-2 rounded-[20px] border border-line bg-raised px-3.5 py-2.5 focus-within:border-brand/50"
+                className="flex items-end gap-2 rounded-[22px] border border-line bg-raised px-4 py-3 focus-within:border-brand/50"
               >
                 <input
                   autoFocus
@@ -246,21 +326,76 @@ export function Onboarding() {
                 </button>
               </form>
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {step.options.map((o) => (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-2">
+                  {step.options.map((o, i) => {
+                    const on = picked.includes(o.label)
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        // On a multi-select the chip is a toggle, so it carries
+                        // pressed state; on a single-select it commits and the
+                        // step advances, so there is no state to carry.
+                        aria-pressed={step.multi ? on : undefined}
+                        onClick={() =>
+                          step.multi
+                            ? setPicked((prev) =>
+                                prev.includes(o.label)
+                                  ? prev.filter((l) => l !== o.label)
+                                  : [...prev, o.label],
+                              )
+                            : answer(o.label, o.value)
+                        }
+                        style={
+                          reduced ? undefined : { animationDelay: `${i * 45}ms` }
+                        }
+                        className={cn(
+                          'rounded-full border px-4 py-2.5 text-[14.5px]',
+                          'transition-all duration-200 cursor-pointer active:scale-[0.97]',
+                          !reduced &&
+                            'motion-safe:animate-[chipIn_320ms_cubic-bezier(0.22,1,0.36,1)_both]',
+                          on
+                            ? 'border-brand bg-brand-soft font-semibold text-brand-deep'
+                            : 'border-line bg-raised text-ink-2 hover:border-brand/50 hover:bg-brand-soft hover:text-brand-deep',
+                        )}
+                      >
+                        {step.multi && (
+                          <Icon
+                            name={on ? 'check' : 'plus'}
+                            size={11}
+                            className="mr-1.5 -mt-px inline-block"
+                          />
+                        )}
+                        {o.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Multi-select needs an explicit commit — with no "done" the
+                    only way to move on would be a chip tap, which is the same
+                    gesture as choosing, and nothing would ever be multiple.
+                    Disabled until something is picked so the button never
+                    promises a step it won't take. */}
+                {step.multi && (
                   <button
-                    key={o.value}
                     type="button"
-                    onClick={() => answer(o.label, o.value)}
+                    onClick={commitMulti}
+                    disabled={picked.length === 0}
                     className={cn(
-                      'rounded-full border border-line bg-raised px-3.5 py-2 text-[13px] text-ink-2',
-                      'transition-all duration-200 cursor-pointer',
-                      'hover:border-brand/50 hover:bg-brand-soft hover:text-brand-deep active:scale-[0.97]',
+                      'self-start rounded-full px-5 py-2.5 text-[14.5px] font-semibold',
+                      'transition-all duration-200',
+                      picked.length > 0
+                        ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.97]'
+                        : 'cursor-default bg-line-soft text-faint',
                     )}
                   >
-                    {o.label}
+                    {picked.length === 0
+                      ? 'Pick what fits'
+                      : `Continue with ${picked.length}`}
                   </button>
-                ))}
+                )}
               </div>
             )}
           </div>
@@ -288,7 +423,7 @@ function Bubble({ role, text, reduced }: { role: 'app' | 'me'; text: string; red
     >
       <div
         className={cn(
-          'rounded-[16px] px-3.5 py-2.5 text-[13.5px] leading-relaxed',
+          'rounded-[18px] px-4 py-3 text-[15px] leading-relaxed',
           mine
             ? 'rounded-br-[4px] bg-brand text-[#1a120f]'
             : 'rounded-bl-[4px] border border-line bg-raised text-ink',
@@ -333,86 +468,102 @@ function Typing() {
  */
 
 /** Deterministic so the composition is designed rather than rolled per load. */
-const CARDS = [
-  { x: 6, y: 12, w: 132, r: -14, o: 0.05, d: 0, dur: 44 },
-  { x: 20, y: 62, w: 96, r: 9, o: 0.04, d: 6, dur: 52 },
-  { x: 34, y: 24, w: 74, r: 22, o: 0.03, d: 12, dur: 38 },
-  { x: 66, y: 16, w: 112, r: -8, o: 0.045, d: 3, dur: 48 },
-  { x: 82, y: 54, w: 150, r: 13, o: 0.05, d: 9, dur: 56 },
-  { x: 90, y: 20, w: 84, r: -20, o: 0.03, d: 15, dur: 42 },
-  { x: 52, y: 78, w: 118, r: 6, o: 0.04, d: 2, dur: 50 },
-  { x: 12, y: 86, w: 88, r: -11, o: 0.035, d: 18, dur: 46 },
-  { x: 74, y: 88, w: 70, r: 17, o: 0.03, d: 11, dur: 40 },
+/**
+ * Dust in the lamplight.
+ *
+ * The one moving thing on this screen, and the whole reason it reads as a
+ * *room* rather than a gradient: still air with motes turning slowly through
+ * a beam is the visual signature of a quiet space nobody has walked through
+ * in a while. Durations are 30–60s — slow enough that you never catch one
+ * moving, you only notice the field has changed when you look back.
+ *
+ * Nine of them, none larger than 3px. It is texture, not an animation.
+ */
+const MOTES = [
+  { x: 22, y: 34, s: 2.5, o: 0.30, d: 0, dur: 52 },
+  { x: 31, y: 58, s: 1.5, o: 0.20, d: 7, dur: 44 },
+  { x: 44, y: 26, s: 2, o: 0.26, d: 3, dur: 60 },
+  { x: 52, y: 47, s: 1.5, o: 0.16, d: 12, dur: 38 },
+  { x: 39, y: 71, s: 3, o: 0.22, d: 5, dur: 56 },
+  { x: 60, y: 63, s: 1.5, o: 0.18, d: 16, dur: 47 },
+  { x: 68, y: 38, s: 2, o: 0.24, d: 9, dur: 41 },
+  { x: 27, y: 18, s: 1.5, o: 0.14, d: 20, dur: 58 },
+  { x: 57, y: 15, s: 2, o: 0.20, d: 14, dur: 50 },
 ]
 
+/**
+ * A quiet study space, after hours.
+ *
+ * This was a field of nine drifting card outlines under a foil sweep — busy,
+ * and pitched at "collection" when the moment is meant to be *arrival*. The
+ * brief here is the opposite of spectacle: someone is stepping into a room
+ * where the lamp is already on and nothing is happening yet.
+ *
+ * So it is built from four things and no more — a lamp, a table, dust, and
+ * the room falling away — which is also why it costs almost nothing to run:
+ * ten infinite transform animations became nine 2px dots.
+ */
 function Backdrop() {
   const reduced = useReducedMotion()
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* The lamp. Warm from the top-left, a cool foil bounce bottom-right —
-          the same two-source lighting the landing page uses, so first run
-          belongs to the same world as the pitch. */}
+      {/* The lamp. One source, warm and high, pooling down the page — a desk
+          lamp left on rather than the two-source stage lighting the landing
+          page uses. Tungsten rather than brand orange: at this size the brand
+          hue reads as an alert, and warm amber reads as a room. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(70rem 46rem at 12% -12%, rgba(255,90,60,0.18), transparent 62%),' +
-            'radial-gradient(56rem 40rem at 98% 104%, rgba(53,214,232,0.12), transparent 64%)',
+            'radial-gradient(80rem 52rem at 50% -18%, rgba(255,176,116,0.13), transparent 66%),' +
+            'radial-gradient(44rem 34rem at 50% 8%, rgba(255,214,170,0.07), transparent 60%)',
         }}
       />
 
-      {/* The collection, not yet collected. */}
-      {CARDS.map((c) => (
-        <div
-          key={`${c.x}-${c.y}`}
-          className="absolute rounded-[14px] border border-[rgba(255,237,220,0.55)]"
-          style={
-            {
-              left: `${c.x}%`,
-              top: `${c.y}%`,
-              width: c.w,
-              // Trading-card proportions, so the silhouettes read as cards even
-              // with no content in them.
-              height: c.w * 1.4,
-              opacity: c.o,
-              // The rotation rides a custom property rather than `transform`,
-              // because the keyframe animates `transform` and would otherwise
-              // overwrite it — every card would snap square the moment the
-              // animation started, which is the whole composition gone.
-              '--r': `${c.r}deg`,
-              transform: `rotate(${c.r}deg)`,
-              background:
-                'linear-gradient(150deg, rgba(255,237,220,0.10), transparent 55%)',
-              animation: reduced
-                ? undefined
-                : `cardFloat ${c.dur}s ${c.d}s ease-in-out infinite`,
-            } as CSSProperties
-          }
-        />
-      ))}
+      {/* The table. The product's own graticule, masked to the lit pool so it
+          reads as ruling on a surface the lamp happens to be falling on —
+          not as wallpaper running out to the window frame. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, rgba(245,237,228,0.032) 1px, transparent 1px),' +
+            'linear-gradient(to bottom, rgba(245,237,228,0.032) 1px, transparent 1px)',
+          backgroundSize: '30px 30px',
+          maskImage: 'radial-gradient(78% 62% at 50% 26%, #000 22%, transparent 92%)',
+          WebkitMaskImage:
+            'radial-gradient(78% 62% at 50% 26%, #000 22%, transparent 92%)',
+        }}
+      />
 
-      {/* Foil. One slow pass across the whole field — the sheen a real foil
-          card throws when you tilt it, at the speed of a room rather than an
-          animation. */}
-      {!reduced && (
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(115deg, transparent 38%, rgba(255,237,220,0.045) 50%, transparent 62%)',
-            backgroundSize: '250% 250%',
-            animation: 'foilSweep 26s ease-in-out infinite',
-          }}
-        />
-      )}
+      {/* Dust, turning in the light. Skipped entirely under reduced motion —
+          a static dot field is just specks on the screen, so there is nothing
+          worth keeping once the movement is gone. */}
+      {!reduced &&
+        MOTES.map((m) => (
+          <div
+            key={`${m.x}-${m.y}`}
+            className="absolute rounded-full bg-[rgb(255,232,206)]"
+            style={{
+              left: `${m.x}%`,
+              top: `${m.y}%`,
+              width: m.s,
+              height: m.s,
+              opacity: m.o,
+              filter: 'blur(0.4px)',
+              animation: `mote ${m.dur}s ${m.d}s ease-in-out infinite`,
+            }}
+          />
+        ))}
 
-      {/* Vignette. The field is behind reading text, so the centre has to stay
-          quieter than the edges or the type loses its ground. */}
+      {/* The room falling away. One vignette, not the two that were stacked
+          here before — they were compounding to near-black at the corners and
+          flattening the lamp into a spotlight. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(58rem 42rem at 50% 45%, rgba(30,24,21,0.86), rgba(30,24,21,0.35) 70%, transparent)',
+            'radial-gradient(130% 100% at 50% 30%, transparent 32%, rgba(18,14,12,0.55) 78%, rgba(14,11,9,0.82) 100%)',
         }}
       />
     </div>

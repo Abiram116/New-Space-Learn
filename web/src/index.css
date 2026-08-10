@@ -671,19 +671,91 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Onboarding answer chips, dealt in one after another. The slight scale is
+   what separates this from the bubble above: a bubble arrives, a chip is
+   offered — it should read as something being placed in front of you. */
+@keyframes chipIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* The onboarding card field. Transform and opacity only, so it composites off
    the main thread — first run is the slowest moment in the app and the one
    place a background must not compete with the first API call. */
-@keyframes cardFloat {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)); }
-  50%      { transform: translate3d(0, -22px, 0) rotate(var(--r, 0deg)); }
+/* Dust turning in lamplight, on the onboarding backdrop. Drifts up and across
+   by a few pixels over the better part of a minute — at this speed you never
+   see one move, you only notice the field is not where you left it. Replaces
+   `cardFloat` and `foilSweep`, which animated nine card outlines and a
+   full-screen gradient sweep to say "collection" on a screen whose job is to
+   say "quiet room". */
+/* ── First-run handoffs (features/transitions/Handoff.tsx) ─────────────
+   Transform and opacity only. These run while the destination route is
+   mounting and making its first requests, which is the busiest moment in the
+   app — anything that touched layout here would drop frames in exactly the
+   place the transition exists to smooth over. */
+
+/* The cover. Fast, because it is hiding a swap rather than performing. */
+@keyframes curtainIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* The uncover: the curtain lifts *toward* the viewer as it fades, so the
+   destination is revealed rather than merely faded up. */
+@keyframes curtainOut {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(1.045); }
 }
 
-/* One slow foil pass across the field — the sheen a real foil card throws when
-   you tilt it, at the speed of a room rather than of an animation. */
-@keyframes foilSweep {
-  0%, 100% { background-position: 0% 50%; }
-  50%      { background-position: 100% 50%; }
+/* The desk lamp warming, not snapping on. */
+@keyframes lampUp {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* The table ruling itself in from the middle outward. */
+@keyframes tableIn {
+  from { opacity: 0; transform: scale(1.08); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* A sheet dealt onto the table: in from above, landing at its own angle.
+   `--tx`/`--tr` carry the resting position so the keyframe can own
+   `transform` outright — setting it inline as well would be overwritten the
+   instant the animation started, which is the whole layout gone. */
+@keyframes sheetDeal {
+  from {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--tx, 0px)), -46px) rotate(0deg) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--tx, 0px)), 0) rotate(var(--tr, 0deg)) scale(1);
+  }
+}
+
+/* The signature hairline, drawn out from the centre. */
+@keyframes ruleSweep {
+  from { opacity: 0; transform: scaleX(0); }
+  to   { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes lineUp {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* The onboarding heading settling in. Longer and softer than `bubbleIn`: a
+   bubble arrives in a conversation already underway, this is the first thing
+   on a screen someone has just landed on. */
+@keyframes settleIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mote {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  33%      { transform: translate3d(9px, -14px, 0); }
+  66%      { transform: translate3d(-6px, -24px, 0); }
 }
 
 /* The profile seal's foil. One highlight travelling across the disc, at the

@@ -53,7 +53,9 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
   }
 
   return (
-    <Rise distance={6} className="flex min-h-0 flex-col gap-3">
+    // See QuizzesPanel: `flex-1` rather than `min-h-full`, so filling the dock
+    // doesn't depend on a percentage resolving through a scroll container.
+    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
       {due > 0 && (
         <div className="flex items-baseline gap-2 rounded-[10px] border border-brand/25 bg-brand-tint px-2.5 py-2">
           <span className="nameplate text-[20px] tabular-nums text-brand">{due}</span>
@@ -95,7 +97,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
 
       <Link
         to={`${base}/flashcards`}
-        className="flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
+        className="mt-auto flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
       >
         Manage decks <Icon name="arrowRight" size={12} />
       </Link>
@@ -145,11 +147,15 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
     [card, showError],
   )
 
-  if (!cards) return <Skeleton className="h-40 rounded-xl" />
+  if (!cards) return <Skeleton className="min-h-0 flex-1 rounded-xl" />
 
   if (!card) {
     return (
-      <Rise distance={5} className="flex flex-col gap-3">
+      // Centred, not top-aligned. This state is two short elements; stretched
+      // to the dock height and pinned to the top they sat under a column of
+      // nothing. A finished state is the one place centring is right — there
+      // is no next thing below it to stay close to.
+      <Rise distance={5} className="flex min-h-0 flex-1 flex-col justify-center gap-3">
         <div className="rounded-xl border border-mint/35 bg-mint-soft/50 px-3 py-3 text-center">
           <Icon name="check" size={18} className="text-mint-deep" />
           <div className="mt-1 text-[13px] font-bold text-mint-deep">
@@ -171,7 +177,7 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex items-center gap-2">
         <button
           type="button"

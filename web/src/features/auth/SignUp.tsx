@@ -5,12 +5,14 @@ import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
+import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
 import { GoogleGlyph } from './GoogleGlyph'
 
 export function SignUp() {
   const navigate = useNavigate()
   const { show } = useToast()
+  const { play } = useHandoff()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,7 +45,22 @@ export function SignUp() {
       if (result.requiresConfirmation) {
         setPendingEmail(email)
       } else {
-        navigate('/home', { replace: true })
+        /**
+         * Straight to the intake, not through `/home`.
+         *
+         * Going to `/home` meant `OnboardingGate` mounted, fetched the student
+         * model, showed a full-page spinner while it waited, and then
+         * redirected here anyway — a round trip and a spinner to establish
+         * something already known for certain: an account created two seconds
+         * ago has no preferences. Skipping it removes a request and the one
+         * loading screen a new student would otherwise hit first.
+         *
+         * The curtain covers the Onboarding chunk loading, so the intake is
+         * mounted and painted before it lifts.
+         */
+        void play('threshold', () => {
+          navigate('/welcome-aboard', { replace: true })
+        })
       }
     } catch (err) {
       setErrors({ form: friendlyMessage(err) })

@@ -8,6 +8,7 @@
 
 import type { ReactNode } from 'react'
 import { clearBriefCache } from '../lib/briefCache'
+import { hideBootSplash } from '../lib/bootSplash'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { getSession, onAuthChange, signOut, updateDisplayName, type Session } from '../api/auth'
 import { setAuthTokenProvider } from '../api/client'
@@ -66,6 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       .finally(() => {
         if (mounted) setLoading(false)
+        // The splash's real exit condition. Routing depends on knowing
+        // whether there is a session, so this is the first moment the app can
+        // paint the correct page rather than a frame of the wrong one.
+        hideBootSplash()
       })
 
     const { data: sub } = onAuthChange((_event, s) => {

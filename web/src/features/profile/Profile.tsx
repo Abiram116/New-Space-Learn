@@ -10,7 +10,7 @@
  * endpoint exists — omitting it is honest, showing a dead button is not.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Badge, Stats } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
@@ -234,7 +234,13 @@ export function Profile() {
               of your own activity is the thing you are measured against; the
               badge case beside it stays a Card because badges are things you
               own. Those two being the same material was the confusion. */}
-          <Ledger className="flex h-full flex-col gap-3 p-5 pt-0">
+          {/* `border-b-0`: a ledger rule underlines figures so the eye can
+              read them against it. Here it lands at the bottom of a panel with
+              nothing beneath it, so it divides nothing and just draws a line
+              across the page — the same "rule with nothing to divide" that was
+              removed from the note canvas. The material stays; its trailing
+              stroke does not. */}
+          <Ledger className="flex h-full flex-col gap-3 border-b-0 p-5 pt-0">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Activity</h2>
               <span className="setcode ml-auto">
@@ -258,7 +264,12 @@ export function Profile() {
           </Ledger>
 
           {/* Badge case — stays a Card. Badges are earned objects you keep. */}
-          <Card className="flex h-full flex-col gap-3 p-5">
+          {/* `self-start`, not `h-full`. Stretching the badge case to match
+              the activity panel left a tall empty box under a 3-row grid of
+              seals — the card was sized by its neighbour rather than by what
+              was in it. It hugs its contents now; the two panels top-align,
+              which is what a pair of unrelated-height panels should do. */}
+          <Card className="flex flex-col gap-3 self-start p-5">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Badges</h2>
               {d && (
@@ -419,11 +430,18 @@ function BadgeSeal({ badge }: { badge: Badge }) {
 }
 
 function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
+  // Drawn once per mount, staggered across the columns. `useState` + rAF
+  // rather than a CSS-only animation because the stagger has to be indexed by
+  // column, and 26 keyframe rules would be worse than one delay expression.
+  const [drawn, setDrawn] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDrawn(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
   if (!cells.length) return <Skeleton className="h-28 rounded-lg" />
 
   // Weeks as columns, weekdays as rows — the layout everyone already reads.
-  // The backend returns ~26 Monday-aligned weeks, which is enough columns that
-  // small square cells fill the card instead of huddling on the left.
   const weeks: (typeof cells)[] = []
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
 
@@ -439,45 +457,74 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
     }
   })
 
+  /* Both label tracks share the cell grid's geometry instead of guessing at
+     it, which is what was wrong before.
+
+     The weekday column used `justify-between` over three labels — so Mon sat
+     at 0%, Wed at 50% and Fri at 100% of the height, while their actual rows
+     are the 1st, 3rd and 5th of seven. Nothing lined up with anything. It is
+     the same 7-row grid as the cells now, with each label placed in its own
+     row, so alignment is structural rather than approximated.
+
+     The month row had every week rendering a `<span>` in a ~6px column, which
+     clipped a three-letter month to about one letter. Ticks are now grid
+     items placed at their starting column and allowed to overflow to the
+     right, the way a real axis tick behaves. */
+  const cols = { gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }
+
   return (
     <div className="flex w-full gap-2">
-      <div className="flex shrink-0 flex-col justify-between py-[13px]">
-        {['Mon', 'Wed', 'Fri'].map((d) => (
-          <span key={d} className="setcode text-[9px] leading-none">
+      {/* Weekday axis, on the cells' own row grid. */}
+      <div className="grid shrink-0 grid-rows-7 gap-[3px] pt-[calc(0.5rem+3px)]">
+        {['Mon', '', 'Wed', '', 'Fri', '', ''].map((d, i) => (
+          <span
+            key={i}
+            className="setcode flex items-center text-[9px] leading-none"
+          >
             {d}
           </span>
         ))}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div
-          className="mb-1 grid gap-[3px]"
-          style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}
-        >
-          {weeks.map((_, i) => {
-            const tick = months.find((m) => m.col === i)
-            return (
-              <span key={i} className="setcode text-[9px] leading-none">
-                {tick ? tick.label : ''}
-              </span>
-            )
-          })}
+        <div className="mb-1 grid h-2 gap-[3px]" style={cols}>
+          {months.map((m) => (
+            <span
+              key={m.label + m.col}
+              // `col + 1` because CSS grid lines are 1-indexed. Overflow is
+              // deliberate: a tick labels the column it starts at and is
+              // allowed to run past it.
+              style={{ gridColumnStart: m.col + 1 }}
+              className="setcode overflow-visible whitespace-nowrap text-[9px] leading-none"
+            >
+              {m.label}
+            </span>
+          ))}
         </div>
 
-        <div
-          className="grid gap-[3px]"
-          style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}
-        >
+        <div className="grid gap-[3px]" style={cols}>
           {weeks.map((week, w) => (
             <div key={w} className="grid grid-rows-7 gap-[3px]">
-              {week.map((cell) => (
+              {week.map((cell, d) => (
                 <span
                   key={cell.day}
-                  title={cell.day}
+                  title={`${cell.day}${cell.minutes ? ` — about ${cell.minutes} min` : ''}`}
                   className={cn(
-                    'aspect-square w-full rounded-[2px] transition-colors',
+                    'aspect-square w-full rounded-[2px]',
+                    'transition-[opacity,transform,background-color] duration-300 ease-out',
                     INTENSITY[Math.min(3, cell.intensity)],
                   )}
+                  style={{
+                    opacity: drawn ? 1 : 0,
+                    // Scale from the cell's own centre so the wave reads as
+                    // the map developing rather than sliding in from an edge.
+                    transform: drawn ? 'scale(1)' : 'scale(0.4)',
+                    // Column-dominant delay with a small per-row offset, so it
+                    // sweeps left to right with a slight diagonal rather than
+                    // marching in rigid vertical bars. Capped so the last
+                    // column is never more than ~half a second behind.
+                    transitionDelay: drawn ? `${Math.min(w * 14 + d * 4, 520)}ms` : '0ms',
+                  }}
                 />
               ))}
             </div>

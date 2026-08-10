@@ -107,7 +107,12 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
   const list = quizzes.data ?? []
 
   return (
-    <Rise distance={6} className="flex min-h-0 flex-col gap-3">
+    // `flex-1`, not `min-h-full`. A percentage min-height has to resolve
+    // against an ancestor chain of definite heights, and one scroll container
+    // in that chain is enough to collapse it back to content height — which is
+    // why this panel kept bunching into a strip at the top of the dock. Being a
+    // flex item that grows needs nothing from its ancestors.
+    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
       <button
         type="button"
         onClick={generate}
@@ -153,7 +158,7 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
 
       <Link
         to={`${base}/quizzes`}
-        className="flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
+        className="mt-auto flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
       >
         All quizzes <Icon name="arrowRight" size={12} />
       </Link>

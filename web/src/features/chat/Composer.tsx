@@ -97,18 +97,23 @@ export function Composer({
       />
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-5 pb-3 pt-1">
-        {assessing && (
-          <div className="flex items-center gap-1.5 self-center rounded-full bg-line-soft px-2.5 py-1 text-[11.5px] text-muted">
-            <Icon name="lock" size={11} />
-            Chat pauses during {reason === 'quiz' ? 'a quiz' : 'a review'} — the answers
-            should be yours.
-          </div>
-        )}
+        {/* Locked state lives on the input itself.
+            There was a pill above saying "chat pauses during a review" AND a
+            placeholder inside saying "paused while you're reviewing" — the
+            same sentence twice, stacked, which reads as the UI being anxious
+            about it. The brand outline marks the control that is actually
+            unavailable, the placeholder explains it, and the lock icon on the
+            send button confirms it. One idea, three non-repeating cues. */}
         <div
           className={cn(
-            'flex items-end gap-2 rounded-[22px] border border-line bg-raised px-3.5 py-2.5',
+            'flex items-end gap-2 rounded-[22px] border px-3.5 py-2.5',
             'transition-[border-color,box-shadow] duration-200',
-            'focus-within:border-brand/50 focus-within:shadow-[0_0_0_3px_rgba(255,90,60,0.10)]',
+            assessing
+              ? 'border-brand/60 bg-canvas shadow-[0_0_0_3px_rgba(255,90,60,0.12)]'
+              : cn(
+                  'border-line bg-raised',
+                  'focus-within:border-brand/50 focus-within:shadow-[0_0_0_3px_rgba(255,90,60,0.10)]',
+                ),
           )}
         >
           <textarea
@@ -151,17 +156,22 @@ export function Composer({
               type="button"
               onClick={submit}
               disabled={!canSend}
-              aria-label="Send message"
-              title="Send"
+              aria-label={assessing ? 'Paused during assessment' : 'Send message'}
+              title={assessing ? 'Paused — finish the assessment first' : 'Send'}
               className={cn(
                 'grid h-8 w-8 shrink-0 place-items-center rounded-full',
                 'transition-all duration-200 cursor-pointer',
                 canSend
                   ? 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-95'
                   : 'cursor-default bg-line-soft text-faint',
+                assessing && 'text-brand-deep',
               )}
             >
-              <Icon name="arrowRight" size={15} className="-rotate-90" />
+              <Icon
+                name={assessing ? 'lock' : 'arrowRight'}
+                size={assessing ? 13 : 15}
+                className={assessing ? undefined : '-rotate-90'}
+              />
             </button>
           )}
         </div>

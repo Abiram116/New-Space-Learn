@@ -50,6 +50,124 @@
       primary action on the card that is actually due.
       FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
     -->
+    <!--
+      BOOT SPLASH — inline on purpose.
+
+      `#root` was empty, so between the browser parsing this file and React
+      mounting there was nothing to paint: a blank page for however long the
+      entry chunk, the fonts and the auth round-trip take. On a phone on
+      college wifi that is comfortably over a second of white-then-dark flash.
+
+      Everything below is inline — no stylesheet, no script, no image request —
+      so it paints on the very first frame, before a single asset has landed.
+      Anything external would defeat the point by being the thing we are
+      waiting for.
+
+      It is removed by `hideBootSplash()` once auth has resolved, not merely
+      when JS runs: routing depends on knowing whether there is a session, and
+      tearing this down earlier would show a frame of the signed-out layout to
+      someone who is signed in. See `src/lib/bootSplash.ts`.
+    -->
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: #1e1a17;
+        /* The drafting graticule the whole product is built on, so the first
+           thing on screen already belongs to the app rather than being a
+           generic loader that gets replaced by something unrelated. */
+        background-image:
+          linear-gradient(to right, rgba(245, 237, 228, 0.035) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(245, 237, 228, 0.035) 1px, transparent 1px);
+        background-size: 22px 22px;
+        transition: opacity 420ms ease, visibility 420ms;
+      }
+      #boot[data-hidden='true'] {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      #boot .boot-inner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 22px;
+      }
+      /* The mark, drawn rather than loaded: a stacked set of cards on a table,
+         which is the product's own object. */
+      #boot .boot-mark {
+        position: relative;
+        width: 54px;
+        height: 54px;
+      }
+      #boot .boot-mark i {
+        position: absolute;
+        inset: 0;
+        border-radius: 9px;
+        border: 1.5px solid #3b3028;
+        background: linear-gradient(180deg, #352b24, #262119);
+        animation: bootDeal 1.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+      }
+      #boot .boot-mark i:nth-child(1) { animation-delay: 0s; }
+      #boot .boot-mark i:nth-child(2) { animation-delay: 0.14s; }
+      #boot .boot-mark i:nth-child(3) {
+        animation-delay: 0.28s;
+        border-color: rgba(255, 90, 60, 0.55);
+        background: linear-gradient(180deg, #ff8b76, #ff5a3c);
+      }
+      @keyframes bootDeal {
+        0%   { transform: translate(0, 0) rotate(0deg); opacity: 0.35; }
+        35%  { transform: translate(-7px, -9px) rotate(-7deg); opacity: 1; }
+        70%  { transform: translate(6px, -4px) rotate(5deg); opacity: 1; }
+        100% { transform: translate(0, 0) rotate(0deg); opacity: 0.35; }
+      }
+      #boot .boot-word {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #9c8b80;
+      }
+      /* A ruled progress line rather than a spinner: a spinner says "busy",
+         a filling rule says "getting there", and this is a finite wait. */
+      #boot .boot-rule {
+        width: 132px;
+        height: 2px;
+        border-radius: 2px;
+        background: #3b3028;
+        overflow: hidden;
+      }
+      #boot .boot-rule span {
+        display: block;
+        height: 100%;
+        width: 40%;
+        border-radius: 2px;
+        background: #ff5a3c;
+        animation: bootSweep 1.35s ease-in-out infinite;
+      }
+      @keyframes bootSweep {
+        0%   { transform: translateX(-100%); }
+        100% { transform: translateX(330%); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot .boot-mark i,
+        #boot .boot-rule span { animation: none; }
+        #boot .boot-mark i { opacity: 1; }
+        #boot .boot-rule span { width: 100%; }
+      }
+    </style>
+    <div id="boot" role="status" aria-live="polite" aria-label="Loading Space Learn">
+      <div class="boot-inner">
+        <div class="boot-mark"><i></i><i></i><i></i></div>
+        <div class="boot-word">Space Learn</div>
+        <div class="boot-rule"><span></span></div>
+      </div>
+    </div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
