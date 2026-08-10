@@ -1,8 +1,125 @@
-# The Soul
+# Vision
 
-> Extends `PRODUCT.md`. Nothing here overrides a Brand Commitment or a Product
-> Principle — it takes Principle 3 ("every claim is traceable") and pushes it
-> one level deeper, from claims to *relationships*.
+What this product is trying to be, and the thesis underneath it.
+
+`vision.md` held the north star and `SOUL.md` held the argument for how to
+reach it. They were always read together and always edited together, so they
+are one document.
+
+---
+
+## Part 1 — The north star
+
+### The core shift
+
+The product should not feel like a website you open and operate. It should
+feel like a mentor you talk to, one who remembers what happened last time
+and has an opinion about what to do next.
+
+**Not this:**
+> Upload PDF → Chat
+
+**This:**
+```
+Student
+  ↓
+AI understands
+  ↓
+Creates a learning plan
+  ↓
+Explains concepts
+  ↓
+Generates notes
+  ↓
+Creates flashcards
+  ↓
+Creates quizzes
+  ↓
+Tracks progress
+  ↓
+Reminds you
+  ↓
+Motivates you
+  ↓
+Adapts difficulty
+```
+
+Every feature in the app is a spoke connected to one hub — a single AI
+companion the student has an ongoing relationship with — not a menu of
+independent tools that happen to share a sidebar.
+
+### What this sounds like in practice
+
+Re-entry, with actual memory of what happened:
+> "Welcome back, Abiram. Last time we studied Dynamic Programming. You
+> struggled with memoization. Shall we revise it with a quick quiz?"
+
+Proactive, not just reactive:
+> "You have an Amazon OA next week. Based on your progress, I recommend
+> practicing Binary Search today instead of Arrays."
+
+After finishing something, offering the next move instead of waiting to be
+asked:
+> "You've mastered Arrays. Would you like to:
+> Learn Linked Lists · Revise with Flashcards · Take a Quiz · Solve 5 problems"
+
+The naming test for whether this is working: a student should say **"I'll
+ask [it]"**, not **"I'll open [it]."** That's the difference between a
+character and a product — the same distinction that makes people say "ask
+Claude" or "ask Siri" rather than "open Claude" or "open Siri."
+
+### Where this already exists in the codebase (the seed to grow, not start from zero)
+
+`GET /me/brief` (`api/app/routers/me.py`) is already the first real instance
+of this pattern — it doesn't greet with "Good evening," it says something
+specific to what the student actually did, grounded in real stored data
+(streak, cards due, last topic touched), with a hard guard against
+inventing numbers. **This is the prototype for the whole vision, not a
+one-off widget.** The "Home brief as a recommendation
+engine" is the most direct next step toward this — extending the brief from
+one re-entry line into an actual mentor's opening move (identify a weak
+area, name it, suggest the specific next action), the same shape as the
+"Amazon OA next week" example above.
+
+The context-aware-agents backlog item is the same vision applied to
+mid-session moments: an agent that already knows the chat history and
+what's indexed shouldn't need to ask "how many cards do you want" — it
+should already know, the way a real tutor would.
+
+### What this rules out
+
+- Generic form-like interactions where the burden of specifying what's
+  needed falls on the student ("how many questions? which topic?") instead
+  of the AI inferring it from context it already has.
+- Screens that only react when clicked, with no sense of what happened
+  before or what should happen next.
+- Copy that could belong to any study app — every message the AI sends
+  should be specific to *this* student's actual history, or it isn't
+  earning the "companion" framing.
+
+### What this does not mean
+
+Not a persona costume **as a substitute** for the real thing — forced
+catchphrases or chattiness papering over a companion that doesn't actually
+remember anything reads as a gimmick, not a mentor. The mechanism has to be
+**real memory of real data plus a clear next-step opinion**.
+
+Personality on top of that mechanism is fine, and worth doing — a mentor
+with some character is more engaging than a neutral data-reporting voice,
+as long as the personality is texture on real substance, not a cover for
+its absence. Confirmed explicitly: it's fine to lean into character/voice
+once the underlying data-grounding is real.
+
+### Status
+
+Recorded as the durable vision, not an active task. No renaming, no new
+build work triggered by this note alone — it's the lens for evaluating and
+prioritizing everything already in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), and for
+judging any new feature proposal from here forward.
+
+---
+
+## Part 2 — The thesis
 
 > **Reviewed 2026-08-09.** The original draft of this document (and its
 > duplicate, `soulgpt.md`, now deleted) proposed a dedicated `concepts` +
@@ -13,7 +130,7 @@
 
 ---
 
-## 1. The enemy
+### 1. The enemy
 
 **The illusion of learning.**
 
@@ -29,7 +146,7 @@ move on. None of them notice the day you stopped actually learning.
 
 Space Learn is the tool that notices.
 
-## 2. The thesis
+### 2. The thesis
 
 **A syllabus is a list. An exam is a graph.**
 
@@ -49,7 +166,7 @@ edge nobody ever showed them.
 **This is a claim about how exams are shaped, not a commitment to storing your
 material as a graph database.** The distinction matters — see §5.
 
-## 3. The promise
+### 3. The promise
 
 Every study session should answer one question:
 
@@ -64,7 +181,7 @@ Space Learn's promise is that opening the app is never a decision — it is a
 verdict. The next twenty minutes are already chosen, and it can tell you exactly
 why they were chosen, from *your* citations, *your* mistakes, *your* reviews.
 
-## 4. The mechanism (what the engine is, once)
+### 4. The mechanism (what the engine is, once)
 
 Because we need it named — but the student never sees this phrase again:
 
@@ -80,7 +197,7 @@ a chosen quiz answer, a link you drew yourself, a subtopic label attached to a
 question at the moment it was written. Not a graph database. "Model of
 understanding" describes what it does for the student, not how it's stored.
 
-### The tension, and how it resolves
+#### The tension, and how it resolves
 
 *Model of understanding* invites inference. *Evidence-only* forbids it. Both are
 load-bearing. The resolution — this is the sentence that makes the whole
@@ -95,7 +212,7 @@ what makes the model trustworthy enough for a lecturer to hand it to a cohort �
 and it holds exactly as well with tagged rows as it would with a formal graph.
 Auditability comes from provenance, not from schema shape.
 
-### Why this is defensible
+#### Why this is defensible
 
 Every study app on earth organises material into folders and quizzes you on
 cards. None of them model *what connects to what, for you specifically*. Anki
@@ -108,9 +225,9 @@ outcomes. All the raw evidence is in the database. It is simply never assembled.
 
 ---
 
-## 5. Structure: Subject → Subspace stays. "Concepts" are tags, not a table.
+### 5. Structure: Subject → Subspace stays. "Concepts" are tags, not a table.
 
-### The fork this section used to leave open — now resolved
+#### The fork this section used to leave open — now resolved
 
 The original draft asked whether to replace Subspace-as-folder with a first-class
 `Concepts` entity (hybrid or full-graph). **Neither.** A third option beats both:
@@ -125,7 +242,7 @@ same model call that writes the question, with zero extra cost
 pattern to flashcards and notes. That string *is* the concept. No entity
 extraction, no merge/conflict resolution, no `concepts` table.
 
-### The killer consequence, unchanged
+#### The killer consequence, unchanged
 
 *Bayes' theorem* appears in Statistics and in Machine Learning. Today those are
 two unrelated subspaces holding two unrelated piles of cards. Once both tag
@@ -157,7 +274,7 @@ not an NLP resolution pipeline. Revisit only with real evidence it's needed.
 
 ---
 
-## 6. The edge doctrine — kept as a principle, corrected as an implementation
+### 6. The edge doctrine — kept as a principle, corrected as an implementation
 
 > **An edge must be evidenced. Never inferred by a model.**
 
@@ -177,7 +294,7 @@ the reason originally stated.
 
 ---
 
-## 7. The loop, reframed
+### 7. The loop, reframed
 
 The five surfaces are currently siblings on a tab strip — which makes them read
 as a feature list. They are actually **phases of one loop**, and the Map is what
@@ -207,11 +324,11 @@ scored.
 
 ---
 
-## 8. The five things that make this best-in-class
+### 8. The five things that make this best-in-class
 
 Ranked by (pitch value ÷ effort), with the corrected mechanism for each.
 
-### 1. Confusion pairs — *"how did it know that?"*
+#### 1. Confusion pairs — *"how did it know that?"*
 Tag each quiz choice with a concept label at generation time; aggregate
 `(correct_concept, chosen_concept)` pairs from existing `quiz_results`. Surfaces
 sentences like *"You've mixed up self-attention and cross-attention four
@@ -219,14 +336,14 @@ times."* No graph, no new tables — one schema tweak to the `choices` shape plu
 one read-time aggregation query.
 **Effort: small. Wow: enormous.** No competitor does this.
 
-### 2. Exam-aware scheduling — *the honest cram*
+#### 2. Exam-aware scheduling — *the honest cram*
 SM-2 is calendar-blind. Add an `exam_date` column to `subjects` and compress
 `grade_card()`'s interval math to fit the runway, with a visible, honest
 explanation of what got sacrificed. **Fully independent of everything else in
 this document** — it never needed concepts or edges at all.
 **Effort: medium. Differentiation: very high.**
 
-### 3. The Gap Map — *a diagnostic, not a hairball*
+#### 3. The Gap Map — *a diagnostic, not a hairball*
 Concept-level, **derived at render time, never stored** — see
 [ADR-0011](adr/0011-gap-map-derived-concept-visualization.md). Not a
 force-directed graph. A deliberately **boring, readable** layout where:
@@ -249,19 +366,19 @@ your revision plan. **There is no graph database and no graph storage** — the
 relational tables stay the single source of truth and the map is a projection
 assembled per request and discarded, so nothing about it can ever go stale.
 
-### 4. Cross-subject transfer — *the moment hierarchy can't produce*
+#### 4. Cross-subject transfer — *the moment hierarchy can't produce*
 One subtopic string, many subjects. Weakness propagates via §5's string match.
 **Postponed** until #1 ships and there's real repeated-tag data to match against
 — building this first, with no data yet, is building on nothing.
 
-### 5. Provenance everywhere — *already built, under-sold*
+#### 5. Provenance everywhere — *already built, under-sold*
 Every card, note and quiz question tracing to `document · page` is the existing
 moat. It should be visible on every artifact, not just chat answers. Pure UI
 surfacing — no backend change.
 
 ---
 
-## 9. What we deliberately will not build
+### 9. What we deliberately will not build
 
 A plan is only real if it says no. These are all tempting and all wrong for this
 product:
@@ -294,7 +411,7 @@ product:
 
 ---
 
-## 10. Free-tier engineering reality
+### 10. Free-tier engineering reality
 
 Render free tier: one worker, 512MB, **spins down after 15 minutes**, no
 background jobs. Supabase free: 500MB. These are hard constraints, and the
@@ -312,7 +429,7 @@ table at all beyond a couple of columns.
 
 ---
 
-## 11. Phasing — every phase ends in something demo-able, none require a graph
+### 11. Phasing — every phase ends in something demo-able, none require a graph
 
 | Phase | Ships | Demo sentence |
 |---|---|---|
@@ -331,7 +448,7 @@ and they already exist.
 
 ---
 
-## 12. The landing page
+### 12. The landing page
 
 The original draft proposed a 3D/SVG rendering of the concept graph as the
 landing hero. **Dropped** — not on merit, but because `IMPLEMENTATION_PLAN.md` §16
@@ -347,7 +464,7 @@ It doesn't need to also be the marketing page's hero.
 
 ---
 
-## 13. The pitch
+### 13. The pitch
 
 Five beats. Two minutes. The order is load-bearing — villain, insight,
 mechanism, proof, moat.
@@ -370,7 +487,7 @@ mechanism, proof, moat.
    a specific quiz attempt. Nothing is a model's opinion. That is why a lecturer
    can hand it to a cohort."
 
-### Selling it
+#### Selling it
 
 The most saleable version is **not** a consumer app (you'd be fighting Quizlet's
 distribution). It's the same engine pointed at an institution:
@@ -386,7 +503,7 @@ query on top of tagged rows than it would have been on top of a graph database.
 
 ---
 
-## 14. Why this is resume-strong
+### 14. Why this is resume-strong
 
 Be able to tell these five stories in an interview:
 
@@ -427,7 +544,7 @@ Those are senior-engineer answers. Very few capstones can supply them.
 
 ---
 
-## 15. The fork — resolved
+### 15. The fork — resolved
 
 The original draft left open "how radical to go on hierarchy," offering a
 choice between a hybrid concepts-inside-subjects model and a full graph
