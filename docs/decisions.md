@@ -61,6 +61,33 @@ ceiling. It is kept only as an offline quality benchmark.
 *Revisit when:* the memory ceiling is lifted, or retrieval quality is
 measured as the actual bottleneck.
 
+**A concept's mastery is joined at read time, never stored.**
+`quizzes.questions[i].subtopic` and `quiz_results.answers[i]` have always been
+enough to reconstruct per-question correctness per concept; the app just never
+did the join. Follows the same rule as the concept tags themselves — computed
+per request, so it cannot go stale. *The cost of this choice:* the join needs
+`questions`, the largest payload in the read pass, which is why the quiz window
+is bounded and the read is flat rather than nested onto `quiz_results`.
+
+**Inferred preferences are derived; only feedback events are stored.**
+Anything computable from the snapshot stays computable — a table holding
+resolved preferences would be a cache that can disagree with its source. What
+earns `response_feedback` a table is that an opinion about an answer is an
+*event*: it cannot be recomputed, so an unrecorded one is gone. Same reasoning
+as the Gap Map, applied to both sides of the line.
+
+**Contradicting evidence outweighs confirming evidence, 1.5 to 1.**
+Being wrong about a student costs more than being unsure about them, so a
+learned preference is expensive to acquire and cheap to lose. Below a floor it
+flips outright rather than sitting at zero — a student whose taste changes gets
+followed, not out-voted by their own history. See
+`engineering/personalization.md`.
+
+**What the personalization layer may model is a closed whitelist.**
+`preferences.KEYS` bounds it structurally rather than by instructing a model not
+to infer sensitive attributes — an instruction depends on compliance, a
+whitelist does not.
+
 **A model may propose; it may never assert.**
 Every relationship and every claim the app makes about a student traces to a
 specific stored row. This is what makes the product's central promise

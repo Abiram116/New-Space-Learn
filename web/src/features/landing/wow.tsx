@@ -16,11 +16,8 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../components/ui/Icon'
+import { useReducedMotion } from '../../components/ui/motion'
 import { DUR_MS, EASE_CSS } from './language'
-
-const reduced = () =>
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 /**
  * Where knowledge is currently converging, in viewport pixels.
@@ -58,9 +55,16 @@ export function VelocityTilt({
   max?: number
 }) {
   const el = useRef<HTMLDivElement>(null)
+  const still = useReducedMotion()
 
   useEffect(() => {
-    if (reduced()) return
+    // Clearing the transform rather than just stopping the loop: the element
+    // is mid-skew at the moment the preference flips, and leaving it there
+    // would freeze the page in a deformation nobody asked for.
+    if (still) {
+      if (el.current) el.current.style.transform = ''
+      return
+    }
     let last = window.scrollY
     let cur = 0
     let raf = 0
@@ -78,7 +82,7 @@ export function VelocityTilt({
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [max])
+  }, [max, still])
 
   return (
     <div ref={el} className={className} style={{ willChange: 'transform' }}>
@@ -104,10 +108,15 @@ export function Magnetic({
   className?: string
 }) {
   const el = useRef<HTMLSpanElement>(null)
+  const still = useReducedMotion()
 
   useEffect(() => {
     const node = el.current
-    if (!node || reduced() || coarse()) return
+    if (!node) return
+    if (still || coarse()) {
+      node.style.transform = 'translate(0px, 0px)'
+      return
+    }
 
     let raf = 0
     let tx = 0
@@ -144,7 +153,7 @@ export function Magnetic({
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerleave', reset)
     }
-  }, [strength])
+  }, [strength, still])
 
   return (
     <span
@@ -288,7 +297,7 @@ export function MaskedLines({
   className?: string
   lineClassName?: string
 }) {
-  const still = reduced()
+  const still = useReducedMotion()
   return (
     <span className={className}>
       {lines.map((line, i) => {
@@ -328,9 +337,10 @@ export function MaskedLines({
 export function DraftingCursor() {
   const dot = useRef<HTMLDivElement>(null)
   const ring = useRef<HTMLDivElement>(null)
+  const still = useReducedMotion()
 
   useEffect(() => {
-    if (coarse() || reduced()) return
+    if (coarse() || still) return
     let tx = -100
     let ty = -100
     let rx = -100
@@ -364,9 +374,9 @@ export function DraftingCursor() {
       window.removeEventListener('pointermove', onMove)
       cancelAnimationFrame(raf)
     }
-  }, [])
+  }, [still])
 
-  if (typeof window !== 'undefined' && (coarse() || reduced())) return null
+  if (still || (typeof window !== 'undefined' && coarse())) return null
 
   return (
     <>
@@ -406,7 +416,8 @@ const FRAGMENTS = [
 ]
 
 export function SourceDrift() {
-  if (reduced()) return null
+  const still = useReducedMotion()
+  if (still) return null
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {FRAGMENTS.map((f) => (

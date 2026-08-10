@@ -13,7 +13,7 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
 from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
-from ..services import activity, rag, student_model, supabase
+from ..services import activity, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
@@ -69,8 +69,15 @@ async def generate_quiz(
     subspace = await assert_subspace(user.id, subspace_id)
     await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
 
-    retrieved = await rag.retrieve(subspace_id, body.topic or "core concepts", k=6)
-    history = await recent_history(user.id, subspace_id)
+    # Three independent reads, gathered. Retrieval, history and the student
+    # model share no inputs, so running them in sequence spent three round
+    # trips to a remote Postgres before the (much slower) model call even
+    # started — pure latency the student waits through.
+    retrieved, history, student_context = await asyncio.gather(
+        rag.retrieve(subspace_id, body.topic or "core concepts", k=6),
+        recent_history(user.id, subspace_id),
+        personalization.build(user.id, "quiz", subspace_id=subspace_id),
+    )
     # A conversation IS the student's material. This used to require indexed
     # documents specifically, which blocked the most natural case in the
     # product: talk through a topic in chat, then ask to be tested on it.
@@ -83,8 +90,6 @@ async def generate_quiz(
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
     label = subspace_label(subspace)
     recent = format_history(history) or "(no prior chat in this space)"
-    student_context = student_model.format_for_prompt(await student_model.get(user.id))
-
     prompt = (
         f"Write {body.count} multiple-choice questions about "
         f"'{body.topic or 'the key concepts in this material'}', within the "

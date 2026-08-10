@@ -44,6 +44,8 @@ export type IconName =
   | 'target'
   | 'clock'
   | 'sparkle'
+  | 'thumbUp'
+  | 'thumbDown'
   | 'offline'
   | 'alert'
   | 'more'
@@ -315,6 +317,29 @@ function paths(name: IconName, filled: boolean) {
         </>
       )
     // Sparkle: a four-point foil glint. Used for AI-authored things.
+    /* Drawn, not emoji — the design system's rule. A single cuff-and-palm
+       outline at 24px reads correctly down to 13px, where a detailed hand
+       turns to mush. `filled` marks the one you chose. */
+    case 'thumbUp':
+      return (
+        <>
+          <path
+            d="M7 10.5v8.5a1 1 0 0 0 1 1h8.2a2 2 0 0 0 1.96-1.6l1.2-6A2 2 0 0 0 17.4 10H14V6.5a2 2 0 0 0-2-2l-2.6 6Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
+          <path d="M7 10.5H4.5a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5H7" />
+        </>
+      )
+    case 'thumbDown':
+      return (
+        <>
+          <path
+            d="M7 13.5V5a1 1 0 0 1 1-1h8.2a2 2 0 0 1 1.96 1.6l1.2 6A2 2 0 0 1 17.4 14H14v3.5a2 2 0 0 1-2 2l-2.6-6Z"
+            fill={filled ? 'currentColor' : 'none'}
+          />
+          <path d="M7 13.5H4.5a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5H7" />
+        </>
+      )
     case 'sparkle':
       return (
         <path

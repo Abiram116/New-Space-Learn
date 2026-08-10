@@ -314,6 +314,16 @@ class Badge(BaseModel):
     tier: Literal["common", "rare", "elite"]
     earned: bool
     hint: str
+    #: Where the student actually stands against the threshold, e.g. 7 of 10
+    #: days. Every badge is a threshold on a figure this endpoint already
+    #: computes, so this is arithmetic on data in hand, not another read.
+    #:
+    #: A hint alone ("Study ten days in a row") tells you the rule but not
+    #: whether you are one day away or have never started — which is the
+    #: difference between a target and a wall. Clamped to `target` so a
+    #: 40-day streak reports 30 of 30 rather than 40 of 30.
+    progress: int = 0
+    target: int = 1
 
 
 class StudentModelIn(BaseModel):
@@ -326,10 +336,50 @@ class StudentModelIn(BaseModel):
     teaching_preference: str | None = Field(default=None, max_length=400)
 
 
+# ── Response feedback ──────────────────────────────────────────────────
+class FeedbackIn(BaseModel):
+    """One tap on a generated response.
+
+    `kind` is validated against `preferences.FEEDBACK_KINDS` in the handler
+    rather than by a Literal here: the taxonomy and its mapping onto preference
+    keys live together in one place, and a second copy in the schema layer is
+    exactly the duplication that lets them drift.
+    """
+
+    surface: Literal["chat", "note", "quiz", "cards"]
+    target_id: str
+    subspace_id: str
+    kind: str = Field(min_length=1, max_length=40)
+    concept: str | None = Field(default=None, max_length=120)
+
+
+class PreferenceOut(BaseModel):
+    """A resolved preference, with everything needed to inspect and question
+    it. Confidence and evidence are shown to the student because a preference
+    they cannot see the basis for is one they cannot correct."""
+
+    key: str
+    value: str
+    source: Literal["explicit", "observed", "feedback", "experiment"]
+    confidence: float
+    evidence_count: int
+    because: str
+    #: False when it's known but below the threshold to change any output.
+    actionable: bool
+
+
 class TopicSignal(BaseModel):
     subspace_id: str
     topic: str
     average: int
+    #: Which subject the topic sits under. The model reads across every
+    #: subject now, so "Attention" alone is ambiguous once two subjects both
+    #: have one.
+    subject: str | None = None
+    #: Later-half minus earlier-half quiz average, in points. Negative means
+    #: getting worse. None when there aren't enough attempts to say.
+    trend: int | None = None
+    days_since_activity: int | None = None
 
 
 class StudentModelOut(BaseModel):
@@ -340,6 +390,17 @@ class StudentModelOut(BaseModel):
     weak_areas: list[TopicSignal]
     strong_areas: list[TopicSignal]
     streak_days: int
+    #: Topics whose scores are dropping — distinct from `weak_areas`, which
+    #: are merely low. A topic climbing from 40% to 55% and one sliding from
+    #: 85% to 70% need opposite advice, and an average cannot separate them.
+    falling_areas: list[TopicSignal] = []
+    #: Real history, then nothing for a while.
+    cold_areas: list[TopicSignal] = []
+    #: Behaviour the app has *observed*, never a preference the student
+    #: stated. Kept apart from the explicit fields above on purpose: writing
+    #: an inference into `learning_style` would make Settings show the
+    #: student a sentence they never wrote as if they had.
+    observed_habits: list[str] = []
 
 
 class BriefSuggestion(BaseModel):

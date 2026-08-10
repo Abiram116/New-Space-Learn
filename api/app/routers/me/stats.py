@@ -108,35 +108,46 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         quizzes_taken=_sum("quizzes_taken"),
     )
 
+    def _badge(*, standing: int, target: int, **fields) -> Badge:
+        """Every badge is `standing >= target`, so `earned` is derived rather
+        than passed in — the two can't disagree, which they could when each
+        badge stated its own `earned` next to its own hint."""
+        return Badge(
+            earned=standing >= target,
+            progress=min(standing, target),
+            target=target,
+            **fields,
+        )
+
     badges = [
-        Badge(
+        _badge(
             id="first_steps", label="First card", icon="deck", tone="sky",
-            tier="common", earned=max_reps >= 1,
+            tier="common", standing=max_reps, target=1,
             hint="Review a single flashcard.",
         ),
-        Badge(
+        _badge(
             id="streak_10", label="10-day streak", icon="flame", tone="sun",
-            tier="common", earned=max_streak >= 10,
+            tier="common", standing=max_streak, target=10,
             hint="Study ten days in a row.",
         ),
-        Badge(
+        _badge(
             id="ten_docs", label="Well read", icon="doc", tone="mint",
-            tier="rare", earned=docs_indexed >= 10,
+            tier="rare", standing=docs_indexed, target=10,
             hint="Index ten documents.",
         ),
-        Badge(
+        _badge(
             id="perfect_quiz", label="Perfect score", icon="target", tone="coral",
-            tier="rare", earned=has_perfect,
+            tier="rare", standing=1 if has_perfect else 0, target=1,
             hint="Score 100% on any quiz.",
         ),
-        Badge(
+        _badge(
             id="fifty_known", label="Fifty known", icon="seal", tone="mint",
-            tier="rare", earned=max_reps >= 50,
+            tier="rare", standing=max_reps, target=50,
             hint="Get fifty cards to a known state.",
         ),
-        Badge(
+        _badge(
             id="streak_30", label="30-day streak", icon="flame", tone="brand",
-            tier="elite", earned=max_streak >= 30,
+            tier="elite", standing=max_streak, target=30,
             hint="Study thirty days in a row.",
         ),
     ]

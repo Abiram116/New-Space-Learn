@@ -7,19 +7,18 @@ the deterministic fallback, the fact-checking of quantities against
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
-from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends
 
 from ...config import settings as cfg
 from ...deps import CurrentUser, get_current_user
 from ...schemas import BriefOut, BriefSuggestion
+from ...services import personalization, supabase
 from ...services import student_model as student_model_service
-from ...services import supabase
 from ...services.llm import get_llm
+from ...services.student_model import Snapshot
 from ...services.voice import COMPANION_VOICE
 
 log = logging.getLogger("space_learn.me.brief")
@@ -61,18 +60,21 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     with `generated=false` so the UI never implies a model wrote it.
     """
 
-    # Three independent read groups — gathered so the brief doesn't pay for
-    # them one after another before the model call even begins.
-    facts, suggestion, student_model_out = await asyncio.gather(
-        _brief_facts(user.id),
-        _compute_suggestion(user.id),
-        student_model_service.get(user.id),
-    )
+    # ONE read pass. This used to be three concurrent groups that each did
+    # their own reads, which meant `quiz_results`, `daily_activity` and
+    # `subspaces` were fetched twice apiece for one render of Home. Everything
+    # below is derived from the snapshot instead.
+    snap = await student_model_service.snapshot(user.id)
+    facts = _brief_facts(snap)
+    suggestion = await _compute_suggestion(snap)
 
     if not cfg.llm_configured:
         return _fallback_brief(facts, suggestion)
 
-    student = student_model_service.format_for_prompt(student_model_out)
+    # `render`, not `build` — the snapshot is already in hand, and `build`
+    # would do the whole ten-select read pass a second time for one render of
+    # Home.
+    student = personalization.render(snap, "brief")
     student_block = f"{student}\n\n" if student else ""
 
     prompt = (
@@ -91,6 +93,14 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         "Cut anything that could be said about any topic. 'to reinforce your "
         "understanding' and 'to deepen your knowledge' are filler — say the "
         "concrete thing instead, or say less.\n"
+        # Without this the model reliably picks the first fact in the list —
+        # the most recent topic — and writes "carry on where you left off",
+        # which is the one thing the student already knows. The facts are
+        # ranked by how unlikely the student is to have noticed them.
+        "Pick the ONE fact a good tutor would lead with. A dropping score "
+        "beats a topic gone quiet, which beats unopened material, which beats "
+        "carrying on with the most recent topic. Never mention more than "
+        "one.\n"
         "NEVER state a quantity, digit, or number-word. The interface already "
         "shows the counts next to your text; repeating them risks contradicting "
         "it. Say 'your backlog', not 'seven cards'.\n"
@@ -177,66 +187,91 @@ def _desentence_case(text: str, topic: str | None) -> str:
     return " ".join(out)
 
 
-async def _brief_facts(user_id: str) -> dict:
-    subs, cards, recent = await asyncio.gather(
-        supabase.db_select(
-            "subspaces",
-            filters={"user_id": f"eq.{user_id}"},
-            select="id,name,last_activity_at",
-            order="last_activity_at.desc",
-            limit=3,
-        ),
-        supabase.db_select(
-            "flashcards",
-            filters={
-                "user_id": f"eq.{user_id}",
-                "due_at": f"lte.{datetime.now(UTC).isoformat()}",
-            },
-            select="id",
-        ),
-        supabase.db_select(
-            "daily_activity",
-            filters={"user_id": f"eq.{user_id}"},
-            select="day,chat_messages,cards_reviewed,quizzes_taken",
-            order="day.desc",
-            limit=7,
-        ),
-    )
-    last_day = recent[0]["day"] if recent else None
-    days_away = 0
-    if last_day:
-        try:
-            days_away = (date.today() - date.fromisoformat(str(last_day))).days
-        except ValueError:
-            days_away = 0
+def _brief_facts(snap: Snapshot) -> dict:
+    """The facts the copy is allowed to draw on, read off the snapshot.
 
+    Wider than it was. The brief used to see the three most recently touched
+    topics and a due count, which meant the only thing it could ever say was
+    "carry on with the thing you were already doing" — the one observation the
+    student does not need a tutor for. It can now see a score that is sliding,
+    a topic that has gone quiet, material sitting unopened, and a whole subject
+    that lost this week to another one.
+    """
+    recent = snap.most_recent
     return {
-        "topic": subs[0]["name"] if subs else None,
-        "topic_count": len(subs),
-        "cards_due": len(cards),
-        "days_away": days_away,
-        "has_history": bool(recent),
+        "topic": recent.topic if recent else None,
+        "subject": recent.subject if recent else None,
+        "cards_due": snap.cards_due_total,
+        "days_away": snap.days_away,
+        "has_history": bool(snap.activity_days),
+        "falling": [(t.topic, t.trend) for t in snap.falling[:2]],
+        "cold": [(t.topic, t.days_since_activity) for t in snap.cold[:2]],
+        "untouched": [t.topic for t in snap.untouched[:2]],
+        "neglected_subjects": snap.neglected_subjects[:2],
     }
 
 
 def _format_facts(f: dict) -> str:
-    lines = []
-    lines.append(f"- Most recent topic: {f['topic'] or 'none yet'}")
-    lines.append(f"- Cards due for review: {f['cards_due']}")
-    lines.append(f"- Days since last study session: {f['days_away']}")
+    lines = [
+        f"- Most recent topic: {f['topic'] or 'none yet'}"
+        + (f" (subject: {f['subject']})" if f["subject"] else ""),
+        f"- Cards due for review: {f['cards_due']}",
+        f"- Days since last study session: {f['days_away']}",
+    ]
+    # Everything below is the difference between a greeting and a tutor. Each
+    # line is omitted entirely when there's nothing to say, rather than being
+    # rendered as "none" — a list of absences reads as noise and invites the
+    # model to write about them.
+    for topic, trend in f["falling"]:
+        lines.append(f"- Quiz scores are DROPPING in '{topic}' (down {abs(trend)} points)")
+    for topic, days in f["cold"]:
+        lines.append(f"- '{topic}' was being studied but hasn't been opened in {days} days")
+    for topic in f["untouched"]:
+        lines.append(f"- '{topic}' has material uploaded that has never been used")
+    for subject in f["neglected_subjects"]:
+        lines.append(f"- The subject '{subject}' got no attention this week while others did")
     if not f["has_history"]:
         lines.append("- This is their first session; nothing studied yet.")
     return "\n".join(lines)
 
 
 def _fallback_brief(f: dict, suggestion: BriefSuggestion | None) -> BriefOut:
-    """Deterministic copy. Still specific — just not model-written."""
+    """Deterministic copy. Still specific — just not model-written.
+
+    Ordered the same way the prompt is told to rank things, so the page says
+    something comparably useful whether or not the model was reachable. The
+    fallback is not a degraded mode anyone should be able to spot from the
+    content alone.
+    """
     topic, due, away = f["topic"], f["cards_due"], f["days_away"]
 
     if not f["has_history"] and not topic:
         return BriefOut(
             headline="Nothing here yet",
             body="Make a space for a subject you're studying, then drop in a PDF and ask it anything.",
+            generated=False,
+            suggestion=suggestion,
+        )
+    if f["falling"]:
+        name, trend = f["falling"][0]
+        return BriefOut(
+            headline=f"{name} is slipping",
+            body=f"Your quiz average there has dropped {abs(trend)} points. Worth going back over before it compounds.",
+            generated=False,
+            suggestion=suggestion,
+        )
+    if f["cold"]:
+        name, days = f["cold"][0]
+        return BriefOut(
+            headline=f"{name} has gone quiet",
+            body=f"Nothing on it for {days} days. A short pass now is cheaper than relearning it later.",
+            generated=False,
+            suggestion=suggestion,
+        )
+    if f["untouched"]:
+        return BriefOut(
+            headline="Material waiting",
+            body=f"You uploaded to {f['untouched'][0]} and never opened it. Ask it a question and see what's in there.",
             generated=False,
             suggestion=suggestion,
         )
@@ -269,83 +304,59 @@ def _fallback_brief(f: dict, suggestion: BriefSuggestion | None) -> BriefOut:
     )
 
 
-async def _compute_suggestion(user_id: str) -> BriefSuggestion | None:
+async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
     """One concrete next action, derived from real stored data only.
 
-    Priority: a deck with overdue cards beats a weak quiz topic, since
-    reviewing something already learned is lower-friction than a full
-    retake. Both are gated (non-trivial overdue count / enough attempts to
-    trust the average) so this never fires on noise.
+    Ranked by what the student is least likely to already be planning:
+
+    1. A topic whose scores are **falling** — retake it while the slide is
+       still small. This is new, and it is the one a student almost never
+       spots unaided, because each individual quiz felt fine.
+    2. A deck with a real overdue backlog — reviewing something already
+       learned is lower friction than a fresh retake.
+    3. A topic with a **low** average — worth a retake, but it is not news.
+
+    Every branch is gated (a meaningful decline, a non-trivial overdue count,
+    enough attempts to trust an average) so this never fires on noise, and
+    every one resolves to a route that exists.
     """
-    # The deck branch wins when it fires, but the quiz read doesn't depend on
-    # it — fetching both up front costs one round trip instead of two.
-    decks, results = await asyncio.gather(
-        supabase.db_select(
-            "decks",
-            filters={"user_id": f"eq.{user_id}"},
-            select="id,name,subspace_id,subspaces(subject_id)",
-        ),
-        supabase.db_select(
-            "quiz_results",
-            filters={"user_id": f"eq.{user_id}"},
-            select="score,quizzes(subspace_id,topic,subspaces(subject_id))",
-            order="submitted_at.desc",
-            limit=30,
-        ),
-    )
-    if decks:
-        deck_ids = ",".join(d["id"] for d in decks)
-        overdue = await supabase.db_select(
-            "flashcards",
-            filters={
-                "user_id": f"eq.{user_id}",
-                "deck_id": f"in.({deck_ids})",
-                "due_at": f"lte.{datetime.now(UTC).isoformat()}",
-            },
-            select="deck_id",
-        )
-        if overdue:
-            counts: dict[str, int] = {}
-            for row in overdue:
-                counts[row["deck_id"]] = counts.get(row["deck_id"], 0) + 1
-            top_deck_id = max(counts, key=lambda k: counts[k])
-            deck = next((d for d in decks if d["id"] == top_deck_id), None)
-            subject_id = ((deck or {}).get("subspaces") or {}).get("subject_id")
-            if deck and subject_id and counts[top_deck_id] >= 3:
-                return BriefSuggestion(
-                    label=f"Review {_short(deck['name'])}",
-                    # MUST carry the `/s/` prefix — it is the live route
-                    # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
-                    # comment here used to justify dropping it, which meant
-                    # every suggested-review link silently 404'd.
-                    route=f"/s/{subject_id}/{deck['subspace_id']}/flashcards",
-                )
-
-    groups: dict[str, dict] = {}
-    for r in results:
-        q = r.get("quizzes") or {}
-        subspace_id = q.get("subspace_id")
-        if not subspace_id:
-            continue
-        g = groups.setdefault(
-            subspace_id,
-            {"scores": [], "topic": q.get("topic"), "subject_id": (q.get("subspaces") or {}).get("subject_id")},
-        )
-        g["scores"].append(int(r["score"]))
-
-    candidates = [
-        (sid, sum(g["scores"]) / len(g["scores"]), g)
-        for sid, g in groups.items()
-        if len(g["scores"]) >= 2 and g["subject_id"]
-    ]
-    if candidates:
-        sid, avg, g = min(candidates, key=lambda c: c[1])
-        if avg < 75:
-            topic = g["topic"] or "this topic"
+    if snap.falling:
+        worst = snap.falling[0]
+        if worst.subject_id:
             return BriefSuggestion(
-                label=f"Retake the {topic} quiz",
-                route=f"/s/{g['subject_id']}/{sid}/quizzes",
+                label=f"Retake {_short(worst.topic)}",
+                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes",
             )
+
+    # Deck names aren't on the snapshot — it aggregates decks to per-topic card
+    # counts, which is all any other consumer needs. One targeted read here,
+    # only when there is genuinely a backlog to name.
+    backlog = [t for t in snap.topics if t.cards_due >= 3 and t.subject_id]
+    if backlog:
+        top = max(backlog, key=lambda t: t.cards_due)
+        decks = await supabase.db_select(
+            "decks",
+            filters={"subspace_id": f"eq.{top.subspace_id}"},
+            select="id,name",
+            limit=1,
+        )
+        if decks:
+            return BriefSuggestion(
+                label=f"Review {_short(decks[0]['name'])}",
+                # MUST carry the `/s/` prefix — it is the live route
+                # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
+                # comment here used to justify dropping it, which meant
+                # every suggested-review link silently 404'd.
+                route=f"/s/{top.subject_id}/{top.subspace_id}/flashcards",
+            )
+
+    weak = [t for t in snap.rated if (t.quiz_average or 0) < 75 and t.subject_id]
+    if weak:
+        worst = min(weak, key=lambda t: t.quiz_average or 0)
+        return BriefSuggestion(
+            label=f"Retake the {_short(worst.topic)} quiz",
+            route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes",
+        )
 
     return None
 

@@ -22,15 +22,28 @@ import {
   updateSettings,
   updateStudentModel,
 } from '../../api/me'
+import { listPreferences, resetFeedback, type Preference } from '../../api/feedback'
 import { getSupabase } from '../../api/supabase'
-import type { Settings as Prefs, StudentModel } from '../../api/types'
+import type { Settings as Prefs, StudentModel, TopicSignal } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { PageSpinner } from '../../components/ui/PageSpinner'
-import { SectionLabel, Toggle } from '../../components/ui/Bits'
+import { SectionLabel } from '../../components/ui/Bits'
+// The six labelled-row primitives used to be defined at the bottom of this
+// file. Nothing in them knows what a preference is — they are the generic
+// "row in a grouped list" pattern — so they live in `components/ui/` now and
+// this file is ~150 lines shorter for it.
+import {
+  RowWithNumber,
+  RowWithSelect,
+  RowWithText,
+  RowWithTime,
+  RowWithToggle,
+  SavingDot,
+} from '../../components/ui/Row'
 import { useToast } from '../../components/ui/Toast'
 import { useFallbackSubspace } from '../../lib/nav'
 import { cn } from '../../lib/cn'
@@ -55,6 +68,26 @@ export function Settings() {
   const [student, setStudent] = useState<StudentModel | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  // `learned`, not `prefs` — `prefs` is already this file's word for the
+  // settings object. These are the inferred preferences, a different thing.
+  const [learned, setLearned] = useState<Preference[]>([])
+  const [resetting, setResetting] = useState(false)
+
+  const resetLearned = async () => {
+    setResetting(true)
+    try {
+      await resetFeedback()
+      // Refetch rather than clearing locally: explicit and observed
+      // preferences survive a reset, so the correct post-reset list is
+      // whatever the server resolves — not an empty array.
+      setLearned(await listPreferences())
+      show('Cleared what I learned from your feedback.', 'success')
+    } catch (err) {
+      showError(err)
+    } finally {
+      setResetting(false)
+    }
+  }
 
   useEffect(() => {
     getSettings()
@@ -63,6 +96,12 @@ export function Settings() {
     getStudentModel()
       .then(setStudent)
       .catch((err) => setError(friendlyMessage(err)))
+    // Failure here is deliberately quiet: the preference panel is additive,
+    // and a settings page that refuses to render because one inspection list
+    // didn't load is worse than one missing a panel.
+    listPreferences()
+      .then(setLearned)
+      .catch(() => undefined)
   }, [])
 
   const patch = useCallback(
@@ -324,18 +363,96 @@ export function Settings() {
                   <div className="mb-2 text-ink-3">From your quiz history</div>
                   <div className="flex flex-col gap-1.5">
                     {student.weak_areas.map((a) => (
-                      <div key={a.subspace_id} className="flex items-center justify-between">
-                        <span className="text-ink">{a.topic}</span>
-                        <span className="text-coral-deep">{a.average}% avg</span>
-                      </div>
+                      <TopicRow key={a.subspace_id} signal={a} tone="coral" />
                     ))}
                     {student.strong_areas.map((a) => (
-                      <div key={a.subspace_id} className="flex items-center justify-between">
-                        <span className="text-ink">{a.topic}</span>
-                        <span className="text-mint-deep">{a.average}% avg</span>
+                      <TopicRow key={a.subspace_id} signal={a} tone="mint" />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Deliberately its own panel, below the averages rather than
+                  mixed into them. A falling score is a different KIND of fact
+                  from a low one — a topic sliding from 85% to 70% never
+                  appears in "weak areas" at all, which is exactly why it used
+                  to go unnoticed. */}
+              {student.falling_areas.length > 0 && (
+                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
+                  <div className="mb-2 text-ink-3">Going the wrong way</div>
+                  <div className="flex flex-col gap-1.5">
+                    {student.falling_areas.map((a) => (
+                      <div key={a.subspace_id} className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate text-ink">{a.topic}</span>
+                        <span className="shrink-0 text-coral-deep">
+                          down {Math.abs(a.trend ?? 0)} pts
+                        </span>
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* What the personalization layer currently believes, with its
+                  source and how sure it is.
+
+                  Inspectable by requirement rather than as a nicety: anything
+                  that changes how you are taught should be something you can
+                  read, question and delete. Confidence is shown as a plain
+                  word, not a percentage — "fairly sure" is honest about the
+                  precision, where "0.62" implies a measurement. */}
+              {learned.length > 0 && (
+                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
+                  <div className="mb-2 flex items-baseline gap-2">
+                    <span className="text-ink-3">What I’ve learned about how you like to learn</span>
+                    <button
+                      type="button"
+                      onClick={resetLearned}
+                      disabled={resetting}
+                      className="ml-auto shrink-0 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-coral-deep disabled:cursor-default disabled:opacity-50"
+                    >
+                      {resetting ? 'Resetting…' : 'Reset'}
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {learned.map((p) => (
+                      <div key={p.key} className="flex flex-col gap-0.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className={cn('min-w-0', p.actionable ? 'text-ink' : 'text-muted')}>
+                            {PREF_LABEL[p.key] ?? p.key}: <b>{PREF_VALUE[p.value] ?? p.value}</b>
+                          </span>
+                          <span className="setcode shrink-0">{confidenceWord(p)}</span>
+                        </div>
+                        <span className="text-[11.5px] text-faint">{p.because}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2.5 text-[11.5px] text-faint">
+                    Reset clears what I learned from your feedback. It doesn’t touch
+                    anything you set yourself above.
+                  </p>
+                </div>
+              )}
+
+              {/* Observations, shown to the student because they feed every
+                  prompt and anything feeding a prompt should be inspectable.
+                  Read-only on purpose: these are things the app noticed, not
+                  things you told it, and the editable fields above are where
+                  your own words go. Conflating the two would show you a
+                  sentence you never wrote in a box that implies you did. */}
+              {student.observed_habits.length > 0 && (
+                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
+                  <div className="mb-2 text-ink-3">What I’ve noticed</div>
+                  <ul className="flex flex-col gap-1.5 text-ink-2">
+                    {student.observed_habits.map((h) => (
+                      <li key={h} className="leading-snug">
+                        {h}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2.5 text-[11.5px] text-faint">
+                    Observed from what you’ve done, not from anything you set.
+                  </p>
                 </div>
               )}
             </>
@@ -471,186 +588,66 @@ export function Settings() {
   )
 }
 
-// ── Reusable rows ──────────────────────────────────────────────────────
-
-function RowShell({
-  label,
-  hint,
-  children,
-  last,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-  last?: boolean
-}) {
+/**
+ * One topic and its quiz average.
+ *
+ * Carries the subject name when the API sends one: now that the student model
+ * reads across every subject rather than one, "Attention" alone stops being
+ * unique the moment two subjects both have a topic by that name — and this
+ * list is precisely where they'd sit next to each other.
+ */
+function TopicRow({ signal, tone }: { signal: TopicSignal; tone: 'coral' | 'mint' }) {
   return (
-    <div
-      className={cn(
-        'flex items-center gap-2.5 px-3.5 py-3',
-        !last && 'border-b border-line-soft',
-      )}
-    >
-      <div className="min-w-0">
-        <div>{label}</div>
-        {hint && <div className="text-[11px] text-faint">{hint}</div>}
-      </div>
-      <div className="ml-auto flex items-center gap-2">{children}</div>
+    <div className="flex items-center justify-between gap-3">
+      <span className="min-w-0 truncate text-ink">
+        {signal.topic}
+        {signal.subject && <span className="text-faint"> · {signal.subject}</span>}
+      </span>
+      <span className={cn('shrink-0', tone === 'coral' ? 'text-coral-deep' : 'text-mint-deep')}>
+        {signal.average}% avg
+      </span>
     </div>
   )
 }
 
-function SavingDot() {
-  return (
-    <span className="flex items-center gap-1 text-[10px] text-sun-deep">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
-      saving…
-    </span>
-  )
+/** Preference keys read as sentences, not dotted paths. */
+const PREF_LABEL: Record<string, string> = {
+  'explanation.length': 'Explanation length',
+  'explanation.depth': 'Level',
+  'explanation.opens_with': 'Starts with',
+  'explanation.note': 'In your words',
+  'interaction.mode': 'How you study',
+  'interaction.answer_mode': 'Answers',
+  'session.length_minutes': 'Session length',
+  'study.goal': 'Studying for',
 }
 
-function RowWithToggle({
-  label,
-  hint,
-  checked,
-  onChange,
-  last,
-}: {
-  label: string
-  hint?: string
-  checked: boolean
-  onChange: (next: boolean) => void
-  last?: boolean
-}) {
-  return (
-    <RowShell label={label} hint={hint} last={last}>
-      <Toggle checked={checked} onChange={onChange} label={label} />
-    </RowShell>
-  )
+const PREF_VALUE: Record<string, string> = {
+  concise: 'short and direct',
+  detailed: 'thorough',
+  simpler: 'plainer language',
+  deeper: 'more advanced',
+  example_first: 'an example',
+  theory_first: 'the principle',
+  direct: 'straight to the point',
+  hints_first: 'hints before answers',
+  discussion: 'by asking questions',
+  drilling: 'by drilling cards',
+  testing: 'by testing yourself',
 }
 
-function RowWithNumber({
-  label,
-  value,
-  suffix,
-  onChange,
-  saving,
-  min,
-  max,
-  last,
-}: {
-  label: string
-  value: number
-  suffix?: string
-  onChange: (next: number) => void
-  saving?: boolean
-  min?: number
-  max?: number
-  last?: boolean
-}) {
-  return (
-    <RowShell label={label} last={last}>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          if (Number.isFinite(n)) onChange(n)
-        }}
-        className="w-16 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
-      />
-      {suffix && <span className="text-xs text-muted">{suffix}</span>}
-      {saving && <SavingDot />}
-    </RowShell>
-  )
-}
-
-function RowWithTime({
-  label,
-  value,
-  onChange,
-  saving,
-  last,
-}: {
-  label: string
-  value: string | null
-  onChange: (next: string | null) => void
-  saving?: boolean
-  last?: boolean
-}) {
-  return (
-    <RowShell label={label} last={last} hint="Off when empty.">
-      <input
-        type="time"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
-      />
-      {saving && <SavingDot />}
-    </RowShell>
-  )
-}
-
-function RowWithText({
-  label,
-  value,
-  placeholder,
-  onChange,
-  saving,
-  last,
-}: {
-  label: string
-  value: string | null
-  placeholder?: string
-  onChange: (next: string | null) => void
-  saving?: boolean
-  last?: boolean
-}) {
-  return (
-    <RowShell label={label} last={last}>
-      <input
-        type="text"
-        value={value ?? ''}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value || null)}
-        className="w-52 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
-      />
-      {saving && <SavingDot />}
-    </RowShell>
-  )
-}
-
-function RowWithSelect<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  saving,
-  last,
-}: {
-  label: string
-  value: T
-  options: { value: T; label: string }[]
-  onChange: (next: T) => void
-  saving?: boolean
-  last?: boolean
-}) {
-  return (
-    <RowShell label={label} last={last}>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-      {saving && <SavingDot />}
-    </RowShell>
-  )
+/**
+ * Confidence as a word.
+ *
+ * A percentage implies a measurement this isn't — 0.62 looks like it was
+ * measured to two digits when it is the output of a hand-tuned update rule.
+ * A word is honest about the precision and is what the student actually needs
+ * to decide whether to correct it.
+ */
+function confidenceWord(p: Preference): string {
+  if (p.source === 'explicit') return 'you set this'
+  if (!p.actionable) return 'still guessing'
+  if (p.confidence >= 0.75) return 'confident'
+  if (p.confidence >= 0.5) return 'fairly sure'
+  return 'leaning that way'
 }

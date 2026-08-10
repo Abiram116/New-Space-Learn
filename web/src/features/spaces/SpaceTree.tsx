@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
-import { Icon } from '../../components/ui/Icon'
+import { Icon, type IconName } from '../../components/ui/Icon'
 import { toneDot, toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
@@ -11,8 +11,15 @@ import { useSpaces } from './SpacesProvider'
 
 export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { spaceId, subspaceId } = useParams()
-  const { spaces, addSubspace, deleteSpace, deleteSubspace, renameSpace, setPinned } =
-    useSpaces()
+  const {
+    spaces,
+    addSubspace,
+    deleteSpace,
+    deleteSubspace,
+    renameSpace,
+    renameSubspace,
+    setPinned,
+  } = useSpaces()
   const { show } = useToast()
   const navigate = useNavigate()
 
@@ -23,6 +30,9 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [confirmDeleteSubspace, setConfirmDeleteSubspace] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [renamingSpace, setRenamingSpace] = useState<string | null>(null)
+  const [renamingSubspace, setRenamingSubspace] = useState<string | null>(null)
+  // One buffer for both, because only one row can be in rename mode at a time —
+  // opening a second rename closes the first by construction.
   const [renameText, setRenameText] = useState('')
 
   const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }))
@@ -61,6 +71,18 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
     if (!name || name === current?.name) return
     try {
       await renameSpace(id, name)
+    } catch (e) {
+      show(friendlyMessage(e), 'error')
+    }
+  }
+
+  const commitRenameSubspace = async (id: string) => {
+    const name = renameText.trim()
+    setRenamingSubspace(null)
+    const current = spaces.flatMap((s) => s.subspaces).find((sub) => sub.id === id)
+    if (!name || name === current?.name) return
+    try {
+      await renameSubspace(id, name)
     } catch (e) {
       show(friendlyMessage(e), 'error')
     }
@@ -161,21 +183,40 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   reads as "more actions here", it holds Rename as well as
                   Delete, and it stays legible because it is drawn in a solid
                   colour rather than faded into the background. */}
-              <SpaceMenu
+              <RowMenu
                 name={space.name}
-                pinned={space.pinned}
-                onTogglePin={async () => {
-                  try {
-                    await setPinned(space.id, !space.pinned)
-                  } catch (e) {
-                    show(friendlyMessage(e), 'error')
-                  }
-                }}
-                onRename={() => {
-                  setRenamingSpace(space.id)
-                  setRenameText(space.name)
-                }}
-                onDelete={() => setConfirmDeleteSpace(space.id)}
+                items={[
+                  {
+                    // The label says what the click DOES, not what the current
+                    // state is — "Pin" on an unpinned subject, "Unpin" on a
+                    // pinned one. A menu item labelled with its state makes you
+                    // work out the verb yourself.
+                    label: space.pinned ? 'Unpin' : 'Pin to top',
+                    icon: 'pin',
+                    iconFilled: space.pinned,
+                    onSelect: async () => {
+                      try {
+                        await setPinned(space.id, !space.pinned)
+                      } catch (e) {
+                        show(friendlyMessage(e), 'error')
+                      }
+                    },
+                  },
+                  {
+                    label: 'Rename',
+                    icon: 'pencil',
+                    onSelect: () => {
+                      setRenamingSpace(space.id)
+                      setRenameText(space.name)
+                    },
+                  },
+                  {
+                    label: 'Delete',
+                    icon: 'trash',
+                    destructive: true,
+                    onSelect: () => setConfirmDeleteSpace(space.id),
+                  },
+                ]}
               />
             </div>
 
@@ -183,28 +224,60 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
               <div className="ml-4 flex min-w-0 flex-col gap-0.5 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
                   <div key={sub.id} className="group/sub flex min-w-0 items-center">
-                    <NavLink
-                      to={subspacePath(space, sub)}
-                      onClick={onNavigate}
-                      className={({ isActive }) =>
-                        cn(
-                          'min-w-0 flex-1 truncate rounded-[9px] px-2.5 py-1.5 transition-colors',
-                          isActive
-                            ? 'bg-brand-soft font-bold text-brand-deep'
-                            : 'font-medium text-ink-2 hover:bg-line-soft hover:text-ink',
-                        )
-                      }
-                    >
-                      {sub.name}
-                    </NavLink>
-                    <button
-                      onClick={() => setConfirmDeleteSubspace(sub.id)}
-                      aria-label={`Delete topic ${sub.name}`}
-                      /* Same reasoning as the subject delete above. */
-                      className="shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-coral-soft hover:text-coral-deep focus-visible:bg-coral-soft focus-visible:text-coral-deep cursor-pointer"
-                    >
-                      <Icon name="trash" size={12} />
-                    </button>
+                    {renamingSubspace === sub.id ? (
+                      <input
+                        autoFocus
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        onBlur={() => commitRenameSubspace(sub.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRenameSubspace(sub.id)
+                          if (e.key === 'Escape') setRenamingSubspace(null)
+                        }}
+                        aria-label={`Rename ${sub.name}`}
+                        className="min-w-0 flex-1 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
+                      />
+                    ) : (
+                      <NavLink
+                        to={subspacePath(space, sub)}
+                        onClick={onNavigate}
+                        className={({ isActive }) =>
+                          cn(
+                            'min-w-0 flex-1 truncate rounded-[9px] px-2.5 py-1.5 transition-colors',
+                            isActive
+                              ? 'bg-brand-soft font-bold text-brand-deep'
+                              : 'font-medium text-ink-2 hover:bg-line-soft hover:text-ink',
+                          )
+                        }
+                      >
+                        {sub.name}
+                      </NavLink>
+                    )}
+                    {/* The same `⋯` as the subject row above, for the same
+                        reason. This was a bare bin, which meant Delete was the
+                        only thing a topic could do — while `renameSubspace`
+                        already existed in the provider with no way to reach
+                        it. A destructive action alone on a row also makes the
+                        single most dangerous control the easiest to hit. */}
+                    <RowMenu
+                      name={sub.name}
+                      items={[
+                        {
+                          label: 'Rename',
+                          icon: 'pencil',
+                          onSelect: () => {
+                            setRenamingSubspace(sub.id)
+                            setRenameText(sub.name)
+                          },
+                        },
+                        {
+                          label: 'Delete',
+                          icon: 'trash',
+                          destructive: true,
+                          onSelect: () => setConfirmDeleteSubspace(sub.id),
+                        },
+                      ]}
+                    />
                   </div>
                 ))}
 
@@ -265,27 +338,31 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   )
 }
 
+export type RowAction = {
+  label: string
+  icon: IconName
+  onSelect: () => void
+  /** Renders in coral. For the one item that destroys something. */
+  destructive?: boolean
+  /** Solid rather than outline glyph — currently only a set pin. */
+  iconFilled?: boolean
+}
+
 /**
- * The `⋯` actions menu on a subject row.
+ * The `⋯` actions menu on a tree row — subjects and topics both.
  *
  * Its own component so the open/close state is per-row rather than one shared
  * "which menu is open" id threaded through the tree — with one shared value,
  * opening a second menu has to remember to close the first, and that is the
  * bug this shape makes impossible.
+ *
+ * Takes its items as data rather than fixed props because subjects and topics
+ * do not offer the same set: a subject can be pinned to the top of the rail, a
+ * topic cannot. Two near-identical menu components is how the two rows drift
+ * apart in spacing, hit area and keyboard behaviour, which is exactly the
+ * duplication that put a 403/404 contradiction in `subspaces.py`.
  */
-function SpaceMenu({
-  name,
-  pinned,
-  onTogglePin,
-  onRename,
-  onDelete,
-}: {
-  name: string
-  pinned: boolean
-  onTogglePin: () => void
-  onRename: () => void
-  onDelete: () => void
-}) {
+function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -329,44 +406,26 @@ function SpaceMenu({
           role="menu"
           className="absolute right-0 top-8 z-50 w-40 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
-              onTogglePin()
-            }}
-            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-ink-2 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
-          >
-            {/* The label says what the click DOES, not what the current
-                state is — "Pin" on an unpinned subject, "Unpin" on a pinned
-                one. A menu item labelled with its state makes you work out
-                the verb yourself. */}
-            <Icon name="pin" size={13} filled={pinned} />
-            {pinned ? 'Unpin' : 'Pin to top'}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
-              onRename()
-            }}
-            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-ink-2 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
-          >
-            <Icon name="pencil" size={13} /> Rename
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false)
-              onDelete()
-            }}
-            className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] text-coral-deep transition-colors cursor-pointer hover:bg-coral-soft"
-          >
-            <Icon name="trash" size={13} /> Delete
-          </button>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                item.onSelect()
+              }}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] transition-colors cursor-pointer',
+                item.destructive
+                  ? 'text-coral-deep hover:bg-coral-soft'
+                  : 'text-ink-2 hover:bg-line-soft hover:text-ink',
+              )}
+            >
+              <Icon name={item.icon} size={13} filled={item.iconFilled} />
+              {item.label}
+            </button>
+          ))}
         </div>
       )}
     </div>

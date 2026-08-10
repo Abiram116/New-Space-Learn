@@ -1,6 +1,6 @@
 # Space Learn — documentation
 
-Six documents and a folder of decisions. Read the one that matches what you
+Seven documents and a file of decisions. Read the one that matches what you
 are trying to do.
 
 ```
@@ -11,6 +11,7 @@ docs/
 ├── engineering/
 │   ├── architecture.md        how the system fits together
 │   ├── ai-pipeline.md         retrieval, prompts, memory, request flows
+│   ├── personalization.md     the Student Model and the feedback loop
 │   └── security.md            auth, guards, injection, open gaps
 ├── operations/
 │   ├── setup.md               run it locally, deploy it
@@ -25,6 +26,7 @@ docs/
 | [engineering/architecture.md](engineering/architecture.md) | Repo shape, the Subjects → Subspaces model, the error contract, service boundaries, what breaks first under scale. |
 | [engineering/ai-pipeline.md](engineering/ai-pipeline.md) | How a question becomes a grounded answer: retrieval, prompt construction, what's remembered, and each feature's request lifecycle. |
 | [engineering/security.md](engineering/security.md) | The guards-over-RLS model, prompt injection, upload validation, and the ranked list of known gaps. |
+| [engineering/personalization.md](engineering/personalization.md) | The Student Model: concept mastery, preferences with confidence, per-task context, and the feedback loop. |
 | [operations/setup.md](operations/setup.md) | Getting it running, and applying migrations with the Supabase CLI. |
 | [operations/performance-and-cost.md](operations/performance-and-cost.md) | Latency budgets, cold starts, and real per-operation cost. |
 | [decisions.md](decisions.md) | Why a major choice was made — including the ones that were rejected, so settled arguments stay settled. |

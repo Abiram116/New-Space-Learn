@@ -128,6 +128,11 @@ export type Badge = {
   earned: boolean
   /** How to earn it. Shown on locked badges so they aren't dead ends. */
   hint: string
+  /** Where you actually stand against the threshold, e.g. 7 of 10 days.
+   *  A hint alone tells you the rule but not whether you're one day away or
+   *  have never started — the difference between a target and a wall. */
+  progress: number
+  target: number
 }
 
 export type BriefSuggestion = {
@@ -140,6 +145,13 @@ export type TopicSignal = {
   subspace_id: string
   topic: string
   average: number
+  /** The subject the topic sits under — "Attention" is ambiguous once two
+   *  subjects both have one. */
+  subject?: string | null
+  /** Later-half minus earlier-half quiz average, in points. Negative means
+   *  getting worse; null when there aren't enough attempts to say. */
+  trend?: number | null
+  days_since_activity?: number | null
 }
 
 export type StudentModel = {
@@ -151,6 +163,15 @@ export type StudentModel = {
   weak_areas: TopicSignal[]
   strong_areas: TopicSignal[]
   streak_days: number
+  /** Scores that are DROPPING — distinct from `weak_areas`, which are merely
+   *  low. A topic climbing from 40% and one sliding from 85% need opposite
+   *  advice, and an average can't separate them. */
+  falling_areas: TopicSignal[]
+  /** Real history, then silence. */
+  cold_areas: TopicSignal[]
+  /** What the app has observed the student doing — never a preference they
+   *  stated. Kept apart from the explicit fields on purpose. */
+  observed_habits: string[]
 }
 
 export type StudentModelPatch = Partial<

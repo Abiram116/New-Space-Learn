@@ -26,7 +26,7 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError
 from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
-from ..services import activity, rag, student_model, supabase
+from ..services import activity, personalization, rag, student_model, supabase
 from ..services.chat_context import recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
@@ -74,8 +74,20 @@ async def send_chat(
     subspace = await assert_subspace(user.id, subspace_id)
     # Bounce over-eager callers before we do any DB or LLM work.
     await consume_llm_quota(user.id)
-    settings_row = await _fetch_settings(user.id)
-    active_skills = await _active_skills(user.id, subspace_id)
+    # Two waves, not six sequential awaits.
+    #
+    # This is the highest-traffic request in the app and every one of these was
+    # a separate round trip to a remote Postgres before the model call even
+    # started. Only two real dependencies exist: the history window needs the
+    # active skills' `memory_scope`, and retrieval needs the linked subspace
+    # ids. Everything else was sequential by habit.
+    settings_row, active_skills, linked_ids, snap = await asyncio.gather(
+        _fetch_settings(user.id),
+        _active_skills(user.id, subspace_id),
+        _linked_subspace_ids(user.id, subspace_id),
+        student_model.snapshot(user.id),
+    )
+
     # A skill's memory_scope is a real behavior dimension, not decoration:
     # "topic"/"all" pull a longer history window so the model actually has
     # more to work with, not just a longer prompt for its own sake.
@@ -84,21 +96,30 @@ async def send_chat(
         (scope_limit.get(s.get("memory_scope", "session"), 8) for s in active_skills),
         default=8,
     )
-    prior = await recent_history(user.id, subspace_id, limit=history_limit)
-    linked_ids = await _linked_subspace_ids(user.id, subspace_id)
-    retrieved = await rag.retrieve_with_links(subspace_id, body.text, linked_ids)
-    student_context = student_model.format_for_prompt(await student_model.get(user.id))
+    prior, retrieved = await asyncio.gather(
+        recent_history(user.id, subspace_id, limit=history_limit),
+        rag.retrieve_with_links(subspace_id, body.text, linked_ids),
+    )
 
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],
-        active_skill_instructions=[_skill_prompt(s) for s in active_skills],
+        # The skill's mode composed WITH this student's weak concepts, rather
+        # than the two handed to the model as separate paragraphs to reconcile.
+        active_skill_instructions=[
+            personalization.for_skill(s, snap, subspace_id=subspace_id)
+            for s in active_skills
+        ],
         history=prior,
         question=body.text,
         retrieved=retrieved,
         answer_only_from_docs=bool(settings_row.get("answer_only_from_docs", True)),
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
-        student_context=student_context,
+        # `render`, not `build` — the snapshot is already in hand above.
+        student_context=personalization.render(snap, "chat", subspace_id=subspace_id),
     )
+    # Recorded on the assistant row below, so a later "this helped" can be
+    # attributed to the preferences that were actually in force.
+    prefs_applied = personalization.applied_keys(snap)
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
     user_row = (
@@ -170,6 +191,16 @@ async def send_chat(
                     "role": "assistant",
                     "content": assistant_text,
                     "citations": citations_meta or None,
+                    # What shaped this answer. Feedback about it is only
+                    # interpretable against the settings that produced it —
+                    # "this helped" says nothing without knowing what was
+                    # applied. Also the hook Phase 4's strategy label needs.
+                    "meta": {
+                        "chars": len(assistant_text),
+                        "had_sources": bool(citations_meta),
+                        "skill_ids": [s["id"] for s in active_skills],
+                        "prefs_applied": prefs_applied,
+                    },
                 },
             )
             saved_id = saved[0]["id"] if saved else None
@@ -239,14 +270,6 @@ async def _fetch_settings(user_id: str) -> dict:
     return rows[0] if rows else {}
 
 
-def _skill_prompt(skill: dict) -> str:
-    """A skill's reasoning-style instructions, plus its output-format
-    dimension when set — one composed prompt fragment, not two."""
-    text = skill.get("instructions", "").strip()
-    output_format = (skill.get("output_format") or "").strip()
-    if output_format:
-        text += f"\n\nOutput format: {output_format}"
-    return text
 
 
 async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:

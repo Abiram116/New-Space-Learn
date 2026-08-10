@@ -27,7 +27,7 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import activity, rag, student_model, supabase
+from ..services import activity, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
@@ -214,16 +214,22 @@ async def generate_cards(
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
     context = body.source_text or ""
-    history = await recent_history(user.id, subspace_id)
+    # Gathered, like quizzes and notes. Retrieval is skipped entirely when the
+    # caller supplied `source_text` (generating from the answer you just read),
+    # so it is conditional here rather than unconditionally fetched and thrown
+    # away — the one case in the three where a read is genuinely avoidable.
+    history, student_context, retrieved = await asyncio.gather(
+        recent_history(user.id, subspace_id),
+        personalization.build(user.id, "cards", subspace_id=subspace_id),
+        rag.retrieve(subspace_id, topic, k=6) if not context else _nothing(),
+    )
     if not context:
-        retrieved = await rag.retrieve(subspace_id, topic, k=6)
         # Chat counts as material — see the note in quizzes.generate_quiz.
         # `history` is passed to `_generate_pairs` below either way, so
         # refusing here while using it there was the same contradiction.
         if not retrieved and not history:
             raise NothingIndexed()
         context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
-    student_context = student_model.format_for_prompt(await student_model.get(user.id))
 
     if settings.llm_configured:
         pairs = await _generate_pairs(topic, label, context, history, student_context, body.count)
@@ -326,6 +332,13 @@ def _to_card(row: dict) -> FlashcardOut:
 def _deck_name(topic: str) -> str:
     clean = topic.strip().rstrip('.')
     return (clean[:1].upper() + clean[1:])[:80] or 'New deck'
+
+
+async def _nothing() -> list:
+    """An already-satisfied awaitable, so the gather above can stay one shape
+    whether or not retrieval is needed. Cheaper to read than branching the
+    gather into two arms."""
+    return []
 
 
 async def _generate_pairs(

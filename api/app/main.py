@@ -26,6 +26,7 @@ from .errors import (
 )
 from .routers import (
     documents,
+    feedback,
     flashcards,
     me,
     notes,
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     app.include_router(flashcards.router, prefix=prefix, tags=["flashcards"])
     app.include_router(quizzes.router, prefix=prefix, tags=["quizzes"])
     app.include_router(skills.router, prefix=prefix, tags=["skills"])
+    app.include_router(feedback.router, prefix=prefix, tags=["feedback"])
 
     @app.get(f"{prefix}/health", tags=["health"])
     async def health() -> dict[str, object]:

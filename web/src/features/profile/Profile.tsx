@@ -351,9 +351,18 @@ function BadgeSeal({ badge }: { badge: Badge }) {
       {badge.tier !== 'common' && badge.earned && (
         <span className="setcode text-[9px]">{badge.tier}</span>
       )}
-      {!badge.earned && (
-        <span className="setcode text-[9px] leading-tight">{badge.hint}</span>
-      )}
+      {!badge.earned &&
+        (badge.target > 1 && badge.progress > 0 ? (
+          /* Standing, not just the rule. "7 of 10" is a target you are close
+             to; "Study ten days in a row" is a wall you may or may not have
+             started climbing. Only shown once there is progress to report —
+             "0 of 10" is the wall again, with extra arithmetic. */
+          <span className="setcode text-[9px] leading-tight text-ink-3">
+            {badge.progress} of {badge.target}
+          </span>
+        ) : (
+          <span className="setcode text-[9px] leading-tight">{badge.hint}</span>
+        ))}
     </div>
   )
 }

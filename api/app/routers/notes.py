@@ -23,7 +23,7 @@ from ..schemas import (
     NoteUpdate,
     OkOut,
 )
-from ..services import activity, rag, student_model, supabase
+from ..services import activity, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
@@ -104,14 +104,17 @@ async def generate_note(
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
-    retrieved = await rag.retrieve(subspace_id, topic, k=6)
-    history = await recent_history(user.id, subspace_id)
+    # Gathered for the same reason as quizzes: independent reads should not
+    # queue behind each other in front of a model call.
+    retrieved, history, student_context = await asyncio.gather(
+        rag.retrieve(subspace_id, topic, k=6),
+        recent_history(user.id, subspace_id),
+        personalization.build(user.id, "notes", subspace_id=subspace_id),
+    )
     if not retrieved and not history:
         raise NothingIndexed()
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
     recent = format_history(history) or "(no prior chat in this space)"
-    student_context = student_model.format_for_prompt(await student_model.get(user.id))
-
     if not settings.llm_configured:
         raise UpstreamUnavailable("Note generation isn't configured yet.")
 
@@ -278,7 +281,9 @@ async def note_ai_inline(
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
     history = await recent_history(user.id, subspace_id)
     recent = format_history(history) or "(no prior chat in this space)"
-    student_context = student_model.format_for_prompt(await student_model.get(user.id))
+    student_context = await personalization.build(
+        user.id, "notes", subspace_id=subspace_id
+    )
 
     prompt = (
         f"The student is writing a note and typed this inline request: "

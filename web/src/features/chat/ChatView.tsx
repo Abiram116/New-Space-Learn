@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
+import { listPreferences, type Preference } from '../../api/feedback'
 import { generateCards } from '../../api/flashcards'
 import { generateNote } from '../../api/notes'
 import { generateQuiz } from '../../api/quizzes'
@@ -28,6 +29,8 @@ import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
 import { ActiveSkillStrip, ContextDock } from './ContextDock'
+import { NoteBriefDialog } from './NoteBriefDialog'
+import { chipsFor } from './feedbackPolicy'
 import type { AgentKey } from './agents'
 
 export function ChatView() {
@@ -95,9 +98,18 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       abortRef.current = controller
       try {
         for await (const evt of streamChat(subspaceId, text, controller.signal)) {
-          handleEvent(evt, setPending, (final, cits) => {
+          handleEvent(evt, setPending, (final, cits, messageId) => {
             const assistant: Message = {
-              id: `srv-${Date.now()}`,
+              // The REAL row id, not a fabricated one.
+              //
+              // The server has always sent `message_id` on the `done` event and
+              // `chat.ts` has always parsed it — this callback just didn't take
+              // it, so every freshly streamed answer got `srv-<timestamp>` and
+              // was unaddressable until a reload. Nothing could be attached to
+              // it: no feedback, no regenerate, no permalink. The fallback is
+              // kept for the case where an older backend sends no id, and it is
+              // marked so callers can tell a real id from a placeholder.
+              id: messageId ?? `srv-${Date.now()}`,
               role: 'assistant',
               content: final,
               citations: cits.length ? cits : null,
@@ -118,6 +130,33 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     [subspaceId, history, showError],
   )
 
+  /* The notes agent asks before it writes; the other two don't.
+     Not an inconsistency — a note is the one artifact here the student then
+     *keeps and edits*, so its shape is worth a question. A quiz and a deck are
+     regenerable in one click if the first attempt isn't useful. */
+  const [noteBrief, setNoteBrief] = useState<{ topic?: string } | null>(null)
+  const [writingNote, setWritingNote] = useState(false)
+
+  const writeNote = useCallback(
+    async (input: { topic?: string; instructions?: string }) => {
+      setWritingNote(true)
+      try {
+        const note = await generateNote(subspaceId, input)
+        setNoteBrief(null)
+        show('Note written.', 'success')
+        onNavigate(`${base}/notes?n=${note.id}`)
+      } catch (err) {
+        // The dialog stays open on failure, holding what was typed — a rate
+        // limit or a dropped connection shouldn't cost the student the brief
+        // they just wrote.
+        showError(err)
+      } finally {
+        setWritingNote(false)
+      }
+    },
+    [base, onNavigate, subspaceId, show, showError],
+  )
+
   const runAgent = useCallback(
     async (agent: AgentKey, argument?: string) => {
       try {
@@ -128,9 +167,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           return
         }
         if (agent === 'notes') {
-          const note = await generateNote(subspaceId, { topic: argument })
-          show('Note written.', 'success')
-          onNavigate(`${base}/notes?n=${note.id}`)
+          setNoteBrief({ topic: argument })
           return
         }
         if (agent === 'flashcards') {
@@ -153,12 +190,42 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     [base, history.data, onNavigate, subspaceId, show, showError],
   )
 
+  /* Feedback offer state.
+     Session-scoped rather than persisted: the policy's job is to stop this
+     being a nag inside one sitting, and carrying "last offered" across reloads
+     would need a write on every render for a control most students will use a
+     handful of times. The confidence gate is what provides the long-term
+     memory — once a preference is settled the chips stop appearing at all,
+     whatever this state says. */
+  const [offerState, setOfferState] = useState<{
+    lastOfferedAt: number | null
+    lastGivenAt: number | null
+  }>({ lastOfferedAt: null, lastGivenAt: null })
+
+  /* Preferences drive the expected-value gate. Fetched once per mount and
+     deliberately NOT refetched after each tap: one tap cannot move a
+     preference past the threshold on its own, and a round trip per chip press
+     would put latency inside the interaction the chips exist to keep cheap. */
+  const [prefs, setPrefs] = useState<Preference[]>([])
+  useEffect(() => {
+    let live = true
+    listPreferences()
+      .then((p) => live && setPrefs(p))
+      // A failed preference read must never break chat. Empty means the gate
+      // is open, which errs toward asking — the recoverable direction.
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [])
+
   // Belt-and-suspenders: two adjacent bubbles with identical role+content are
   // never meaningful to show twice, whatever produced them (a retried
   // request, a dev-only HMR remount mid-stream). Collapse rather than trust
   // every upstream path to be perfectly exactly-once.
   const messages = dedupeAdjacent(history.data ?? [])
   const isEmpty = !history.loading && messages.length === 0 && !pending
+  const assistantTurns = messages.filter((m) => m.role === 'assistant').length
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -187,8 +254,39 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             />
           )}
 
-          {messages.map((m) => (
-            <ChatMessage key={m.id} message={m} />
+          {messages.map((m, i) => (
+            <ChatMessage
+              key={m.id}
+              message={m}
+              // Chips only under the LAST answer, and only when it is complete.
+              // Under an older message they'd be asking about something the
+              // student has already moved past, and a row of stale controls up
+              // the scrollback is visual noise that never gets used.
+              feedback={
+                i === messages.length - 1 && m.role === 'assistant' && !streaming
+                  ? {
+                      chips: chipsFor({
+                        chars: m.content.length,
+                        assistantTurns,
+                        lastOfferedAt: offerState.lastOfferedAt,
+                        lastGivenAt: offerState.lastGivenAt,
+                        preferences: prefs,
+                        complete: true,
+                      }),
+                      messageId: m.id,
+                      subspaceId,
+                      onRecorded: () =>
+                        setOfferState((s) => ({ ...s, lastGivenAt: assistantTurns })),
+                      onOffered: () =>
+                        setOfferState((s) =>
+                          s.lastOfferedAt === assistantTurns
+                            ? s
+                            : { ...s, lastOfferedAt: assistantTurns },
+                        ),
+                    }
+                  : undefined
+              }
+            />
           ))}
 
           {pending && (
@@ -218,6 +316,14 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       </div>
 
       <ContextDock subspaceId={subspaceId} base={base} onRunAgent={runAgent} />
+
+      <NoteBriefDialog
+        open={noteBrief !== null}
+        topic={noteBrief?.topic}
+        busy={writingNote}
+        onCancel={() => setNoteBrief(null)}
+        onGenerate={writeNote}
+      />
     </div>
   )
 }
@@ -227,7 +333,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
 function handleEvent(
   evt: ChatStreamEvent,
   setPending: (fn: (prev: { text: string; citations: Citation[] } | null) => { text: string; citations: Citation[] }) => void,
-  onDone: (finalText: string, citations: Citation[]) => void,
+  onDone: (finalText: string, citations: Citation[], messageId: string | null) => void,
 ) {
   if (evt.type === 'token') {
     setPending((prev) => ({
@@ -250,7 +356,11 @@ function handleEvent(
       // Falling back to the streamed buffer keeps this working if an older
       // backend doesn't send `content`.
       const finalText = (evt.content ?? prev?.text ?? '').trim() || '(no reply)'
-      onDone(finalText, evt.citations.length ? evt.citations : (prev?.citations ?? []))
+      onDone(
+        finalText,
+        evt.citations.length ? evt.citations : (prev?.citations ?? []),
+        evt.messageId,
+      )
       return { text: '', citations: [] }
     })
     return

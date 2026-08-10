@@ -49,6 +49,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { Rise, Stagger } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
@@ -268,8 +269,13 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
               Nothing matches “{search}”.
             </p>
           )}
-          {!loading &&
-            visible.map((item) => {
+          {/* Deals itself in on load. `Stagger` keys on position, so typing in
+              the search box refilters without re-animating the rows that
+              survive the filter — the list settles once, then behaves like a
+              list. */}
+          {!loading && (
+            <Stagger step={22} max={160}>
+            {visible.map((item) => {
               const active = item.id === current?.id
               const preview = notePreview(item.body_md)
               return (
@@ -313,6 +319,8 @@ function Inner({ subspaceId, subspaceName }: { subspaceId: string; subspaceName:
                 </button>
               )
             })}
+            </Stagger>
+          )}
         </div>
       </aside>
 
@@ -898,23 +906,36 @@ function NoteEditor({
             line at 66ch, which replaces the arbitrary `max-w-3xl`: 3xl is a
             width, 66ch is a reading length, and only one of those is about
             the text. */}
-        {/* The note gets the whole surface.
-            Three things were fighting the writing here and all three are
-            gone. `.leaf`'s `border-left` drew a rule that had nothing to
-            divide, because on a full-page editor the page already IS the
-            leaf — it read as a stray vertical line. `mx-auto` on a narrow
-            column then stranded that line mid-screen behind a dead gutter.
-            And `leaf-measure` capped the text at 66ch, which is the right
-            call for a chat answer sitting among other content and the wrong
-            one for a canvas the student is working inside.
+        {/* The note gets the whole surface — properly, this time.
+            `.leaf`'s `border-left` drew a rule that had nothing to divide,
+            because on a full-page editor the page already IS the leaf, and
+            `leaf-measure`'s 66ch cap is right for a chat answer sitting among
+            other content and wrong for a canvas you work inside. Both gone.
 
-            What replaces them: a generous max width so a line still doesn't
-            run to 1900px and become unreadable, but wide enough that images,
-            tables and code have somewhere to live. Padding scales with the
-            viewport instead of centring a fixed column, so the writing
-            starts near the left the way a page does. */}
-        <div className="w-full px-6 pb-24 pt-10 sm:px-12 lg:px-16 xl:px-24">
-          <div className="flex min-h-full w-full max-w-[68rem] flex-col gap-3">
+            What was still wrong after that: the padding escalated to `px-24`
+            (96px) and the column capped at 68rem, so on a wide screen the
+            writing started ~100px in from a pane that had ALREADY been
+            narrowed twice — once by the rail, once by the note list. Three
+            left edges in a row, and the third one arbitrary. It read as a
+            document floating in a margin rather than a canvas.
+
+            Now the gutter is small and stops growing: enough that glyphs
+            aren't jammed against the divider, not so much that it becomes a
+            design element. The cap only exists to stop a line running the full
+            width of an ultrawide monitor, which no cap at all would allow —
+            it is a last resort, not the layout. */}
+        <div className="w-full px-5 pb-24 pt-10 sm:px-8 lg:px-10">
+          {/* The note arrives rather than snapping.
+              `NoteEditor` is keyed on the note id, so switching notes remounts
+              this and the rise plays per note — which is the moment worth
+              marking, since it is the only point where the entire surface
+              changes underneath you. Deliberately the app's `Rise` and not a
+              bespoke tween: the editor was the last screen still cutting
+              straight to its final state while every other one eased in.
+              `distance` is smaller than the default because this is a
+              full-height column, and 8px of travel on something this tall
+              reads as the page settling rather than as content sliding. */}
+          <Rise distance={5} className="flex min-h-full w-full max-w-[110rem] flex-col gap-3">
           {/* A title, not a form field. The bordered input made the first line
               of a note look like something to fill in rather than something to
               write. */}
@@ -1058,7 +1079,7 @@ function NoteEditor({
             )}
           </div>
 
-          </div>
+          </Rise>
         </div>
       </div>
     </div>

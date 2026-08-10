@@ -285,20 +285,56 @@ Struck through so nobody re-opens them:
 
 | # | Item | Why it matters |
 |---|---|---|
-| N1 | **A real student model, and a brief that uses it.** The brief should read across *every* subject and topic — what was studied, what was skipped, where quiz scores are falling, which topic has gone cold — and say something a tutor would say. Today it looks at a narrow slice. This is the single feature that makes the product a tutor rather than a CRUD app. | It is the product thesis. See `product/vision.md`. |
-| N2 | **Notes agent asks how you want it.** The backend already accepts free-text `instructions` and honours them (verified: "just a checklist" returns a checklist). The UI never collects them. | Half-built feature, invisible to users. |
-| N3 | **Personalised tone per student.** `student_model.format_for_prompt` exists and feeds preferences into prompts, but nothing populates `teaching_preference` or `learning_style` from behaviour. | The personalisation is a stub with a real interface. |
+| ~~N1~~ | ~~A real student model, and a brief that uses it~~ — **done.** The model is per-subspace `TopicView`s across every subject with quiz average, trend, cold/untouched/neglected detection, plus per-concept mastery (below). The brief reads one snapshot instead of three overlapping fetches, ranks facts by how unlikely the student is to have noticed them, and the deterministic fallback follows the same ranking. |
+| ~~N2~~ | ~~Notes agent asks how you want it~~ — **done.** `NoteBriefDialog` collects free-text `instructions` before the agent runs. Examples are prefills, not an enum — the schema comment is explicit that a fixed style list can only offer shapes someone thought of in advance. |
+| ~~N3~~ | ~~Personalised tone per student~~ — **done, deliberately not as written.** The task said populate `teaching_preference`/`learning_style` from behaviour. Those fields are the student's own words, shown back in Settings, so writing inferences into them would display sentences they never wrote as though they had. Behaviour now feeds a separate observed layer (`observed_habits`, `preferences.resolve()`), counted in **days** rather than events so 400 cards and 3 quizzes aren't compared as one unit. Explicit always outranks observed. |
+
+### The personalization engine — shipped 2026-08-10
+
+Knowledge, preferences, per-task context, skill composition and the feedback
+loop are **built and in use**. How it works, and every decision behind it:
+[engineering/personalization.md](engineering/personalization.md).
+
+**The feedback loop is HALF-MIGRATED — finish P-0 before anything else.**
+
+The ask policy shipped time-driven ("chips every 5 assistant turns"), which is
+the wrong product principle: it makes the app feel like a survey. The right
+question is not *when did we last ask* but **is asking worth the interruption**.
+Half the fix is in; the UI half is not.
+
+Done:
+- **Implicit signals are mined from the student's own turns.** "explain that
+  more simply", "go deeper", "give me an example" are already feedback, already
+  stored in `chat_messages`, and were being ignored — while the app interrupted
+  the student to ask what they had just said. Now derived at read time (never
+  stored — the messages are the source), filed as `observed` so a regex reading
+  phrasing can never outrank a deliberate tap, and dropped entirely when a
+  dimension was pulled both ways, because that is context-dependence rather than
+  a preference. High precision by design: "give me an example" counts, "what is
+  an example of a monad" does not.
+- `thumbUp` / `thumbDown` icons added to `Icon.tsx`. **Currently unused** — they
+  are for P-0 below.
+
+What is left, in order:
+
+| # | Item | Gated on |
+|---|---|---|
+| **P-0** | **Finish the event-driven feedback UX.** Replace the turn-counted chip row with a *passive* control: a quiet 👍/👎 on the last answer that is always available and never asks a question. A 👎 then reveals the reason chips — an ask the student invited, not one imposed. Delete the `TURN_GAP` / `AFTER_FEEDBACK_GAP` counting from `feedbackPolicy.ts`; keep `isSettled`, which is the part that was right. **New chat ≠ new student and new topic ≠ new preference** — the model is global and must not re-ask on either. Any *active* prompt (the A/B "which helped more?") fires only on genuine uncertainty: the dimension is unknown OR the evidence is contradictory, AND it matters for what is happening right now. Not on a timer. | — |
+| **P-1** | **Scoped preferences** — subject/topic-level, not just global. `response_feedback.concept` is already recorded so this needs no backfill. Only worth doing if the collected data shows preferences actually diverge by subject; precedence is cheap to define and expensive to populate. | real feedback data |
+| **P-2** | **A/B teaching-strategy experiments.** Two strategies for the same struggling concept, compared on what happens next (quiz movement, fewer clarifications, recall). Needs a `strategy` label on `chat_messages.meta` — the column already exists — and a `teaching_experiments` table. **Deliberately not started:** two generations per question doubles token cost on the highest-traffic endpoint and burns the rate limiter's budget (chat costs 1 of 20/min). Justify it with evidence that single-signal feedback is insufficient. | P-1 evidence |
+| **P-3** | **Confusion pairs into the model.** "You've mixed up self-attention and cross-attention four times" needs the *chosen* concept, not just the correct one. | tasks 1.2 + Phase 2 below |
+| **P-4** | **Concept-tag flashcards** (task 1.1). Cards carry no `subtopic`, so Phase 4 outcome measurement can't ask "did drilling improve this concept". | — |
 
 ### P1 — visibly broken or missing
 
 | # | Item |
 |---|---|
-| N4 | **Loading times, everywhere.** Needs a real profiling pass — route chunks, request waterfalls, cache hit rates, skeleton coverage — not spot fixes. Start from `operations/performance-and-cost.md`. |
-| N5 | **Topics have no `⋯` menu.** Subjects got Rename/Pin/Delete; topics still have a bare bin, and `renameSubspace` exists in the provider with no UI at all. |
-| N6 | **Notes has no motion.** Everything else in the app rises in; the editor snaps. |
-| N7 | **Profile is thin.** Reads as a receipt. Badges exist; nothing celebrates them. |
-| N8 | **`CardSequence.tsx` is dead code** — well built, imported nowhere. Wire it into `Landing.tsx` or delete it. |
-| N9 | **`wow.tsx`'s `reduced()` is read once per mount**, not subscribed. Toggling the OS motion setting mid-session doesn't reach `VelocityTilt`, `Magnetic`, `DraftingCursor`, `SourceDrift`. Low impact, real. |
+| **N4** | **Loading times.** Largely addressed 2026-08-10 — see the list below. What remains is a real *measured* pass: there are no numbers here yet, only removed waterfalls, and `operations/performance-and-cost.md`'s estimates are still simulated rather than observed. Skeleton coverage on the less-travelled screens is also unaudited. |
+| ~~N5~~ | ~~Topics have no `⋯` menu~~ — **done.** `SpaceMenu` generalised to `RowMenu` taking its items as data, used by both subjects (Pin/Rename/Delete) and topics (Rename/Delete). Two near-identical menu components is how the two rows drift apart. |
+| ~~N6~~ | ~~Notes has no motion~~ — **done.** Editor column rises per opened note (keyed on note id); the note list staggers in on load. Both use the app's existing primitives, not bespoke tweens. |
+| ~~N7~~ | ~~Profile is thin~~ — **done.** Every badge is a threshold on a figure `/me/stats` already computes, so locked badges now show standing ("7 of 10") instead of only a rule. `earned` is derived from the threshold rather than passed in, so the two can't disagree. |
+| ~~N8~~ | ~~`CardSequence.tsx` is dead code~~ — **deleted.** `Film` in `Landing.tsx` already implements the same idea more richly, and its own docstring records that two back-to-back pinned scenes is what made the page read as slides. Wiring it in would have re-introduced the seam that was deliberately removed. |
+| ~~N9~~ | ~~`wow.tsx`'s `reduced()` is read once per mount~~ — **done.** It now uses the live-updating `useReducedMotion()` that already existed in `components/ui/motion.tsx`; the local copy was a second, static implementation of a solved problem. `VelocityTilt` also clears its transform on the flip rather than freezing mid-skew. |
 
 ### P2 — engineering debt with a known cost
 
@@ -306,7 +342,7 @@ Struck through so nobody re-opens them:
 |---|---|
 | ~~N10~~ | ~~No frontend test runner~~ — **done.** Vitest, 44 tests, aimed where bugs are silent: the escaped-HTML repair, the SM-2 client port's half-to-even rounding, slash-menu availability. See N15/N16 for what is still uncovered. |
 | ~~N11~~ | ~~`subspaces.py` private guard copies~~ — **done.** Deleted; it calls `guards.py` now, so the 403/404 contradiction is gone. |
-| **N12** | **Two fat frontend files remain.** `FlashcardsView` (1,063) and `Settings` (656, with six generic `Row*` primitives that belong in `components/ui/`). `NotesView` was split — 1,174 → 1,068 plus `toolbar.ts` and `format.ts` — because the plan queues more notes work; the other two were left because nothing is about to land in them. **Split before adding to them, not after.** Flashcards is the more urgent of the two: Phase 3 adds the exam-countdown surface to it. |
+| ~~N12~~ | ~~Two fat frontend files remain~~ — **done, before Phase 3 lands in them rather than after.** `FlashcardsView` 1,063 → 555 (`Review.tsx`, `Summary.tsx`, `modals.tsx`, `model.ts` — `Mode` had to move too, or extracting `Review` would have been a circular import). `Settings` 656 → 543, with the six `Row*` primitives now in `components/ui/Row.tsx`; nothing in them knew what a preference was. |
 | ~~N13~~ | ~~`me.py` is the largest backend file~~ — **done.** Now a package: `account` (who you are), `stats` (what you've done), `brief` (what to do next), `_common` (the two helpers with real second callers). 679 → largest module 362. All nine routes still register; `main.py` unchanged. |
 | ~~N14~~ | ~~58 ruff errors, 93% false positives~~ — **done.** `B008` ignored with the reasoning recorded in `api/pyproject.toml`; the four real errors fixed. Zero now, and it immediately earned its keep — the `me.py` split broke four names and ruff named all of them. |
 | **N15** | **No component-render tests.** Coverage is pure logic only. Nothing asserts that a component mounts, that the slash menu opens on `/`, or that the AI placeholder is removed when a request fails — all three have shipped bugs. Needs `@testing-library/react` and `jsdom`; deliberately deferred rather than half-added. |

@@ -1,10 +1,30 @@
+import { useEffect } from 'react'
+import type { FeedbackKind } from '../../api/feedback'
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
 import { Leaf } from '../../components/ui/Surface'
+import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
 
-export function ChatMessage({ message }: { message: Message }) {
+export type MessageFeedback = {
+  chips: FeedbackKind[]
+  messageId: string
+  subspaceId: string
+  onRecorded: () => void
+  /** Fired when a non-empty row is actually shown, so the policy's turn
+   *  counter advances on display rather than on the decision to display —
+   *  otherwise a suppressed row would still start the cooldown. */
+  onOffered: () => void
+}
+
+export function ChatMessage({
+  message,
+  feedback,
+}: {
+  message: Message
+  feedback?: MessageFeedback
+}) {
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
@@ -61,7 +81,35 @@ export function ChatMessage({ message }: { message: Message }) {
         </div>
       )}
     </Leaf>
+    {/* Outside the Leaf: this is a control, not part of what was written.
+        A `srv-` id means the server sent no message_id (an older backend), so
+        there is nothing to attach feedback to — the row is skipped rather than
+        posting against an id the server would reject. */}
+    {feedback && feedback.chips.length > 0 && !feedback.messageId.startsWith('srv-') && (
+      <FeedbackRow feedback={feedback} />
+    )}
     </Rise>
+  )
+}
+
+function FeedbackRow({ feedback }: { feedback: MessageFeedback }) {
+  const { onOffered } = feedback
+  // Reported on mount, not during render: telling the parent to advance its
+  // counter while it is rendering is a setState-during-render warning and, in
+  // StrictMode, a double count.
+  useEffect(() => {
+    onOffered()
+  }, [onOffered])
+
+  return (
+    <div className="mt-2">
+      <FeedbackChips
+        chips={feedback.chips}
+        messageId={feedback.messageId}
+        subspaceId={feedback.subspaceId}
+        onRecorded={feedback.onRecorded}
+      />
+    </div>
   )
 }
 
