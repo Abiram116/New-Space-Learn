@@ -325,11 +325,40 @@ What is left, in order:
 | **P-3** | **Confusion pairs into the model.** "You've mixed up self-attention and cross-attention four times" needs the *chosen* concept, not just the correct one. | tasks 1.2 + Phase 2 below |
 | **P-4** | **Concept-tag flashcards** (task 1.1). Cards carry no `subtopic`, so Phase 4 outcome measurement can't ask "did drilling improve this concept". | — |
 
+### Shipped 2026-08-10 (workspace + assessment pass)
+
+- **The chat dock is a workspace, not a menu.** Notes read *and edit* in the
+  panel with autosave; card review runs there; quizzes are taken and scored
+  there. The file that used to argue a 320px column couldn't host these was
+  wrong about what they need — a card is one question and four grades, a quiz
+  question is a stem and four choices. They are the narrowest things in the
+  app. Same components as the full pages, in `compact` mode, so the two cannot
+  drift.
+- **Notes are no longer scoped to the current topic.** `GET /notes` returns
+  everything with its subject and topic name; the panel has a This topic /
+  Everything toggle.
+- **Quizzes reveal each answer on commit**, with an explanation the generator
+  now writes, an encouraging line on a hit, the correct answer plus the concept
+  to revise on a miss, and an elapsed timer. Choices lock once answered — a
+  reveal you can answer around is not a reveal.
+- **Chat locks during a quiz or card review.** Ref-counted so two mounted
+  assessments can't unlock each other, tied to component lifecycle so no exit
+  path forgets.
+- **Quiz results rebuilt**: verdict pinned, review scrolls in its own
+  container, misses first with explanations open, correct answers collapsed.
+- **First-run intake** replaces the dashboard-of-zeroes: four questions in a
+  scripted chat (no model call), writing real preferences. It does not ask what
+  you're studying for — that changes fortnightly and already lives in Settings.
+- **Settings has no dead controls.** Reminder time is gone rather than
+  "honestly labelled"; the column stays if a notifier ever ships.
+- **Profile fills the page** instead of centring into a blank lower half.
+
 ### P1 — visibly broken or missing
 
 | # | Item |
 |---|---|
-| **N4** | **Loading times.** Largely addressed 2026-08-10 — see the list below. What remains is a real *measured* pass: there are no numbers here yet, only removed waterfalls, and `operations/performance-and-cost.md`'s estimates are still simulated rather than observed. Skeleton coverage on the less-travelled screens is also unaudited. |
+| ~~N4~~ | ~~Loading times~~ — **addressed.** Chat's pre-model path went six sequential round trips → two waves; quiz/cards/notes generation gather their reads; `/me/brief` stopped double-fetching three tables; `/me/preferences` reads 3 tables instead of 10. What remains is a *measured* pass — there are still no numbers, only removed waterfalls. |
+| **N4b** | **Measure it.** Largely addressed 2026-08-10 — see the list below. What remains is a real *measured* pass: there are no numbers here yet, only removed waterfalls, and `operations/performance-and-cost.md`'s estimates are still simulated rather than observed. Skeleton coverage on the less-travelled screens is also unaudited. |
 | ~~N5~~ | ~~Topics have no `⋯` menu~~ — **done.** `SpaceMenu` generalised to `RowMenu` taking its items as data, used by both subjects (Pin/Rename/Delete) and topics (Rename/Delete). Two near-identical menu components is how the two rows drift apart. |
 | ~~N6~~ | ~~Notes has no motion~~ — **done.** Editor column rises per opened note (keyed on note id); the note list staggers in on load. Both use the app's existing primitives, not bespoke tweens. |
 | ~~N7~~ | ~~Profile is thin~~ — **done.** Every badge is a threshold on a figure `/me/stats` already computes, so locked badges now show standing ("7 of 10") instead of only a rule. `earned` is derived from the threshold rather than passed in, so the two can't disagree. |

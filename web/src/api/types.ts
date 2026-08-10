@@ -57,6 +57,11 @@ export type Note = {
   origin: 'user' | 'agent' | 'doc'
   source_ids: string[] | null
   updated_at: string
+  /** Where the note lives. Only sent by the cross-topic listing — a title
+   *  alone is ambiguous once you're looking at every subject at once. */
+  subspace_id?: string | null
+  subspace_name?: string | null
+  subject_name?: string | null
 }
 
 export type Deck = {
@@ -87,6 +92,9 @@ export type QuizQuestion = {
   answer_index: number
   source?: string | null
   subtopic?: string | null
+  /** Why the right answer is right. Shown the moment the student commits,
+   *  not at the end. Absent on quizzes generated before the field existed. */
+  explanation?: string | null
 }
 
 export type Quiz = {
@@ -99,6 +107,7 @@ export type Quiz = {
 export type QuizResult = {
   score: number
   correct: boolean[]
+  duration_seconds?: number | null
 }
 
 export type MemoryScope = 'session' | 'topic' | 'all'

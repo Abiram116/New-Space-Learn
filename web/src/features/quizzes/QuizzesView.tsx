@@ -6,12 +6,11 @@
  * so back-nav works and the sidebar stays.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { generateQuiz, getQuiz, listQuizzes, submitQuiz } from '../../api/quizzes'
+import { generateQuiz, getQuiz, listQuizzes } from '../../api/quizzes'
 import type { Quiz, QuizResult } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
-import { clearStatsCache } from '../../lib/briefCache'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -19,15 +18,15 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { CountUp, Stagger } from '../../components/ui/motion'
-import { Leaf, Ledger } from '../../components/ui/Surface'
+
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
-import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { QuizRunner } from './QuizRunner'
+import { QuizResults } from './QuizResults'
 
 export function QuizzesView() {
   const { space, subspace } = useActiveSubspace()
@@ -88,7 +87,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             </Button>
           }
         />
-        <QuizRunner
+        <QuizSession
           quizId={activeId}
           onBack={back}
           onDone={() => {
@@ -214,7 +213,16 @@ function QuizList({
   )
 }
 
-function QuizRunner({
+
+/**
+ * Loads a quiz by id, then hands off to the shared runner and results.
+ *
+ * This file used to own both a ~180-line runner and a ~100-line results view.
+ * They moved to `QuizRunner.tsx` / `QuizResults.tsx` so the chat dock can run
+ * exactly the same quiz in a 320px column — two implementations of "take a
+ * quiz" would drift, and the second one would be the neglected one.
+ */
+function QuizSession({
   quizId,
   onDone,
   onBack,
@@ -225,50 +233,20 @@ function QuizRunner({
 }) {
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [answers, setAnswers] = useState<number[]>([])
-  const [index, setIndex] = useState(0)
-  const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<QuizResult | null>(null)
-
-  /* Back to a blank attempt. Lifted out of the load effect so the results
-     screen can reuse it as "retake" — same reset, no refetch. */
-  const reset = useCallback((q: Quiz | null) => {
-    setResult(null)
-    setError(null)
-    setIndex(0)
-    setAnswers(q ? new Array(q.questions.length).fill(-1) : [])
-  }, [])
+  const [finished, setFinished] = useState<{ result: QuizResult; answers: number[] } | null>(
+    null,
+  )
+  // Bumped on retake to remount the runner, which resets every answer and the
+  // timer in one move rather than threading a reset through its internals.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     setQuiz(null)
-    reset(null)
+    setFinished(null)
     getQuiz(quizId)
-      .then((q) => {
-        setQuiz(q)
-        reset(q)
-      })
+      .then(setQuiz)
       .catch((err) => setError(friendlyMessage(err)))
-  }, [quizId, reset])
-
-  const chosen = answers[index]
-  const canAdvance = chosen !== undefined && chosen !== -1
-  const isLast = quiz ? index === quiz.questions.length - 1 : false
-
-  const submit = async () => {
-    if (!quiz) return
-    setBusy(true)
-    try {
-      const r = await submitQuiz(quiz.id, answers)
-      // The quiz average and streak just changed — see clearStatsCache.
-      clearStatsCache()
-      setResult(r)
-      onDone()
-    } catch (err) {
-      setError(friendlyMessage(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+  }, [quizId])
 
   if (error) {
     return (
@@ -279,215 +257,31 @@ function QuizRunner({
   }
   if (!quiz) return <PageSpinner label="Loading quiz…" />
 
-  if (result) {
+  if (finished) {
     return (
       <QuizResults
         quiz={quiz}
-        answers={answers}
-        result={result}
-        onRetake={() => reset(quiz)}
+        answers={finished.answers}
+        result={finished.result}
+        onRetake={() => {
+          setFinished(null)
+          setAttempt((n) => n + 1)
+        }}
         onBack={onBack}
       />
     )
   }
 
-  const q = quiz.questions[index]
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-8">
-      <div className="flex w-full max-w-2xl flex-col gap-6">
-        <div className="flex items-center gap-2 text-xs text-muted">
-          Question {index + 1} of {quiz.questions.length}
-          <div className="h-1 flex-1 rounded-full bg-line-soft">
-            <div
-              className="h-1 rounded-full bg-brand transition-all"
-              style={{ width: `${((index + 1) / quiz.questions.length) * 100}%` }}
-            />
-          </div>
-        </div>
-        {/* LEAF — a question stem is prose you read before you can answer it,
-            not an object you own. The choices below stay as pressable
-            controls; only the stem changes material. */}
-        <Leaf className="py-2 pr-6">
-          <div className="text-[15px] font-medium leading-relaxed">{q.q}</div>
-          <div className="mt-4 flex flex-col gap-2">
-            {q.choices.map((choice, i) => (
-              <button
-                key={i}
-                onClick={() =>
-                  setAnswers((prev) => {
-                    const next = [...prev]
-                    next[index] = i
-                    return next
-                  })
-                }
-                className={cn(
-                  'flex items-center gap-3 rounded-xl border-[1.5px] px-3.5 py-3 text-left text-sm transition-colors cursor-pointer',
-                  answers[index] === i
-                    ? 'border-brand bg-brand-soft'
-                    : 'border-line bg-surface hover:border-brand-200',
-                )}
-              >
-                <span
-                  className={cn(
-                    'flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold',
-                    answers[index] === i ? 'bg-brand text-white' : 'bg-line-soft text-muted',
-                  )}
-                >
-                  {String.fromCharCode(65 + i)}
-                </span>
-                {choice}
-              </button>
-            ))}
-          </div>
-        </Leaf>
-        <div className="flex justify-between">
-          {/* Ghost, not secondary. Going back is a correction, not a step in
-              the task — and on wide screens the question grid already jumps
-              anywhere. Giving it equal weight to Next made every question
-              look like a two-way decision. */}
-          <Button
-            variant="ghost"
-            onClick={() => setIndex((i) => Math.max(0, i - 1))}
-            disabled={index === 0}
-          >
-            Back
-          </Button>
-          {isLast ? (
-            <Button onClick={submit} disabled={!canAdvance || busy}>
-              {busy ? 'Submitting…' : 'Submit quiz'}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => setIndex((i) => Math.min(quiz.questions.length - 1, i + 1))}
-              disabled={!canAdvance}
-            >
-              Next
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Jump to any question directly — real use of the extra width, not decoration. */}
-      <aside className="hidden w-full shrink-0 flex-col gap-2 lg:sticky lg:top-6 lg:flex lg:w-48">
-        <span className="setcode px-0.5">Questions</span>
-        <div className="grid grid-cols-6 gap-1.5 lg:grid-cols-4">
-          {quiz.questions.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setIndex(i)}
-              className={cn(
-                'flex h-9 items-center justify-center rounded-lg text-xs font-bold transition-colors cursor-pointer',
-                i === index
-                  ? 'bg-brand text-white'
-                  : answers[i] !== -1
-                    ? 'bg-brand-soft text-brand-deep'
-                    : 'border border-line text-faint hover:border-brand/40',
-              )}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-      </aside>
-    </div>
-  )
-}
-
-function QuizResults({
-  quiz,
-  answers,
-  result,
-  onRetake,
-  onBack,
-}: {
-  quiz: Quiz
-  answers: number[]
-  result: QuizResult
-  onRetake: () => void
-  onBack: () => void
-}) {
-  const scoreClass = useMemo(() => {
-    if (result.score >= 80) return 'text-mint'
-    if (result.score >= 60) return 'text-sky-deep'
-    return 'text-coral-deep'
-  }, [result.score])
-
-  return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:gap-6">
-      {/* LEDGER — a score is the definitive "measured against" object. As a
-          Card it sat next to the reviewed questions looking like another
-          artifact you'd collected, rather than the verdict on them. */}
-      <Ledger className="flex shrink-0 flex-col gap-3 p-5 pt-0 lg:sticky lg:top-6 lg:w-64">
-        {/* The score is the moment this screen exists for — it counts up. */}
-        <div className={cn('font-display text-5xl font-semibold', scoreClass)}>
-          <CountUp value={result.score} />%
-        </div>
-        <div className="text-sm text-muted">
-          {result.correct.filter(Boolean).length} of {quiz.questions.length} correct
-        </div>
-
-        {/* A terminal screen has to offer a way forward — sit them under the
-            score so they're reachable without scrolling past every review. */}
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <Button onClick={onRetake}>
-            <Icon name="refresh" size={14} /> Retake this quiz
-          </Button>
-          <Button variant="secondary" onClick={onBack}>
-            Back to all quizzes
-          </Button>
-        </div>
-      </Ledger>
-
-      {/* Reviewed questions arrive in order rather than all at once, so the
-          eye has somewhere to start. Capped stagger — see ui/motion. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-3">
-      <Stagger step={45}>
-      {quiz.questions.map((q, i) => {
-        const chose = answers[i]
-        const correct = result.correct[i]
-        return (
-          <Card key={i} className="flex flex-col gap-2.5 p-4">
-            <div className="flex items-center gap-2">
-              <span
-                className={cn(
-                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
-                  correct ? 'bg-mint text-white' : 'bg-coral-deep text-white',
-                )}
-              >
-                <Icon name={correct ? 'check' : 'close'} size={13} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{q.q}</div>
-                {q.subtopic && (
-                  <span className="setcode mt-0.5 inline-block text-sky-deep">{q.subtopic}</span>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col gap-1 pl-8 text-sm">
-              {q.choices.map((choice, ci) => (
-                <div
-                  key={ci}
-                  className={cn(
-                    'rounded-md px-2 py-1',
-                    ci === q.answer_index && 'bg-mint-soft text-mint font-semibold',
-                    ci === chose && ci !== q.answer_index && 'bg-coral-soft text-coral-deep',
-                  )}
-                >
-                  {choice}
-                  {ci === chose && ci !== q.answer_index && ' — your answer'}
-                  {ci === q.answer_index && ' — correct'}
-                </div>
-              ))}
-              {q.source && (
-                <div className="mt-1 text-[11px] text-faint">source: {q.source}</div>
-              )}
-            </div>
-          </Card>
-        )
-      })}
-      </Stagger>
-      </div>
-    </div>
+    <QuizRunner
+      key={attempt}
+      quiz={quiz}
+      onFinished={(result, answers) => {
+        setFinished({ result, answers })
+        onDone()
+      }}
+      onExit={onBack}
+    />
   )
 }
 

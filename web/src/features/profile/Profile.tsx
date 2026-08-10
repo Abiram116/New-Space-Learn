@@ -69,7 +69,13 @@ export function Profile() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-7 sm:px-7">
+      {/* Fills the height instead of stacking into the top third.
+          `max-w-5xl` on a 1900px monitor put every element in a centred column
+          with a blank lower half — the page read as a receipt printed in the
+          middle of a desk. Wider cap, and `min-h-full` with the ledger row
+          allowed to grow means the activity map and badge case take the space
+          that was empty rather than the page ending early. */}
+      <div className="mx-auto flex min-h-full w-full max-w-[92rem] flex-col gap-6 px-4 py-7 sm:px-8">
         {/* Identity */}
         <header className="flex flex-wrap items-center gap-4">
           {/* A seal, not a coloured square.
@@ -79,11 +85,34 @@ export function Profile() {
               — so the identity mark belongs to the same world as the record
               underneath it. The ring and inner glow give it depth without a
               drop shadow, which `Ledger` surfaces never use. */}
-          <span className="relative grid h-16 w-16 shrink-0 place-items-center">
+          {/* It behaves like foil, because that is what it is.
+              A static disc is a placeholder avatar whether or not it is
+              drawn well. This one has a highlight that travels slowly across
+              it — the same tilt-sheen a real foil card throws, at room speed
+              rather than animation speed — and an orbiting ring that marks it
+              as the one earned object on the page you did not have to unlock.
+              Transform and opacity only, so it composites off the main
+              thread; both stop dead under reduced motion, leaving the drawn
+              seal exactly as it was. */}
+          <span className="group relative grid h-16 w-16 shrink-0 place-items-center">
             <span
               aria-hidden
-              className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_25%,var(--color-brand-300),var(--color-brand)_55%,var(--color-brand-deep))] ring-1 ring-brand/40"
+              className="absolute -inset-1 rounded-full border border-brand/25 opacity-0 transition-opacity duration-500 group-hover:opacity-100 motion-safe:animate-[sealOrbit_9s_linear_infinite]"
             />
+            <span
+              aria-hidden
+              className="absolute inset-0 overflow-hidden rounded-full bg-[radial-gradient(circle_at_30%_25%,var(--color-brand-300),var(--color-brand)_55%,var(--color-brand-deep))] ring-1 ring-brand/40 transition-transform duration-500 group-hover:scale-[1.04]"
+            >
+              <span
+                aria-hidden
+                className="absolute inset-0 motion-safe:animate-[sealSheen_7s_ease-in-out_infinite]"
+                style={{
+                  background:
+                    'linear-gradient(115deg, transparent 35%, rgba(255,255,255,0.55) 50%, transparent 65%)',
+                  backgroundSize: '260% 260%',
+                }}
+              />
+            </span>
             <span
               aria-hidden
               className="absolute inset-[3px] rounded-full ring-1 ring-[rgba(255,237,220,0.25)]"
@@ -196,13 +225,16 @@ export function Profile() {
           />
         </section>
 
-        <div className="grid gap-5 lg:grid-cols-[1.25fr_1fr]">
+        {/* `flex-1` on the row, not just the page: this is the part with
+            content that scales, so it is the part that should absorb the
+            leftover height. */}
+        <div className="grid flex-1 gap-5 lg:grid-cols-[1.35fr_1fr]">
           {/* Activity ledger — and now actually a Ledger. This was already
               named one in the markup while rendering as cardstock. Six months
               of your own activity is the thing you are measured against; the
               badge case beside it stays a Card because badges are things you
               own. Those two being the same material was the confusion. */}
-          <Ledger className="flex flex-col gap-3 p-5 pt-0">
+          <Ledger className="flex h-full flex-col gap-3 p-5 pt-0">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Activity</h2>
               <span className="setcode ml-auto">
@@ -226,7 +258,7 @@ export function Profile() {
           </Ledger>
 
           {/* Badge case — stays a Card. Badges are earned objects you keep. */}
-          <Card className="flex flex-col gap-3 p-5">
+          <Card className="flex h-full flex-col gap-3 p-5">
             <div className="flex items-baseline gap-2">
               <h2 className="nameplate text-[20px] text-ink">Badges</h2>
               {d && (
@@ -307,8 +339,16 @@ function StatTile({
 
 /**
  * A badge is a foil seal. Tier drives how precious it looks; an unearned one
- * shows its hint rather than a bare padlock, so it reads as a target instead
- * of a locked door.
+ * shows how close you are, so it reads as a target rather than a locked door.
+ *
+ * **Uniform height, deliberately.** These tiles used to print the full hint
+ * ("Get fifty cards to a known state.") under the label. Grid rows size to
+ * their tallest item, so one three-line hint stretched every tile beside it and
+ * the whole case turned into a column of tall, mostly-empty boxes. The standing
+ * is a progress rail now — one fixed-height row that says the same thing
+ * faster — and the hint moved to the tooltip, where a sentence belongs. Labels
+ * clamp to two lines with a reserved minimum so every tile matches whatever its
+ * neighbours do.
  */
 function BadgeSeal({ badge }: { badge: Badge }) {
   const tierRing = {
@@ -319,7 +359,9 @@ function BadgeSeal({ badge }: { badge: Badge }) {
 
   return (
     <div
-      title={badge.earned ? badge.label : badge.hint}
+      /* The hint lives here now rather than in the tile: a sentence is a
+         tooltip's job, and printing it was what made every row tall. */
+      title={badge.earned ? badge.label : `${badge.hint} (${badge.progress} of ${badge.target})`}
       className={cn(
         'group relative flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center ring-1 transition-all duration-200',
         badge.earned && badge.tier !== 'common' && 'foil hover:-translate-y-0.5',
@@ -340,29 +382,38 @@ function BadgeSeal({ badge }: { badge: Badge }) {
           filled={badge.earned}
         />
       </span>
+      {/* Two lines maximum, with the space for two always reserved, so a
+          one-word label and a wrapping one produce the same tile. */}
       <span
         className={cn(
-          'text-[11px] leading-tight',
+          'line-clamp-2 min-h-[2.1em] text-[11px] leading-tight',
           badge.earned ? 'font-bold text-ink' : 'text-faint',
         )}
       >
         {badge.label}
       </span>
-      {badge.tier !== 'common' && badge.earned && (
-        <span className="setcode text-[9px]">{badge.tier}</span>
-      )}
-      {!badge.earned &&
-        (badge.target > 1 && badge.progress > 0 ? (
-          /* Standing, not just the rule. "7 of 10" is a target you are close
-             to; "Study ten days in a row" is a wall you may or may not have
-             started climbing. Only shown once there is progress to report —
-             "0 of 10" is the wall again, with extra arithmetic. */
-          <span className="setcode text-[9px] leading-tight text-ink-3">
-            {badge.progress} of {badge.target}
-          </span>
-        ) : (
-          <span className="setcode text-[9px] leading-tight">{badge.hint}</span>
-        ))}
+
+      {/* One fixed-height slot for the footer, whatever goes in it — this is
+          what actually keeps the row uniform. */}
+      <div className="flex h-3 w-full items-center justify-center">
+        {badge.earned ? (
+          badge.tier !== 'common' && <span className="setcode text-[9px]">{badge.tier}</span>
+        ) : badge.target > 1 ? (
+          /* Standing, not the rule. "7 of 10" is a target you are close to;
+             the rule alone is a wall you may not have started climbing. Drawn
+             rather than written, because a bar is read at a glance and costs
+             one line instead of three. */
+          <div
+            className="h-1 w-full overflow-hidden rounded-full bg-line-soft"
+            title={`${badge.progress} of ${badge.target}`}
+          >
+            <div
+              className="h-full rounded-full bg-brand/70 transition-[width] duration-700 ease-out"
+              style={{ width: `${Math.round((badge.progress / badge.target) * 100)}%` }}
+            />
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }

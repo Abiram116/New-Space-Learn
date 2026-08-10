@@ -51,6 +51,10 @@ export const Profile = lazy(() =>
 export const Settings = lazy(() =>
   import('../features/settings/Settings').then((m) => ({ default: m.Settings })),
 )
+/** First run only, and never again — it must not sit in the entry bundle. */
+export const Onboarding = lazy(() =>
+  import('../features/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })),
+)
 export const SkillsView = lazy(() =>
   import('../features/skills/SkillsView').then((m) => ({ default: m.SkillsView })),
 )

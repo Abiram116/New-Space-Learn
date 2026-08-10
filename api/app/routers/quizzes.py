@@ -103,9 +103,15 @@ async def generate_quiz(
         f"Recent conversation in this space:\n{recent}\n\n"
         "Return a JSON array; each item has fields: "
         '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, '
-        '"source": str, "subtopic": str}. subtopic is the specific concept '
-        "this question tests, narrower than the overall topic (e.g. "
-        "'Policy Iteration', not 'Reinforcement Learning'). "
+        '"source": str, "subtopic": str, "explanation": str}. subtopic is the '
+        "specific concept this question tests, narrower than the overall topic "
+        "(e.g. 'Policy Iteration', not 'Reinforcement Learning'). "
+        # Shown the instant the student answers, so it has to teach rather than
+        # justify — naming why the tempting wrong choice is tempting is what
+        # turns a wrong answer into the most useful moment in the quiz.
+        "explanation is 1-2 sentences saying WHY the correct answer is correct "
+        "and, where there is an obvious trap, why the most tempting wrong "
+        "choice is wrong. Write it to the student, in second person. "
         "Return only the JSON array — no prose, no code fences."
     )
 
@@ -185,10 +191,13 @@ async def submit_quiz(
             "user_id": user.id,
             "answers": body.answers,
             "score": score,
+            "duration_seconds": body.duration_seconds,
         },
     )
     await activity.bump(user.id, quizzes_taken=1, study_seconds=activity.SECONDS_PER_QUIZ)
-    return QuizResultOut(score=score, correct=correct)
+    return QuizResultOut(
+        score=score, correct=correct, duration_seconds=body.duration_seconds
+    )
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -229,6 +238,7 @@ def _stub_questions(topic: str | None, count: int) -> list[QuizQuestion]:
             q=f"Placeholder question {i + 1}: choose any option to try the flow ({t}).",
             choices=["Option A", "Option B", "Option C", "Option D"],
             answer_index=0,
+            explanation="This is a placeholder — the AI isn't configured yet, so no real explanation exists.",
         )
         for i in range(count)
     ]

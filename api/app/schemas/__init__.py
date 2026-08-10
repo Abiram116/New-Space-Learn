@@ -108,6 +108,12 @@ class NoteOut(BaseModel):
     origin: Literal["user", "agent", "doc"]
     source_ids: list[str] | None = None
     updated_at: datetime
+    # Where the note lives. Only populated by the cross-topic listing, which
+    # shows notes from everywhere and so has to say where each one came from —
+    # a title alone is ambiguous once you are looking at every subject at once.
+    subspace_id: str | None = None
+    subspace_name: str | None = None
+    subject_name: str | None = None
 
 
 class NoteCreate(BaseModel):
@@ -211,6 +217,11 @@ class QuizQuestion(BaseModel):
     answer_index: int
     source: str | None = None
     subtopic: str | None = None
+    # Why the right answer is right, shown the moment the student commits to a
+    # choice rather than at the end of the quiz. Optional because every quiz
+    # generated before this field existed has none, and a tolerant reader is
+    # the documented alternative to a data migration.
+    explanation: str | None = None
 
 
 class QuizOut(BaseModel):
@@ -227,11 +238,15 @@ class QuizGenerate(BaseModel):
 
 class QuizSubmit(BaseModel):
     answers: list[int]
+    #: Wall-clock seconds the student spent on the quiz. Client-reported and
+    #: therefore advisory — it is a study signal, never a grade input.
+    duration_seconds: int | None = Field(default=None, ge=0, le=24 * 3600)
 
 
 class QuizResultOut(BaseModel):
     score: int
     correct: list[bool]
+    duration_seconds: int | None = None
 
 
 # ── Skills ─────────────────────────────────────────────────────────────

@@ -15,5 +15,10 @@ export const generateQuiz = (
     body: { topic: input.topic, count: input.count ?? 5 },
   })
 
-export const submitQuiz = (id: string, answers: number[]) =>
-  apiFetch<QuizResult>(`/quizzes/${id}/submit`, { method: 'POST', body: { answers } })
+/** `durationSeconds` is wall-clock time on the quiz — a study signal, never a
+ *  grade input, and advisory since the client reports it. */
+export const submitQuiz = (id: string, answers: number[], durationSeconds?: number) =>
+  apiFetch<QuizResult>(`/quizzes/${id}/submit`, {
+    method: 'POST',
+    body: { answers, duration_seconds: durationSeconds },
+  })

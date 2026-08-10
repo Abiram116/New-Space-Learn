@@ -5,7 +5,9 @@ import { AuthCallback } from './features/auth/AuthCallback'
 import { SignIn } from './features/auth/SignIn'
 import { SignUp } from './features/auth/SignUp'
 import { Home } from './features/home/Home'
+import { OnboardingGate } from './features/onboarding/OnboardingGate'
 import {
+  Onboarding,
   ChatView,
   DocsView,
   FlashcardsView,
@@ -53,10 +55,26 @@ export default function App() {
       />
       <Route path="/auth/callback" element={<AuthCallback />} />
 
+      {/* First run goes here instead of the app. Outside the AppShell on
+          purpose: the rail and the dock are furniture for a student who has
+          material, and showing an empty one behind the intake undercuts it. */}
+      <Route
+        path="/welcome-aboard"
+        element={
+          <RequireAuth>
+            <Lazy>
+              <Onboarding />
+            </Lazy>
+          </RequireAuth>
+        }
+      />
+
       <Route
         element={
           <RequireAuth>
-            <AppShell />
+            <OnboardingGate>
+              <AppShell />
+            </OnboardingGate>
           </RequireAuth>
         }
       >

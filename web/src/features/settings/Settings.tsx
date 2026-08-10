@@ -3,14 +3,20 @@
  *
  * Sections match the plan's cut list:
  *   - Account (identity from Supabase, read-only in v1)
- *   - Study (daily goal, reminder, streak-freeze, SM-2 pace)
+ *   - Study (daily goal, streak-freeze, SM-2 pace)
  *   - AI & sources (RAG toggles)
  *   - Skills → link to /skills (no duplication)
  *   - Privacy → sign out
  *
  * Space Learn Plus is intentionally removed (per user's answer).
- * Reminders are honestly labelled: they persist, but firing needs a worker
- * we haven't shipped yet.
+ *
+ * **Every control here is live.** The reminder-time picker used to sit in the
+ * Study group storing a value nothing ever read, on the reasoning that it was
+ * "honestly labelled" — but a setting that cannot take effect is a promise the
+ * app is not keeping, and a caption admitting it does not fix that, it just
+ * documents it. Firing a reminder needs a scheduled worker the free tier will
+ * not run, so the control is gone rather than decorative. The column survives
+ * in the database, so nothing is lost if a notifier ever ships.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -40,7 +46,6 @@ import {
   RowWithNumber,
   RowWithSelect,
   RowWithText,
-  RowWithTime,
   RowWithToggle,
   SavingDot,
 } from '../../components/ui/Row'
@@ -270,12 +275,6 @@ export function Settings() {
                   min={1}
                   max={500}
                 />
-                <RowWithTime
-                  label="Reminder time"
-                  value={prefs.reminder_time}
-                  onChange={(t) => patch('reminder_time', { reminder_time: t })}
-                  saving={savingKey === 'reminder_time'}
-                />
                 <RowWithToggle
                   label="Streak freeze"
                   hint="Miss one day without breaking your streak."
@@ -297,8 +296,9 @@ export function Settings() {
                 />
               </div>
               <p className="text-xs text-faint">
-                Reminders will resume when the notifier is live — your time is
-                saved either way.
+                Every control on this page does something the moment you change
+                it — there is nothing here waiting on a feature that hasn't
+                shipped.
               </p>
             </>
           )}

@@ -654,3 +654,49 @@
 .notes-doc ul[data-type='taskList'] { list-style: none; }
 .notes-doc strong { font-weight: 700; color: #fff6ec; }
 .notes-doc em { font-style: italic; }
+
+/* The quiz verdict arriving. Grows from the top edge rather than fading —
+   the verdict is a consequence of the tap, and movement originating at the
+   thing you just pressed reads as causation rather than as decoration. */
+@keyframes verdictIn {
+  from { opacity: 0; transform: translateY(-4px) scaleY(0.96); transform-origin: top; }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); transform-origin: top; }
+}
+
+/* Onboarding turns arriving. Rises and settles on the app's one curve — the
+   intake is the first motion a new student sees, so it has to be the same
+   language everything after it uses. */
+@keyframes bubbleIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* The onboarding card field. Transform and opacity only, so it composites off
+   the main thread — first run is the slowest moment in the app and the one
+   place a background must not compete with the first API call. */
+@keyframes cardFloat {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--r, 0deg)); }
+  50%      { transform: translate3d(0, -22px, 0) rotate(var(--r, 0deg)); }
+}
+
+/* One slow foil pass across the field — the sheen a real foil card throws when
+   you tilt it, at the speed of a room rather than of an animation. */
+@keyframes foilSweep {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* The profile seal's foil. One highlight travelling across the disc, at the
+   speed of a tilt rather than of an animation — fast enough to notice once,
+   slow enough never to nag. Background-position only, so it composites. */
+@keyframes sealSheen {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* The ring around it. Rotation alone — the fade in and out is a CSS
+   transition on hover, so the ring is only ever drawn when it is wanted. */
+@keyframes sealOrbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

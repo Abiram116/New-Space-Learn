@@ -4,6 +4,14 @@ import type { Note } from './types'
 export const listNotes = (subspaceId: string) =>
   apiFetch<Note[]>(`/subspaces/${subspaceId}/notes`)
 
+/** Every note the user has, wherever it lives, newest first.
+ *
+ *  Scoping notes to whichever topic you happen to be sitting in was a
+ *  restriction the data never justified — reading your Deadlock note while
+ *  chatting about Virtual Memory is an ordinary thing to want. Each row carries
+ *  its subspace and subject name so the list can say where a note came from. */
+export const listAllNotes = () => apiFetch<Note[]>('/notes')
+
 export const createNote = (
   subspaceId: string,
   input: { title: string; body_md?: string; origin?: 'user' | 'agent' | 'doc' },

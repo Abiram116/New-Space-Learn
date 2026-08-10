@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AgentKey } from './agents'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
+import { useAssessment } from '../../lib/assessment'
 
 /**
  * Typed shortcuts. Recognised, not advertised.
@@ -73,7 +74,16 @@ export function Composer({
     setValue('')
   }
 
-  const canSend = !disabled && value.trim().length > 0
+  /* Locked while a quiz or card review is running.
+     A quiz is only worth anything if the answers came from the student, and
+     with the tutor one panel away "what's the answer to this" is a two-second
+     detour that makes every score in the app a lie — the student model, the
+     brief and the card schedule are all built on these scores being real.
+     Framed as an explanation rather than an accusation: a student who does
+     this is only cheating their own revision plan, and treating them as a
+     suspect for opening a panel is the worse product. */
+  const { assessing, reason } = useAssessment()
+  const canSend = !disabled && !assessing && value.trim().length > 0
 
   return (
     <div className="relative shrink-0">
@@ -87,6 +97,13 @@ export function Composer({
       />
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-5 pb-3 pt-1">
+        {assessing && (
+          <div className="flex items-center gap-1.5 self-center rounded-full bg-line-soft px-2.5 py-1 text-[11.5px] text-muted">
+            <Icon name="lock" size={11} />
+            Chat pauses during {reason === 'quiz' ? 'a quiz' : 'a review'} — the answers
+            should be yours.
+          </div>
+        )}
         <div
           className={cn(
             'flex items-end gap-2 rounded-[22px] border border-line bg-raised px-3.5 py-2.5',
@@ -105,8 +122,14 @@ export function Composer({
                 submit()
               }
             }}
-            placeholder={placeholder}
-            disabled={disabled}
+            placeholder={
+              assessing
+                ? reason === 'quiz'
+                  ? 'Paused while you’re taking the quiz'
+                  : 'Paused while you’re reviewing cards'
+                : placeholder
+            }
+            disabled={disabled || assessing}
             className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint disabled:opacity-60"
           />
 
