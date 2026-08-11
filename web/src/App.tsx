@@ -1,13 +1,13 @@
 import { Route, Routes } from 'react-router-dom'
 import { RedirectIfAuthed, RequireAuth } from './auth/guards'
 import { AppShell } from './components/layout/AppShell'
-import { AuthCallback } from './features/auth/AuthCallback'
-import { SignIn } from './features/auth/SignIn'
-import { SignUp } from './features/auth/SignUp'
 import { Home } from './features/home/Home'
 import { OnboardingGate } from './features/onboarding/OnboardingGate'
 import {
+  AuthCallback,
   Onboarding,
+  SignIn,
+  SignUp,
   ChatView,
   DocsView,
   FlashcardsView,
@@ -41,7 +41,9 @@ export default function App() {
         path="/signin"
         element={
           <RedirectIfAuthed>
-            <SignIn />
+            <Lazy>
+              <SignIn />
+            </Lazy>
           </RedirectIfAuthed>
         }
       />
@@ -49,11 +51,20 @@ export default function App() {
         path="/signup"
         element={
           <RedirectIfAuthed>
-            <SignUp />
+            <Lazy>
+              <SignUp />
+            </Lazy>
           </RedirectIfAuthed>
         }
       />
-      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route
+        path="/auth/callback"
+        element={
+          <Lazy>
+            <AuthCallback />
+          </Lazy>
+        }
+      />
 
       {/* First run goes here instead of the app. Outside the AppShell on
           purpose: the rail and the dock are furniture for a student who has

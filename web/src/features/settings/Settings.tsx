@@ -28,6 +28,7 @@ import {
   updateSettings,
   updateStudentModel,
 } from '../../api/me'
+import { signOutLocally } from '../../api/auth'
 import { listPreferences, resetFeedback, type Preference } from '../../api/feedback'
 import { getSupabase } from '../../api/supabase'
 import type { Settings as Prefs, StudentModel, TopicSignal } from '../../api/types'
@@ -185,6 +186,18 @@ export function Settings() {
     setDeleteBusy(true)
     try {
       await deleteAccount()
+      /**
+       * Drop the local session before navigating — without this, deleting your
+       * account left you trapped in a dead app.
+       *
+       * Supabase JWTs are stateless: deleting the user server-side does not
+       * invalidate the copy sitting in this browser. So `navigate('/signin')`
+       * hit `RedirectIfAuthed`, which saw a session and bounced straight back
+       * to `/home`, where every request 401'd into "account not found" toasts
+       * over a UI with nothing left to load. The account was gone and the app
+       * was the only thing that hadn't been told.
+       */
+      await signOutLocally()
       navigate('/signin', { replace: true })
     } catch (err) {
       showError(err)

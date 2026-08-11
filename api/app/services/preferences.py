@@ -376,13 +376,34 @@ def _resolve_explicit(snapshot, put) -> None:
     """
     explicit = dict(snapshot.settings.get("student_model") or {})
 
-    if note := (explicit.get("teaching_preference") or "").strip():
-        put(Preference("explanation.note", note, "explicit", 0.9, 1, "you set this"))
+    # Both intake answers describe how to explain things, and both used to be
+    # `put` separately under the SAME key — which meant only one survived.
+    # `_put` refuses to overwrite an equal-or-stronger source, both are
+    # "explicit", and `teaching_preference` went first: so `learning_style`
+    # was collected, stored, and then silently dropped before it ever reached
+    # a prompt. The intake's most considered question — the multi-select, with
+    # a live preview telling the student their choice mattered — changed
+    # nothing about how the tutor wrote.
+    #
+    # They are complementary rather than competing, so they are composed into
+    # one note instead of racing: the learning style says how to *open* an
+    # explanation, the teaching preference says how far to take it. Style
+    # leads because that is the order the sentence is read in.
+    #
+    # Neither is parsed into the structured enums. Mapping "visual" onto
+    # `explanation.opens_with` would be the system inventing a structured
+    # claim out of an unstructured sentence.
+    notes: list[str] = []
     if style := (explicit.get("learning_style") or "").strip():
-        # Free text, deliberately not parsed into the enum. Mapping "visual"
-        # onto `explanation.opens_with` would be the system inventing a
-        # structured claim out of an unstructured sentence.
-        put(Preference("explanation.note", style, "explicit", 0.85, 1, "you set this"))
+        notes.append(f"What makes something click for them: {style}.")
+    if note := (explicit.get("teaching_preference") or "").strip():
+        notes.append(note)
+    if notes:
+        put(
+            Preference(
+                "explanation.note", " ".join(notes), "explicit", 0.9, 1, "you set this"
+            )
+        )
     if goal := (explicit.get("exam_context") or "").strip():
         put(Preference("study.goal", goal, "explicit", 0.9, 1, "you set this"))
     if minutes := explicit.get("session_length_minutes"):

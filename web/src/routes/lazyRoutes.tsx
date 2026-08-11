@@ -55,6 +55,18 @@ export const Settings = lazy(() =>
 export const Onboarding = lazy(() =>
   import('../features/onboarding/Onboarding').then((m) => ({ default: m.Onboarding })),
 )
+/* The auth screens. Only ever reached signed-OUT, yet a signed-in session
+   loaded all three on every visit. They are prefetched on idle below so the
+   split costs a signed-out visitor nothing. */
+export const SignIn = lazy(() =>
+  import('../features/auth/SignIn').then((m) => ({ default: m.SignIn })),
+)
+export const SignUp = lazy(() =>
+  import('../features/auth/SignUp').then((m) => ({ default: m.SignUp })),
+)
+export const AuthCallback = lazy(() =>
+  import('../features/auth/AuthCallback').then((m) => ({ default: m.AuthCallback })),
+)
 export const SkillsView = lazy(() =>
   import('../features/skills/SkillsView').then((m) => ({ default: m.SkillsView })),
 )
@@ -77,6 +89,28 @@ export function Lazy({ children }: { children: ReactNode }) {
  */
 type IdleWindow = Window & {
   requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void
+}
+
+/**
+ * Warm the auth screens for a visitor who is signed out.
+ *
+ * Splitting them out took ~4KB off every signed-in load, but a signed-out
+ * visitor's very next click is almost always Sign in — and paying a chunk
+ * fetch on the first screen of the funnel is the wrong trade. Prefetching
+ * during idle gets both: absent from the signed-in bundle, already cached by
+ * the time it is clicked.
+ *
+ * Called from the landing page rather than AppShell, which only ever mounts
+ * for someone who is already signed in.
+ */
+export function prefetchAuthChunks(): void {
+  const warm = () => {
+    void import('../features/auth/SignIn')
+    void import('../features/auth/SignUp')
+  }
+  const idle = (window as IdleWindow).requestIdleCallback
+  if (idle) idle(warm, { timeout: 3000 })
+  else window.setTimeout(warm, 1500)
 }
 
 export function prefetchRouteChunks(): void {

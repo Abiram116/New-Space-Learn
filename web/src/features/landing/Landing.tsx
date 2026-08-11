@@ -24,6 +24,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { prefetchAuthChunks } from '../../routes/lazyRoutes'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../components/ui/Icon'
 import { Logo, LogoMark } from '../../components/ui/Logo'
@@ -46,6 +47,11 @@ export function Landing() {
   // every load including this one) so it also covers a student who bookmarks
   // straight into an authenticated page and never sees this component. See
   // AuthProvider.tsx and docs/operations/performance-and-cost.md §6.
+
+  // Sign in / Sign up are split out of the entry bundle, and this page is where
+  // the click comes from. Warming them on idle means the split costs a
+  // signed-in session 4KB less on every load and costs a visitor nothing.
+  useEffect(prefetchAuthChunks, [])
 
   return (
     <SmoothScroll>

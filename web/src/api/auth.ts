@@ -88,6 +88,46 @@ export async function signOut(): Promise<void> {
   if (error) throw new ApiError('internal_error', error.message)
 }
 
+/**
+ * Ask Supabase to trade the refresh token for a new access token.
+ *
+ * Used to tell two very different 401s apart: an access token that simply
+ * aged out mid-request (refresh succeeds, carry on) versus a session the
+ * server will never honour again — deleted account, revoked token — where the
+ * refresh is rejected too. Returns null instead of throwing, because every
+ * caller wants "did this work" rather than an exception to catch.
+ */
+export async function refreshSession(): Promise<Session | null> {
+  try {
+    const { data, error } = await getSupabase().auth.refreshSession()
+    if (error) return null
+    return data.session ?? null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Drop the session on this device without asking the server to revoke it.
+ *
+ * For the case where the server-side user is already gone — a deleted account,
+ * a session revoked elsewhere. A normal `signOut()` posts to `/logout` with the
+ * dead token, gets a 401, throws, and leaves the local session sitting in
+ * storage: the app still believes it is signed in, `RedirectIfAuthed` bounces
+ * `/signin` back to `/home`, and every request from then on 401s. Clearing
+ * locally is the only step that actually applies when there is nothing left to
+ * revoke.
+ */
+export async function signOutLocally(): Promise<void> {
+  // Never throws: this runs on paths whose whole purpose is to get someone
+  // *out*, and failing there would strand them in the broken state.
+  try {
+    await getSupabase().auth.signOut({ scope: 'local' })
+  } catch {
+    /* the session is being abandoned either way */
+  }
+}
+
 /** Turn supabase-js text errors into our typed error so UX is consistent. */
 function fromSupabaseError(message: string): ApiError {
   const lower = message.toLowerCase()

@@ -43,6 +43,28 @@ describe('runHandoffSequence', () => {
     expect(r.events).toEqual(['in', 'work', 'out', 'clear'])
   })
 
+  it('waits for the curtain to be fully opaque before swapping the page', async () => {
+    // The regression that made the dashboard flicker into view: the route
+    // change fired on the same tick the cover animation ended, so any jitter
+    // swapped the page while the curtain was still see-through. The work must
+    // land strictly *after* the fade, not on its last frame.
+    const coverMs = 80
+    let workAt = 0
+    const start = Date.now()
+
+    await runHandoffSequence({
+      inMs: 200,
+      outMs: 10,
+      coverMs,
+      work: () => {
+        workAt = Date.now() - start
+      },
+      onPhase: () => {},
+    })
+
+    expect(workAt).toBeGreaterThan(coverMs)
+  })
+
   it('holds the cover until the work finishes, even when it runs long', async () => {
     const r = recorder()
     const start = Date.now()

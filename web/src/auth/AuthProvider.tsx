@@ -10,8 +10,16 @@ import type { ReactNode } from 'react'
 import { clearBriefCache } from '../lib/briefCache'
 import { hideBootSplash } from '../lib/bootSplash'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { getSession, onAuthChange, signOut, updateDisplayName, type Session } from '../api/auth'
-import { setAuthTokenProvider } from '../api/client'
+import {
+  getSession,
+  onAuthChange,
+  refreshSession,
+  signOut,
+  signOutLocally,
+  updateDisplayName,
+  type Session,
+} from '../api/auth'
+import { setAuthTokenProvider, setUnauthorizedHandler } from '../api/client'
 import { setUploadTokenProvider } from '../api/documents'
 import { SUPABASE_CONFIGURED } from '../lib/env'
 import { warmApi } from '../lib/warmApi'
@@ -38,6 +46,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setAuthTokenProvider(() => tokenRef.current)
     setUploadTokenProvider(() => tokenRef.current)
+  }, [])
+
+  /**
+   * A rejected token ends the session.
+   *
+   * Deleting your account used to leave the app running on a JWT the server
+   * had stopped honouring: the guards saw a session, `/signin` bounced back to
+   * `/home`, and every request answered 401 into a toast. The account was gone
+   * and the app was the last to know.
+   *
+   * **A 401 is not taken at face value.** Supabase refreshes access tokens in
+   * the background, so a request can legitimately race an expiry and come back
+   * 401 while the session is perfectly recoverable — signing out there would
+   * throw people out mid-sentence for a token that was about to renew. So the
+   * refresh is tried first, and only a refresh that fails is treated as proof
+   * the session is genuinely dead.
+   *
+   * Nothing navigates here. Clearing the session is enough: `RequireAuth`
+   * already sends a visitor without one to sign-in, and having two things
+   * decide where you land is how redirect loops start.
+   */
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED) return
+    let checking = false
+
+    setUnauthorizedHandler(() => {
+      // A dead session 401s every in-flight request at once; without this, one
+      // dashboard load would fire a refresh per failed call.
+      if (checking || !tokenRef.current) return
+      checking = true
+      void refreshSession()
+        .catch(() => null)
+        .then(async (fresh) => {
+          if (!fresh) {
+            await signOutLocally()
+            setSession(null)
+            tokenRef.current = null
+            clearBriefCache()
+          }
+        })
+        .finally(() => {
+          checking = false
+        })
+    })
+
+    return () => setUnauthorizedHandler(null)
   }, [])
 
   // This wraps the whole app above the router (see main.tsx), so it mounts on

@@ -54,11 +54,31 @@ async function buildInit(init: Init | undefined): Promise<RequestInit> {
   }
 }
 
+/**
+ * Told when the server rejects our credentials.
+ *
+ * A 401 means this session is no longer good — the account was deleted (here
+ * or on another device), the refresh token was revoked, the user was removed
+ * from the project. Without somewhere to report that, the app kept the dead
+ * session and every screen filled with "unauthorized" toasts over data that
+ * would never arrive, with no route back to sign-in because the guards still
+ * believed there was a session.
+ *
+ * A callback rather than an import so this module stays free of React and of
+ * the auth layer that imports it.
+ */
+let onUnauthorized: (() => void) | null = null
+
+export function setUnauthorizedHandler(fn: (() => void) | null): void {
+  onUnauthorized = fn
+}
+
 /** Low-level fetch that returns the raw Response — used by streamers. */
 export async function apiFetchRaw(path: string, init?: Init): Promise<Response> {
   const finalInit = await buildInit(init)
   try {
     const res = await fetch(joinUrl(API_URL, path), finalInit)
+    if (res.status === 401) onUnauthorized?.()
     if (!res.ok) throw await parseError(res)
     return res
   } catch (e) {

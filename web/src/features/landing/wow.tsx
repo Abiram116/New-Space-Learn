@@ -17,6 +17,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../components/ui/Icon'
 import { useReducedMotion } from '../../components/ui/motion'
+export { DraftingCursor } from '../../components/ui/DraftingCursor'
 import { DUR_MS, EASE_CSS } from './language'
 
 /**
@@ -321,79 +322,6 @@ export function MaskedLines({
   )
 }
 
-/**
- * A drafting reticle in place of the system cursor — landing page only.
- *
- * Two elements at different lags: a hard dot pinned exactly to the pointer, and
- * a ring that trails it. The gap between them is the whole effect — the dot
- * says precisely where you are, the ring gives the movement weight. One
- * element alone reads either sluggish or lifeless.
- *
- * The ring opens up over anything interactive, so the cursor answers the page
- * instead of just decorating it. Never mounts on a coarse pointer: replacing
- * the cursor on a touch device costs two always-on listeners to move something
- * nobody can see.
- */
-export function DraftingCursor() {
-  const dot = useRef<HTMLDivElement>(null)
-  const ring = useRef<HTMLDivElement>(null)
-  const still = useReducedMotion()
-
-  useEffect(() => {
-    if (coarse() || still) return
-    let tx = -100
-    let ty = -100
-    let rx = -100
-    let ry = -100
-    let hot = false
-    let raf = 0
-
-    const onMove = (e: PointerEvent) => {
-      tx = e.clientX
-      ty = e.clientY
-      const t = e.target as Element | null
-      hot = !!t?.closest?.('a,button,[role="button"],input,textarea,label')
-    }
-
-    const tick = () => {
-      rx += (tx - rx) * 0.16
-      ry += (ty - ry) * 0.16
-      if (dot.current) dot.current.style.transform = `translate3d(${tx - 2}px,${ty - 2}px,0)`
-      if (ring.current) {
-        ring.current.style.transform = `translate3d(${rx - 15}px,${ry - 15}px,0) scale(${hot ? 1.85 : 1})`
-        ring.current.style.borderColor = hot
-          ? 'rgba(255,90,60,0.85)'
-          : 'rgba(245,237,228,0.42)'
-      }
-      raf = requestAnimationFrame(tick)
-    }
-
-    window.addEventListener('pointermove', onMove, { passive: true })
-    raf = requestAnimationFrame(tick)
-    return () => {
-      window.removeEventListener('pointermove', onMove)
-      cancelAnimationFrame(raf)
-    }
-  }, [still])
-
-  if (still || (typeof window !== 'undefined' && coarse())) return null
-
-  return (
-    <>
-      <div
-        ref={dot}
-        aria-hidden
-        className="pointer-events-none fixed left-0 top-0 z-[60] h-1 w-1 rounded-full bg-brand"
-      />
-      <div
-        ref={ring}
-        aria-hidden
-        className="pointer-events-none fixed left-0 top-0 z-[60] h-[30px] w-[30px] rounded-full border"
-        style={{ transition: 'transform 120ms linear, border-color 220ms ease' }}
-      />
-    </>
-  )
-}
 
 /**
  * Out-of-focus fragments of the student's own material, drifting deep in the

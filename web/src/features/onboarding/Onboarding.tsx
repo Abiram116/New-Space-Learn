@@ -1,106 +1,137 @@
 /**
- * First run — a short conversation, not a form.
+ * First run — a workbench, not a form and not a transcript.
  *
  * A new account has nothing: no subjects, no cards, no history. Dropping
- * someone straight into a dashboard of zeroes teaches them the product is
- * empty, and a settings form of dropdowns teaches them it is admin. The one
- * thing the app genuinely needs before it can be useful is a sense of how this
- * person wants to be taught — and the natural way to collect that in a product
- * whose whole surface is a chat is to *ask*, in the same shape they'll be
- * using for everything else.
+ * someone into a dashboard of zeroes teaches them the product is empty, and a
+ * settings form of dropdowns teaches them it is admin. The app genuinely needs
+ * one thing before it can be useful — a sense of how this person wants to be
+ * taught — so it asks.
  *
- * **Nothing here is a model call.** The questions are fixed, the "typing" is a
- * timer, and the replies are chosen from what was tapped. Spending a real
- * generation on a scripted intake would be slow, cost quota, and risk the
- * model improvising a question we don't have a preference key for. It looks
- * like the chat because that is honest about where you are, not because
- * anything is being inferred.
+ * **The problem with asking.** Four questions from a product you have not used
+ * yet is unpleasant in a specific way: you cannot tell what any answer will do,
+ * so you start guessing at the response the form wants, and then you rush or
+ * skip. Two earlier versions of this screen made it worse — a dropdown form,
+ * then a simulated chat that put a fake typing delay in front of every
+ * question, which is a wait dressed as a personality.
+ *
+ * **So the consequence is on screen.** Every choice visibly rewrites a sample
+ * answer beside it. Pick "a concrete example" and it opens with a speedometer;
+ * pick "the formal definition" and it opens with the limit. There is no hidden
+ * correct answer because every answer is visible, which turns the question from
+ * a test into a control you are operating — and demonstrates the hand-off the
+ * product is built on before the student has uploaded a single page.
+ *
+ * **Nothing here is a model call.** The questions are fixed and the sample is
+ * composed by lookup (see `preview.ts`). Spending a real generation on a
+ * scripted screen would be slow, cost quota, and risk the model contradicting
+ * the preference it is meant to be illustrating.
  *
  * **It does not ask what you are studying for.** That was on the original list
  * and it is the one question to cut: it changes on a fortnightly cycle, it is
- * already a field in Settings, and asking it here would have someone type
- * "finals" on day one and be reminded of it in March. Preferences are stable;
- * goals are not.
+ * already a field in Settings, and asking here would have someone type "finals"
+ * on day one and be reminded of it in March. Preferences are stable; goals are
+ * not.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { updateStudentModel } from '../../api/me'
+import { useAuth } from '../../auth/AuthProvider'
+import { DraftingCursor } from '../../components/ui/DraftingCursor'
 import { Icon } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
-import { useAuth } from '../../auth/AuthProvider'
 import { cn } from '../../lib/cn'
+import {
+  LAMP_BASE_WARMTH,
+  lampGradient,
+  MOTES,
+  TABLE_IMAGE,
+  TABLE_MASK,
+  TABLE_SIZE,
+  VIGNETTE,
+} from '../../lib/room'
 import { useHandoff } from '../transitions/Handoff'
+import { composeSample, SAMPLE_QUESTION, sessionShape } from './preview'
+import { FREE_TEXT_MAX, STEPS } from './steps'
 import { markOnboarded } from './state'
 
-type Step = {
-  id: string
-  /** What the app says. */
-  ask: string
-  /** Tappable answers. The label is what the student sees and what is stored. */
-  options: { label: string; value: string }[]
-  /** Where the answer goes. */
-  field: 'learning_style' | 'teaching_preference' | 'session_length_minutes'
-  /** Free text instead of options. */
-  freeform?: boolean
-  /**
-   * Several answers can be true at once.
-   *
-   * "What makes it click" is genuinely not one thing — an example *and* a
-   * comparison is the honest answer for most people, and forcing a single
-   * pick throws away half of what they would have told us. Single-select
-   * stays the default because most questions really do have one answer, and
-   * a multi-select that only ever takes one tap is a worse single-select.
-   */
-  multi?: boolean
+/**
+ * The arrival waits for you, it does not race you.
+ *
+ * It was on a 4.2s timer, which was worse than either extreme: too short to
+ * finish reading, long enough to feel like a wait, and it moved on whether you
+ * were ready or not. Reading speed is not something to guess at.
+ *
+ * So the student starts it. Nothing advances until they act, and this ceiling
+ * exists only so an unattended tab does not sit on the intro forever — it is a
+ * failsafe, not a pace.
+ */
+const ARRIVAL_CEILING_MS = 45_000
+
+/** Before this, a click is almost certainly the one that landed you here. */
+const ARRIVAL_GUARD_MS = 900
+
+/**
+ * The arrival: a rule drawn across the table, and words appearing behind it.
+ *
+ * The one moment in the product that is purely atmosphere, and it earns the
+ * exception. Signing up is a form; the intake is four questions; between those
+ * two the student has had nothing but demands, and a screen that asks for
+ * nothing is what makes the next one feel like a conversation rather than more
+ * paperwork.
+ *
+ * The mechanism is a plotter, not a fade. A hairline draws outward from the
+ * centre, and each line of text is revealed by a clip that opens from the
+ * centre at the same rate — so the words read as being *drawn onto the table*
+ * by the passing rule rather than fading in beside it. Drafting, in the app's
+ * own idiom, and the reason it does not look like a generic splash.
+ */
+function Arrival() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 px-8"
+      // The whole page is mid-arrival, so this is the only thing worth
+      // announcing. Polite, not assertive: nothing here needs interrupting.
+      role="status"
+      aria-live="polite"
+    >
+      <p
+        className="max-w-2xl text-center text-[clamp(24px,3.4vw,42px)] font-semibold leading-[1.15] text-ink"
+        style={{ animation: 'wipeIn 1100ms 700ms var(--ease-sl) both' }}
+      >
+        Let's set the table.
+      </p>
+
+      {/* The rule. Drawn from the centre, and the text above is clipped open at
+          the same rate — one gesture, two things revealed by it. */}
+      <div
+        aria-hidden
+        className="h-px w-full max-w-md origin-center bg-[rgba(255,237,220,0.28)]"
+        style={{ animation: 'ruleSweep 1000ms 300ms var(--ease-sl) both' }}
+      />
+
+      <p
+        className="max-w-lg text-center text-[15px] leading-relaxed text-ink-3"
+        style={{ animation: 'lineUp 900ms 1900ms var(--ease-sl) both' }}
+      >
+        Four questions about how you like to be taught. There are no wrong
+        answers — you'll see what each one does as you pick it.
+      </p>
+
+      {/* The only instruction on screen, and it arrives last — after both
+          lines have had time to be read rather than alongside them. It breathes
+          so it stays findable without becoming the thing you look at. */}
+      <span
+        className="setcode"
+        style={{ animation: 'lineUp 900ms 3200ms var(--ease-sl) both, breathe 3.4s 4100ms ease-in-out infinite' }}
+      >
+        Click anywhere when you're ready
+      </span>
+    </div>
+  )
 }
-
-const STEPS: Step[] = [
-  {
-    id: 'style',
-    ask: "When something's new to you, what makes it click? Pick as many as fit.",
-    field: 'learning_style',
-    multi: true,
-    options: [
-      { label: 'A concrete example', value: 'examples first, then the general rule' },
-      { label: 'The idea behind it', value: 'the intuition first, then the detail' },
-      { label: 'The formal definition', value: 'the precise definition first, then examples' },
-      { label: 'Seeing it compared', value: 'comparisons against things I already know' },
-    ],
-  },
-  {
-    id: 'depth',
-    ask: 'And how much do you want at once?',
-    field: 'teaching_preference',
-    options: [
-      { label: 'Keep it short', value: 'Keep explanations short and direct.' },
-      { label: 'Go deep', value: 'Go into real depth; I would rather have too much than too little.' },
-      { label: 'Depends — read the room', value: 'Match the depth to the question rather than a fixed length.' },
-    ],
-  },
-  {
-    id: 'session',
-    ask: 'Roughly how long is one of your study sessions?',
-    field: 'session_length_minutes',
-    options: [
-      { label: '15 minutes', value: '15' },
-      { label: '30 minutes', value: '30' },
-      { label: 'An hour', value: '60' },
-      { label: 'Longer', value: '120' },
-    ],
-  },
-  {
-    id: 'anything',
-    ask: 'Anything else about how you like to be taught? Skip it if nothing comes to mind.',
-    field: 'teaching_preference',
-    freeform: true,
-    options: [],
-  },
-]
-
-type Turn = { role: 'app' | 'me'; text: string }
 
 export function Onboarding() {
   const navigate = useNavigate()
@@ -109,32 +140,61 @@ export function Onboarding() {
   const reduced = useReducedMotion()
   const { play } = useHandoff()
 
+  /**
+   * The arrival sequence, before any question is asked.
+   *
+   * Four seconds of nothing being demanded. A student who has just signed up
+   * has spent the last minute typing credentials into a form, and dropping
+   * them straight onto question one makes the product feel like more of the
+   * same admin — so the room gets a moment to be a room first, and the
+   * questions arrive into a screen that already feels settled.
+   *
+   * Skipped instantly under reduced motion, and dismissible with any click or
+   * key, because a beautiful thing you cannot get past stops being beautiful
+   * the second time you see it.
+   */
+  const [arrived, setArrived] = useState(reduced)
+
   const [stepIndex, setStepIndex] = useState(0)
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [typing, setTyping] = useState(true)
+  const [picked, setPicked] = useState<string[]>([])
   const [freeText, setFreeText] = useState('')
   const [saving, setSaving] = useState(false)
   const answers = useRef<Record<string, string>>({})
-  const scroller = useRef<HTMLDivElement>(null)
+  /* Mirrors `answers.current` for rendering. The ref is what `finish` reads —
+     it must not be a render behind — and this is what the preview reads. */
+  const [chosen, setChosen] = useState<Record<string, string>>({})
+
   const step = STEPS[stepIndex]
-
-  // The "typing" pause. Long enough that the question feels considered, short
-  // enough that four of them don't become a wait — and skipped entirely under
-  // reduced motion, where a simulated delay is just a delay.
-  useEffect(() => {
-    if (stepIndex >= STEPS.length) return
-    setTyping(true)
-    const delay = reduced ? 0 : 620
-    const id = window.setTimeout(() => {
-      setTurns((prev) => [...prev, { role: 'app', text: STEPS[stepIndex].ask }])
-      setTyping(false)
-    }, delay)
-    return () => window.clearTimeout(id)
-  }, [stepIndex, reduced])
+  const isLast = stepIndex === STEPS.length - 1
 
   useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })
-  }, [turns, typing])
+    if (arrived) return
+    const done = () => setArrived(true)
+
+    // A short guard before input counts. Without it the click that submitted
+    // the sign-up form — or the one that dismissed the handoff — arrives here
+    // as the *first* event and skips the intro before it has drawn a frame.
+    let armed = false
+    const arm = window.setTimeout(() => {
+      armed = true
+    }, ARRIVAL_GUARD_MS)
+    const onInput = () => {
+      if (armed) done()
+    }
+
+    const ceiling = window.setTimeout(done, ARRIVAL_CEILING_MS)
+    // Listening on the window rather than putting a button on screen: a "skip
+    // intro" control would be the loudest thing in a composition whose whole
+    // point is that nothing is being demanded yet.
+    window.addEventListener('pointerdown', onInput)
+    window.addEventListener('keydown', onInput)
+    return () => {
+      window.clearTimeout(arm)
+      window.clearTimeout(ceiling)
+      window.removeEventListener('pointerdown', onInput)
+      window.removeEventListener('keydown', onInput)
+    }
+  }, [arrived])
 
   const finish = useCallback(
     async (collected: Record<string, string>) => {
@@ -146,7 +206,7 @@ export function Onboarding() {
           patch.session_length_minutes = Number(collected.session_length_minutes)
         }
         // Two steps write `teaching_preference` — the depth choice and the
-        // free-text one. Joined rather than last-wins so a student who says
+        // free-text one. Joined rather than last-wins so a student who answers
         // both keeps both.
         const teaching = [collected.teaching_preference, collected.teaching_extra]
           .filter(Boolean)
@@ -155,26 +215,17 @@ export function Onboarding() {
 
         if (Object.keys(patch).length > 0) await updateStudentModel(patch)
       } catch (err) {
-        // A failed save must not trap someone on the intake screen forever —
-        // these are preferences, all of them editable in Settings, and none
-        // worth blocking first use over.
+        // A failed save must not trap someone on the intake forever — these are
+        // preferences, all editable in Settings, none worth blocking first use.
         showError(err)
       } finally {
-        /**
-         * With the user id — without it, Skip did nothing at all.
-         *
-         * `markOnboarded()` falls back to an un-suffixed key, but
-         * `hasSkippedLocally` only ever reads the per-user one. So skipping
-         * wrote a flag nothing reads: the gate re-checked the server, found no
-         * preferences (because you skipped), and sent you straight back to the
-         * intake. "Skip for now" was a button that reloaded the screen it was
-         * trying to leave.
-         */
+        // With the user id. Without it `markOnboarded` writes to a key that
+        // `hasSkippedLocally` never reads, so skipping sent you straight back
+        // to the screen you were trying to leave.
         markOnboarded(session?.user?.id ?? null)
         // The one moment this product gets to feel like an arrival. The
         // dashboard mounts and fetches underneath the curtain, so it is
-        // finished and painted by the time it is uncovered — the transition
-        // is the loading state, not an animation played next to one.
+        // finished and painted by the time it is uncovered.
         void play('desk', () => {
           navigate('/home', { replace: true })
         })
@@ -183,328 +234,397 @@ export function Onboarding() {
     [navigate, play, session, showError],
   )
 
-  /* Selections for the current multi-select question. Keyed by option label
-     so re-tapping toggles rather than duplicating. Cleared on every step. */
-  const [picked, setPicked] = useState<string[]>([])
-
-  const answer = useCallback(
-    (label: string, value: string) => {
+  const commit = useCallback(
+    (value: string, key?: string) => {
+      const field = key ?? (step.freeform ? 'teaching_extra' : step.field)
+      const next = { ...answers.current }
+      if (value) next[field] = value
+      answers.current = next
+      setChosen(next)
       setPicked([])
-      setTurns((prev) => [...prev, { role: 'me', text: label }])
-      const key = step.freeform ? 'teaching_extra' : step.field
-      if (value) answers.current[key] = value
-
-      if (stepIndex === STEPS.length - 1) void finish(answers.current)
+      setFreeText('')
+      if (isLast) void finish(next)
       else setStepIndex((i) => i + 1)
     },
-    [step, stepIndex, finish],
+    [step, isLast, finish],
   )
 
-  /** Commit a multi-select: one turn, one joined preference. */
-  const commitMulti = useCallback(() => {
-    if (picked.length === 0) return
-    const chosen = step.options.filter((o) => picked.includes(o.label))
-    answer(
-      chosen.map((o) => o.label).join(', '),
-      // Joined into one sentence rather than stored as a list: every consumer
-      // of `learning_style` interpolates it into a prompt, and a JSON array
-      // appearing mid-sentence there would read as a bug to the model.
-      chosen.map((o) => o.value).join('; '),
-    )
-  }, [picked, step, answer])
+  const back = useCallback(() => {
+    setPicked([])
+    setStepIndex((i) => Math.max(0, i - 1))
+  }, [])
 
-  const skip = useCallback(() => {
-    void finish(answers.current)
-  }, [finish])
+  const skip = useCallback(() => void finish(answers.current), [finish])
+
+  /* The sample, composed from what has been answered so far. */
+  const sample = useMemo(
+    () => composeSample(chosen.learning_style, chosen.teaching_preference),
+    [chosen.learning_style, chosen.teaching_preference],
+  )
+  const shape = sessionShape(chosen.session_length_minutes)
+
+  /** Single-select commits on tap; multi-select waits for Continue. */
+  const canContinue = step.multi ? picked.length > 0 : true
 
   return (
-    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-canvas">
-      <Backdrop />
+    // `lg:cursor-none` scoped here, matching the landing page. First run is a
+    // surface you are being *shown*, so it keeps the reticle; the app proper
+    // does not, because a screen you work in needs the system cursor and every
+    // affordance it carries.
+    <div className="relative flex min-h-dvh flex-col overflow-hidden bg-canvas lg:cursor-none">
+      <DraftingCursor />
+      <Backdrop reduced={reduced} lit={stepIndex} />
 
-      <header className="relative z-10 flex items-center justify-between px-5 py-4 sm:px-8">
+      {!arrived && <Arrival />}
+
+      <header
+        className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-10"
+        style={arrived && !reduced ? { animation: 'stepIn 700ms both var(--ease-sl)' } : undefined}
+      >
         <Logo />
         <button
           type="button"
           onClick={skip}
           disabled={saving}
-          className="text-[13.5px] text-muted transition-colors cursor-pointer hover:text-ink"
+          className="rounded-full px-3 py-1.5 text-[13.5px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
         >
           Skip for now
         </button>
       </header>
 
-      {/* Top-aligned, and sized to its content.
-          Two things were wrong before. `flex-1` on the transcript pushed the
-          answer chips to the bottom edge of the viewport, so the last question
-          sat up by the heading with several hundred pixels of nothing between
-          it and the buttons that answered it — the two halves of one exchange,
-          as far apart as the layout could put them. Centring the block fixed
-          the gap but floated everything in the middle of the screen, which is
-          the same complaint in a different direction.
-          So: it starts at the top and grows downward, the transcript sizes to
-          its content and scrolls past a cap, and the chips sit directly under
-          the question where the eye already is. The empty lower half is not a
-          problem to solve with layout — it is the room, and the card field
-          behind it is what fills it. */}
-      {/* Centred in the viewport and set large.
-          This was `max-w-xl` pinned to the top of the page: on a 2000px
-          display it put a 576px column of 13px type in the upper-left eighth
-          of the screen and left the rest black. A previous comment here
-          argued the empty lower half "is the room" — that was a rationalisation
-          of a layout problem, and the screenshot settles it. A first screen
-          with four short questions on it has no reason to hug the top edge.
-          `justify-center` on a `flex-1` main puts the block on the optical
-          centre, and the type scale below is sized for the screen it is
-          actually shown on rather than for a phone that has been stretched. */}
-      <main className="relative z-10 mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center px-6 pb-12">
-        {/* The arrival, settling in three beats: the heading, the line under
-            it, then a rule drawn across. Slow and staggered rather than
-            snappy — this screen is meant to feel like sitting down, and a
-            fast entrance would undo what the backdrop is doing. */}
-        <div className="pb-7">
-          <h1
-            className="nameplate text-[clamp(38px,6vw,72px)] leading-[0.98] text-ink"
-            style={
-              reduced ? undefined : { animation: 'settleIn 720ms 60ms var(--ease-sl) both' }
-            }
-          >
-            Before we start
-          </h1>
-          <p
-            className="mt-3 max-w-lg text-[clamp(15px,1.35vw,18px)] leading-relaxed text-ink-3"
-            style={
-              reduced ? undefined : { animation: 'settleIn 720ms 220ms var(--ease-sl) both' }
-            }
-          >
-            Four quick questions so answers land the way you like them. You can
-            change any of it later in Settings.
-          </p>
+      {/* Held back until the room has had its moment. Rendered rather than
+          hidden so the layout is already resolved when it appears — a reflow
+          on the first frame of the reveal would undo the whole effect. */}
+      <main
+        className={cn(
+          'relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-10 px-6 pb-14',
+          'lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16 lg:px-10',
+          !arrived && 'pointer-events-none',
+        )}
+        aria-hidden={!arrived}
+        style={
+          reduced
+            ? undefined
+            : arrived
+              ? { animation: 'stepIn 820ms 120ms both var(--ease-sl)' }
+              : { opacity: 0 }
+        }
+      >
+        {/* ── The question ───────────────────────────────────────────── */}
+        <section className="flex flex-col">
+          <Progress index={stepIndex} total={STEPS.length} reduced={reduced} />
+
+          {/* Keyed on the step so every question animates in as its own beat.
+              This is the screen's one authored motion moment: the question and
+              its choices arrive together, and nothing else on the page moves
+              while you are reading them. */}
           <div
-            aria-hidden
-            className="mt-6 h-px w-full origin-left bg-line"
+            key={step.id}
             style={
-              reduced ? undefined : { animation: 'ruleSweep 820ms 380ms var(--ease-sl) both' }
+              reduced ? undefined : { animation: 'stepIn 520ms var(--ease-sl) both' }
             }
-          />
-        </div>
+          >
+            <h1 className="nameplate mt-7 text-[clamp(30px,3.6vw,50px)] leading-[1.02] text-ink">
+              {step.ask}
+            </h1>
+            <p className="mt-3 max-w-md text-[15px] leading-relaxed text-ink-3">
+              {step.aside}
+            </p>
 
-        <div
-          ref={scroller}
-          className="flex max-h-[38vh] flex-col gap-3.5 overflow-y-auto py-1"
-        >
-          {turns.map((t, i) => (
-            <Bubble key={i} role={t.role} text={t.text} reduced={reduced} />
-          ))}
-          {typing && <Typing />}
-        </div>
-
-        {!typing && stepIndex < STEPS.length && (
-          <div className="shrink-0 pt-4">
-            {step.freeform ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  const text = freeText.trim()
-                  answer(text || 'Nothing in particular', text)
-                }}
-                className="flex items-end gap-2 rounded-[22px] border border-line bg-raised px-4 py-3 focus-within:border-brand/50"
-              >
-                <input
-                  autoFocus
-                  value={freeText}
-                  onChange={(e) => setFreeText(e.target.value)}
-                  placeholder="e.g. use analogies, and don't skip the maths"
-                  className="min-w-0 flex-1 bg-transparent text-[13.5px] text-ink outline-none placeholder:text-faint"
-                />
-                <button
-                  type="submit"
-                  disabled={saving}
-                  aria-label="Send"
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand text-[#1a120f] transition-transform cursor-pointer hover:brightness-110 active:scale-95"
+            <div className="mt-7">
+              {step.freeform ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    commit(freeText.trim())
+                  }}
+                  className="flex flex-col gap-3"
                 >
-                  <Icon name="arrowRight" size={15} />
-                </button>
-              </form>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {step.options.map((o, i) => {
-                    const on = picked.includes(o.label)
-                    return (
-                      <button
-                        key={o.value}
-                        type="button"
-                        // On a multi-select the chip is a toggle, so it carries
-                        // pressed state; on a single-select it commits and the
-                        // step advances, so there is no state to carry.
-                        aria-pressed={step.multi ? on : undefined}
-                        onClick={() =>
-                          step.multi
-                            ? setPicked((prev) =>
-                                prev.includes(o.label)
-                                  ? prev.filter((l) => l !== o.label)
-                                  : [...prev, o.label],
-                              )
-                            : answer(o.label, o.value)
-                        }
-                        style={
-                          reduced ? undefined : { animationDelay: `${i * 45}ms` }
-                        }
-                        className={cn(
-                          'rounded-full border px-4 py-2.5 text-[14.5px]',
-                          'transition-all duration-200 cursor-pointer active:scale-[0.97]',
-                          !reduced &&
-                            'motion-safe:animate-[chipIn_320ms_cubic-bezier(0.22,1,0.36,1)_both]',
-                          on
-                            ? 'border-brand bg-brand-soft font-semibold text-brand-deep'
-                            : 'border-line bg-raised text-ink-2 hover:border-brand/50 hover:bg-brand-soft hover:text-brand-deep',
-                        )}
-                      >
-                        {step.multi && (
-                          <Icon
-                            name={on ? 'check' : 'plus'}
-                            size={11}
-                            className="mr-1.5 -mt-px inline-block"
-                          />
-                        )}
-                        {o.label}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Multi-select needs an explicit commit — with no "done" the
-                    only way to move on would be a chip tap, which is the same
-                    gesture as choosing, and nothing would ever be multiple.
-                    Disabled until something is picked so the button never
-                    promises a step it won't take. */}
-                {step.multi && (
-                  <button
-                    type="button"
-                    onClick={commitMulti}
-                    disabled={picked.length === 0}
-                    className={cn(
-                      'self-start rounded-full px-5 py-2.5 text-[14.5px] font-semibold',
-                      'transition-all duration-200',
-                      picked.length > 0
-                        ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.97]'
-                        : 'cursor-default bg-line-soft text-faint',
+                  <textarea
+                    autoFocus
+                    rows={3}
+                    /**
+                     * Capped so the save cannot fail on length.
+                     *
+                     * `teaching_preference` allows 400 server-side and is
+                     * written by *two* steps — the depth pick prefixes this
+                     * text — so the room left here is 400 minus the longest
+                     * depth value. Without the cap a student who typed a
+                     * paragraph got a 422 that discarded the entire intake,
+                     * including the three questions they had already answered.
+                     * Stopping the input is kinder than validating it after
+                     * the fact: there is nothing to correct if it cannot be
+                     * over-typed in the first place.
+                     */
+                    maxLength={FREE_TEXT_MAX}
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        commit(freeText.trim())
+                      }
+                    }}
+                    placeholder="e.g. use analogies, and don't skip the maths"
+                    className="w-full resize-none rounded-[16px] border border-line bg-raised px-4 py-3.5 text-[15px] leading-relaxed text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/60"
+                  />
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-[14.5px] font-semibold text-[#1a120f] transition-all cursor-pointer hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+                    >
+                      {saving ? 'Setting up…' : 'Finish'}
+                      <Icon name="arrowRight" size={14} />
+                    </button>
+                    {!freeText.trim() && (
+                      <span className="text-[13px] text-faint">
+                        or leave it blank
+                      </span>
                     )}
-                  >
-                    {picked.length === 0
-                      ? 'Pick what fits'
-                      : `Continue with ${picked.length}`}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2">
+                    {step.options.map((o, i) => {
+                      const on = picked.includes(o.label)
+                      return (
+                        <button
+                          key={o.value}
+                          type="button"
+                          aria-pressed={step.multi ? on : undefined}
+                          onClick={() =>
+                            step.multi
+                              ? setPicked((prev) =>
+                                  prev.includes(o.label)
+                                    ? prev.filter((l) => l !== o.label)
+                                    : [...prev, o.label],
+                                )
+                              : commit(o.value)
+                          }
+                          style={reduced ? undefined : { animationDelay: `${120 + i * 55}ms` }}
+                          className={cn(
+                            'group flex items-center gap-3.5 rounded-[14px] border px-4 py-3 text-left',
+                            'transition-[border-color,background-color,transform] duration-200',
+                            'cursor-pointer active:scale-[0.995]',
+                            !reduced && 'motion-safe:animate-[stepIn_420ms_var(--ease-sl)_both]',
+                            on
+                              ? 'border-brand/70 bg-brand-soft'
+                              : 'border-line bg-raised/70 hover:border-brand/40 hover:bg-raised',
+                          )}
+                        >
+                          {/* A mark, not a checkbox: it reads as a selection on
+                              a sheet rather than as a form control. */}
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors',
+                              on
+                                ? 'border-brand bg-brand text-[#1a120f]'
+                                : 'border-line text-transparent group-hover:border-brand/50',
+                            )}
+                          >
+                            <Icon name="check" size={12} />
+                          </span>
+                          <span className="min-w-0">
+                            <span
+                              className={cn(
+                                'block text-[15.5px] font-semibold',
+                                on ? 'text-brand-deep' : 'text-ink',
+                              )}
+                            >
+                              {o.label}
+                            </span>
+                            <span className="mt-0.5 block text-[13px] leading-snug text-muted">
+                              {o.hint}
+                            </span>
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
 
-        {saving && (
-          <p className="shrink-0 pt-3 text-center text-[12.5px] text-muted">Setting things up…</p>
-        )}
+                  {step.multi && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        commit(
+                          step.options
+                            .filter((o) => picked.includes(o.label))
+                            // Joined into one sentence rather than stored as a
+                            // list: every consumer interpolates this into a
+                            // prompt, and a JSON array appearing mid-sentence
+                            // would read as a bug to the model.
+                            .map((o) => o.value)
+                            .join('; '),
+                        )
+                      }
+                      disabled={!canContinue}
+                      className={cn(
+                        'mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5',
+                        'text-[14.5px] font-semibold transition-all duration-200',
+                        canContinue
+                          ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.98]'
+                          : 'cursor-default bg-line-soft text-faint',
+                      )}
+                    >
+                      {picked.length === 0 ? 'Pick what fits' : 'Continue'}
+                      {picked.length > 0 && <Icon name="arrowRight" size={14} />}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {stepIndex > 0 && (
+            <button
+              type="button"
+              onClick={back}
+              className="mt-6 inline-flex w-fit items-center gap-1.5 text-[13px] text-muted transition-colors cursor-pointer hover:text-ink"
+            >
+              <Icon name="arrowLeft" size={12} /> Back
+            </button>
+          )}
+        </section>
+
+        {/* ── What the answers did ───────────────────────────────────── */}
+        <Preview
+          paragraphs={sample.paragraphs}
+          shape={shape}
+          reduced={reduced}
+          answered={stepIndex}
+        />
       </main>
     </div>
   )
 }
 
-/* ── Pieces ──────────────────────────────────────────────────────────── */
+/* ── Progress ─────────────────────────────────────────────────────────── */
 
-function Bubble({ role, text, reduced }: { role: 'app' | 'me'; text: string; reduced: boolean }) {
-  const mine = role === 'me'
+/**
+ * Four segments on a rule.
+ *
+ * Ruled stock rather than dots, because this is a measurement — how much is
+ * left — and the app already says measurements sit on a rule. It exists to
+ * answer "how long is this going to take" before the student has to wonder,
+ * which is most of what makes a multi-step form feel like a chore.
+ */
+function Progress({
+  index,
+  total,
+  reduced,
+}: {
+  index: number
+  total: number
+  reduced: boolean
+}) {
   return (
-    <div
-      className={cn(
-        'max-w-[85%]',
-        mine ? 'self-end' : 'self-start',
-        !reduced && 'motion-safe:animate-[bubbleIn_320ms_cubic-bezier(0.22,1,0.36,1)]',
-      )}
-    >
-      <div
-        className={cn(
-          'rounded-[18px] px-4 py-3 text-[15px] leading-relaxed',
-          mine
-            ? 'rounded-br-[4px] bg-brand text-[#1a120f]'
-            : 'rounded-bl-[4px] border border-line bg-raised text-ink',
-        )}
-      >
-        {text}
+    <div className="flex items-center gap-3">
+      <div className="flex flex-1 gap-1.5" role="presentation">
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className={cn(
+              'h-[3px] flex-1 rounded-full',
+              !reduced && 'transition-colors duration-500',
+              i < index ? 'bg-brand/55' : i === index ? 'bg-brand' : 'bg-line',
+            )}
+          />
+        ))}
       </div>
+      <span className="setcode tabular-nums">
+        {index + 1} / {total}
+      </span>
     </div>
   )
 }
 
-function Typing() {
+/* ── Preview ──────────────────────────────────────────────────────────── */
+
+/**
+ * The sample answer, rewritten by whatever has been chosen.
+ *
+ * A Leaf, deliberately: this is a thing you *read*, and it is the one place on
+ * this screen showing the product's actual output rather than its controls.
+ * Labelled a sample and given a fixed question, so it illustrates behaviour
+ * without implying the app has answered anything yet — nothing here may claim
+ * usage that does not exist.
+ */
+function Preview({
+  paragraphs,
+  shape,
+  reduced,
+  answered,
+}: {
+  paragraphs: string[]
+  shape: string | null
+  reduced: boolean
+  answered: number
+}) {
   return (
-    <div className="flex h-8 items-center gap-1.5 self-start rounded-[16px] rounded-bl-[4px] border border-line bg-raised px-3.5">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full bg-brand"
-          style={{ animation: `thinkPulse 1.15s ${i * 0.16}s ease-in-out infinite` }}
-        />
-      ))}
-    </div>
+    <aside className="lg:sticky lg:top-24">
+      <div className="flex items-center gap-2 pb-3">
+        <Icon name="sparkle" size={12} className="text-brand" />
+        <span className="setcode">How answers will read</span>
+      </div>
+
+      <div className="leaf rounded-r-[14px] py-1 pr-5">
+        <p className="text-[13px] font-semibold text-muted">{SAMPLE_QUESTION}</p>
+
+        {/* Keyed on the composed text so a changed answer re-runs the fade.
+            This is the payoff of the whole screen — the moment a choice stops
+            being abstract — so it gets the motion, and the rest of the panel
+            stays still. */}
+        <div
+          key={paragraphs.join('|')}
+          className="mt-3 flex flex-col gap-3"
+          style={reduced ? undefined : { animation: 'sampleIn 480ms var(--ease-sl) both' }}
+        >
+          {paragraphs.map((p, i) => (
+            <p key={i} className="text-[14.5px] leading-[1.7] text-ink-2">
+              {p}
+            </p>
+          ))}
+        </div>
+
+        {shape && (
+          <p
+            key={shape}
+            className="mt-4 border-t border-line pt-3 text-[13px] leading-snug text-muted"
+            style={reduced ? undefined : { animation: 'sampleIn 480ms var(--ease-sl) both' }}
+          >
+            {shape}
+          </p>
+        )}
+      </div>
+
+      <p className="mt-3 text-[12.5px] leading-snug text-faint">
+        {answered === 0
+          ? 'A sample, so you can see what each choice does.'
+          : 'Every one of these is changeable later in Settings.'}
+      </p>
+    </aside>
   )
 }
 
-/**
- * An empty binder, waiting.
- *
- * The first version was two flat radial washes, which is what a blank page
- * looks like when you have added a gradient to it. This is a first impression
- * and it should say what the product is: the visual atom here is a card, a new
- * account is an empty collection, so the room is a field of card silhouettes
- * with the lamp already on over it. It reads as somewhere the student is about
- * to fill rather than as a form they have to get through.
- *
- * **Still cheap on purpose.** First run is the slowest moment in the app — a
- * cold Render instance, the first API call in flight — and it is exactly where
- * a canvas loop turns a first impression into a stutter. Everything here is
- * declarative CSS: transforms and opacity only, so it runs on the compositor,
- * with no rAF, no state, and no work on the main thread. Under reduced motion
- * the whole field holds still and only the lamp remains.
- */
-
-/** Deterministic so the composition is designed rather than rolled per load. */
-/**
- * Dust in the lamplight.
- *
- * The one moving thing on this screen, and the whole reason it reads as a
- * *room* rather than a gradient: still air with motes turning slowly through
- * a beam is the visual signature of a quiet space nobody has walked through
- * in a while. Durations are 30–60s — slow enough that you never catch one
- * moving, you only notice the field has changed when you look back.
- *
- * Nine of them, none larger than 3px. It is texture, not an animation.
- */
-const MOTES = [
-  { x: 22, y: 34, s: 2.5, o: 0.30, d: 0, dur: 52 },
-  { x: 31, y: 58, s: 1.5, o: 0.20, d: 7, dur: 44 },
-  { x: 44, y: 26, s: 2, o: 0.26, d: 3, dur: 60 },
-  { x: 52, y: 47, s: 1.5, o: 0.16, d: 12, dur: 38 },
-  { x: 39, y: 71, s: 3, o: 0.22, d: 5, dur: 56 },
-  { x: 60, y: 63, s: 1.5, o: 0.18, d: 16, dur: 47 },
-  { x: 68, y: 38, s: 2, o: 0.24, d: 9, dur: 41 },
-  { x: 27, y: 18, s: 1.5, o: 0.14, d: 20, dur: 58 },
-  { x: 57, y: 15, s: 2, o: 0.20, d: 14, dur: 50 },
-]
+/* ── Backdrop ─────────────────────────────────────────────────────────── */
 
 /**
  * A quiet study space, after hours.
  *
- * This was a field of nine drifting card outlines under a foil sweep — busy,
- * and pitched at "collection" when the moment is meant to be *arrival*. The
- * brief here is the opposite of spectacle: someone is stepping into a room
- * where the lamp is already on and nothing is happening yet.
+ * Built from four things and no more — a lamp, a table, dust, and the room
+ * falling away. An earlier version had nine drifting card outlines under a
+ * foil sweep, which was busy, pitched at "collection" when the moment is
+ * *arrival*, and cost ten infinite transform animations to say it.
  *
- * So it is built from four things and no more — a lamp, a table, dust, and
- * the room falling away — which is also why it costs almost nothing to run:
- * ten infinite transform animations became nine 2px dots.
+ * `lit` rises with the step: the lamp warms very slightly as the student works
+ * through, so finishing arrives somewhere brighter than it started. It is
+ * meant to be felt rather than noticed.
  */
-function Backdrop() {
-  const reduced = useReducedMotion()
+function Backdrop({ reduced, lit }: { reduced: boolean; lit: number }) {
+  const warmth = LAMP_BASE_WARMTH + Math.min(lit, 3) * 0.018
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       {/* The lamp. One source, warm and high, pooling down the page — a desk
@@ -512,32 +632,27 @@ function Backdrop() {
           page uses. Tungsten rather than brand orange: at this size the brand
           hue reads as an alert, and warm amber reads as a room. */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 transition-[background] duration-[1200ms]"
         style={{
-          background:
-            'radial-gradient(80rem 52rem at 50% -18%, rgba(255,176,116,0.13), transparent 66%),' +
-            'radial-gradient(44rem 34rem at 50% 8%, rgba(255,214,170,0.07), transparent 60%)',
+          background: lampGradient(warmth),
         }}
       />
 
       {/* The table. The product's own graticule, masked to the lit pool so it
-          reads as ruling on a surface the lamp happens to be falling on —
-          not as wallpaper running out to the window frame. */}
+          reads as ruling on a surface the lamp happens to fall on — not as
+          wallpaper running out to the window frame. */}
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage:
-            'linear-gradient(to right, rgba(245,237,228,0.032) 1px, transparent 1px),' +
-            'linear-gradient(to bottom, rgba(245,237,228,0.032) 1px, transparent 1px)',
-          backgroundSize: '30px 30px',
-          maskImage: 'radial-gradient(78% 62% at 50% 26%, #000 22%, transparent 92%)',
-          WebkitMaskImage:
-            'radial-gradient(78% 62% at 50% 26%, #000 22%, transparent 92%)',
+          backgroundImage: TABLE_IMAGE,
+          backgroundSize: TABLE_SIZE,
+          maskImage: TABLE_MASK,
+          WebkitMaskImage: TABLE_MASK,
         }}
       />
 
-      {/* Dust, turning in the light. Skipped entirely under reduced motion —
-          a static dot field is just specks on the screen, so there is nothing
+      {/* Dust, turning in the light. Skipped entirely under reduced motion — a
+          static dot field is just specks on the screen, so there is nothing
           worth keeping once the movement is gone. */}
       {!reduced &&
         MOTES.map((m) => (
@@ -556,14 +671,11 @@ function Backdrop() {
           />
         ))}
 
-      {/* The room falling away. One vignette, not the two that were stacked
-          here before — they were compounding to near-black at the corners and
-          flattening the lamp into a spotlight. */}
+      {/* The room falling away. */}
       <div
         className="absolute inset-0"
         style={{
-          background:
-            'radial-gradient(130% 100% at 50% 30%, transparent 32%, rgba(18,14,12,0.55) 78%, rgba(14,11,9,0.82) 100%)',
+          background: VIGNETTE,
         }}
       />
     </div>

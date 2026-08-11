@@ -68,6 +68,48 @@ _TOKEN_CACHE_MAX = 512
 _token_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _warned_local_verify = False
 
+# The project's published signing keys, keyed by `kid`.
+#
+# Supabase issues ES256 tokens on projects created under asymmetric signing,
+# which is most of them now — and an HS256 secret can never validate one. That
+# is not a misconfiguration to warn about, it is simply a different key type,
+# and the public half is published. Fetching it once turns every authenticated
+# request from "ask Supabase who this is" into local arithmetic.
+_jwks: dict[str, dict[str, Any]] = {}
+_jwks_fetched_at = 0.0
+#: Long, because keys rotate rarely and an unknown `kid` forces a refetch anyway.
+_JWKS_TTL_S = 3600.0
+
+
+async def _get_signing_key(kid: str) -> dict[str, Any] | None:
+    """The public key for `kid`, fetching the key set if it is not known yet.
+
+    A `kid` we have never seen forces a refetch even inside the TTL — that is
+    what makes key rotation a non-event rather than an outage, and it cannot be
+    abused into hammering the endpoint because the result is cached either way.
+    """
+    global _jwks_fetched_at
+    now = time.monotonic()
+    if kid in _jwks and now - _jwks_fetched_at < _JWKS_TTL_S:
+        return _jwks[kid]
+    try:
+        client = await get_client()
+        r = await client.get(
+            "/auth/v1/.well-known/jwks.json",
+            headers={"apikey": settings.supabase_service_role_key},
+        )
+        if r.status_code >= 400:
+            return None
+        keys = {k["kid"]: k for k in r.json().get("keys", []) if k.get("kid")}
+    except (httpx.HTTPError, ValueError, KeyError):
+        # Never fatal: the network path below is still a correct answer.
+        return None
+    if keys:
+        _jwks.clear()
+        _jwks.update(keys)
+        _jwks_fetched_at = now
+    return _jwks.get(kid)
+
 
 async def verify_access_token(token: str) -> dict[str, Any]:
     """Return the decoded JWT claims for a Supabase access token.
@@ -80,7 +122,31 @@ async def verify_access_token(token: str) -> dict[str, Any]:
     `/auth/v1/user` and let Supabase be the final word.
     """
 
-    if settings.supabase_jwt_secret:
+    # Asymmetric first — it is what this project actually issues.
+    try:
+        header = jwt.get_unverified_header(token)
+    except JWTError:
+        raise Unauthorized("Sign-in required.") from None
+    alg = header.get("alg", "")
+    kid = header.get("kid")
+    if kid and alg.startswith(("ES", "RS")):
+        key = await _get_signing_key(kid)
+        if key is not None:
+            try:
+                return jwt.decode(
+                    token,
+                    key,
+                    algorithms=[alg],
+                    audience="authenticated",
+                    options={"verify_aud": False},
+                )
+            except JWTError:
+                # A token that fails against a key we hold is genuinely bad —
+                # but the network path gives Supabase the final word rather
+                # than us guessing, and it is only reached on real failures.
+                pass
+
+    if settings.supabase_jwt_secret and alg == "HS256":
         try:
             claims = jwt.decode(
                 token,

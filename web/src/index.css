@@ -663,25 +663,58 @@
   to   { opacity: 1; transform: translateY(0) scaleY(1); transform-origin: top; }
 }
 
-/* Onboarding turns arriving. Rises and settles on the app's one curve — the
-   intake is the first motion a new student sees, so it has to be the same
-   language everything after it uses. */
-@keyframes bubbleIn {
-  from { opacity: 0; transform: translateY(6px); }
+/* Text revealed by the rule passing under it: a clip opening from the centre
+   outward at the same rate the hairline draws, so the words read as being
+   plotted onto the table rather than fading in next to it. Paired with a small
+   rise so it settles rather than snapping into place. */
+/* A prompt that stays findable without demanding attention. Opacity only, and
+   slow enough that it reads as breathing rather than blinking. */
+@keyframes breathe {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@keyframes wipeIn {
+  from { clip-path: inset(0 50% 0 50%); opacity: 0; transform: translateY(6px); }
+  40%  { opacity: 1; }
+  to   { clip-path: inset(0 0 0 0); opacity: 1; transform: translateY(0); }
+}
+
+/* The onboarding question and its choices arriving as one beat — the screen's
+   single authored motion moment. Slightly longer and softer than a list
+   stagger: this is a question someone is about to think about, not a row
+   appearing. */
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(14px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Onboarding answer chips, dealt in one after another. The slight scale is
-   what separates this from the bubble above: a bubble arrives, a chip is
-   offered — it should read as something being placed in front of you. */
-@keyframes chipIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+/* A panel of the first-run loop diagram arriving. Comes in slightly *behind*
+   the plane with a touch of scale, so the three panels read as being laid down
+   in sequence rather than fading in as a set — the order is the content. */
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* The onboarding card field. Transform and opacity only, so it composites off
-   the main thread — first run is the slowest moment in the app and the one
-   place a background must not compete with the first API call. */
+/* The hand-off between two panels, drawn rather than revealed: the line grows
+   from the panel it leaves toward the one it feeds. `transform-origin` is set
+   on the element so this works for both the vertical (phone) and horizontal
+   (desktop) orientation. */
+@keyframes drawLine {
+  from { transform: scale3d(0, 0, 1); opacity: 0; }
+  to   { transform: scale3d(1, 1, 1); opacity: 1; }
+}
+
+/* The sample answer rewriting itself when a choice changes. A short rise with
+   a blur coming off it, so the text reads as *settling into focus* rather than
+   as a new element sliding in — the panel is the same panel, saying something
+   different. */
+@keyframes sampleIn {
+  from { opacity: 0; transform: translateY(6px); filter: blur(5px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
 /* Dust turning in lamplight, on the onboarding backdrop. Drifts up and across
    by a few pixels over the better part of a minute — at this speed you never
    see one move, you only notice the field is not where you left it. Replaces
@@ -706,6 +739,64 @@
   to   { opacity: 0; transform: scale(1.045); }
 }
 
+/* ── Threshold scene: the lamp clicks on ──────────────────────────────
+   Its own vocabulary, on purpose. The desk scene is objects arriving on a lit
+   surface (translate, scaleX); this is a space becoming visible (expansion
+   from a point). Two moments that mean opposite things should not move the
+   same way. */
+
+/* The lamp itself. Blooms outward from its source with an exponential
+   ease-out, which is how light actually fills a room — fast at first, then
+   settling — rather than the linear ramp of a fade. */
+@keyframes lampClick {
+  from { opacity: 0; transform: scale(0.42); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* The table found by the beam. Shares the lamp's origin so the ruling reads as
+   revealed by the light spreading, not as a layer fading in beside it. */
+@keyframes roomIn {
+  from { opacity: 0; transform: scale(0.68); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Dust becomes visible only once there is light to catch it. Opacity alone —
+   each mote is already running its own slow drift underneath. */
+@keyframes dustIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* A pulse leaving the lamp and travelling out across the room. Scales from
+   nothing and fades as it widens, so it reads as light reaching further rather
+   than as a circle growing. */
+@keyframes pulseOut {
+  from { transform: scale(0.04); opacity: 0; }
+  18%  { opacity: 1; }
+  to   { transform: scale(2.6); opacity: 0; }
+}
+
+/* One side of the desk frame arriving from its own edge. `--from` carries the
+   direction so a single keyframe serves all four. */
+@keyframes sideIn {
+  from { transform: var(--from); opacity: 0; }
+  to   { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+
+/* The surface inside the frame, warming once the sides have met. */
+@keyframes surfaceIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* The frame opening out past the viewport — what turns "four lines met" into
+   "the space is yours". Scale and fade only, so it composites. */
+@keyframes frameOpen {
+  from { transform: scale(1); opacity: 1; }
+  70%  { opacity: 1; }
+  to   { transform: scale(4.2); opacity: 0; }
+}
+
 /* The desk lamp warming, not snapping on. */
 @keyframes lampUp {
   from { opacity: 0; transform: scale(0.94); }
@@ -721,18 +812,6 @@
 /* A sheet dealt onto the table: in from above, landing at its own angle.
    `--tx`/`--tr` carry the resting position so the keyframe can own
    `transform` outright — setting it inline as well would be overwritten the
-   instant the animation started, which is the whole layout gone. */
-@keyframes sheetDeal {
-  from {
-    opacity: 0;
-    transform: translate(calc(-50% + var(--tx, 0px)), -46px) rotate(0deg) scale(0.94);
-  }
-  to {
-    opacity: 1;
-    transform: translate(calc(-50% + var(--tx, 0px)), 0) rotate(var(--tr, 0deg)) scale(1);
-  }
-}
-
 /* The signature hairline, drawn out from the centre. */
 @keyframes ruleSweep {
   from { opacity: 0; transform: scaleX(0); }
@@ -741,14 +820,6 @@
 
 @keyframes lineUp {
   from { opacity: 0; transform: translateY(7px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* The onboarding heading settling in. Longer and softer than `bubbleIn`: a
-   bubble arrives in a conversation already underway, this is the first thing
-   on a screen someone has just landed on. */
-@keyframes settleIn {
-  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 

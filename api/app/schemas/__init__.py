@@ -353,7 +353,15 @@ class StudentModelIn(BaseModel):
     """Explicit, student-set fields only — computed fields (weak/strong
     areas, streak) are never accepted from the client."""
 
-    learning_style: str | None = Field(default=None, max_length=60)
+    # 60 was sized for a single phrase and silently broke first-run intake the
+    # moment onboarding became multi-select. Two picks join to ~75 characters,
+    # which 422'd the whole PATCH — and because the intake sends one patch, the
+    # session length and teaching preference were discarded along with it. The
+    # student answered every question, watched the sample answer rewrite itself,
+    # and nothing was saved. 240 holds all four options joined (163) with room
+    # for rewording. Stored as JSON in `settings`, so there is no column width
+    # behind this number — it was the only thing enforcing the old ceiling.
+    learning_style: str | None = Field(default=None, max_length=240)
     session_length_minutes: int | None = Field(default=None, ge=5, le=180)
     exam_context: str | None = Field(default=None, max_length=140)
     teaching_preference: str | None = Field(default=None, max_length=400)

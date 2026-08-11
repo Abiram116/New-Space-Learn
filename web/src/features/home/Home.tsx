@@ -24,6 +24,7 @@ import type {
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { FirstRun } from './FirstRun'
 import { Tip } from '../../components/ui/Tip'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { CountUp, Rise, Stagger } from '../../components/ui/motion'
@@ -52,6 +53,42 @@ export function Home() {
   const emptySubjects = spaces.filter((sp) => sp.subspaces.length === 0).slice(0, 3)
 
   const due = stats.data?.cards_due ?? 0
+
+  /**
+   * Decide nothing until the subjects are in.
+   *
+   * Home has two entirely different shapes — the introduction for an empty
+   * account, the dashboard for a working one — and which applies is not known
+   * until `/spaces` answers. The old order rendered the *dashboard* while that
+   * was still in flight and corrected itself afterwards, so a new account got a
+   * flash of standing figures under a brief headline before being replaced by
+   * "Bring what you're studying".
+   *
+   * It looked intermittent because the brief is cached for half an hour: on the
+   * first reload the cache still held a headline written when the account had
+   * subjects, which is what made the flash legible. Later reloads found a cache
+   * matching the empty state and the swap became invisible — same bug, quieter.
+   *
+   * Guessing was never worth it. `/spaces` is one round trip now, and a brief
+   * skeleton beats showing someone a dashboard that is about to be taken away.
+   */
+  if (spacesLoading) return <HomeSkeleton />
+
+  /* A brand-new account gets the introduction *instead of* the dashboard, not
+     threaded through it. Until there is a subject there is nothing to brief,
+     nothing to measure and nothing to resume, and every one of those bands is
+     an argument that the product is empty. Home returns the moment there is
+     anything real to put on it. */
+  if (!anySpaces) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
+          <FirstRun onCreate={() => setNewSpaceOpen(true)} />
+        </div>
+        <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -107,20 +144,6 @@ export function Home() {
             </div>
           )}
         </header>
-
-        {/* ── First run ── */}
-        {!spacesLoading && !anySpaces && (
-          /* First words the product ever says. It should sound like the
-             companion introducing itself and what it will do, not a
-             database reporting zero rows. */
-          <EmptyState
-            className="my-6"
-            icon="sparkle"
-            title="Let's start with what you're studying"
-            description="Give me a subject and a topic inside it, then drop in your lecture notes or a PDF. From there I'll answer from your own material, and turn what you cover into cards, notes and quizzes."
-            action={<Button onClick={() => setNewSpaceOpen(true)}>Create your first subject</Button>}
-          />
-        )}
 
         {/* ── Standing: four figures on one rule, the fortnight as evidence ──
 
@@ -597,3 +620,32 @@ function dayLabel(iso: string) {
 
 // `Stats` is referenced by the async hook's generic inference above.
 export type { Stats }
+
+/**
+ * Home while `/spaces` is in flight.
+ *
+ * Deliberately shaped like neither outcome. It carries a heading block and a
+ * row of figures because *most* accounts land on the dashboard, but nothing in
+ * it commits to content — showing a real headline here is what produced the
+ * flash this replaces.
+ */
+function HomeSkeleton() {
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto" aria-busy="true">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
+        <div className="flex flex-col gap-3 pb-8">
+          <Skeleton className="h-11 w-2/3 max-w-md rounded-lg" />
+          <Skeleton className="h-4 w-1/2 max-w-sm rounded" />
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line pt-7 lg:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col gap-2">
+              <Skeleton className="h-3 w-20 rounded" />
+              <Skeleton className="h-8 w-16 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

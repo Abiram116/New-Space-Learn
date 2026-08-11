@@ -34,6 +34,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useReducedMotion } from '../../components/ui/motion'
+import { lampGradient, MOTES, TABLE_IMAGE, TABLE_MASK, TABLE_SIZE, VIGNETTE } from '../../lib/room'
 
 /**
  * `desk` — finishing onboarding. The payoff moment, so it is the long one:
@@ -56,9 +57,33 @@ type Phase = 'in' | 'out'
  * registered as having happened. Both are unhurried now — the time is the
  * experience, and it is covering real work either way.
  */
-const IN_MS: Record<HandoffVariant, number> = { desk: 1850, threshold: 1550 }
+// Both are sized so the choreography *finishes* before the uncover. `desk`:
+// the frame lands at ~1250ms, opens out by ~2750ms, and the closing line
+// settles at ~3080ms. `threshold`: the last pulse clears at ~2000ms. Cutting
+// either short was the specific complaint that the transition did not complete
+// before the page arrived.
+const IN_MS: Record<HandoffVariant, number> = { desk: 3250, threshold: 2100 }
 /** The uncover. Slower than the cover — leaving should feel like a reveal. */
 const OUT_MS: Record<HandoffVariant, number> = { desk: 620, threshold: 560 }
+
+/**
+ * How long the curtain takes to become fully opaque, and how long to wait
+ * after that before swapping the page underneath it.
+ *
+ * These two constants are why the destination used to flicker into view
+ * mid-transition. The cover animation ran for 260ms and the route change fired
+ * at `wait(260)` — the same number written twice, in two files' worth of
+ * distance from each other, with **zero margin between them**. The navigation
+ * landed on the exact frame the curtain first reached full opacity, so any
+ * jitter at all (a long frame, React committing a beat late, the animation
+ * starting one frame after the timer) swapped the page while the curtain was
+ * still translucent, and you watched the dashboard appear *through* it.
+ *
+ * Now the fade owns `COVER_MS`, the sequencer waits `COVER_MS + COVER_SETTLE`,
+ * and the margin is stated rather than assumed.
+ */
+const COVER_MS = 420
+const COVER_SETTLE_MS = 110
 /** Reduced motion: enough to hide the swap, not enough to be a sequence. */
 const REDUCED_IN_MS = 220
 const REDUCED_OUT_MS = 200
@@ -83,6 +108,11 @@ type HandoffApi = {
   play: (variant: HandoffVariant, work: () => void | Promise<void>) => Promise<void>
   /** True from the first frame of the cover to the last frame of the uncover. */
   playing: boolean
+  /**
+   * True once the destination should start its own entrance — either no
+   * handoff is running, or the curtain has begun lifting.
+   */
+  revealing: boolean
 }
 
 const Ctx = createContext<HandoffApi | null>(null)
@@ -111,6 +141,27 @@ export function useHandoffPlaying(): boolean {
   return useContext(Ctx)?.playing ?? false
 }
 
+/**
+ * Should this screen play its entrance yet?
+ *
+ * The destination mounts *under* the curtain — that is the point, it is how the
+ * page is finished and painted before anyone sees it. But it also meant every
+ * entrance animation on that page ran and completed during the hold, so by the
+ * time the curtain lifted the dashboard was already sitting there, static. The
+ * first-run introduction has a nine-beat sequence nobody ever saw.
+ *
+ * So a covered screen waits. This flips true the moment the curtain starts
+ * lifting, and the entrance plays *through* the uncover — the content arriving
+ * as the cover leaves, which is the thing that reads as one continuous move
+ * rather than two events that happened to be adjacent.
+ *
+ * Non-throwing: returns true with no provider, so a screen rendered outside a
+ * handoff animates immediately and nothing has to know whether it is covered.
+ */
+export function useHandoffReveal(): boolean {
+  return useContext(Ctx)?.revealing ?? true
+}
+
 const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 
 /**
@@ -137,21 +188,25 @@ const painted = () =>
 export async function runHandoffSequence({
   inMs,
   outMs,
+  coverMs = COVER_MS,
   ceilingMs = WORK_CEILING_MS,
   work,
   onPhase,
 }: {
   inMs: number
   outMs: number
+  /** Must match the curtain's fade-in, or the swap shows through it. */
+  coverMs?: number
   ceilingMs?: number
   work: () => void | Promise<void>
   onPhase: (phase: Phase | null) => void
 }): Promise<void> {
   try {
     onPhase('in')
-    // Let the cover land before the destination starts mounting, or the work
-    // competes with the overlay's own first frames.
-    await wait(Math.min(260, inMs))
+    // Do not touch the page until the curtain is provably opaque. The margin
+    // on top of the fade is the whole fix for the destination flickering into
+    // view mid-transition — see COVER_MS.
+    await wait(Math.min(coverMs + COVER_SETTLE_MS, inMs))
 
     const started = Date.now()
     try {
@@ -201,7 +256,14 @@ export function HandoffProvider({ children }: { children: ReactNode }) {
     [reduced],
   )
 
-  const api = useMemo(() => ({ play, playing: state !== null }), [play, state])
+  const api = useMemo(
+    () => ({
+      play,
+      playing: state !== null,
+      revealing: state === null || state.phase === 'out',
+    }),
+    [play, state],
+  )
 
   return (
     <Ctx.Provider value={api}>
@@ -213,19 +275,6 @@ export function HandoffProvider({ children }: { children: ReactNode }) {
 
 /* ── The curtain ─────────────────────────────────────────────────────── */
 
-/**
- * Where the three sheets land. Slight rotations — dealt, not stacked.
- *
- * The spread is `min(164px, 26vw)` rather than a flat 164px: at 375px the
- * outer two sat 220px from centre inside a 187px half-width and were sliced
- * off by the curtain's `overflow-hidden`, so the phone version of the payoff
- * moment was one sheet and two offcuts.
- */
-const SHEETS = [
-  { key: 'l', x: 'calc(min(164px, 26vw) * -1)', r: -7, d: 620 },
-  { key: 'c', x: '0px', r: 1.5, d: 740 },
-  { key: 'r', x: 'min(164px, 26vw)', r: 8, d: 860 },
-]
 
 function Curtain({
   variant,
@@ -236,29 +285,170 @@ function Curtain({
   phase: Phase
   reduced: boolean
 }) {
-  const desk = variant === 'desk'
   return (
     <div
       // Announced rather than silent: a full-screen cover with no accessible
-      // name is a screen reader dead end. `alert` would interrupt; `status`
-      // is the polite register this deserves.
+      // name is a screen reader dead end. `alert` would interrupt; `status` is
+      // the polite register this deserves.
       role="status"
       aria-live="polite"
+      aria-label={variant === 'desk' ? 'Setting up your desk' : 'Opening Space Learn'}
       className="fixed inset-0 z-[100] overflow-hidden bg-canvas"
       style={{
+        // The cover duration is COVER_MS, the same constant the sequencer waits
+        // on. Writing the number here independently is what let the two drift
+        // into a zero-margin race in the first place.
         animation: `${phase === 'in' ? 'curtainIn' : 'curtainOut'} ${
           phase === 'in'
             ? reduced
               ? REDUCED_IN_MS
-              : 260
+              : COVER_MS
             : reduced
               ? REDUCED_OUT_MS
               : OUT_MS[variant]
         }ms var(--ease-sl) both`,
       }}
     >
-      {/* The lamp coming up. Present in both variants — it is the constant
-          that makes the two handoffs feel like one product. */}
+      {variant === 'desk' ? (
+        <DeskScene reduced={reduced} />
+      ) : (
+        <ThresholdScene reduced={reduced} />
+      )}
+    </div>
+  )
+}
+
+
+/* ── Threshold: the room is found, ring by ring ──────────────────────── */
+
+/**
+ * Signing in. A pulse goes out and the room comes back with it.
+ *
+ * The previous version was a lamp fading up under a line of text, and text was
+ * the wrong instrument entirely — a caption explaining a moment that should
+ * have been carried by the moment. This is motion doing the work: a point of
+ * light at the top of the frame, then rings travelling outward from it, and the
+ * table becoming visible in their wake. Sonar, essentially — the shape of
+ * *finding* a space rather than being told about one.
+ *
+ * **It ends on the frame the destination starts on.** The rings are transient;
+ * what remains when they have passed is the onboarding backdrop exactly — same
+ * lamp, same graticule, same mask, same dust, all from `lib/room`. So the
+ * curtain lifting is a continuity cut onto an identical picture rather than a
+ * crossfade between two similar ones.
+ */
+function ThresholdScene({ reduced }: { reduced: boolean }) {
+  return (
+    <>
+      {/* The lamp, blooming from its source rather than fading up as a wash —
+          a lamp has a position, and the eye needs it for the room to have a
+          shape. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: lampGradient(),
+          transformOrigin: '50% 0%',
+          animation: reduced ? undefined : 'lampClick 1250ms var(--ease-out-expo) both',
+        }}
+      />
+
+      {/* The pulse. Three rings leaving the lamp's position, each one wider and
+          fainter than the last, so the room reads as being *found* outward from
+          a source rather than switched on all at once. */}
+      {!reduced && (
+        <div className="pointer-events-none absolute inset-x-0 top-0 grid h-0 place-items-center">
+          {[0, 260, 540].map((d, i) => (
+            <span
+              key={d}
+              className="absolute rounded-full border"
+              style={{
+                width: '34rem',
+                height: '34rem',
+                marginTop: '-17rem',
+                borderColor: `rgba(255,196,140,${0.3 - i * 0.07})`,
+                animation: `pulseOut ${1900 + i * 160}ms ${180 + d}ms var(--ease-out-expo) both`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* The table, found by the pulse. Shares the lamp's origin so the ruling
+          appears to be revealed by the light spreading across it. */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: TABLE_IMAGE,
+          backgroundSize: TABLE_SIZE,
+          maskImage: TABLE_MASK,
+          WebkitMaskImage: TABLE_MASK,
+          transformOrigin: '50% 20%',
+          animation: reduced ? undefined : 'roomIn 1500ms 320ms var(--ease-out-expo) both',
+        }}
+      />
+
+      {/* Dust, arriving last — you only see it once there is enough light to
+          catch it, which is also the moment the room stops being empty. */}
+      {!reduced && (
+        <div
+          className="absolute inset-0"
+          style={{ animation: 'dustIn 1000ms 900ms var(--ease-sl) both' }}
+        >
+          {MOTES.map((m) => (
+            <div
+              key={`${m.x}-${m.y}`}
+              className="absolute rounded-full bg-[rgb(255,232,206)]"
+              style={{
+                left: `${m.x}%`,
+                top: `${m.y}%`,
+                width: m.s,
+                height: m.s,
+                opacity: m.o,
+                filter: 'blur(0.4px)',
+                animation: `mote ${m.dur}s ${m.d}s ease-in-out infinite`,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div
+        className="absolute inset-0"
+        style={{ background: VIGNETTE }}
+      />
+    </>
+  )
+}
+
+/* ── Desk: four answers, one workspace ───────────────────────────────── */
+
+/** The four sides of the frame, and the edge each one flies in from. */
+const SIDES = [
+  { key: 't', cls: 'left-0 top-0 h-px w-full origin-left', from: 'translate3d(0,-42vh,0)' },
+  { key: 'b', cls: 'bottom-0 left-0 h-px w-full origin-right', from: 'translate3d(0,42vh,0)' },
+  { key: 'l', cls: 'left-0 top-0 h-full w-px origin-top', from: 'translate3d(-42vw,0,0)' },
+  { key: 'r', cls: 'right-0 top-0 h-full w-px origin-bottom', from: 'translate3d(42vw,0,0)' },
+]
+
+/**
+ * Finishing the intake. Four answers close into one workspace.
+ *
+ * Two attempts preceded this and both were wrong in instructive ways. Card
+ * outlines falling onto a table were generic — floating rectangles that could
+ * have come from any template. Drafting the dashboard's plan was closer in
+ * spirit but read as a *chart*: a row of gold bars and some rules, which says
+ * "here is a graph" rather than "here is your desk".
+ *
+ * So it is built from what actually just happened. The student answered four
+ * questions; four strokes converge from the four edges, close into a frame,
+ * and that frame opens out to become the workspace. It is the shape of things
+ * being *settled* — and it uses the opposite motion to the threshold scene by
+ * design: that one travels outward from a point to find a room, this one
+ * travels inward to four edges to build one.
+ */
+function DeskScene({ reduced }: { reduced: boolean }) {
+  return (
+    <>
       <div
         className="absolute inset-0"
         style={{
@@ -269,69 +459,69 @@ function Curtain({
         }}
       />
 
-      {/* The table ruling itself in, from the middle outward. */}
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage:
-            'linear-gradient(to right, rgba(245,237,228,0.05) 1px, transparent 1px),' +
-            'linear-gradient(to bottom, rgba(245,237,228,0.05) 1px, transparent 1px)',
-          backgroundSize: '30px 30px',
-          maskImage: 'radial-gradient(70% 58% at 50% 42%, #000 20%, transparent 92%)',
-          WebkitMaskImage: 'radial-gradient(70% 58% at 50% 42%, #000 20%, transparent 92%)',
-          animation: reduced
-            ? undefined
-            : 'tableIn 1200ms 120ms var(--ease-sl) both',
+          backgroundImage: TABLE_IMAGE,
+          backgroundSize: TABLE_SIZE,
+          maskImage: 'radial-gradient(70% 58% at 50% 46%, #000 20%, transparent 92%)',
+          WebkitMaskImage: 'radial-gradient(70% 58% at 50% 46%, #000 20%, transparent 92%)',
+          animation: reduced ? undefined : 'tableIn 1400ms 200ms var(--ease-sl) both',
         }}
       />
 
-      {desk && !reduced && (
+      {!reduced && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="relative h-[190px] w-full max-w-lg">
-            {/* Three sheets dealt onto the table — the dashboard being laid
-                out, in the product's own material rather than a spinner. */}
-            {SHEETS.map((s) => (
-              <div
+          {/* The frame. Each side arrives from its own edge and lands; then the
+              whole thing opens outward past the viewport, which is what turns
+              "four lines met" into "the space is yours". */}
+          <div
+            className="relative h-[42vmin] w-[62vmin]"
+            style={{ animation: 'frameOpen 1500ms 1250ms var(--ease-out-expo) both' }}
+          >
+            {SIDES.map((s, i) => (
+              <span
                 key={s.key}
-                className="absolute left-1/2 top-0 h-[150px] w-[92px] rounded-[10px] border border-[rgba(255,237,220,0.16)] sm:w-[112px]"
+                className={`absolute bg-[rgba(255,237,220,0.55)] ${s.cls}`}
                 style={{
-                  background:
-                    'linear-gradient(155deg, rgba(255,237,220,0.10), rgba(255,237,220,0.02) 60%)',
-                  boxShadow: '0 18px 40px -22px rgba(0,0,0,0.9)',
-                  ['--tx' as string]: s.x,
-                  ['--tr' as string]: `${s.r}deg`,
-                  animation: `sheetDeal 720ms ${s.d}ms var(--ease-sl) both`,
+                  ['--from' as string]: s.from,
+                  animation: `sideIn 900ms ${240 + i * 110}ms var(--ease-out-expo) both`,
                 }}
               />
             ))}
+            {/* The surface inside it, warming as the frame closes. */}
+            <span
+              className="absolute inset-0"
+              style={{
+                background:
+                  'linear-gradient(150deg, rgba(255,237,220,0.07), rgba(255,237,220,0.015) 60%)',
+                animation: 'surfaceIn 900ms 900ms var(--ease-sl) both',
+              }}
+            />
           </div>
         </div>
       )}
 
       {/* The rule, then the line. The sweeping hairline is the product's
-          signature beat — it is on the boot splash, so the first run and every
-          run after it open the same way. */}
-      <div className="absolute inset-x-0 bottom-[18%] flex flex-col items-center gap-3.5 px-6">
+          signature beat — it is on the boot splash too, so finishing the intake
+          rhymes with every launch after it. */}
+      <div className="absolute inset-x-0 bottom-[16%] flex flex-col items-center gap-3.5 px-6">
         <div
           className="h-px w-full max-w-xs bg-[rgba(255,237,220,0.22)]"
           style={{
             transformOrigin: 'center',
-            animation: reduced
-              ? undefined
-              : `ruleSweep 820ms ${desk ? 900 : 420}ms var(--ease-sl) both`,
+            animation: reduced ? undefined : 'ruleSweep 820ms 2180ms var(--ease-sl) both',
           }}
         />
         <p
           className="text-center text-[13px] tracking-[0.02em] text-ink-3"
           style={{
-            animation: reduced
-              ? undefined
-              : `lineUp 680ms ${desk ? 1120 : 700}ms var(--ease-sl) both`,
+            animation: reduced ? undefined : 'lineUp 680ms 2400ms var(--ease-sl) both',
           }}
         >
-          {desk ? 'Your desk is set.' : 'Come on in.'}
+          Your desk is set.
         </p>
       </div>
-    </div>
+    </>
   )
 }
