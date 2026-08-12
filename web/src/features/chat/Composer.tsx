@@ -160,7 +160,7 @@ export function Composer({
               title={assessing ? 'Paused — finish the assessment first' : 'Send'}
               className={cn(
                 'grid h-8 w-8 shrink-0 place-items-center rounded-full',
-                'transition-all duration-200 cursor-pointer',
+                't-control duration-200 cursor-pointer',
                 canSend
                   ? 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-95'
                   : 'cursor-default bg-line-soft text-faint',

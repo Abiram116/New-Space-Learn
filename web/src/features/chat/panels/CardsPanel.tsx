@@ -17,9 +17,10 @@ import { Link } from 'react-router-dom'
 import { generateCards, gradeCard, listCards, listDecks } from '../../../api/flashcards'
 import type { Deck, Flashcard, Grade } from '../../../api/types'
 import { Icon } from '../../../components/ui/Icon'
+import { CardFace } from '../../flashcards/Review'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
-import { Rise, Stagger } from '../../../components/ui/motion'
+import { Stagger } from '../../../components/ui/motion'
 import { clearStatsCache } from '../../../lib/briefCache'
 import { cn } from '../../../lib/cn'
 import { nextIntervalLabel } from '../../../lib/schedule'
@@ -35,7 +36,7 @@ const GRADES: { key: Grade; label: string }[] = [
 ]
 
 export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const decks = useAsync(() => listDecks(subspaceId), [subspaceId])
+  const decks = useAsync(() => listDecks(subspaceId), [subspaceId], `decks:${subspaceId}`)
   const [reviewing, setReviewing] = useState<Deck | null>(null)
   const list = decks.data ?? []
   const due = list.reduce((n, d) => n + d.due, 0)
@@ -55,7 +56,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
   return (
     // See QuizzesPanel: `flex-1` rather than `min-h-full`, so filling the dock
     // doesn't depend on a percentage resolving through a scroll container.
-    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       {due > 0 && (
         <div className="flex items-baseline gap-2 rounded-[10px] border border-brand/25 bg-brand-tint px-2.5 py-2">
           <span className="nameplate text-[20px] tabular-nums text-brand">{due}</span>
@@ -82,7 +83,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
                   <button
                     type="button"
                     onClick={() => setReviewing(d)}
-                    className="shrink-0 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-[#1a120f] transition-all cursor-pointer hover:brightness-110 active:scale-95"
+                    className="shrink-0 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-95"
                   >
                     Review {d.due}
                   </button>
@@ -101,7 +102,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
       >
         Manage decks <Icon name="arrowRight" size={12} />
       </Link>
-    </Rise>
+    </div>
   )
 }
 
@@ -155,7 +156,7 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
       // to the dock height and pinned to the top they sat under a column of
       // nothing. A finished state is the one place centring is right — there
       // is no next thing below it to stay close to.
-      <Rise distance={5} className="flex min-h-0 flex-1 flex-col justify-center gap-3">
+      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
         <div className="rounded-xl border border-mint/35 bg-mint-soft/50 px-3 py-3 text-center">
           <Icon name="check" size={18} className="text-mint-deep" />
           <div className="mt-1 text-[13px] font-bold text-mint-deep">
@@ -172,7 +173,7 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
         >
           Done
         </button>
-      </Rise>
+      </div>
     )
   }
 
@@ -189,21 +190,39 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
         <span className="setcode ml-auto">{cards.length - index} left</span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-line bg-raised px-3 py-3">
-        <span className="setcode">{flipped ? 'Answer' : 'Question'}</span>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
-          {flipped ? card.back : card.front}
-        </p>
-        {flipped && card.source && (
-          <span className="setcode mt-2 block truncate">{card.source}</span>
-        )}
+      {/* The real card, and the real flip.
+          This was a full-height bordered box with the text at the top — a
+          panel, not a card, stretched down the whole column with nothing in
+          the bottom two thirds of it. A flashcard is an *object you hold*, and
+          the app already has one: `CardFace` plus a genuine `rotateY` on a
+          preserved-3d parent. Reusing it means the dock and the full page flip
+          the same way instead of the dock quietly being the neglected copy.
+          Fixed height and centred, so it reads as a card sitting on the table
+          rather than as the column's wallpaper. */}
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <div className="w-full [perspective:1400px]" style={{ height: 'min(52vh, 280px)' }}>
+          <button
+            type="button"
+            onClick={() => setFlipped((f) => !f)}
+            aria-label={flipped ? 'Show question' : 'Show answer'}
+            className={cn(
+              'relative h-full w-full cursor-pointer text-left',
+              '[transform-style:preserve-3d] transition-transform duration-500',
+              'motion-reduce:transition-none',
+            )}
+            style={{ transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
+          >
+            <CardFace side="front" text={card.front} compact hint="Tap to flip" />
+            <CardFace side="back" text={card.back} source={card.source} compact />
+          </button>
+        </div>
       </div>
 
       {!flipped ? (
         <button
           type="button"
           onClick={() => setFlipped(true)}
-          className="rounded-[10px] bg-brand px-3 py-2 text-[12.5px] font-bold text-[#1a120f] transition-all cursor-pointer hover:brightness-110 active:scale-[0.98]"
+          className="shrink-0 rounded-[10px] bg-brand px-3 py-2 text-[12.5px] font-bold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98]"
         >
           Show answer
         </button>
@@ -211,7 +230,7 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
         // Four figures on a rule, per the design track — grading is one
         // ordered scale, not four categories, and the intervals say so in
         // real numbers.
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid shrink-0 grid-cols-4 gap-1">
           {GRADES.map((g) => (
             <button
               key={g.key}
@@ -259,7 +278,7 @@ function MakeCards({ subspaceId, onMade }: { subspaceId: string; onMade: () => v
       disabled={busy}
       className={cn(
         'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
-        'text-[12.5px] font-semibold transition-all duration-200 cursor-pointer',
+        'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
         busy
           ? 'cursor-default bg-line-soft text-muted'
           : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',

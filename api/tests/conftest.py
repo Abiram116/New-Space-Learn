@@ -30,6 +30,19 @@ class FakeDb:
     def seed(self, table: str, rows: list[dict[str, Any]]) -> None:
         self.rows[table] = rows
 
+    async def db_rpc(self, fn: str, args: dict):
+        """Refuse, loudly.
+
+        The fake models tables, not Postgres functions, so it cannot answer an
+        RPC faithfully. Raising sends callers down their documented fallback —
+        which is the path these tests are asserting on — and, more importantly,
+        stops an unmocked RPC from quietly making a real network call and
+        returning the developer's own data instead of the seeded fixture. That
+        is what happened when `student_snapshot` shipped: six tests failed
+        against live rows.
+        """
+        raise ConnectionError(f"FakeDb has no RPC {fn!r}")
+
     async def db_select(
         self,
         table: str,
@@ -78,6 +91,7 @@ def db(monkeypatch: pytest.MonkeyPatch) -> FakeDb:
 
     fake = FakeDb()
     monkeypatch.setattr(supabase_module, "db_select", fake.db_select)
+    monkeypatch.setattr(supabase_module, "db_rpc", fake.db_rpc)
     monkeypatch.setattr(supabase_module, "db_update", fake.db_update)
     monkeypatch.setattr(supabase_module, "db_insert", fake.db_insert)
     return fake

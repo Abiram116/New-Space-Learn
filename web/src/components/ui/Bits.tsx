@@ -61,8 +61,8 @@ export function ProgressBar({
   return (
     <div className={cn('h-1.5 overflow-hidden rounded-full', toneTrack[tone], className)}>
       <div
-        className={cn('h-full rounded-full transition-[width] duration-500 ease-out', toneBar[tone])}
-        style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
+        className={cn('h-full w-full origin-left t-meter duration-500 ease-out', toneBar[tone])}
+        style={{ transform: `scaleX(${Math.min(1, Math.max(0, value / 100))})` }}
       />
     </div>
   )

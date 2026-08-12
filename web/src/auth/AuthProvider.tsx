@@ -8,6 +8,7 @@
 
 import type { ReactNode } from 'react'
 import { clearBriefCache } from '../lib/briefCache'
+import { clearCache } from '../lib/asyncCache'
 import { hideBootSplash } from '../lib/bootSplash'
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -84,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setSession(null)
             tokenRef.current = null
             clearBriefCache()
+            clearCache()
           }
         })
         .finally(() => {
@@ -153,8 +155,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {
         // The next person to sign in on this browser must not inherit the
-        // previous user's personalised brief.
+        // previous user's personalised brief — or their notes, decks and
+        // quizzes, which the in-memory request cache would otherwise still be
+        // holding and would serve instantly to whoever signs in next.
         clearBriefCache()
+        clearCache()
         await signOut()
         setSession(null)
         tokenRef.current = null

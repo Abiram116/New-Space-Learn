@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { PageSpinner } from '../components/ui/PageSpinner'
+import { FirstPaintFallback } from '../components/ui/FirstPaint'
 
 /**
  * The heaviest routes, split out of the initial bundle.
@@ -72,7 +72,7 @@ export const SkillsView = lazy(() =>
 )
 
 export function Lazy({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<PageSpinner />}>{children}</Suspense>
+  return <Suspense fallback={<FirstPaintFallback />}>{children}</Suspense>
 }
 
 /**

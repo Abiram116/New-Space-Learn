@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isOpenIn, toggleIn } from './treeState'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { Icon, type IconName } from '../../components/ui/Icon'
@@ -35,17 +36,13 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   // opening a second rename closes the first by construction.
   const [renameText, setRenameText] = useState('')
 
-  const toggle = (id: string) => setCollapsed((prev) => ({ ...prev, [id]: !(prev[id] ?? false) }))
-
-  const isOpen = (id: string) => {
-    const explicit = collapsed[id]
-    if (explicit !== undefined) return !explicit
-    const space = spaces.find((s) => s.id === id)
-    // Defaults open when there's nothing to collapse — an empty subject's
-    // only useful state is "show me how to add a topic", not a closed row
-    // that gives no hint anything is missing.
-    return id === spaceId || space?.subspaces.length === 0
-  }
+  /* Both the reader and the writer come from `treeState`, which is the point:
+     they used to be separate expressions with different ideas of the default,
+     and that disagreement is what made an untouched subject take two clicks
+     to open. See treeState.ts. */
+  const isOpen = (id: string) => isOpenIn(collapsed, id, spaces, spaceId)
+  const toggle = (id: string) =>
+    setCollapsed((prev) => toggleIn(prev, id, spaces, spaceId))
 
   const commitTopic = async (spaceId: string) => {
     const name = newTopic.trim()

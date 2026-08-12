@@ -542,106 +542,25 @@ export function NoteEditor({
       </div>
 
       {/* Formatting follows the selection. Nothing on screen until there is
-          something to format. */}
+          something to format.
+
+          **Four controls and a spill.** This used to render every heading,
+          every mark, every block type and every AI action in one row — about
+          seventeen buttons. On the full page it was merely long; in the chat
+          dock it was wider than the column, so the last items were simply
+          cut off by the panel edge and unreachable.
+
+          Cutting features was not the answer: they are all worth having. What
+          was wrong is that a selection toolbar had become a menu bar. The four
+          things people reach for *while a selection is live* stay out; the rest
+          moves one click away, where being a longer list costs nothing. */}
       {editor && (
         <BubbleMenu
           editor={editor}
           options={{ placement: 'top', offset: 8 }}
-          className="flex items-center gap-0.5 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
+          className="max-w-[min(92vw,22rem)] rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
         >
-          {HEADINGS.map((level) => (
-            <button
-              key={level}
-              type="button"
-              title={`Heading ${level}`}
-              onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-              className={cn(
-                'grid h-7 w-7 place-items-center rounded-md text-[11.5px] font-bold transition-colors cursor-pointer',
-                editor.isActive('heading', { level })
-                  ? 'bg-brand-soft text-brand-deep'
-                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
-              )}
-            >
-              H{level}
-            </button>
-          ))}
-          <span className="mx-0.5 h-4 w-px bg-line" />
-          {MARKS.map((m) => (
-            <button
-              key={m.key}
-              type="button"
-              title={m.title}
-              aria-label={m.title}
-              onClick={() => m.run(editor)}
-              className={cn(
-                'grid h-7 w-7 place-items-center rounded-md text-[12.5px] transition-colors cursor-pointer',
-                m.key === 'italic' && 'italic font-serif',
-                m.key === 'strike' && 'line-through',
-                m.key === 'underline' && 'underline',
-                m.key === 'bold' && 'font-bold',
-                m.active(editor)
-                  ? 'bg-brand-soft text-brand-deep'
-                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
-              )}
-            >
-              {m.icon ? <Icon name={m.icon} size={12} /> : m.label}
-            </button>
-          ))}
-          <span className="mx-0.5 h-4 w-px bg-line" />
-          {BLOCKS.map((b) => (
-            <button
-              key={b.key}
-              type="button"
-              title={b.title}
-              aria-label={b.title}
-              onClick={() => b.run(editor)}
-              className={cn(
-                'grid h-7 w-7 place-items-center rounded-md text-[11.5px] font-bold transition-colors cursor-pointer',
-                b.active(editor)
-                  ? 'bg-brand-soft text-brand-deep'
-                  : 'text-ink-3 hover:bg-line-soft hover:text-ink',
-              )}
-            >
-              {BLOCK_ICON[b.key] ? (
-                <Icon name={BLOCK_ICON[b.key]} size={12} />
-              ) : (
-                b.label
-              )}
-            </button>
-          ))}
-          <span className="mx-0.5 h-4 w-px bg-line" />
-          {/* The one AI action worth reaching for mid-sentence. Everything
-              else is a `/` away and doesn't need permanent real estate. */}
-          {/* AI acting on the document, not beside it.
-              Each action rewrites or extends the selection in place, so the
-              result is note content the student can edit like anything else
-              they wrote — the difference between a notebook and a chat
-              window that happens to be next to one. `replaces` decides
-              whether the passage is consumed or added to; consuming the text
-              you asked a question *about* is never the intent. */}
-          {SELECTION_ACTIONS.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              title={`${action.label} — with AI, in place`}
-              onClick={() => {
-                const { from, to } = editor.state.selection
-                const sel = editor.state.doc.textBetween(from, to, '\n')
-                if (!sel.trim()) return
-                // Non-replacing actions insert *after* the selection, so the
-                // range handed to runInlineAi is the empty point at its end.
-                void runInlineAi(
-                  action.prompt(sel),
-                  action.replaces ? from : to,
-                  to,
-                )
-              }}
-              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
-            >
-              {action.id === 'rewrite' && <Icon name="sparkle" size={12} />}
-              {action.label}
-            </button>
-          ))}
+          <SelectionBar editor={editor} onAi={runInlineAi} />
         </BubbleMenu>
       )}
 
@@ -869,5 +788,206 @@ export function NoteEditor({
         </div>
       </div>
     </div>
+  )
+}
+
+/* ── Selection toolbar ────────────────────────────────────────────────── */
+
+/**
+ * What you reach for with a selection live, and everything else one click away.
+ *
+ * The old bar laid out every heading, mark, block type and AI action in a
+ * single row — roughly seventeen controls. On the full page that was merely
+ * long; in the 320px dock it was wider than the panel, so the right-hand end
+ * was clipped by the column edge and the AI actions were unreachable there.
+ *
+ * The fix is not fewer features, it is a shorter *default*. Bold, italic and
+ * one AI action cover the overwhelming majority of what a live selection wants;
+ * headings and block conversions are structural edits you make deliberately,
+ * and they read fine as a list. So the bar is four controls wide at any width,
+ * and the list behind `⋯` can grow without ever threatening the layout again.
+ */
+function SelectionBar({
+  editor,
+  onAi,
+}: {
+  editor: Editor
+  onAi: (prompt: string, from: number, to: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  /** Runs an AI action against the current selection. */
+  const runAction = useCallback(
+    (action: (typeof SELECTION_ACTIONS)[number]) => {
+      const { from, to } = editor.state.selection
+      const sel = editor.state.doc.textBetween(from, to, '\n')
+      if (!sel.trim()) return
+      setOpen(false)
+      // Non-replacing actions insert *after* the selection, so the range handed
+      // over is the empty point at its end — consuming the passage you asked a
+      // question *about* is never the intent.
+      onAi(action.prompt(sel), action.replaces ? from : to, to)
+    },
+    [editor, onAi],
+  )
+
+  const primaryAi = SELECTION_ACTIONS[0]
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-0.5">
+        {MARKS.filter((m) => m.key === 'bold' || m.key === 'italic').map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            title={m.title}
+            aria-label={m.title}
+            onClick={() => m.run(editor)}
+            className={cn(
+              'grid h-7 w-7 place-items-center rounded-md text-[12.5px] transition-colors cursor-pointer',
+              m.key === 'italic' && 'italic font-serif',
+              m.key === 'bold' && 'font-bold',
+              m.active(editor)
+                ? 'bg-brand-soft text-brand-deep'
+                : 'text-ink-3 hover:bg-line-soft hover:text-ink',
+            )}
+          >
+            {m.icon ? <Icon name={m.icon} size={12} /> : m.label}
+          </button>
+        ))}
+
+        <span className="mx-0.5 h-4 w-px bg-line" />
+
+        {primaryAi && (
+          <button
+            type="button"
+            title={`${primaryAi.label} — with AI, in place`}
+            onClick={() => runAction(primaryAi)}
+            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
+          >
+            <Icon name="sparkle" size={12} />
+            {primaryAi.label}
+          </button>
+        )}
+
+        <span className="mx-0.5 h-4 w-px bg-line" />
+
+        <button
+          type="button"
+          aria-label="More formatting"
+          aria-expanded={open}
+          title="More"
+          onClick={() => setOpen((o) => !o)}
+          className={cn(
+            'grid h-7 w-7 place-items-center rounded-md transition-colors cursor-pointer',
+            open ? 'bg-line-soft text-ink' : 'text-ink-3 hover:bg-line-soft hover:text-ink',
+          )}
+        >
+          <Icon name="more" size={13} />
+        </button>
+      </div>
+
+      {open && (
+        <div className="mt-1 flex max-h-[46vh] flex-col gap-2 overflow-y-auto border-t border-line pt-2">
+          <Group label="Heading">
+            {HEADINGS.map((level) => (
+              <Cell
+                key={level}
+                active={editor.isActive('heading', { level })}
+                onClick={() => {
+                  editor.chain().focus().toggleHeading({ level }).run()
+                  setOpen(false)
+                }}
+              >
+                H{level}
+              </Cell>
+            ))}
+          </Group>
+
+          <Group label="Style">
+            {MARKS.filter((m) => m.key !== 'bold' && m.key !== 'italic').map((m) => (
+              <Cell
+                key={m.key}
+                active={m.active(editor)}
+                onClick={() => {
+                  m.run(editor)
+                  setOpen(false)
+                }}
+              >
+                {m.icon ? <Icon name={m.icon} size={12} /> : m.label}
+              </Cell>
+            ))}
+          </Group>
+
+          <Group label="Block">
+            {BLOCKS.map((b) => (
+              <Cell
+                key={b.key}
+                active={b.active(editor)}
+                title={b.title}
+                onClick={() => {
+                  b.run(editor)
+                  setOpen(false)
+                }}
+              >
+                {BLOCK_ICON[b.key] ? <Icon name={BLOCK_ICON[b.key]} size={12} /> : b.label}
+              </Cell>
+            ))}
+          </Group>
+
+          {SELECTION_ACTIONS.length > 1 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="setcode px-1">With AI</span>
+              {SELECTION_ACTIONS.slice(1).map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => runAction(action)}
+                  className="flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-[12.5px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
+                >
+                  <Icon name="sparkle" size={11} />
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Group({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="setcode px-1">{label}</span>
+      <div className="flex flex-wrap gap-0.5">{children}</div>
+    </div>
+  )
+}
+
+function Cell({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  title?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(
+        'grid h-7 w-7 place-items-center rounded-md text-[11.5px] font-bold transition-colors cursor-pointer',
+        active ? 'bg-brand-soft text-brand-deep' : 'text-ink-3 hover:bg-line-soft hover:text-ink',
+      )}
+    >
+      {children}
+    </button>
   )
 }

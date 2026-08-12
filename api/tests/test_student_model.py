@@ -302,3 +302,40 @@ async def test_snapshot_survives_a_brand_new_account(db):
     assert snap.most_recent is None
     assert snap.days_away == 0
     assert sm.format_for_prompt(snap.to_model()) == ""
+
+
+# ── The one-round-trip read, and its fallback ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_snapshot_falls_back_to_selects_when_the_rpc_is_missing(db) -> None:
+    """`student_snapshot` collapses twelve selects into one round trip, but a
+    database that has not taken the migration must still serve rather than 500
+    on the most-used read in the app.
+
+    `FakeDb` refuses RPCs, so this is the path every other test in the suite
+    runs through — this one states it on purpose rather than relying on it
+    accidentally.
+    """
+    db.seed("response_feedback", [
+        {"user_id": OWNER, "kind": "too_long", "created_at": "2026-08-01T00:00:00Z",
+         "concept": None},
+    ])
+    rows = await sm._snapshot_rows(OWNER)
+
+    # Every key the folding code indexes must be present, or the fallback is a
+    # different shape from the RPC and only fails once someone is offline.
+    for key in sm._SNAPSHOT_KEYS:
+        assert key in rows, f"fallback is missing {key!r}"
+    assert len(rows["response_feedback"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_fallback_returns_the_shape_the_rpc_promises(db) -> None:
+    """Lists stay lists and settings stays a mapping even for an empty account.
+    A `None` here would crash the folding below it rather than degrade."""
+    rows = await sm._snapshot_rows("nobody")
+    assert isinstance(rows["settings"], dict)
+    for key in sm._SNAPSHOT_KEYS:
+        if key != "settings":
+            assert isinstance(rows[key], list), f"{key} should be a list"

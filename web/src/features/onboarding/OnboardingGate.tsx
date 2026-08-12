@@ -13,12 +13,11 @@
  * while a login that goes nowhere is not.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { getStudentModel } from '../../api/me'
 import { useAuth } from '../../auth/AuthProvider'
-import { holdBootSplash } from '../../lib/bootSplash'
-import { PageSpinner } from '../../components/ui/PageSpinner'
+import { FirstPaintFallback } from '../../components/ui/FirstPaint'
 import { hasPreferences, hasSkippedLocally } from './state'
 
 type Verdict = 'checking' | 'needs-intake' | 'ready'
@@ -28,29 +27,6 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const userId = session?.user?.id ?? null
   const [verdict, setVerdict] = useState<Verdict>('checking')
-  /* Captured once, at mount: was the boot splash still on screen when this
-     gate first rendered? Decides whether "still checking" should show nothing
-     (the splash has it covered) or a spinner (nothing else is there). A ref
-     rather than a render-time DOM read, so the answer cannot change mid-render
-     as the splash tears down underneath us. */
-  const splashWasUp = useRef(
-    typeof document !== 'undefined' && document.getElementById('boot') !== null,
-  )
-
-  /**
-   * Hold the boot splash for as long as this gate is undecided.
-   *
-   * `useLayoutEffect`, not `useEffect`, and the distinction is load-bearing:
-   * `AuthProvider` calls `hideBootSplash()` the moment auth resolves, which
-   * schedules the teardown on a timer. Layout effects run in the same commit,
-   * before any timer can fire — so the hold is always registered before the
-   * splash could act on that request. A passive effect would sometimes lose
-   * that race and let the splash go, which is the bug being fixed.
-   */
-  useLayoutEffect(() => {
-    if (verdict !== 'checking') return
-    return holdBootSplash()
-  }, [verdict])
 
   useEffect(() => {
     let live = true
@@ -77,19 +53,11 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
   }, [userId])
 
-  // One loading screen at a time, whichever one is actually on screen.
-  //
-  // On a cold start the boot splash is still up — held by the effect above —
-  // so a second, generic spinner stacked on top of it is what produced the
-  // custom-splash-then-circular-spinner sequence. Render nothing and let the
-  // splash do its job.
-  //
-  // But this gate also mounts warm: returning from Google lands on `/home`
-  // with the app long since booted and no splash to hide behind, and there
-  // `null` is a blank screen. So the fallback depends on which is true, decided
-  // once at mount rather than read during every render.
+  // `FirstPaintFallback` owns the "which loading screen" decision and the
+  // splash hold. This gate had its own copy of both; two implementations of
+  // "is the splash still up" is how one of them ends up wrong.
   if (verdict === 'checking') {
-    return splashWasUp.current ? null : <PageSpinner label="Loading…" />
+    return <FirstPaintFallback label="Loading…" />
   }
   // Already on the intake — rendering a redirect to it would loop.
   if (verdict === 'needs-intake' && location.pathname !== '/welcome-aboard') {

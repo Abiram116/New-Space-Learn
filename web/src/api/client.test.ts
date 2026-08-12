@@ -15,6 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, setUnauthorizedHandler } from './client'
+import { clearCache, readCache, writeCache } from '../lib/asyncCache'
 
 const ok = (body: unknown = {}) =>
   new Response(JSON.stringify(body), {
@@ -75,5 +76,76 @@ describe('unauthorized reporting', () => {
     setUnauthorizedHandler(null)
     vi.stubGlobal('fetch', vi.fn(async () => status(401)))
     await expect(apiFetch('/me')).rejects.toThrow()
+  })
+})
+
+/* ── Cache invalidation ──────────────────────────────────────────────── */
+
+/**
+ * The cache is what stops page switches flashing; this is what stops it lying.
+ * Deriving invalidation from the request means a mutation written next year,
+ * by someone who has never read `asyncCache.ts`, still leaves the UI correct.
+ */
+describe('cache invalidation from writes', () => {
+  beforeEach(() => {
+    clearCache()
+  })
+
+  it('drops the matching family after a successful write', async () => {
+    writeCache('notes:sub-1', ['stale'])
+    vi.stubGlobal('fetch', vi.fn(async () => ok({ id: 'n1' })))
+
+    await apiFetch('/notes', { method: 'POST', body: { title: 'x' } })
+
+    expect(readCache('notes:sub-1')).toBeUndefined()
+  })
+
+  it('leaves unrelated families alone', async () => {
+    writeCache('decks:sub-1', ['keep'])
+    vi.stubGlobal('fetch', vi.fn(async () => ok({})))
+
+    await apiFetch('/notes/n1', { method: 'DELETE' })
+
+    expect(readCache('decks:sub-1')?.data).toEqual(['keep'])
+  })
+
+  it('does NOT invalidate on a read', async () => {
+    writeCache('notes:sub-1', ['keep'])
+    vi.stubGlobal('fetch', vi.fn(async () => ok([])))
+
+    await apiFetch('/notes')
+
+    // A GET returning the same list must not evict it — that would make every
+    // revalidation blank the screen it was meant to keep filled.
+    expect(readCache('notes:sub-1')?.data).toEqual(['keep'])
+  })
+
+  it('does NOT invalidate when the write fails', async () => {
+    writeCache('notes:sub-1', ['keep'])
+    vi.stubGlobal('fetch', vi.fn(async () => status(500)))
+
+    await apiFetch('/notes', { method: 'POST', body: {} }).catch(() => null)
+
+    // Nothing changed server-side, so throwing away good data would be a
+    // self-inflicted refetch and a visible flash for no reason.
+    expect(readCache('notes:sub-1')?.data).toEqual(['keep'])
+  })
+
+  it('reaches every shape that changes a deck', async () => {
+    for (const path of [
+      '/decks/d1',
+      '/decks/d1/cards',
+      '/cards/c1/grade',
+      '/subspaces/s1/cards/generate',
+    ]) {
+      writeCache('decks:s1', ['stale'])
+      writeCache('cards:d1', ['stale'])
+      vi.stubGlobal('fetch', vi.fn(async () => ok({})))
+
+      await apiFetch(path, { method: 'POST', body: {} })
+
+      expect(readCache('decks:s1'), `${path} should clear decks`).toBeUndefined()
+      expect(readCache('cards:d1'), `${path} should clear cards`).toBeUndefined()
+    }
   })
 })

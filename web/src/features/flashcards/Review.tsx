@@ -250,17 +250,23 @@ export function CardFace({
   text,
   source,
   hint,
+  compact = false,
 }: {
   side: 'front' | 'back'
   text: string
   source?: string | null
   hint?: string
+  /** Dock density: a ~320px column, so the padding and the display size both
+   *  step down. Same component, same flip — only the scale changes, which is
+   *  what keeps the dock from drifting into a second implementation. */
+  compact?: boolean
 }) {
   const isBack = side === 'back'
   return (
     <div
       className={cn(
-        'cardstock absolute inset-0 flex flex-col rounded-2xl p-6 sm:p-8',
+        'cardstock absolute inset-0 flex flex-col rounded-2xl',
+        compact ? 'p-4' : 'p-6 sm:p-8',
         '[backface-visibility:hidden]',
         isBack && 'bg-raised',
       )}
@@ -272,8 +278,11 @@ export function CardFace({
           className={cn(
             'text-center',
             isBack
-              ? 'text-[15px] leading-relaxed text-ink-2'
-              : 'nameplate text-[clamp(22px,4vw,32px)] leading-tight text-ink',
+              ? cn('leading-relaxed text-ink-2', compact ? 'text-[13px]' : 'text-[15px]')
+              : cn(
+                  'nameplate leading-tight text-ink',
+                  compact ? 'text-[17px]' : 'text-[clamp(22px,4vw,32px)]',
+                ),
           )}
         >
           {stripMarkdown(text)}

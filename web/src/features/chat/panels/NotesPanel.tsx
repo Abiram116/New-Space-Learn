@@ -25,7 +25,7 @@ import { generateNote, listAllNotes, listNotes } from '../../../api/notes'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
-import { Rise, Stagger } from '../../../components/ui/motion'
+import { Stagger } from '../../../components/ui/motion'
 import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
 
@@ -48,6 +48,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
   const notes = useAsync(
     () => (scope === 'all' ? listAllNotes() : listNotes(subspaceId)),
     [scope, subspaceId],
+    scope === 'all' ? 'notes:all' : `notes:${subspaceId}`,
   )
   const list = notes.data ?? []
   const open = list.find((n) => n.id === openId) ?? null
@@ -90,7 +91,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
   }
 
   return (
-    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <WriteFromChat subspaceId={subspaceId} onWritten={notes.refresh} />
 
       <div className="flex items-center gap-1">
@@ -150,7 +151,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
           </Stagger>
         )}
       </div>
-    </Rise>
+    </div>
   )
 }
 
@@ -198,7 +199,7 @@ function WriteFromChat({
         disabled={writing}
         className={cn(
           'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
-          'text-[12.5px] font-semibold transition-all duration-200 cursor-pointer',
+          'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
           writing
             ? 'cursor-default bg-line-soft text-muted'
             : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',

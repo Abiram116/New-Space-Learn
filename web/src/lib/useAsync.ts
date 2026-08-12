@@ -4,56 +4,105 @@
  * Refuses stale updates when the input changes mid-request (last-write-wins).
  * Any thrown value is normalized via `friendlyMessage` so the state's `error`
  * is always a printable string. Callers can also call `refresh()` explicitly.
+ *
+ * **Pass a `key` and it stops flashing.** Without one this fetches from scratch
+ * on every mount, so navigating away and back discards data the tab already has
+ * and replaces it with a skeleton while an identical request goes out — the
+ * split-second blank on every page switch. With a key, a cached result is
+ * served on the first render and revalidated behind it, so a screen only shows
+ * a loading state the first time it has genuinely never had the data.
+ *
+ * The key must describe the *request*, not the screen: two components asking
+ * for the same thing should share an entry, and one component asking about two
+ * different subspaces must not.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { friendlyMessage } from '../api/errors'
+import { readCache, subscribe, writeCache } from './asyncCache'
 
 export type AsyncState<T> = {
   data: T | null
   error: string | null
   loading: boolean
+  /** True while a *background* revalidation runs over data already on screen. */
+  validating: boolean
   refresh: () => void
   setData: (updater: (prev: T | null) => T | null) => void
 }
 
+const noopSubscribe = () => () => {}
+const noSnapshot = () => undefined
+
 export function useAsync<T>(
   fn: () => Promise<T>,
   deps: ReadonlyArray<unknown> = [],
+  key?: string,
 ): AsyncState<T> {
-  const [data, setData] = useState<T | null>(null)
+  // Subscribed rather than read once, so an `invalidate()` elsewhere reaches a
+  // mounted screen instead of leaving it on data already known to be wrong.
+  const subscribeToKey = useCallback(
+    (cb: () => void) => (key ? subscribe(key, cb) : noopSubscribe()),
+    [key],
+  )
+  const snapshot = useCallback(
+    () => (key ? readCache<T>(key)?.data : undefined),
+    [key],
+  )
+  const cached = useSyncExternalStore(subscribeToKey, snapshot, noSnapshot)
+
+  const [local, setLocal] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState<boolean>(true)
+  const [validating, setValidating] = useState(true)
   const [tick, setTick] = useState(0)
   const generation = useRef(0)
-  // Keep the newest fn without triggering effects on every render.
   const fnRef = useRef(fn)
   fnRef.current = fn
 
+  // Cache first: it is what makes the first paint real. `local` only carries
+  // results for un-keyed callers.
+  const data = (cached as T | undefined) ?? local
+
   useEffect(() => {
     const gen = ++generation.current
-    setLoading(true)
+    setValidating(true)
     setError(null)
     fnRef.current()
       .then((result) => {
         if (gen !== generation.current) return
-        setData(result)
-        setLoading(false)
+        if (key) writeCache(key, result)
+        else setLocal(result)
+        setValidating(false)
       })
       .catch((err) => {
         if (gen !== generation.current) return
         setError(friendlyMessage(err))
-        setLoading(false)
+        setValidating(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, ...deps])
+  }, [tick, key, ...deps])
 
   const refresh = useCallback(() => setTick((t) => t + 1), [])
 
   const updateData = useCallback(
-    (updater: (prev: T | null) => T | null) => setData(updater),
-    [],
+    (updater: (prev: T | null) => T | null) => {
+      // An optimistic edit has to land in the cache, or the next mount of this
+      // key serves the pre-edit value and the change appears to undo itself.
+      if (key) writeCache(key, updater(readCache<T>(key)?.data ?? null))
+      else setLocal(updater)
+    },
+    [key],
   )
 
-  return { data, error, loading, refresh, setData: updateData }
+  return {
+    data: data ?? null,
+    error,
+    // Only a *first* load is "loading". A revalidation over content already on
+    // screen must not put a skeleton back over it — that would reintroduce the
+    // exact flash this exists to remove.
+    loading: (data ?? null) === null && validating,
+    validating,
+    refresh,
+    setData: updateData,
+  }
 }

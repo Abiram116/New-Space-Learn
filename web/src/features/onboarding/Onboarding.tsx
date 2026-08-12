@@ -135,7 +135,7 @@ function Arrival() {
 
 export function Onboarding() {
   const navigate = useNavigate()
-  const { showError } = useToast()
+  const { show, showError } = useToast()
   const { session } = useAuth()
   const reduced = useReducedMotion()
   const { play } = useHandoff()
@@ -254,7 +254,14 @@ export function Onboarding() {
     setStepIndex((i) => Math.max(0, i - 1))
   }, [])
 
-  const skip = useCallback(() => void finish(answers.current), [finish])
+  const skip = useCallback(() => {
+    // Say where it went. Skipping is a legitimate choice, but leaving without
+    // being told the questions still exist somewhere makes it look like a
+    // one-time door you just closed — and these are the settings that decide
+    // how every answer in the product is written.
+    show('You can set these any time — Settings → How you learn.', 'info')
+    void finish(answers.current)
+  }, [finish, show])
 
   /* The sample, composed from what has been answered so far. */
   const sample = useMemo(
@@ -372,7 +379,7 @@ export function Onboarding() {
                     <button
                       type="submit"
                       disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-[14.5px] font-semibold text-[#1a120f] transition-all cursor-pointer hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-[14.5px] font-semibold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
                     >
                       {saving ? 'Setting up…' : 'Finish'}
                       <Icon name="arrowRight" size={14} />
@@ -463,7 +470,7 @@ export function Onboarding() {
                       disabled={!canContinue}
                       className={cn(
                         'mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5',
-                        'text-[14.5px] font-semibold transition-all duration-200',
+                        'text-[14.5px] font-semibold t-control duration-200',
                         canContinue
                           ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.98]'
                           : 'cursor-default bg-line-soft text-faint',

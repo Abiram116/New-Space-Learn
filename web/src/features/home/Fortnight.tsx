@@ -132,7 +132,7 @@ export function Fortnight({
             >
               <span
                 className={cn(
-                  'w-full rounded-[4px] transition-all duration-300 ease-out',
+                  'w-full rounded-[4px] t-meter duration-300 ease-out',
                   lit
                     ? 'bg-brand'
                     : cell.minutes > 0
@@ -141,7 +141,13 @@ export function Fortnight({
                   isHover && 'brightness-125',
                 )}
                 style={{
-                  height: drawn ? `${pct}%` : '4%',
+                  // Scaled from the baseline rather than grown: `height` on
+                  // fourteen bars relayouts the chart every frame. `origin-bottom`
+                  // makes them stand up off the rule they sit on, which is also
+                  // the right gesture for a column chart.
+                  height: '100%',
+                  transformOrigin: 'bottom',
+                  transform: `scaleY(${drawn ? pct / 100 : 0.04})`,
                   transitionDelay: drawn ? `${i * 34}ms` : '0ms',
                   boxShadow: lit ? '0 0 14px -4px rgba(255,90,60,0.7)' : undefined,
                 }}

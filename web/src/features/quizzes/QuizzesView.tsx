@@ -37,7 +37,7 @@ export function QuizzesView() {
 function Inner({ subspaceId }: { subspaceId: string }) {
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
-  const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId])
+  const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId], `quizzes:${subspaceId}`)
   const [activeId, setActiveId] = useState<string | null>(params.get('q'))
   const [generating, setGenerating] = useState(false)
   const [genOpen, setGenOpen] = useState(false)

@@ -170,6 +170,7 @@ async def generate_note(
     if not retrieved and not history:
         raise NothingIndexed()
     context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
+    grounded = bool(retrieved)
     recent = format_history(history) or "(no prior chat in this space)"
     if not settings.llm_configured:
         raise UpstreamUnavailable("Note generation isn't configured yet.")
@@ -201,16 +202,13 @@ async def generate_note(
         "conditions, the formulas, the worked example, the exception. If "
         "the student got something wrong in the conversation and was "
         "corrected, the note should make the correct version unmissable.\n\n"
-        "Length follows the material: several hundred words when there is "
-        "that much to say, short when there genuinely isn't. Do not pad, "
-        "and do not compress a rich conversation into four bullets.\n\n"
+        f"{_length_rule(grounded)}\n\n"
         "Use headings to separate ideas, bullets for lists of things, bold "
         "for the term being defined, tables when comparing two things, and "
         "a blockquote for the one idea worth remembering above the rest. "
         "Never a heading with a single line under it."
         f"{style}\n\n"
-        "Ground every claim in the material and conversation above; do not "
-        "invent facts not present in either.\n\n"
+        f"{_grounding_rule(grounded)}\n\n"
         "Reply in exactly this format and nothing else:\n\n"
         "TITLE: <the title>\n"
         "---\n"
@@ -417,6 +415,60 @@ _HTML_BLOCK_MAP = [
 
 
 _CODE_SPAN = re.compile(r"```.*?```|`[^`\n]+`", re.S)
+
+
+def _length_rule(grounded: bool) -> str:
+    """How long the note should be, which depends on whether there is material.
+
+    The single rule used to be "length follows the material — short when there
+    genuinely isn't much to say". Read literally with an empty corpus, that is
+    an instruction to write almost nothing, and it is why a note requested with
+    no documents uploaded came back as four bullets.
+    """
+    if grounded:
+        return (
+            "Length follows the material: several hundred words when there is "
+            "that much to say, short when there genuinely isn't. Do not pad, "
+            "and do not compress a rich conversation into four bullets."
+        )
+    return (
+        "There is no uploaded material for this topic, which is a reason to "
+        "write MORE, not less — the note is the only thing the student will "
+        "have to revise from. Write a full study note: several hundred words, "
+        "structured, with the definitions, the mechanism, the trade-offs and "
+        "at least one worked or concrete example. Do not hedge about the "
+        "missing sources or apologise for them; just write the note."
+    )
+
+
+def _grounding_rule(grounded: bool) -> str:
+    """What the note may be built from.
+
+    With material, the rule is strict: every claim traceable, nothing invented.
+    That is the product's central promise and it does not bend.
+
+    With NO material it was the same sentence — "do not invent facts not
+    present in either" — which forbade the model from using its own knowledge
+    of the topic at all. The result was a note that could only paraphrase
+    whatever happened to be in the recent chat, which is exactly the failure
+    where asking for a note on one topic returned a rewrite of a different one.
+    Space Learn is meant to be good without uploads and excellent with them;
+    that instruction made it useless without them.
+    """
+    if grounded:
+        return (
+            "Ground every claim in the material and conversation above; do not "
+            "invent facts not present in either."
+        )
+    return (
+        "There is no indexed material, so write from your own knowledge of the "
+        "subject, at the level the student is working at. Two rules still "
+        "hold. First, the topic the student asked for is the subject of this "
+        "note — if the recent conversation is about something else, ignore it "
+        "rather than writing about what was discussed. Second, do not present "
+        "anything as coming from the student's own documents or cite pages: "
+        "there are none, and a fabricated citation is worse than no citation."
+    )
 
 
 def _demote_html(text: str) -> str:

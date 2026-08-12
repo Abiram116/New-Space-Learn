@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
@@ -73,6 +74,25 @@ def create_app() -> FastAPI:
         openapi_url="/api/v1/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
+
+    # Compress JSON on the way out.
+    #
+    # These payloads are highly repetitive — arrays of objects with the same
+    # keys on every row — which is close to the best case for gzip. The
+    # snapshot and spaces responses are the biggest, and they are also the ones
+    # on the critical path of every page.
+    #
+    # `minimum_size` keeps small bodies uncompressed: below roughly a packet
+    # there is nothing to save, and the CPU is not free on a single free-tier
+    # worker. Placed before CORS so the headers CORS adds are not compressed
+    # away from it.
+    #
+    # Deliberately NOT applied to the chat stream: `GZipMiddleware` buffers a
+    # streaming response to compress it, which would hold every token until the
+    # answer finished and turn a live stream into a long pause. Starlette skips
+    # responses that are already streaming, which is why this is safe here —
+    # but it is the reason to think twice before raising the compression level.
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
     app.add_middleware(
         CORSMiddleware,

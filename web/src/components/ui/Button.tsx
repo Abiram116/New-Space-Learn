@@ -68,7 +68,7 @@ export function Button({ variant = 'primary', size = 'md', className, ...props }
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 font-bold transition-all duration-100 cursor-pointer',
+        'inline-flex items-center justify-center gap-1.5 font-bold t-control duration-100 cursor-pointer',
         'disabled:opacity-40 disabled:cursor-default disabled:pointer-events-none',
         variants[variant],
         sizes[size],

@@ -18,6 +18,7 @@ import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import { DockPanelBody, type DockPanel } from './DockPanels'
+import { useDockPanelMotion } from './useDockPanelMotion'
 import { useDockWidth } from './useDockWidth'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
@@ -42,7 +43,7 @@ const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
  * again in a worse shape.
  */
 export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
+  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId], `skills:${subspaceId}`)
 
   if (skills.loading || skills.error) return null
   const list = skills.data ?? []
@@ -98,8 +99,8 @@ export function ContextDock({
   panel: DockPanel
   onClosePanel: () => void
 }) {
-  const docs = useAsync(() => listDocuments(subspaceId), [subspaceId])
-  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
+  const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
+  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId], `skills:${subspaceId}`)
   const { showError } = useToast()
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -111,6 +112,8 @@ export function ContextDock({
     onPointerDown,
     onKeyDown,
   } = useDockWidth()
+
+  const view = useDockPanelMotion(panel)
 
   const docList = docs.data ?? []
   const skillList = skills.data ?? []
@@ -159,15 +162,23 @@ export function ContextDock({
         )}
       />
 
-      {/* The panel slides over the overview rather than replacing it, so
-          going back is a slide-out and the overview never has to re-mount or
-          refetch. `translate-x-full` parks it off to the right when closed. */}
-      {panel && (
+      {/* The panel slides over the overview rather than replacing it, so the
+          overview never has to re-mount or refetch.
+
+          **Three moves, three animations.** This used to key on `panel` and
+          replay one "slide in from the right" for every change, which told the
+          wrong story twice over: switching Notes → Quizzes is a *lateral* move
+          at the same depth, not another step deeper, and closing had no exit at
+          all — the panel simply vanished, so going back felt like a glitch
+          rather than a retreat. See `useDockPanelMotion`. */}
+      {view.panel && (
+        // The shell is keyed on nothing — it stays mounted across a switch, so
+        // the header and this scroll container are not torn down and rebuilt
+        // to change what is inside them.
         <div
-          key={panel}
           className={cn(
             'absolute inset-0 z-20 flex flex-col bg-surface',
-            'motion-safe:animate-[dockIn_220ms_cubic-bezier(0.22,1,0.36,1)]',
+            view.shellAnimation,
           )}
         >
           <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
@@ -178,7 +189,7 @@ export function ContextDock({
             >
               <Icon name="arrowLeft" size={13} /> Overview
             </button>
-            <span className="setcode ml-auto">{PANEL_TITLE[panel]}</span>
+            <span className="setcode ml-auto">{PANEL_TITLE[view.panel]}</span>
           </div>
           {/* A flex column whose panel child is `flex-1`, so panels stretch to
               the dock rather than stacking into a strip at the top over a dead
@@ -187,13 +198,31 @@ export function ContextDock({
               every ancestor up the chain to have a definite height, and this
               scroll container breaks that chain. Growth via flex asks nothing
               of its ancestors, so it can't regress the same way. */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3.5">
-            <DockPanelBody panel={panel} subspaceId={subspaceId} base={base} />
+          {/* Keyed on the panel: this is the part that actually differs
+              between siblings, so it is the part that remounts and animates. */}
+          <div
+            key={view.panel}
+            className={cn(
+              'flex min-h-0 flex-1 flex-col overflow-y-auto p-3.5',
+              view.bodyAnimation,
+            )}
+          >
+            <DockPanelBody panel={view.panel} subspaceId={subspaceId} base={base} />
           </div>
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5">
+      {/* Recedes while a panel covers it. Nobody sees this directly — the
+          panel is opaque — but they see the half-second of it during the exit,
+          and a background that settles back into place is what makes closing
+          read as returning rather than as a new screen appearing. */}
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5',
+          'motion-safe:transition-transform motion-safe:duration-300 motion-safe:[transition-timing-function:var(--ease-sl)]',
+          view.panel && 'motion-safe:scale-[0.98]',
+        )}
+      >
       {/* ── Actions ── */}
       <section className="flex flex-col gap-2">
         <SectionLabel>Do something with this</SectionLabel>

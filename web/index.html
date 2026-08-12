@@ -5,6 +5,22 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1E1A17" />
+    <!--
+      Warm the two origins every signed-in load talks to, before any JavaScript
+      has parsed.
+
+      A cold request to a new origin pays DNS + TCP + TLS before a single byte
+      of the response moves — on a mobile connection that is comfortably 200ms,
+      and it is paid twice here because Supabase (auth) and the API (data) are
+      different hosts. `preconnect` does that handshake during HTML parse, in
+      parallel with downloading the bundle, so the first real request starts on
+      an open connection.
+
+      Injected at build time from the same env vars the client reads, because a
+      hardcoded host here would silently stop helping the moment either moved
+      and nothing would fail loudly enough to notice.
+    -->
+    %VITE_PRECONNECT%
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--

@@ -216,9 +216,13 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
                   <span className="setcode shrink-0 text-sky-deep">{u.progress}%</span>
                 </div>
                 <div className="h-1 overflow-hidden rounded-full bg-line-soft">
+                  {/* Scaled, not resized. `width` animates layout on every
+                      frame; a transform composites. The track above owns the
+                      rounding and clips the overflow, so the fill can be a
+                      plain rectangle whose corners never squash. */}
                   <div
-                    className="h-1 rounded-full bg-sky transition-all duration-300"
-                    style={{ width: `${u.progress}%` }}
+                    className="h-1 w-full origin-left bg-sky t-meter duration-300"
+                    style={{ transform: `scaleX(${u.progress / 100})` }}
                   />
                 </div>
               </div>

@@ -67,9 +67,10 @@ export function SourceItem({
           </div>
           {pending && (
             <div className="h-1 overflow-hidden rounded-full bg-line-soft">
+              {/* See DocsView: the track clips and rounds, the fill scales. */}
               <div
-                className={cn('h-1 rounded-full transition-all duration-300', meta.barClass)}
-                style={{ width: `${value}%` }}
+                className={cn('h-1 w-full origin-left t-meter duration-300', meta.barClass)}
+                style={{ transform: `scaleX(${value / 100})` }}
               />
             </div>
           )}

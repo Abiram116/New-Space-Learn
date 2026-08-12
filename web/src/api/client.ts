@@ -11,6 +11,7 @@
  * `res.body` themselves.
  */
 
+import { invalidate } from '../lib/asyncCache'
 import { API_URL } from '../lib/env'
 import { ApiError, type ErrorCode } from './errors'
 
@@ -73,13 +74,45 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   onUnauthorized = fn
 }
 
+/**
+ * Which cached families a path's mutations invalidate.
+ *
+ * `useAsync` serves a cached entry on mount so switching pages does not flash,
+ * and the price of that is a cache that has to be told when it is wrong.
+ * Deriving it here — from the method and path every request already carries —
+ * means it happens once, for every caller, including ones written later that
+ * have never heard of the cache. Doing it at each mutation's call site instead
+ * is fifteen places to forget.
+ *
+ * Matched on segments rather than exact routes because the same family is
+ * reachable by several shapes (`/decks/x/cards`, `/subspaces/x/cards/generate`,
+ * `/cards/x/grade` all change what a deck list shows).
+ */
+const CACHE_FAMILIES: { match: RegExp; families: string[] }[] = [
+  { match: /\/notes(\/|$)/, families: ['notes:'] },
+  { match: /\/quizzes(\/|$)/, families: ['quizzes:'] },
+  { match: /\/(decks|cards|flashcards)(\/|$)/, families: ['decks:', 'cards:'] },
+  { match: /\/documents(\/|$)/, families: ['docs:'] },
+  { match: /\/skills(\/|$)/, families: ['skills:'] },
+]
+
+function invalidateFor(path: string): void {
+  for (const { match, families } of CACHE_FAMILIES) {
+    if (match.test(path)) families.forEach(invalidate)
+  }
+}
+
 /** Low-level fetch that returns the raw Response — used by streamers. */
 export async function apiFetchRaw(path: string, init?: Init): Promise<Response> {
   const finalInit = await buildInit(init)
+  const method = (finalInit.method ?? 'GET').toUpperCase()
   try {
     const res = await fetch(joinUrl(API_URL, path), finalInit)
     if (res.status === 401) onUnauthorized?.()
     if (!res.ok) throw await parseError(res)
+    // Only after a *successful* write: invalidating on a failed request would
+    // throw away good data to reflect a change that never happened.
+    if (method !== 'GET') invalidateFor(path)
     return res
   } catch (e) {
     if (e instanceof ApiError) throw e

@@ -18,14 +18,14 @@ import type { Quiz, QuizResult } from '../../../api/types'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
-import { Rise, Stagger } from '../../../components/ui/motion'
+import { Stagger } from '../../../components/ui/motion'
 import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
 import { QuizResults } from '../../quizzes/QuizResults'
 import { QuizRunner } from '../../quizzes/QuizRunner'
 
 export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId])
+  const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId], `quizzes:${subspaceId}`)
   const [active, setActive] = useState<Quiz | null>(null)
   const [finished, setFinished] = useState<{ result: QuizResult; answers: number[] } | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -112,14 +112,14 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
     // in that chain is enough to collapse it back to content height — which is
     // why this panel kept bunching into a strip at the top of the dock. Being a
     // flex item that grows needs nothing from its ancestors.
-    <Rise distance={6} className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <button
         type="button"
         onClick={generate}
         disabled={generating}
         className={cn(
           'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
-          'text-[12.5px] font-semibold transition-all duration-200 cursor-pointer',
+          'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
           generating
             ? 'cursor-default bg-line-soft text-muted'
             : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',
@@ -162,6 +162,6 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
       >
         All quizzes <Icon name="arrowRight" size={12} />
       </Link>
-    </Rise>
+    </div>
   )
 }

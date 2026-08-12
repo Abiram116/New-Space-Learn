@@ -66,7 +66,7 @@ function Inner({
   base: string
 }) {
   const { show, showError } = useToast()
-  const decks = useAsync(() => listDecks(subspaceId), [subspaceId])
+  const decks = useAsync(() => listDecks(subspaceId), [subspaceId], `decks:${subspaceId}`)
   const [mode, setMode] = useState<Mode>({ kind: 'decks' })
   const [newDeckOpen, setNewDeckOpen] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
@@ -339,7 +339,7 @@ function DeckDetail({
   onReview: () => void
 }) {
   const { show, showError } = useToast()
-  const cards = useAsync(() => listCards(deckId), [deckId])
+  const cards = useAsync(() => listCards(deckId), [deckId], `cards:${deckId}`)
   const [editing, setEditing] = useState<Flashcard | 'new' | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
 

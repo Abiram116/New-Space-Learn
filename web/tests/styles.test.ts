@@ -115,3 +115,93 @@ describe('keyframes', () => {
     expect(orphans).toEqual([])
   })
 })
+
+describe('motion language', () => {
+  /**
+   * The app commits to two easing curves — `--ease-sl` for app motion and
+   * `--ease-out-expo` for the landing page's longer moves — and the stylesheet
+   * goes to unusual lengths to enforce them, including an unlayered rule that
+   * exists purely to beat Tailwind's default curve.
+   *
+   * That enforcement only covers CSS transitions. Inline styles and Tailwind
+   * arbitrary values bypass it entirely, and four had drifted: the same two
+   * curves written out longhand, plus one element running `ease-out` on its
+   * opacity while its transform ran on an expo — a single declaration speaking
+   * two dialects.
+   *
+   * Literal curves are the tell, so the test bans them rather than trying to
+   * compare numbers.
+   */
+  /**
+   * `index.html`'s inline splash is the one legitimate exception, and it is
+   * exempt for a reason rather than for convenience: that CSS runs *before*
+   * `index.css` has loaded, so `var(--ease-sl)` would resolve to nothing and
+   * the splash would animate on the browser default. Writing the curve out is
+   * the only way to have it there at all.
+   */
+  const EXEMPT = ['index.html']
+
+  /** Comments are prose about the curves, not uses of them. */
+  const stripComments = (text: string) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+
+  it('uses the easing tokens rather than writing curves out longhand', () => {
+    const offenders: string[] = []
+    for (const { path, text } of SOURCES) {
+      if (EXEMPT.some((e) => path.endsWith(e))) continue
+      for (const line of stripComments(text).split('\n')) {
+        if (!line.includes('cubic-bezier(')) continue
+        // The token definitions themselves, and the landing page's GSAP bridge
+        // which builds the same curve from shared numbers.
+        if (line.includes('--ease-')) continue
+        if (line.includes('EASE_POINTS')) continue
+        offenders.push(`${path.replace(ROOT, '.')} → ${line.trim().slice(0, 80)}`)
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('transition sets', () => {
+  /**
+   * Tailwind's catch-all transition utility is a jank source dressed as a
+   * shorthand: it animates every animatable property, so a hover meant to
+   * change one colour also tweens width, padding and font-size, each forcing
+   * layout on every frame. Sixteen controls had it.
+   *
+   * The replacements name what each element actually changes (`t-control`,
+   * `t-move`, `t-meter` in index.css). This stops the shorthand creeping back:
+   * it is always easier to type than the correct thing.
+   *
+   * The needle is assembled rather than written out, for the same reason the
+   * note in index.css avoids it — Tailwind scans this file as raw text and
+   * would emit the very utility the test exists to ban.
+   */
+  const BANNED = ['transition', 'all'].join('-')
+
+  it('never uses the catch-all transition utility', () => {
+    const offenders: string[] = []
+    for (const { path, text } of SOURCES) {
+      // index.css documents the ban; it does not use it.
+      if (path.endsWith('index.css')) continue
+      text.split('\n').forEach((line, i) => {
+        if (line.includes(BANNED)) {
+          offenders.push(`${path.replace(ROOT, '.')}:${i + 1}`)
+        }
+      })
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it('defines every transition set the app uses', () => {
+    const css = readFileSync(join(ROOT, 'src/index.css'), 'utf8')
+    const used = new Set<string>()
+    for (const { path, text } of SOURCES) {
+      if (path.endsWith('index.css')) continue
+      for (const m of text.matchAll(/\bt-(control|move|meter)\b/g)) used.add(`.t-${m[1]}`)
+    }
+    // A class that is used but never defined silently does nothing — the
+    // element just snaps, which is exactly what this work set out to remove.
+    for (const cls of used) expect(css).toContain(`${cls} {`)
+  })
+})

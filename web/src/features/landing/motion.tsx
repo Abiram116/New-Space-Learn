@@ -89,7 +89,11 @@ export function DealText({
                 : 'translateY(0.9em) rotateX(-72deg)',
               opacity: on ? 1 : 0,
               transformOrigin: 'top center',
-              transition: `transform 720ms cubic-bezier(0.16,1,0.3,1) ${i * stagger}ms, opacity 480ms ease-out ${i * stagger}ms`,
+              // One curve for both properties. This ran `ease-out` on the opacity
+              // beside an expo on the transform, so a single element faded on one
+              // curve while it moved on another — the 'three dialects' the
+              // stylesheet's own note complains about, inside one declaration.
+              transition: `transform 720ms var(--ease-out-expo) ${i * stagger}ms, opacity 480ms var(--ease-out-expo) ${i * stagger}ms`,
             }}
           >
             {word}
@@ -304,7 +308,7 @@ export function ParallaxLayer({
       style={{
         ...style,
         transform: `translate3d(${-pos.x * depth}px, ${-pos.y * depth * 0.6}px, 0) ${style?.transform ?? ''}`,
-        transition: 'transform 380ms cubic-bezier(0.16,1,0.3,1)',
+        transition: 'transform 380ms var(--ease-out-expo)',
       }}
     >
       {children}
@@ -326,7 +330,7 @@ export function Rise({
   return (
     <div
       ref={ref}
-      className={cn('transition-all duration-700 ease-out', className)}
+      className={cn('t-move duration-700 ease-out', className)}
       style={{
         transitionDelay: `${delay}ms`,
         opacity: on ? 1 : 0,

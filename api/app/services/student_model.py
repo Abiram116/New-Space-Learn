@@ -27,14 +27,17 @@ the number of them.
 from __future__ import annotations
 
 import asyncio
+import logging
 import statistics
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from ..schemas import StudentModelOut, TopicSignal
 from . import supabase
 from .streaks import compute_streak
+
+log = logging.getLogger("space_learn.student_model")
 
 # How long a topic with real history has to sit untouched before it counts as
 # gone cold. Ten days is deliberately past a week: a student who studies on
@@ -391,37 +394,46 @@ def _signal(t: TopicView) -> TopicSignal:
 # ── The read pass ──────────────────────────────────────────────────────
 
 
-async def snapshot(user_id: str) -> Snapshot:
-    """Everything, concurrently. Ten small selects rather than one join,
-    because the httpx/PostgREST wrapper has no join builder and aggregating a
-    few hundred rows in Python is far cheaper than the round trips would be.
+_warned_no_rpc = False
 
-    `flashcards` is fetched whole (two columns) rather than filtered to due
-    ones. It costs a few hundred rows and removes a dependency: filtering by
-    `deck_id in (…)` requires the deck ids first, which would serialise this
-    gather into two waves for one boolean per row we can evaluate here.
+#: Shape `student_snapshot` returns. Also the fallback's assembly order.
+_SNAPSHOT_KEYS = (
+    "settings", "subjects", "subspaces", "quiz_results", "quizzes",
+    "daily_activity", "decks", "flashcards", "notes", "documents",
+    "response_feedback", "chat_messages",
+)
 
-    **`quizzes` is read separately rather than joined onto `quiz_results`.**
-    Concept mastery needs `questions`, which is by far the largest payload in
-    this module — and a nested `quizzes(questions)` select repeats that whole
-    blob once per *result*, so a quiz taken four times ships its questions four
-    times. Read flat and joined in Python, each quiz's questions cross the wire
-    exactly once. That is why this is ten selects and not nine, and it is
-    smaller on the wire than the nine-select version would have been.
+
+async def _snapshot_rows(user_id: str) -> dict[str, Any]:
+    """Every read the student model needs, preferring one round trip.
+
+    The RPC is the fast path. The twelve-select fallback stays because a
+    database that has not taken the migration must still serve the app rather
+    than 500 on its most-used read — and because it is the executable
+    definition of what the SQL is supposed to return, which is worth keeping
+    next to it.
     """
+    global _warned_no_rpc
+    try:
+        payload = await supabase.db_rpc("student_snapshot", {"p_user_id": user_id})
+        if isinstance(payload, dict) and all(k in payload for k in _SNAPSHOT_KEYS):
+            return payload
+        reason = "returned an unexpected shape"
+    except Exception as e:
+        reason = f"unavailable ({type(e).__name__})"
+    # Once per process, not once per call: this runs on nearly every request,
+    # and a per-call warning would bury the log it is trying to be visible in.
+    if not _warned_no_rpc:
+        _warned_no_rpc = True
+        log.warning("student_snapshot %s — using the twelve-select fallback", reason)
+    return await _snapshot_rows_via_selects(user_id)
+
+
+async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
+    """The pre-RPC read path, kept as a fallback and as the spec for the SQL."""
     (
-        settings_rows,
-        subject_rows,
-        subspace_rows,
-        results,
-        quizzes,
-        activity_days,
-        decks,
-        cards,
-        notes,
-        documents,
-        feedback,
-        user_message_rows,
+        settings_rows, subjects, subspaces, quiz_results, quizzes, daily_activity,
+        decks, flashcards, notes, documents, response_feedback, chat_messages,
     ) = await asyncio.gather(
         supabase.db_select("user_settings", filters={"user_id": f"eq.{user_id}"}, limit=1),
         supabase.db_select("subjects", filters={"user_id": f"eq.{user_id}"}, select="id,name"),
@@ -474,6 +486,66 @@ async def snapshot(user_id: str) -> Snapshot:
             limit=MESSAGE_WINDOW,
         ),
     )
+    return {
+        "settings": settings_rows[0] if settings_rows else {},
+        "subjects": subjects,
+        "subspaces": subspaces,
+        "quiz_results": quiz_results,
+        "quizzes": quizzes,
+        "daily_activity": daily_activity,
+        "decks": decks,
+        "flashcards": flashcards,
+        "notes": notes,
+        "documents": documents,
+        "response_feedback": response_feedback,
+        "chat_messages": chat_messages,
+    }
+
+
+async def snapshot(user_id: str) -> Snapshot:
+    """Everything, concurrently. Ten small selects rather than one join,
+    because the httpx/PostgREST wrapper has no join builder and aggregating a
+    few hundred rows in Python is far cheaper than the round trips would be.
+
+    `flashcards` is fetched whole (two columns) rather than filtered to due
+    ones. It costs a few hundred rows and removes a dependency: filtering by
+    `deck_id in (…)` requires the deck ids first, which would serialise this
+    gather into two waves for one boolean per row we can evaluate here.
+
+    **`quizzes` is read separately rather than joined onto `quiz_results`.**
+    Concept mastery needs `questions`, which is by far the largest payload in
+    this module — and a nested `quizzes(questions)` select repeats that whole
+    blob once per *result*, so a quiz taken four times ships its questions four
+    times. Read flat and joined in Python, each quiz's questions cross the wire
+    exactly once. That is why this is ten selects and not nine, and it is
+    smaller on the wire than the nine-select version would have been.
+    """
+    # ONE round trip, not twelve.
+    #
+    # These were twelve concurrent `db_select`s. Concurrency was not the
+    # problem and `gather` was not the fix: against a remote Supabase every
+    # extra connection pays its own TLS handshake, which costs more than the
+    # overlap saves — measured in `_bulk_counts`'s note in routers/spaces.py.
+    # Twelve round trips is ~500ms of network however it is scheduled, and this
+    # function is the read behind the brief, chat personalisation, note and
+    # quiz generation and the feedback policy. So it asks once.
+    #
+    # `student_snapshot` mirrors every window, ordering and projection below.
+    # Falls back to the twelve reads if the function is missing, so a database
+    # that has not taken the migration still serves rather than 500s.
+    snap_rows = await _snapshot_rows(user_id)
+    settings_rows = [snap_rows["settings"]] if snap_rows.get("settings") else []
+    subject_rows = snap_rows["subjects"]
+    subspace_rows = snap_rows["subspaces"]
+    results = snap_rows["quiz_results"]
+    quizzes = snap_rows["quizzes"]
+    activity_days = snap_rows["daily_activity"]
+    decks = snap_rows["decks"]
+    cards = snap_rows["flashcards"]
+    notes = snap_rows["notes"]
+    documents = snap_rows["documents"]
+    feedback = snap_rows["response_feedback"]
+    user_message_rows = snap_rows["chat_messages"]
 
     settings_row = settings_rows[0] if settings_rows else {}
     subject_names = {s["id"]: s.get("name") or "Untitled" for s in subject_rows}

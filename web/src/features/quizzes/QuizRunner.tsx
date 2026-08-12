@@ -144,7 +144,12 @@ export function QuizRunner({
     <div
       className={cn(
         'flex w-full flex-col',
-        compact ? 'gap-3' : 'mx-auto max-w-3xl gap-5 px-4 py-6 sm:px-6',
+        // `flex-1` in the dock, and this is the line the "quiz sits at the top
+        // of the sidebar" report kept coming back for. The panels *around* this
+        // were given flex-1 twice; the runner itself never was, so it sized to
+        // its content and left the rest of the column empty no matter what its
+        // parents did. A child that refuses to grow cannot be fixed from above.
+        compact ? 'min-h-0 flex-1 gap-3' : 'mx-auto max-w-3xl gap-5 px-4 py-6 sm:px-6',
       )}
     >
       <ProgressHeader
@@ -158,7 +163,14 @@ export function QuizRunner({
 
       {/* LEAF — a question stem is prose you read before you can answer, not an
           object you own. The choices stay pressable controls. */}
-      <Leaf className={cn('pr-4', compact ? 'py-1' : 'py-2 pr-6')}>
+      <Leaf
+        className={cn(
+          'pr-4',
+          // Takes the growth and scrolls its own overflow, so a long stem never
+          // pushes the answer button off the bottom of a 320px column.
+          compact ? 'min-h-0 flex-1 overflow-y-auto py-1' : 'py-2 pr-6',
+        )}
+      >
         {q.subtopic && <span className="setcode">{q.subtopic}</span>}
         <div
           className={cn(
@@ -198,7 +210,7 @@ export function QuizRunner({
         />
       )}
 
-      <div className="flex items-center justify-between gap-2">
+      <div className={cn('flex items-center justify-between gap-2', compact && 'shrink-0')}>
         <span className="setcode">
           {isRevealed ? '' : 'Pick an answer to see how you did'}
         </span>
@@ -257,8 +269,8 @@ function ProgressHeader({
       </div>
       <div className="h-1 w-full overflow-hidden rounded-full bg-line-soft">
         <div
-          className="h-full rounded-full bg-brand transition-[width] duration-500 ease-out"
-          style={{ width: `${(answered / total) * 100}%` }}
+          className="h-full w-full origin-left bg-brand t-meter duration-500 ease-out"
+          style={{ transform: `scaleX(${total ? answered / total : 0})` }}
         />
       </div>
       {!compact && (
@@ -306,7 +318,7 @@ function Choice({
       onClick={onPick}
       disabled={revealed}
       className={cn(
-        'flex items-start gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 text-left transition-all duration-200',
+        'flex items-start gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 text-left t-control duration-200',
         compact ? 'text-[12.5px]' : 'text-[14px]',
         revealed ? 'cursor-default' : 'cursor-pointer',
         tone,
@@ -381,7 +393,7 @@ function Verdict({
         // Grows in from the top edge rather than fading: the verdict arrives
         // as a consequence of the tap, and movement from the thing you just
         // pressed reads as causation.
-        !reduced && 'motion-safe:animate-[verdictIn_260ms_cubic-bezier(0.22,1,0.36,1)]',
+        !reduced && 'motion-safe:animate-[verdictIn_260ms_var(--ease-sl)]',
       )}
     >
       <div className="flex items-center gap-1.5">

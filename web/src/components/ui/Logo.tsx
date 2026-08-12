@@ -116,7 +116,7 @@ export function Logo({
       </span>
 
       <style>{`
-        .logo-mark { transition: transform 420ms cubic-bezier(0.16,1,0.3,1); }
+        .logo-mark { transition: transform 420ms var(--ease-out-expo); }
         .group\\/logo:hover .logo-mark { transform: rotate(-6deg) scale(1.06); }
 
         .logo-word::after {

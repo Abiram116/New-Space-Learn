@@ -90,7 +90,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                a near-white token, so the info toast was white-on-white at
                1.16:1). These pairings measure 8.5–12.2:1. */
             className={cn(
-              'pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur transition-all cursor-pointer',
+              'pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur t-move cursor-pointer',
               t.kind === 'error' && 'border-coral/30 bg-coral-soft text-coral-deep',
               t.kind === 'success' && 'border-mint/30 bg-mint-soft text-mint-deep',
               t.kind === 'info' && 'border-line-dash bg-line text-ink',

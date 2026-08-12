@@ -26,7 +26,8 @@ import { Ledger } from '../../components/ui/Surface'
 import { getCachedStats } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
-import { toneSoft, toneText } from '../../lib/tone'
+import { useReducedMotion } from '../../components/ui/motion'
+import { toneBar, toneSoft, toneText } from '../../lib/tone'
 
 /** Heatmap steps, warm→hot, so a dense week reads at a glance. */
 const INTENSITY = ['bg-line-soft', 'bg-brand/25', 'bg-brand/55', 'bg-brand']
@@ -189,41 +190,84 @@ export function Profile() {
           />
         )}
 
-        {/* Standing */}
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile
-            icon="flame"
-            label="Current streak"
-            value={d ? `${d.streak_days}` : null}
-            unit={d?.streak_days === 1 ? 'day' : 'days'}
-            tone="brand"
-            loading={stats.loading}
-          />
-          <StatTile
-            icon="seal"
-            label="Longest streak"
-            value={d ? `${d.max_streak}` : null}
-            unit={d?.max_streak === 1 ? 'day' : 'days'}
-            tone="sun"
-            loading={stats.loading}
-          />
-          <StatTile
-            icon="doc"
-            label="Sources indexed"
-            value={d ? `${d.docs_indexed}` : null}
-            unit=""
-            tone="sky"
-            loading={stats.loading}
-          />
-          <StatTile
-            icon="target"
-            label="Quiz average"
-            value={d ? (d.quiz_average != null ? `${d.quiz_average}` : '—') : null}
-            unit={d?.quiz_average != null ? '%' : ''}
-            tone="mint"
-            loading={stats.loading}
-          />
+        {/* ── Standing ─────────────────────────────────────────────────
+            Figures measured against something, not four flat numbers.
+
+            This was a 2×4 grid of tiles each printing one value in large type.
+            A streak of 3 tells you nothing on its own: 3 against a personal
+            best of 3 is a different sentence from 3 against a best of 12, and
+            only one of those belongs on a page about your record.
+
+            It is also the first use of `ruled-datum`, which the material system
+            defines as the thing that makes a figure mean anything — "without a
+            reference, a bar chart is decoration" — and which nothing had
+            adopted. The rail is where you stand; the reference is named in
+            words so it never has to be inferred from the geometry. */}
+        <section className="flex flex-col">
+          <div className="flex items-baseline gap-2 pb-1">
+            <h2 className="nameplate text-[20px] text-ink">Standing</h2>
+            <span className="setcode ml-auto">against your own best</span>
+          </div>
+
+          {stats.loading ? (
+            <div className="flex flex-col gap-3 pt-2">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-10 rounded-lg" />
+              ))}
+            </div>
+          ) : d ? (
+            <>
+              <Measure
+                icon="flame"
+                label="Current streak"
+                value={d.streak_days}
+                against={Math.max(d.max_streak, 1)}
+                unit={d.streak_days === 1 ? 'day' : 'days'}
+                reference={d.max_streak > 0 ? `best ${d.max_streak}` : 'no record yet'}
+                tone="brand"
+              />
+              <Measure
+                icon="clock"
+                label="Studied this week"
+                value={d.study_minutes_this_week}
+                /* The weekly form of the goal the student actually set in
+                   Settings — a real target, not a number invented here. */
+                against={Math.max(d.daily_goal * 7, 1)}
+                unit="min"
+                reference={`goal ${d.daily_goal * 7}`}
+                tone="sun"
+              />
+              <Measure
+                icon="target"
+                label="Quiz average"
+                value={d.quiz_average ?? 0}
+                against={100}
+                unit={d.quiz_average != null ? '%' : ''}
+                reference={d.quiz_average != null ? 'of 100' : 'none taken yet'}
+                empty={d.quiz_average == null}
+                tone="mint"
+              />
+            </>
+          ) : null}
         </section>
+
+        {/* ── What exists because you did it ────────────────────────────
+            The other half of a record. These are counts of things you own, so
+            they stay plain figures rather than bars: there is no target a note
+            is measured against, and inventing one would be exactly the
+            "reference that means nothing" the material system warns about. */}
+        {d && (
+          <section className="flex flex-wrap items-baseline gap-x-8 gap-y-2 border-t border-line pt-4">
+            <span className="setcode-strong">Built so far</span>
+            <Built value={d.spaces_count} one="subject" many="subjects" />
+            <Built value={d.docs_indexed} one="source" many="sources" />
+            <Built
+              value={d.badges.filter((b) => b.earned).length}
+              one="badge"
+              many="badges"
+            />
+          </section>
+        )}
 
         {/* `flex-1` on the row, not just the page: this is the part with
             content that scales, so it is the part that should absorb the
@@ -298,53 +342,107 @@ export function Profile() {
   )
 }
 
-function StatTile({
+/**
+ * One figure, and the thing it is measured against.
+ *
+ * LEDGER — a streak count or a quiz average is a figure about you, not an
+ * object you hold, so it takes no foil: foil is the collectible cue, and
+ * spending it on a statistic is what made every number look like loot.
+ *
+ * The rail fills from zero once, on mount. It is the *only* thing that moves
+ * in this band, deliberately: the heatmap below is this page's animated
+ * element, and two things competing for the eye is what made everything except
+ * the heatmap read as inert.
+ */
+function Measure({
   icon,
   label,
   value,
+  against,
   unit,
+  reference,
   tone,
-  loading,
+  empty = false,
 }: {
   icon: IconName
   label: string
-  value: string | null
+  value: number
+  /** The denominator — a personal best, a goal, a ceiling. Never zero. */
+  against: number
   unit: string
+  /** The reference in words, so it is never inferred from bar width alone. */
+  reference: string
   tone: 'brand' | 'sky' | 'sun' | 'mint'
-  loading: boolean
+  /** No data yet. Shows a dash rather than implying a score of zero. */
+  empty?: boolean
 }) {
-  const lit = value !== null && value !== '—' && value !== '0'
+  const reduced = useReducedMotion()
+  const [shown, setShown] = useState(reduced)
+  useEffect(() => {
+    if (reduced) return
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [reduced])
+
+  const pct = Math.min(100, Math.round((value / against) * 100))
+  const lit = !empty && value > 0
+
   return (
-    // LEDGER — a streak count or a quiz average is a figure about you, not an
-    // object you hold. It also loses `foil`: foil is the collectible cue, and
-    // spending it on a statistic is what made every number look like loot.
-    <Ledger className="flex flex-col gap-2 p-4 pt-3">
+    <div className="ruled ruled-datum flex items-center gap-3 py-3">
       <span
         className={cn(
-          'grid h-7 w-7 place-items-center rounded-md',
+          'grid h-7 w-7 shrink-0 place-items-center rounded-md',
           toneSoft[tone],
           lit ? toneText[tone] : 'text-faint',
         )}
       >
-        <Icon3D name={icon} size={15} lifted={lit} />
+        <Icon3D name={icon} size={14} lifted={lit} />
       </span>
-      {loading ? (
-        <Skeleton className="h-8 w-14 rounded" />
-      ) : (
-        <div className="flex items-baseline gap-1.5">
-          <span
-            className={cn(
-              'nameplate text-[34px] leading-none tabular-nums',
-              lit ? toneText[tone] : 'text-ink-3',
-            )}
-          >
-            {value ?? '—'}
-          </span>
-          {unit && <span className="setcode">{unit}</span>}
-        </div>
-      )}
-      <span className="setcode">{label}</span>
-    </Ledger>
+
+      <span className="w-[7.5rem] shrink-0 text-[12.5px] text-ink-3">{label}</span>
+
+      {/* The track rounds and clips; the fill scales. Animating the fill's
+          `width` would lay out the row on every frame of a 900ms transition —
+          the same thing `.t-meter` exists to avoid — and the clip is what lets
+          the fill stay a plain rectangle whose corners cannot squash. */}
+      <span className="relative h-[6px] min-w-0 flex-1 overflow-hidden rounded-full bg-line-soft">
+        <span
+          className={cn('absolute inset-0 origin-left', toneBar[tone])}
+          style={{
+            transform: `scaleX(${shown ? pct / 100 : 0})`,
+            transition: reduced ? undefined : 'transform 900ms var(--ease-sl)',
+          }}
+        />
+      </span>
+
+      <span className="flex shrink-0 items-baseline gap-1">
+        <span
+          className={cn(
+            'nameplate text-[22px] leading-none tabular-nums',
+            lit ? toneText[tone] : 'text-ink-3',
+          )}
+        >
+          {empty ? '—' : value}
+        </span>
+        {unit && <span className="setcode">{unit}</span>}
+      </span>
+
+      <span className="setcode hidden w-[7rem] shrink-0 text-right sm:block">
+        {reference}
+      </span>
+    </div>
+  )
+}
+
+/** A count of something that exists because you made it. */
+function Built({ value, one, many }: { value: number; one: string; many: string }) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="nameplate text-[20px] leading-none tabular-nums text-ink">
+        {value}
+      </span>
+      <span className="text-[12.5px] text-muted">{value === 1 ? one : many}</span>
+    </span>
   )
 }
 
@@ -374,7 +472,7 @@ function BadgeSeal({ badge }: { badge: Badge }) {
          tooltip's job, and printing it was what made every row tall. */
       title={badge.earned ? badge.label : `${badge.hint} (${badge.progress} of ${badge.target})`}
       className={cn(
-        'group relative flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center ring-1 transition-all duration-200',
+        'group relative flex flex-col items-center gap-1.5 rounded-lg p-2.5 text-center ring-1 t-control duration-200',
         badge.earned && badge.tier !== 'common' && 'foil hover:-translate-y-0.5',
         badge.earned ? cn('bg-raised', tierRing) : 'bg-well/60 ring-line/60',
       )}
@@ -418,9 +516,12 @@ function BadgeSeal({ badge }: { badge: Badge }) {
             className="h-1 w-full overflow-hidden rounded-full bg-line-soft"
             title={`${badge.progress} of ${badge.target}`}
           >
+            {/* Same as every other meter: the track clips, the fill scales.
+                A 700ms `width` transition on a grid of ten badges is ten
+                elements relaying out together, every frame. */}
             <div
-              className="h-full rounded-full bg-brand/70 transition-[width] duration-700 ease-out"
-              style={{ width: `${Math.round((badge.progress / badge.target) * 100)}%` }}
+              className="h-full w-full origin-left bg-brand/70 t-meter duration-700 ease-out"
+              style={{ transform: `scaleX(${Math.min(1, badge.progress / badge.target)})` }}
             />
           </div>
         ) : null}

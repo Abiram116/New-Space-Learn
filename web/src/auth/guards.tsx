@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 import { useHandoffPlaying } from '../features/transitions/Handoff'
-import { PageSpinner } from '../components/ui/PageSpinner'
+import { FirstPaintFallback } from '../components/ui/FirstPaint'
 import { ConfigMissing } from '../components/ui/ConfigMissing'
 
 /** Renders children only when the visitor has a session; otherwise → /signin. */
@@ -10,7 +10,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   const { loading, session, supabaseConfigured } = useAuth()
   const location = useLocation()
   if (!supabaseConfigured) return <ConfigMissing />
-  if (loading) return <PageSpinner label="Checking your session…" />
+  if (loading) return <FirstPaintFallback label="Checking your session…" />
   if (!session) {
     const returnTo = `${location.pathname}${location.search}`
     return <Navigate to={`/signin?next=${encodeURIComponent(returnTo)}`} replace />
@@ -28,7 +28,7 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   // playing it owns navigation; see `useHandoffPlaying`.
   const handingOff = useHandoffPlaying()
   if (!supabaseConfigured) return <>{children}</>
-  if (loading) return <PageSpinner />
+  if (loading) return <FirstPaintFallback />
   if (session && !handingOff) return <Navigate to="/home" replace />
   return <>{children}</>
 }

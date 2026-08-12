@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
-import { PageSpinner } from '../components/ui/PageSpinner'
+import { FirstPaintFallback } from '../components/ui/FirstPaint'
 // Lazy — a static import here would pull Landing back into the main bundle
 // for signed-in users, who never see it. See routes/lazyRoutes.
 import { Landing, Lazy } from './lazyRoutes'
@@ -23,7 +23,7 @@ export function RootRoute() {
   const { session, loading } = useAuth()
 
   // Deciding before the session resolves would flash the wrong surface.
-  if (loading) return <PageSpinner label="Loading…" />
+  if (loading) return <FirstPaintFallback label="Loading…" />
   if (session) return <Navigate to="/home" replace />
   return (
     <Lazy>
