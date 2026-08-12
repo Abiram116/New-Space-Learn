@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
@@ -46,6 +47,7 @@ export function NewDeckModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
+          maxLength={LIMITS.deckName}
           placeholder="Photosynthesis"
           autoFocus
         />
@@ -104,6 +106,7 @@ export function GenerateModal({
           label="Topic"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
+          maxLength={LIMITS.cardsTopic}
           placeholder={subspaceName}
           hint="Left blank, it draws on everything indexed in this topic."
         />

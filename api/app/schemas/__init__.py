@@ -83,6 +83,18 @@ class ChatMessageOut(BaseModel):
 
 class ChatSend(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    #: Pasted or picked images, as `data:` URLs.
+    #:
+    #: Sent inline rather than uploaded first because a pasted screenshot has
+    #: no filename, no permanence and no reason to become a `document` — it is
+    #: part of one question, not material to be indexed and cited later.
+    #:
+    #: The caps are the interesting part. Three images because the vision model
+    #: degrades sharply with more, and ~1.5MB each because a data URL travels
+    #: base64-encoded in a JSON body: the wire cost is ~4/3 of the raw bytes,
+    #: and a single free-tier worker holding several of those in memory while
+    #: it streams a response is how the 512MB ceiling gets hit.
+    images: list[str] = Field(default_factory=list, max_length=3)
     #: True when this is a fresh attempt at a question already on the record —
     #: the student clicked Regenerate rather than typing something new. The
     #: question is not re-stored: it is already in `chat_messages` from the

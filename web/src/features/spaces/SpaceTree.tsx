@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { isOpenIn, toggleIn } from './treeState'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
@@ -138,6 +139,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     if (e.key === 'Enter') commitRename(space.id)
                     if (e.key === 'Escape') setRenamingSpace(null)
                   }}
+                  maxLength={LIMITS.spaceName}
                   aria-label={`Rename ${space.name}`}
                   className="min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-2.5 py-1.5 text-[14px] font-semibold text-ink outline-none"
                 />
@@ -231,7 +233,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                           if (e.key === 'Enter') commitRenameSubspace(sub.id)
                           if (e.key === 'Escape') setRenamingSubspace(null)
                         }}
-                        aria-label={`Rename ${sub.name}`}
+                        maxLength={LIMITS.subspaceName}
+                  aria-label={`Rename ${sub.name}`}
                         className="min-w-0 flex-1 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
                       />
                     ) : (
@@ -291,6 +294,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         setNewTopic('')
                       }
                     }}
+                    maxLength={LIMITS.subspaceName}
                     placeholder="New topic"
                     className="min-w-0 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
                   />

@@ -21,6 +21,7 @@
  */
 
 import { lazy, Suspense, useCallback, useState } from 'react'
+import { LIMITS } from '../../../lib/limits'
 import { generateNote, listAllNotes, listNotes } from '../../../api/notes'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
@@ -190,6 +191,7 @@ function WriteFromChat({
         rows={2}
         value={instructions}
         onChange={(e) => setInstructions(e.target.value)}
+        maxLength={LIMITS.noteInstructions}
         placeholder="How should it be written? e.g. just a checklist, or go deep — I have an exam"
         className="w-full resize-none rounded-[10px] border border-line bg-canvas px-2.5 py-2 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/50"
       />

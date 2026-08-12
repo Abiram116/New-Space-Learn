@@ -37,10 +37,14 @@ export async function* streamChat(
    *  The backend skips re-storing it so the question doesn't appear twice for
    *  one answer that changed. */
   regenerate = false,
+  /** Pasted screenshots, as `data:` URLs. Sent inline with the question
+   *  rather than uploaded first: a pasted image belongs to one turn, not to
+   *  the topic's indexed material. */
+  images: string[] = [],
 ): AsyncGenerator<ChatStreamEvent> {
   const res = await apiFetchRaw(`/subspaces/${subspaceId}/chat`, {
     method: 'POST',
-    body: { text, regenerate },
+    body: { text, regenerate, images },
     signal,
   })
   if (!res.body) {

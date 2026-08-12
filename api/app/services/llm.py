@@ -21,7 +21,13 @@ from ..errors import ApiError, NotConfigured, RateLimited, UpstreamUnavailable
 log = logging.getLogger("space_learn.llm")
 
 
-ChatMessage = dict[str, str]  # {"role": "system"|"user"|"assistant", "content": ...}
+#: {"role": "system"|"user"|"assistant", "content": str | list[dict]}
+#:
+#: `content` is a plain string for text turns and an OpenAI-style content array
+#: when images are attached. Typed `Any` rather than a union because every
+#: call site builds one shape or the other and none inspects it — a union here
+#: would buy a cast at each of them for no checking that matters.
+ChatMessage = dict[str, Any]
 
 
 class LLM(Protocol):

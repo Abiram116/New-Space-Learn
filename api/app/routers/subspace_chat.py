@@ -22,11 +22,12 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
+from ..config import settings
 from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError
 from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
-from ..services import activity, personalization, rag, student_model, supabase
+from ..services import activity, guardrails, personalization, rag, student_model, supabase
 from ..services.chat_context import recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
@@ -73,7 +74,14 @@ async def send_chat(
 ) -> StreamingResponse:
     subspace = await assert_subspace(user.id, subspace_id)
     # Bounce over-eager callers before we do any DB or LLM work.
-    await consume_llm_quota(user.id)
+    # Validated before the quota is charged, so a rejected attachment does not
+    # cost the student a request. Invalid images are dropped, not refused —
+    # the text is the question, the image is an attachment to it.
+    images = guardrails.validate_images(body.images)
+    # An image costs more: it is a larger request, a slower model, and more
+    # tokens in and out. Charging it as one plain turn would let a student
+    # burn the free-tier budget three times faster than the quota implies.
+    await consume_llm_quota(user.id, cost=2 if images else 1)
     # Two waves, not six sequential awaits.
     #
     # This is the highest-traffic request in the app and every one of these was
@@ -112,6 +120,7 @@ async def send_chat(
         history=prior,
         question=body.text,
         retrieved=retrieved,
+        images=images,
         answer_only_from_docs=bool(settings_row.get("answer_only_from_docs", True)),
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
         # `render`, not `build` — the snapshot is already in hand above.
@@ -147,7 +156,16 @@ async def send_chat(
             # while tokens are still streaming in.
             for c in citations_meta:
                 yield _sse("citation", c)
-            async for delta in get_llm().stream_chat(messages):
+            # The vision model, only when there is something to see.
+            #
+            # This is a real trade, not a free upgrade: the image-capable model
+            # is smaller than the 70B used for text, so attaching a screenshot
+            # buys sight at the cost of reasoning. Routing every turn through it
+            # "for consistency" would quietly make every text answer worse.
+            async for delta in get_llm().stream_chat(
+                messages,
+                model=settings.groq_model_vision if images else None,
+            ):
                 buffer.append(delta)
                 yield _sse("token", {"delta": delta})
             assistant_text = "".join(buffer).strip() or "(no reply)"

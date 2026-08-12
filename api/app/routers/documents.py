@@ -346,7 +346,7 @@ async def _extract_image_text(data: bytes, mime_type: str) -> str:
                         },
                     ],
                 },
-            ],  # type: ignore[list-item]  — multimodal content, not the plain-str shape
+            ],
             model=settings.groq_model_vision,
             temperature=0.2,
         ):

@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { useSearchParams } from 'react-router-dom'
 import { generateQuiz, getQuiz, listQuizzes } from '../../api/quizzes'
 import type { Quiz, QuizResult } from '../../api/types'
@@ -306,6 +307,7 @@ function GenerateQuizModal({
           label="Topic (optional)"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
+          maxLength={LIMITS.quizTopic}
           placeholder="Attention basics"
           hint="Leave blank to cover the whole subspace."
         />

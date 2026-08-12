@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { Editor, EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
@@ -607,6 +608,7 @@ export function NoteEditor({
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            maxLength={LIMITS.noteTitle}
             placeholder="Untitled note"
             aria-label="Note title"
             className={cn(
@@ -693,6 +695,7 @@ export function NoteEditor({
                       void runInlineAi(prompt, from, to)
                     }
                   }}
+                  maxLength={LIMITS.notePrompt}
                   placeholder={
                     askAi.sel
                       ? 'e.g. explain this with a worked example'

@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
 import { listPreferences, sendFeedback, type Preference } from '../../api/feedback'
@@ -39,6 +40,21 @@ import {
   type TurnSignal,
 } from './feedbackPolicy'
 import type { AgentKey } from './agents'
+
+/**
+ * A slash-command argument, cut to what the endpoint will accept.
+ *
+ * `/quiz <topic>` takes the rest of the composer line, and the composer is
+ * capped at 4000 characters while every `topic` field on the API is capped at
+ * 120–140. A `maxLength` cannot help here — the text is one field being read
+ * as two — so the clamp belongs at the point the argument is handed to a
+ * request. Truncating a topic is lossless in practice: it is a phrase used to
+ * steer retrieval, not content that gets stored.
+ */
+function clampTopic(value: string | undefined, max: number): string | undefined {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed.slice(0, max) : undefined
+}
 
 export function ChatView() {
   const { space, subspace, base } = useActiveSubspace()
@@ -100,7 +116,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   }, [])
 
   const send = useCallback(
-    async (text: string, opts?: { regenerate?: boolean }) => {
+    async (text: string, opts?: { regenerate?: boolean; images?: string[] }) => {
       const regenerate = opts?.regenerate ?? false
       // A regenerate is another attempt at a question already on screen, not
       // a new turn — appending a second identical bubble would show the
@@ -124,7 +140,13 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       const controller = new AbortController()
       abortRef.current = controller
       try {
-        for await (const evt of streamChat(subspaceId, text, controller.signal, regenerate)) {
+        for await (const evt of streamChat(
+          subspaceId,
+          text,
+          controller.signal,
+          regenerate,
+          opts?.images ?? [],
+        )) {
           handleEvent(evt, setPending, (final, cits, messageId) => {
             const assistant: Message = {
               // The REAL row id, not a fabricated one.
@@ -188,13 +210,16 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     async (agent: AgentKey, argument?: string) => {
       try {
         if (agent === 'quiz') {
-          const quiz = await generateQuiz(subspaceId, { topic: argument, count: 5 })
+          const quiz = await generateQuiz(subspaceId, {
+            topic: clampTopic(argument, LIMITS.quizTopic),
+            count: 5,
+          })
           show('Quiz ready.', 'success')
           onNavigate(`${base}/quizzes?q=${quiz.id}`)
           return
         }
         if (agent === 'notes') {
-          setNoteBrief({ topic: argument })
+          setNoteBrief({ topic: clampTopic(argument, LIMITS.noteTopic) })
           return
         }
         if (agent === 'flashcards') {
@@ -202,7 +227,10 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           // generator draw on whatever this topic has indexed.
           const summary = lastAssistant(history.data ?? [])
           const cards = await generateCards(subspaceId, {
-            topic: argument || (summary ? firstSentence(summary.content, 60) : undefined),
+            topic: clampTopic(
+              argument || (summary ? firstSentence(summary.content, 60) : undefined),
+              LIMITS.cardsTopic,
+            ),
             source_text: summary?.content,
             count: 8,
           })

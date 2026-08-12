@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import {
   createCard,
   createDeck,
@@ -530,6 +531,7 @@ function CardEditor({
           value={front}
           onChange={(e) => setFront(e.target.value)}
           rows={2}
+          maxLength={LIMITS.cardFront}
           placeholder="What does one turn of the Krebs cycle yield?"
         />
         <Textarea
@@ -538,6 +540,7 @@ function CardEditor({
           value={back}
           onChange={(e) => setBack(e.target.value)}
           rows={4}
+          maxLength={LIMITS.cardBack}
           placeholder="How much future reward is worth relative to immediate reward."
         />
         {error && <p className="text-xs font-semibold text-coral-deep">{error}</p>}

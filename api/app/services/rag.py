@@ -12,9 +12,9 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from . import supabase
+from . import guardrails, supabase
 from .embeddings import embed_texts
-from .voice import COMPANION_VOICE
+from .voice import COMPANION_VOICE, DIAGRAM_RULE, RESPONSE_SHAPE
 
 
 @dataclass(slots=True)
@@ -96,7 +96,8 @@ def build_prompt(
     answer_only_from_docs: bool,
     always_show_citations: bool,
     student_context: str = "",
-) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
+    images: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (messages_for_llm, citations_metadata_for_frontend)."""
 
     citations_meta: list[dict[str, Any]] = []
@@ -128,11 +129,21 @@ def build_prompt(
     # honesty claim actually depends on — split apart or vague, a model
     # reliably drifts toward answering from general knowledge without saying
     # so.
+    # Voice, then shape, then when to draw. All three are *style*, and they
+    # sit before the Skill on purpose: "prose only, no lists" is a legitimate
+    # teaching preference and should be able to win against any of them. Only
+    # the integrity and safety blocks at the end are non-negotiable.
     system_parts = [
         COMPANION_VOICE,
         f"You are working with the student on the topic '{subspace_name}'.",
-        "Be direct, accurate, and concise. Prefer short paragraphs over long ones.",
+        RESPONSE_SHAPE,
+        DIAGRAM_RULE,
     ]
+    # Only when there is actually an image. Explaining how to read attachments
+    # on every text-only turn is tokens spent on a situation that is not
+    # happening, on every message, forever.
+    if images:
+        system_parts.append(guardrails.IMAGE_RULES)
     if always_show_citations and retrieved:
         system_parts.append(
             "Every factual claim that comes from a source must end with that "
@@ -155,18 +166,56 @@ def build_prompt(
                 "indexed in this topic covers it yet — do not answer from outside "
                 "knowledge instead."
             )
+    # ── Skill, then student, then the rules that outrank both ─────────
+    #
+    # Order is the whole mechanism here. `for_skill`'s docstring records that
+    # "a model reads the last constraint as the most specific" — and this
+    # assembly used to end on user-authored Skill text, which put 4000
+    # characters of free input in the most authoritative position in the
+    # prompt, after the product's own honesty rules.
+    #
+    # That is not primarily a malicious-user problem (a Skill only affects its
+    # own account, and `is_library` is not settable through the API). It is a
+    # careless-Skill problem: "always cite a source" written as a teaching
+    # style, sitting after "only cite the sources you were given", is how a
+    # tutor starts inventing citations while looking like it is working.
+    #
+    # So Skills go in the middle, framed as style rather than authority, and
+    # the invariants go last where the same reasoning now works for us.
     for extra in active_skill_instructions:
-        if extra.strip():
-            system_parts.append(extra.strip())
+        framed = guardrails.frame_skill(extra)
+        if framed:
+            system_parts.append(framed)
     if student_context:
         system_parts.append(student_context)
+
+    system_parts.append(
+        guardrails.integrity_rules(
+            grounded=bool(retrieved), cite=always_show_citations
+        )
+    )
+    system_parts.append(guardrails.SAFETY_RULES)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(system_parts)}]
     if sources_block:
         messages.append({"role": "system", "content": sources_block})
     # Keep the last N turns of history so context doesn't balloon.
     messages.extend(history[-8:])
-    messages.append({"role": "user", "content": question})
+
+    # The question and its attachments are ONE user turn.
+    #
+    # Sent as the OpenAI-style content array the vision models expect, and only
+    # when images exist — a plain string is what every text model wants, and
+    # wrapping every message in an array "for consistency" would change the
+    # shape of a request that has nothing to do with images.
+    if images:
+        content: list[dict[str, Any]] = [{"type": "text", "text": question}]
+        content.extend(
+            {"type": "image_url", "image_url": {"url": url}} for url in images
+        )
+        messages.append({"role": "user", "content": content})
+    else:
+        messages.append({"role": "user", "content": question})
     return messages, citations_meta
 
 

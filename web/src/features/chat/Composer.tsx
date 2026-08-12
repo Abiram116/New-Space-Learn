@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { AttachmentStrip, AttachmentViewer, useAttachments } from './Attachments'
+import { LIMITS } from '../../lib/limits'
 import type { AgentKey } from './agents'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
@@ -46,12 +48,14 @@ export function Composer({
   placeholder: string
   disabled?: boolean
   streaming?: boolean
-  onSend: (text: string) => void
+  onSend: (text: string, opts?: { images?: string[] }) => void
   onCancel?: () => void
   onRunAgent: (agent: AgentKey, argument?: string) => void
 }) {
   const [value, setValue] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const shots = useAttachments()
 
   // Auto-grow the textarea to a maximum height then scroll.
   useEffect(() => {
@@ -69,9 +73,10 @@ export function Composer({
       const argument = text.slice(match.command.length).trim()
       onRunAgent(match.agent, argument || undefined)
     } else {
-      onSend(text)
+      onSend(text, { images: shots.items.map((i) => i.url) })
     }
     setValue('')
+    shots.clear()
   }
 
   /* Locked while a quiz or card review is running.
@@ -97,6 +102,26 @@ export function Composer({
       />
 
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-2 px-5 pb-3 pt-1">
+        <AttachmentStrip
+          items={shots.items}
+          onRemove={shots.remove}
+          onOpen={shots.open}
+        />
+        <AttachmentViewer item={shots.viewing} onClose={shots.closeViewer} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          hidden
+          onChange={(e) => {
+            void shots.add(Array.from(e.target.files ?? []))
+            // Cleared so picking the same file twice in a row still fires
+            // `change` — otherwise re-attaching something you just removed
+            // silently does nothing.
+            e.target.value = ''
+          }}
+        />
         {/* Locked state lives on the input itself.
             There was a pill above saying "chat pauses during a review" AND a
             placeholder inside saying "paused while you're reviewing" — the
@@ -119,8 +144,22 @@ export function Composer({
           <textarea
             ref={ref}
             rows={1}
+            /* Stops at the API's own ceiling rather than letting a long paste
+               become a validation error. See lib/limits.ts. */
+            maxLength={LIMITS.chatText}
             value={value}
             onChange={(e) => setValue(e.target.value)}
+            /* Paste is the whole feature. A student takes a screenshot of a
+               slide or a problem set and hits Ctrl+V — asking them to save it
+               to disk first and then find it in a picker is the interaction
+               this replaces. `getAsFile` returns null for ordinary text
+               pastes, so those fall through to the textarea untouched. */
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData.files)
+              if (files.length === 0) return
+              e.preventDefault()
+              void shots.add(files)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -137,6 +176,33 @@ export function Composer({
             disabled={disabled || assessing}
             className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint disabled:opacity-60"
           />
+
+          {/* Paste is the fast path; this is the discoverable one. Nobody
+              learns Ctrl+V works by guessing, and on a phone there is no
+              paste gesture for a screenshot at all. Hidden while a review is
+              running, for the same reason the input is locked. */}
+          {!assessing && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={disabled || shots.items.length >= LIMITS.chatImages}
+              aria-label="Attach an image"
+              title={
+                shots.items.length >= LIMITS.chatImages
+                  ? `${LIMITS.chatImages} images is the limit`
+                  : 'Attach an image'
+              }
+              className={cn(
+                'grid h-8 w-8 shrink-0 place-items-center rounded-full',
+                't-control duration-200',
+                shots.items.length >= LIMITS.chatImages
+                  ? 'cursor-default text-faint'
+                  : 'cursor-pointer text-muted hover:bg-line-soft hover:text-ink',
+              )}
+            >
+              <Icon name="upload" size={14} />
+            </button>
+          )}
 
           {streaming ? (
             <button
