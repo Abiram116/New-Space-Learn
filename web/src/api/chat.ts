@@ -33,10 +33,14 @@ export async function* streamChat(
   subspaceId: string,
   text: string,
   signal?: AbortSignal,
+  /** True for a Regenerate click: the same question again, not a new turn.
+   *  The backend skips re-storing it so the question doesn't appear twice for
+   *  one answer that changed. */
+  regenerate = false,
 ): AsyncGenerator<ChatStreamEvent> {
   const res = await apiFetchRaw(`/subspaces/${subspaceId}/chat`, {
     method: 'POST',
-    body: { text },
+    body: { text, regenerate },
     signal,
   })
   if (!res.body) {

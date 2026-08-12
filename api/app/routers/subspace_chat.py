@@ -122,17 +122,23 @@ async def send_chat(
     prefs_applied = personalization.applied_keys(snap)
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
-    user_row = (
-        await supabase.db_insert(
-            "chat_messages",
-            {
-                "user_id": user.id,
-                "subspace_id": subspace_id,
-                "role": "user",
-                "content": body.text,
-            },
-        )
-    )[0]
+    # Skipped on a regenerate: the question is already on the record from the
+    # first attempt, and this is another attempt at the same one, not a new
+    # turn — inserting it again would show the question twice for one answer
+    # that changed.
+    user_row: dict | None = None
+    if not body.regenerate:
+        user_row = (
+            await supabase.db_insert(
+                "chat_messages",
+                {
+                    "user_id": user.id,
+                    "subspace_id": subspace_id,
+                    "role": "user",
+                    "content": body.text,
+                },
+            )
+        )[0]
 
     async def gen() -> AsyncIterator[bytes]:
         buffer: list[str] = []
@@ -214,7 +220,7 @@ async def send_chat(
                 "done",
                 {
                     "message_id": saved_id,
-                    "user_message_id": user_row["id"],
+                    "user_message_id": user_row["id"] if user_row else None,
                     "citations": citations_meta,
                     # The canonical stored text. Tokens were already streamed
                     # raw, so if any marker was stripped above the client's

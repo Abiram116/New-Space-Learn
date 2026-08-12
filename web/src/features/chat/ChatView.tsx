@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
-import { listPreferences, type Preference } from '../../api/feedback'
+import { listPreferences, sendFeedback, type Preference } from '../../api/feedback'
 import { generateCards } from '../../api/flashcards'
 import { generateNote } from '../../api/notes'
 import { generateQuiz } from '../../api/quizzes'
@@ -78,6 +78,15 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
+  /* Consecutive regenerations of the CURRENT answer — reset the moment a
+     genuine new question is asked (see `send`, non-regenerate branch), so
+     regenerating an old answer and then moving on doesn't carry a stale count
+     into an unrelated one. `feedbackPolicy.askReason` only escalates to
+     `repeated_regenerate` on the second consecutive regenerate; the first is
+     treated as ordinary dissatisfaction, not yet a signal worth interrupting
+     for. */
+  const [regenerations, setRegenerations] = useState(0)
+
   // Auto-scroll to bottom when messages arrive.
   useEffect(() => {
     const el = scrollRef.current
@@ -91,20 +100,31 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   }, [])
 
   const send = useCallback(
-    async (text: string) => {
-      const optimistic: Message = {
-        id: `tmp-${Date.now()}`,
-        role: 'user',
-        content: text,
-        created_at: new Date().toISOString(),
+    async (text: string, opts?: { regenerate?: boolean }) => {
+      const regenerate = opts?.regenerate ?? false
+      // A regenerate is another attempt at a question already on screen, not
+      // a new turn — appending a second identical bubble would show the
+      // student's own question twice for one answer that changed. The
+      // backend mirrors this: it does not re-store the question either.
+      if (!regenerate) {
+        const optimistic: Message = {
+          id: `tmp-${Date.now()}`,
+          role: 'user',
+          content: text,
+          created_at: new Date().toISOString(),
+        }
+        history.setData((prev) => [...(prev ?? []), optimistic])
+        // A genuinely new question starts a new answer chain — an old
+        // regenerate count must not carry over and falsely trigger
+        // `repeated_regenerate` on an answer nobody has regenerated yet.
+        setRegenerations(0)
       }
-      history.setData((prev) => [...(prev ?? []), optimistic])
       setPending({ text: '', citations: [] })
       setStreaming(true)
       const controller = new AbortController()
       abortRef.current = controller
       try {
-        for await (const evt of streamChat(subspaceId, text, controller.signal)) {
+        for await (const evt of streamChat(subspaceId, text, controller.signal, regenerate)) {
           handleEvent(evt, setPending, (final, cits, messageId) => {
             const assistant: Message = {
               // The REAL row id, not a fabricated one.
@@ -209,17 +229,6 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     lastGivenAt: number | null
   }>({ lastOfferedAt: null, lastGivenAt: null })
 
-  /* Consecutive regenerations of the current answer.
-     Hardcoded to zero, deliberately and visibly: **there is no regenerate
-     control in the app yet.** The `regenerate` feedback kind exists in the
-     taxonomy and the backend already knows what to do with it — it lowers
-     every leading preference a little, dissatisfaction with no stated
-     direction — but nothing can send one. `feedbackPolicy` supports the
-     trigger so wiring a regenerate button is a one-line change here rather
-     than a policy change; tracked as N18 in docs/plan.md. A `useState` that
-     nothing ever sets would just be dead state pretending to be a feature. */
-  const regenerations = 0
-
   /* Preferences drive the expected-value gate. Fetched once per mount and
      deliberately NOT refetched after each tap: one tap cannot move a
      preference past the threshold on its own, and a round trip per chip press
@@ -274,6 +283,36 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     preferences: prefs,
     complete: true,
   })
+
+  /* Try that again.
+     Two things happen, in this order: the dissatisfaction is recorded first
+     (so it lands even if the resend then fails or is aborted), then a fresh
+     attempt at the same question streams in as a new answer alongside the
+     old one — nothing is deleted, so a student comparing two explanations of
+     the same thing still can. `regenerate: 'regenerate'` carries no stated
+     direction on its own (see `preferences.FEEDBACK_KINDS` on the backend):
+     it lowers every leading preference a little rather than pointing
+     anywhere, which is the honest read of "that didn't land, try again"
+     with nothing else said. */
+  const regenerate = useCallback(async () => {
+    if (streaming) return
+    const question = lastUserMessage?.content
+    if (!question) return
+    const target = lastAssistant(messages)
+    if (target && !target.id.startsWith('srv-') && target.id !== 'pending') {
+      void sendFeedback({
+        surface: 'chat',
+        target_id: target.id,
+        subspace_id: subspaceId,
+        kind: 'regenerate',
+      }).catch(() => {
+        // Silent, same as every other feedback tap — losing one signal is a
+        // rounding error against blocking the regenerate itself on it.
+      })
+    }
+    setRegenerations((n) => n + 1)
+    await send(question, { regenerate: true })
+  }, [streaming, lastUserMessage, messages, subspaceId, send])
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -340,6 +379,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
                             ? s
                             : { ...s, lastOfferedAt: assistantTurns },
                         ),
+                      onRegenerate: regenerate,
                     }
                   : undefined
               }

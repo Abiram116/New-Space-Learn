@@ -20,6 +20,9 @@ export type MessageFeedback = {
    *  is supposed to always be available would suppress the rare one that
    *  isn't. */
   onOffered: () => void
+  /** Try that answer again. Always available on the last complete answer —
+   *  an action, not a feedback tap, though it also records one. */
+  onRegenerate: () => void
 }
 
 export function ChatMessage({
@@ -124,6 +127,7 @@ function FeedbackRow({ feedback }: { feedback: MessageFeedback }) {
         messageId={feedback.messageId}
         subspaceId={feedback.subspaceId}
         onRecorded={feedback.onRecorded}
+        onRegenerate={feedback.onRegenerate}
       />
     </div>
   )

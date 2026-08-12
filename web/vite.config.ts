@@ -24,6 +24,7 @@ export default defineConfig({
     // `environmentMatchGlobs`; the docblock is the supported way to do this
     // without splitting the suite into projects.)
     environment: 'node',
+    setupFiles: ['./src/testSetup.ts'],
   },
 })
 

@@ -24,6 +24,15 @@
  * failed request is swallowed. A student who taps "too long" and gets a red
  * toast has been punished for helping, and silently losing one piece of
  * evidence is a rounding error against that.
+ *
+ * **A third, always-present action lives in the same row as the thumbs:
+ * Regenerate.** It is not feedback in the sense the two layers above are —
+ * it does something (a fresh attempt streams in) rather than only recording
+ * an opinion — but tapping it also files a `regenerate` feedback event, which
+ * is what lets `feedbackPolicy`'s `repeated_regenerate` trigger fire on a
+ * *second* consecutive tap. One regenerate is just "let me see that again";
+ * two in a row is the student telling the system, without words, that
+ * whatever it's doing isn't working.
  */
 
 import { useState } from 'react'
@@ -38,6 +47,7 @@ export function FeedbackChips({
   messageId,
   subspaceId,
   onRecorded,
+  onRegenerate,
 }: {
   /** Reason chips to offer. May be empty — the thumbs still render. */
   chips: FeedbackKind[]
@@ -46,6 +56,11 @@ export function FeedbackChips({
   messageId: string
   subspaceId: string
   onRecorded: () => void
+  /** Try that answer again — an action, not a feedback tap, though clicking
+   *  it also records one (kind: 'regenerate'). Always available, same row as
+   *  the thumbs, because asking again is something a student might want on
+   *  any answer, not only one flagged as needing feedback. */
+  onRegenerate: () => void
 }) {
   const [given, setGiven] = useState<FeedbackKind | null>(null)
   /** Set by thumbs-down: the student asked to say more, so chips are welcome. */
@@ -69,6 +84,18 @@ export function FeedbackChips({
       <div className="flex items-center gap-1.5 pl-4 text-[11.5px] text-muted">
         <Icon name="check" size={11} className="text-mint-deep" />
         {given === 'useful' ? 'Glad it helped.' : 'Noted — I’ll adjust.'}
+        {/* Naming a specific problem ("too long", "need an example") is
+            precisely the moment a student wants a fresh attempt, not just a
+            note for next time — so the door to it stays open here too. */}
+        {given !== 'useful' && (
+          <button
+            type="button"
+            onClick={onRegenerate}
+            className="ml-1 font-semibold text-brand-deep transition-colors cursor-pointer hover:text-brand"
+          >
+            Try again
+          </button>
+        )}
       </div>
     )
   }
@@ -91,6 +118,16 @@ export function FeedbackChips({
           active={invited}
           onClick={() => setInvited(true)}
         />
+        <span aria-hidden className="mx-0.5 h-4 w-px bg-line" />
+        <button
+          type="button"
+          onClick={onRegenerate}
+          aria-label="Try that again"
+          title="Try that again"
+          className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+        >
+          <Icon name="refresh" size={14} />
+        </button>
         {invited ? (
           <span className="ml-1.5 text-[11.5px] text-faint">What was off?</span>
         ) : (

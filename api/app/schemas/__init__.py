@@ -83,6 +83,14 @@ class ChatMessageOut(BaseModel):
 
 class ChatSend(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+    #: True when this is a fresh attempt at a question already on the record —
+    #: the student clicked Regenerate rather than typing something new. The
+    #: question is not re-stored: it is already in `chat_messages` from the
+    #: first attempt, and inserting it again would show the same question
+    #: twice for one answer that changed. The answer itself is always stored,
+    #: regenerated or not — nothing about a student's history disappears,
+    #: only the redundant restatement of the question is skipped.
+    regenerate: bool = False
 
 
 # ── Documents ──────────────────────────────────────────────────────────

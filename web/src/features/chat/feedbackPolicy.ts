@@ -196,7 +196,15 @@ export function readSignal(message: string): TurnSignal {
   if (
     /\b(simpler|simplify|dumb(?:ed)? down|less detail|shorter|too long|be brief|concise)\b/.test(t) ||
     /\b(more detail|elaborate|go deeper|expand on|longer|in depth)\b/.test(t) ||
-    /\b(example|for instance|show me how)\b/.test(t)
+    /\b(example|for instance|show me how)\b/.test(t) ||
+    // Mirrors _IMPLICIT_PATTERNS' interaction.answer_mode/direct on the
+    // backend — this whole category had no frontend pattern at all, found by
+    // api/tests/test_implicit_signal_parity.py running the two side by side.
+    // Unlike the confusion phrases pinned there, there is no reason for the
+    // ask policy to stay ignorant of this one: recognising it only means
+    // fewer redundant "what would help?" asks after a student who has
+    // already said, plainly, that they want less back-and-forth.
+    /\b(just (tell|give) me|straight answer|just the answer|stop asking)\b/.test(t)
   ) {
     return 'directed'
   }

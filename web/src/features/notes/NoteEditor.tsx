@@ -28,6 +28,7 @@ import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-detai
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
+import { AI_PLACEHOLDER, clearAiPlaceholder } from './aiPlaceholder'
 import { healEscapedHtml } from './healHtml'
 import { ImageBlock } from './ImageBlock'
 import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS, SELECTION_ACTIONS } from './toolbar'
@@ -42,9 +43,6 @@ import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 
 const lowlight = createLowlight(common)
-
-/** Shown at the cursor while an AI command is in flight, then taken back out. */
-const AI_PLACEHOLDER = 'Thinking\u2026'
 
 /** Offered in the code block's language picker. */
 const CODE_LANGUAGES = [
@@ -206,25 +204,11 @@ export function NoteEditor({
       setAiBusy(true)
       editor.chain().deleteRange({ from, to }).insertContentAt(from, AI_PLACEHOLDER).run()
 
-      /**
-       * Take the placeholder back out, and only the placeholder.
-       *
-       * Two things this has to survive. **A failed request:** the old version
-       * removed the placeholder on the success path only, so any error left a
-       * literal "Thinking…" sitting in the student's note forever, saved to
-       * the database with everything else. **A student who keeps typing:** the
-       * request is async, so by the time it returns the text at `from` may no
-       * longer be the placeholder at all — deleting blindly would eat words
-       * they just wrote. So the range is verified before anything is removed,
-       * and if it doesn't match we leave the document alone.
-       */
-      const clearPlaceholder = () => {
-        const end = from + AI_PLACEHOLDER.length
-        if (end > editor.state.doc.content.size) return false
-        if (editor.state.doc.textBetween(from, end) !== AI_PLACEHOLDER) return false
-        editor.chain().deleteRange({ from, to: end }).run()
-        return true
-      }
+      // Removing the placeholder is pure ProseMirror logic with no React in
+      // it — see `aiPlaceholder.ts` for what it has to survive (a failed
+      // request, and a student who kept typing while it was in flight) and
+      // for the tests that drive it with a real editor.
+      const clearPlaceholder = () => clearAiPlaceholder(editor, from)
 
       try {
         const { content_md, citations } = await noteAiInline(subspaceId, prompt)
