@@ -18,9 +18,9 @@ against the other.
 | App shell interactive, backend warm | <500ms | Not independently measured; depends on auth verify + first data fetch |
 | App shell interactive, backend cold | Best-effort — Render free tier costs ~30s here, not a target to hit | Mitigated for landing visitors (health-ping warm-up per `docs/product/vision.md §10`); **not mitigated for a student who bookmarks the app directly and lands past the landing page** — see §6 |
 | Simple list/get API call, warm | <300ms | One measured warm round trip to remote Supabase is ~150–257ms (`docs/plan.md`); most list endpoints are 1–2 round trips deep after the responsiveness pass |
-| Chat time-to-first-token, warm | <1.5s | Retrieval (2–3 round trips) + Groq TTFT (estimated 300–600ms) — not independently measured end-to-end |
+| Chat time-to-first-token, warm | <1.5s | **Measured 2026-08-12: ~699ms** (retrieval 512ms + Groq TTFT 187ms, real call against 52 real embedded chunks — see §9). Comfortably inside budget. |
 | Quiz/flashcard generation (full artifact) | <6s | One 70B call generating N structured items — the slowest routine user-facing wait in the product; must always show a real loading state, never a bare spinner with no explanation |
-| Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | Not independently measured; falls back to "still processing, tap reprocess" on timeout rather than hanging |
+| Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | **Measured 2026-08-12: 6.2s median** re-embedding a real 52-chunk academic paper (extract+chunk+embed+insert, real local BGE-small) — inside both the hard cap and the target, for a document larger than "typical." |
 | First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-09: 147KB** entry (app), **~209KB** for a landing visit (entry + the lazy `Landing` chunk). The 245KB previously recorded here predates the landing rebuild and further splitting. |
 | Any in-app animation | ≤320ms (`docs/plan.md`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
 
@@ -92,11 +92,16 @@ above as a to-do, not a claim.
   At the 500MB free-tier ceiling, the embedding vector is the dominant
   per-row cost, not the text — worth knowing before assuming a storage
   problem is a text-chunking problem.
-- **Stubbed embeddings mean this entire section is currently measuring the
-  wrong thing.** Query latency for a meaningless-vector search is the same
-  as for a real one — the performance characteristics documented here don't
-  change once real embeddings ship, but retrieval *quality* does, and
-  that's a correctness fix (`docs/engineering/ai-pipeline.md §4`), not a performance one.
+- **Superseded 2026-08-12 — embeddings are real now, and so is this
+  measurement.** `rag.retrieve()` against the "transformer" subspace's 52
+  real embedded chunks: **median 512ms** (k=4, 10 runs; one 2.7s cold-run
+  outlier excluded from the median, same connection-warm-up pattern as
+  everywhere else in this doc). Sanity-checked, not just timed: the query
+  "What is self-attention?" returned its top hit at similarity 0.694 from
+  the paper's own self-attention section — retrieval is finding the right
+  thing, not just responding fast. This number is the local BGE-small
+  inference (`asyncio.to_thread`, off the event loop) plus one indexed
+  Postgres query; see `docs/decisions.md` for the model choice.
 
 ---
 
@@ -208,21 +213,60 @@ observed as one, not pre-emptively.
 
 ---
 
-### 8. Recommendations, ranked by effort ÷ impact
+### 9. N4b — the real measured pass, 2026-08-12
+
+Everything below is `api/scripts/measure_perf_pass.py` calling the real,
+unmodified handlers directly against the live database and, for the LLM
+rows, the live Groq API — same technique as §7's `/me/stats` script. Real
+data throughout: the "transformer" subspace (52 real embedded chunks from
+the Attention Is All You Need paper), real `daily_activity`/quiz/card rows.
+
+| Endpoint / operation | Median | n | Note |
+|---|---|---|---|
+| `GET /me/brief` | 814.5ms | 10 | Includes a real fast-tier Groq call for the companion text, plus its own reads — no prior measurement existed for this endpoint to compare against |
+| `GET /me/stats` | 725.5ms | 10 | See the discrepancy note below |
+| `rag.retrieve()`, k=4 | 512.0ms | 10 | Real embeddings, real cosine similarity — see §4's sanity check |
+| Groq TTFT, large tier | 187.4ms | 5 | Isolated from retrieval — just the model call |
+| Retrieval + TTFT (≈ real chat TTFT) | 699.4ms | — | Against the <1.5s budget in §1 |
+| Document reprocess (52 chunks) | 6157.6ms | 3 | Against the 25s hard cap and <8s target in §1 |
+
+**The `/me/stats` discrepancy, stated plainly rather than silently
+overwritten:** §7 measured 518.8ms on 2026-08-09; this pass measured
+725.5ms on 2026-08-12. Checked the code before writing this down —
+`stats.py` still runs the identical single 8-way `asyncio.gather` (read
+directly, not assumed), so the round-trip *shape* hasn't regressed. The most
+plausible explanation is more real data now existing to aggregate (real
+`daily_activity` rows across 181 days, real cards/decks/quizzes, where the
+2026-08-09 measurement ran against a thinner account) plus ordinary
+run-to-run network variance — but that's a plausible explanation, not a
+proven one. Recorded as an open question rather than resolved: **if this
+number keeps climbing on a future re-measurement, that's worth treating as a
+real trend, not noise.**
+
+**What this pass confirms, that no prior measurement could:** real
+embeddings retrieve the right content (§4's similarity check), real chat
+TTFT is comfortably inside budget, and real document processing is
+comfortably inside both its hard cap and its target — all three were
+previously either simulated, estimated, or blocked on stub embeddings.
+
+---
+
+### 10. Recommendations, ranked by effort ÷ impact
 
 1. ~~**Warm the app shell, not just the landing page**~~ (§6) — **done,
    2026-08-09 (D6).** Moved to `AuthProvider`, the one mount point that
    actually covers a direct-bookmark visitor.
-2. ~~**Measure `/me/stats` for real**~~ (§7) — **done, 2026-08-09.** 20 real
-   runs against the live database: median 518.8ms (475.6ms excluding a
-   one-time connection warm-up on run 1), not the ~150ms simulated estimate.
+2. ~~**Measure `/me/stats` for real**~~ (§7, re-measured §9) — **done.**
    `asyncio.gather` already covers all 8 reads; no code change is justified
-   by these numbers.
-3. **Budget the Gap Map's rendering approach as its own lazy chunk from day
+   by either measurement. The 518.8ms → 725.5ms shift between the two
+   passes is noted, not explained away — see §9.
+3. ~~**Fix real embeddings before optimizing retrieval further**~~ (§4) —
+   **done.** Retrieval is real, measured, and confirmed to surface correct
+   content — see §4 and §9.
+4. **Budget the Gap Map's rendering approach as its own lazy chunk from day
    one** (§2) — costs nothing extra if done from the start; costly to
    retrofit if a graphing library quietly lands in the main bundle first.
-4. **Fix real embeddings before optimizing retrieval further** (§4) — any
-   retrieval-latency work done before this is optimizing the wrong metric.
+   Still open — the Gap Map itself isn't built yet.
 
 ---
 

@@ -87,7 +87,10 @@ describe('keyframes', () => {
     ]
     const offenders: string[] = []
     for (const { path, text } of SOURCES) {
-      if (path.endsWith('lib/room.ts')) continue
+      // `path.join` uses `\` on Windows — normalize before comparing against a
+      // forward-slash literal, or this exclusion silently never matches there
+      // and the source-of-truth file flags itself as its own offender.
+      if (path.replace(/\\/g, '/').endsWith('lib/room.ts')) continue
       for (const v of roomValues) {
         if (text.includes(v)) offenders.push(`${path.replace(ROOT, '.')} → ${v}`)
       }

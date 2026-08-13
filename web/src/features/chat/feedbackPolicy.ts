@@ -12,9 +12,16 @@
  *
  * Something happened that the system cannot interpret on its own:
  *
- * - **Confusion with no direction** — "I don't get it", "I'm lost". They are
- *   stuck and haven't said *how*, so which dimension is wrong is genuinely
- *   unknown. The strongest case for asking.
+ * - **Confusion with no direction, the FIRST time** — "I don't get it", "I'm
+ *   lost". They are stuck and haven't said *how*, so which dimension is wrong
+ *   is genuinely unknown. The strongest case for asking — but only once per
+ *   run. If the same student says it again right after, with no direction
+ *   given in between, asking a second time is asking a question they just
+ *   demonstrated they can't answer. That repeat is itself a signal — "simpler
+ *   didn't land either, or they're not going to specify" — and the backend's
+ *   `_resolve_implicit` already reads it that way (confidence rises with
+ *   repeat count). So a repeat is left to that silent inference instead of
+ *   interrupting again. See `consecutiveConfusion`.
  * - **Repeated regeneration** — asking again for the same thing says the
  *   current settings are not working, without saying what to change. One
  *   regenerate is noise; two in a row is a signal.
@@ -108,6 +115,12 @@ export type AskInput = {
   preferences: Preference[]
   /** False while tokens are still arriving — never interrupt a stream. */
   complete: boolean
+  /**
+   * How many `confusion` signals in a row the student has sent, counting
+   * this one, with nothing else in between. `1` on the first — the only
+   * value the `confusion` trigger fires on. See `consecutiveConfusion`.
+   */
+  consecutiveConfusion: number
 }
 
 /** Why the chips are being shown. Returned so the UI can word the row. */
@@ -141,7 +154,12 @@ export function askReason(input: AskInput): AskReason {
   }
 
   // ── Triggers, strongest first ──
-  if (input.signal === 'confusion') return 'confusion'
+  // Only the FIRST unresolved confusion signal asks. A repeat with nothing
+  // in between (no direction given, no topic change) has already shown that
+  // one question didn't get an answer — asking again gets the same result.
+  // The backend's implicit-signal mining keeps reading the repeat as evidence
+  // for "simpler" regardless; this only decides whether to interrupt.
+  if (input.signal === 'confusion' && input.consecutiveConfusion <= 1) return 'confusion'
   if (input.signal === 'regenerated' && input.regenerations >= 2) {
     return 'repeated_regenerate'
   }
@@ -217,6 +235,29 @@ export function readSignal(message: string): TurnSignal {
   }
 
   return 'none'
+}
+
+/**
+ * How many `confusion` signals the student has sent in a row, counting
+ * backward from the most recent message, stopping at the first message that
+ * isn't one.
+ *
+ * "In a row" is deliberate: a `directed` reply resets it (they specified a
+ * fix — resolved), and so does an ordinary `none` turn (they moved on to
+ * something else — a fresh "I don't get it" after that is about the NEW
+ * thing, not a continuation of the old one). Only messages with nothing
+ * else between them count as the same unresolved run.
+ *
+ * `messages` is oldest-first, matching how chat history is already stored
+ * and rendered everywhere else in this file's caller.
+ */
+export function consecutiveConfusion(messages: string[]): number {
+  let count = 0
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (readSignal(messages[i]) !== 'confusion') break
+    count += 1
+  }
+  return count
 }
 
 /** The key a chip is evidence for — mirrors the backend taxonomy. */

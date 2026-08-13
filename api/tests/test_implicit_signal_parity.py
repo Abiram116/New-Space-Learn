@@ -24,6 +24,18 @@ decision, not a refactor — this file's job is to make sure that decision has
 to be made *on purpose*, by pinning today's behaviour so any future change to
 either regex list shows up here rather than shipping silently.
 
+**Resolved 2026-08-12, at a different layer than either classifier.** Both
+readings turned out to be right, for different occurrences of the same
+phrase: the first time, ask (`readSignal` → `confusion`, unchanged); a repeat
+right after, with nothing resolving it in between, infer instead of
+interrupting again (the backend's reading, unchanged). `readSignal` and
+`_IMPLICIT_PATTERNS` did not need to move — the ask policy's `askReason` did,
+gated on the new `consecutiveConfusion` in `feedbackPolicy.ts`. So this file's
+pins below are still exactly correct and still worth keeping: they lock the
+classification the resolution was built on top of, not the interruption
+decision itself. See `decisions.md` and `feedbackPolicy.test.ts`'s
+"does not ask a second time" case for the actual behaviour.
+
 Style matches `test_sm2.py` / `sm2_parity.mjs`: run the real `readSignal.ts`
 in Node, never a Python transcription of it.
 """

@@ -22,6 +22,7 @@ import {
   MIN_TURNS_BETWEEN_OFFERS,
   askReason,
   chipsFor,
+  consecutiveConfusion,
   isContested,
   isSettled,
   readSignal,
@@ -39,7 +40,9 @@ const pref = (over: Partial<Preference> = {}): Preference => ({
   ...over,
 })
 
-/** A turn where nothing notable happened and nothing blocks an ask. */
+/** A turn where nothing notable happened and nothing blocks an ask.
+ * `consecutiveConfusion: 1` is "first occurrence" — the value every existing
+ * `signal: 'confusion'` test below is implicitly relying on. */
 const base = (over: Partial<AskInput> = {}): AskInput => ({
   chars: 200,
   signal: 'none',
@@ -49,6 +52,7 @@ const base = (over: Partial<AskInput> = {}): AskInput => ({
   assistantTurns: 5,
   preferences: [],
   complete: true,
+  consecutiveConfusion: 1,
   ...over,
 })
 
@@ -75,6 +79,15 @@ describe('time alone never triggers an ask', () => {
 describe('events trigger an ask', () => {
   it('asks when the student is confused and gave no direction', () => {
     expect(askReason(base({ signal: 'confusion' }))).toBe('confusion')
+  })
+
+  it('does not ask a second time about the same unresolved confusion', () => {
+    // First time: ask. Second time in a row, nothing else in between: the
+    // first question already didn't get an answer — asking again gets the
+    // same result. The backend still reads the repeat as evidence on its own.
+    expect(askReason(base({ signal: 'confusion', consecutiveConfusion: 1 }))).toBe('confusion')
+    expect(askReason(base({ signal: 'confusion', consecutiveConfusion: 2 }))).toBeNull()
+    expect(askReason(base({ signal: 'confusion', consecutiveConfusion: 5 }))).toBeNull()
   })
 
   it('asks after a second consecutive regeneration, not the first', () => {
@@ -160,6 +173,41 @@ describe('readSignal', () => {
   it('prefers direction over confusion when a message has both', () => {
     // "I don't get it, can you simplify" states the fix — no need to ask.
     expect(readSignal("i don't get it, can you simplify")).toBe('directed')
+  })
+})
+
+describe('consecutiveConfusion', () => {
+  it('is zero with no messages, or none of them confused', () => {
+    expect(consecutiveConfusion([])).toBe(0)
+    expect(consecutiveConfusion(['what about the discount factor?'])).toBe(0)
+  })
+
+  it('is one on a single confusion message', () => {
+    expect(consecutiveConfusion(["i don't get it"])).toBe(1)
+  })
+
+  it('counts a genuine back-to-back run', () => {
+    expect(consecutiveConfusion(["i don't get it", 'I am lost', 'this makes no sense'])).toBe(3)
+  })
+
+  it('resets on a directed message — they specified a fix', () => {
+    expect(
+      consecutiveConfusion(["i don't get it", 'can you simplify', "i don't get it"]),
+    ).toBe(1)
+  })
+
+  it('resets on an ordinary turn — a ordinary follow-up moved on', () => {
+    expect(
+      consecutiveConfusion(['what about the discount factor?', "i don't get it"]),
+    ).toBe(1)
+  })
+
+  it('only counts the run ending at the LAST message, not confusion anywhere', () => {
+    // Confused twice, then asked an ordinary question — the run is over, even
+    // though two confusion messages exist earlier in the conversation.
+    expect(
+      consecutiveConfusion(["i don't get it", 'I am lost', 'what about Bellman?']),
+    ).toBe(0)
   })
 })
 

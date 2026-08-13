@@ -34,10 +34,13 @@ import { cn } from '../../lib/cn'
 type Align = 'left' | 'center' | 'right'
 
 /** Smallest useful size — below this the image is a thumbnail, not content. */
-const MIN_WIDTH = 20
-const MAX_WIDTH = 100
+export const MIN_WIDTH = 20
+export const MAX_WIDTH = 100
 
-function parseTitle(title: string | null): { width: number | null; align: Align } {
+/** Exported for `ImageBlock.test.ts` — the round-trip through markdown's
+ * `title` string is the one place a bug here would be silent: nothing
+ * throws, an image just quietly forgets its width or alignment on reload. */
+export function parseTitle(title: string | null): { width: number | null; align: Align } {
   let width: number | null = null
   let align: Align = 'center'
   for (const part of (title ?? '').split(';')) {
@@ -51,7 +54,7 @@ function parseTitle(title: string | null): { width: number | null; align: Align 
   return { width, align }
 }
 
-function buildTitle(width: number | null, align: Align): string | null {
+export function buildTitle(width: number | null, align: Align): string | null {
   const parts: string[] = []
   if (width != null) parts.push(`w=${Math.round(width)}`)
   // Centre is the default, so it isn't worth a character in the file.

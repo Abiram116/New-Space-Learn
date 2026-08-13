@@ -94,6 +94,20 @@ specific stored row. This is what makes the product's central promise
 inspectable rather than a matter of trust, and it is why citations are
 validated server-side before they are persisted.
 
+**"I don't understand" asks once, then infers.**
+The backend and frontend classified the same phrase two defensible ways —
+directed evidence for "simpler" (backend), the strongest reason to interrupt
+(frontend) — and `test_implicit_signal_parity.py` pinned the disagreement
+rather than silently picking one. Resolved by splitting it on occurrence, not
+by picking a side: the first confusion signal in a run asks what would help,
+because which dimension is actually wrong is genuinely unknown; a repeat with
+nothing resolving it in between skips the question and lets the backend's
+existing implicit-signal inference act on it instead, because asking again
+would be asking a question the student just demonstrated they can't answer.
+Implemented as `consecutiveConfusion` gating `askReason`'s `confusion`
+trigger — the classifiers themselves (`readSignal`, `_IMPLICIT_PATTERNS`)
+didn't change, only whether a hit interrupts.
+
 ---
 
 ## Backend

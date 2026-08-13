@@ -353,12 +353,51 @@ What is left, in order:
   "honestly labelled"; the column stays if a notifier ever ships.
 - **Profile fills the page** instead of centring into a blank lower half.
 
+### Shipped 2026-08-11 to 2026-08-12 (grounding, guardrails, images, engineering pass)
+
+Two commits this section previously didn't reflect (`21f8e16`, `b9c5baf`) —
+N15–N18 above cover the first; this covers the second plus a follow-on
+engineering-gap pass:
+
+- **Response shape and diagram rules keyed on non-linearity, not keywords.**
+  Skills moved behind the honesty invariants — a user-authored Skill could
+  previously outrank them by prompt position alone, now it's framed as
+  style, not truth. Safety narrowed and says so explicitly, so coursework on
+  pathogens, exploits and atrocities is answered rather than refused.
+- **Images paste into the composer** — downscaled client-side, validated
+  before quota is charged, routed to the vision tier at 2x cost.
+- **Every capped API field is mirrored in `lib/limits.ts`**, checked by a
+  test that parses the Pydantic source directly rather than hand-copying
+  numbers that then drift. Slash-command topics are clamped where the
+  argument becomes a request, since no input `maxLength` covers that path.
+- **A real embedding-provider decision, reversed and re-decided.** Phase 0
+  shipped a hosted OpenAI provider; the product owner rejected it outright —
+  $0 and genuinely local, not just cheap. Investigated BGE-small-en-v1.5
+  (quantized ONNX) against measured memory/latency/quality, rejected BGE-M3
+  for production (~2.2GB model, 4–8x the entire Render free-tier ceiling),
+  and shipped the local model behind a `Protocol`-based provider interface.
+  Migration to `vector(384)` applied on the live database; a real PDF
+  verified end-to-end, upload → chunk → embed → insert → retrieve → correct
+  citation. See `decisions.md`.
+- **N4b closed for real** — see the table above. Also found and fixed two
+  bugs that were blocking verification itself, not features: `@testing-library/dom`
+  was never installed (a peer dependency of `@testing-library/react` that
+  silently didn't resolve — all 21 frontend test files failed on a clean
+  `npm ci`, so "217 tests pass" wasn't reproducible from a fresh clone), and
+  `tests/styles.test.ts`'s `room.ts` exclusion compared a Windows
+  backslash-separated path against a forward-slash literal, so the
+  source-of-truth file flagged itself as its own offender on this platform.
+- **BTech-core seed data added** to the live account for demo/dev use —
+  Operating Systems, Database Management Systems, Computer Networks, each
+  with real subspaces and at least one genuine study note, alongside the
+  existing `fsd`/`NLP`/`Deep Learning`/`Java` subjects.
+
 ### P1 — visibly broken or missing
 
 | # | Item |
 |---|---|
 | ~~N4~~ | ~~Loading times~~ — **addressed.** Chat's pre-model path went six sequential round trips → two waves; quiz/cards/notes generation gather their reads; `/me/brief` stopped double-fetching three tables; `/me/preferences` reads 3 tables instead of 10. What remains is a *measured* pass — there are still no numbers, only removed waterfalls. |
-| **N4b** | **Measure it.** Largely addressed 2026-08-10 — see the list below. What remains is a real *measured* pass: there are no numbers here yet, only removed waterfalls, and `operations/performance-and-cost.md`'s estimates are still simulated rather than observed. Skeleton coverage on the less-travelled screens is also unaudited. |
+| ~~N4b~~ | ~~Measure it~~ — **done, 2026-08-12.** Real handlers, real database, real Groq calls, real embedded documents (`api/scripts/measure_perf_pass.py`): `/me/brief` 814.5ms median, `/me/stats` 725.5ms median (up from an earlier 518.8ms pass — checked the code, the round-trip shape hasn't regressed; flagged as an open question rather than papered over), retrieval 512ms against 52 real embedded chunks (sanity-checked against real similarity scores, not just timed), Groq TTFT 187ms, real chat TTFT ≈699ms (inside the <1.5s budget), document reprocess 6.2s (inside the 25s cap and <8s target). Full numbers in `operations/performance-and-cost.md §9`. Skeleton coverage on less-travelled screens is still unaudited. |
 | ~~N5~~ | ~~Topics have no `⋯` menu~~ — **done.** `SpaceMenu` generalised to `RowMenu` taking its items as data, used by both subjects (Pin/Rename/Delete) and topics (Rename/Delete). Two near-identical menu components is how the two rows drift apart. |
 | ~~N6~~ | ~~Notes has no motion~~ — **done.** Editor column rises per opened note (keyed on note id); the note list staggers in on load. Both use the app's existing primitives, not bespoke tweens. |
 | ~~N7~~ | ~~Profile is thin~~ — **done.** Every badge is a threshold on a figure `/me/stats` already computes, so locked badges now show standing ("7 of 10") instead of only a rule. `earned` is derived from the threshold rather than passed in, so the two can't disagree. |
@@ -374,10 +413,10 @@ What is left, in order:
 | ~~N12~~ | ~~Two fat frontend files remain~~ — **done, before Phase 3 lands in them rather than after.** `FlashcardsView` 1,063 → 555 (`Review.tsx`, `Summary.tsx`, `modals.tsx`, `model.ts` — `Mode` had to move too, or extracting `Review` would have been a circular import). `Settings` 656 → 543, with the six `Row*` primitives now in `components/ui/Row.tsx`; nothing in them knew what a preference was. |
 | ~~N13~~ | ~~`me.py` is the largest backend file~~ — **done.** Now a package: `account` (who you are), `stats` (what you've done), `brief` (what to do next), `_common` (the two helpers with real second callers). 679 → largest module 362. All nine routes still register; `main.py` unchanged. |
 | ~~N14~~ | ~~58 ruff errors, 93% false positives~~ — **done.** `B008` ignored with the reasoning recorded in `api/pyproject.toml`; the four real errors fixed. Zero now, and it immediately earned its keep — the `me.py` split broke four names and ruff named all of them. |
-| **N15** | **No component-render tests.** Coverage is pure logic only. Nothing asserts that a component mounts, that the slash menu opens on `/`, or that the AI placeholder is removed when a request fails — all three have shipped bugs. Needs `@testing-library/react` and `jsdom`; deliberately deferred rather than half-added. |
-| **N17** | **No regenerate control exists.** The `regenerate` feedback kind is in the taxonomy and `_apply_directionless` already knows what to do with it — lower every leading preference a little, dissatisfaction with no stated direction — but nothing in the UI can send one. `feedbackPolicy` supports the trigger and `ChatView` hardcodes `regenerations = 0` with a comment saying so, rather than carrying a `useState` nothing ever sets. Wiring a regenerate button is a one-line change at that call site. |
-| **N18** | **`readSignal` duplicates `_IMPLICIT_PATTERNS`.** The frontend copy only decides whether to *stay quiet*; the backend copy is what actually records the preference. The asymmetry makes the duplication survivable — a miss on the frontend costs one unnecessary offer, not a lost signal — but they will drift. Worth either a shared fixture both sides test against, or an endpoint that classifies the turn once. Not urgent; noted so the drift is a known cost rather than a surprise. |
-| **N16** | **Untested pure logic worth covering next**, roughly in value order: `lib/retention.ts` (a formula shown to students as a percentage), `lib/sessionCache.ts` (the TTL/versioning that already served a stale payload once and took Home down behind the error boundary), `ImageBlock`'s `parseTitle`/`buildTitle` round-trip, and `rag.strip_invalid_citations`' frontend counterpart. |
+| ~~N15~~ | ~~No component-render tests~~ — **done, 21f8e16.** `@testing-library/react` + `jsdom` installed. First fully-mounted `NoteEditor` test in the repo: slash menu opens on `/`, closes on backspace/space/ordinary text. `clearAiPlaceholder` extracted out of a closure specifically so the "Thinking…" survives a failed request" bug is covered directly, not mocked. Two mutations survived the first pass and both were real — see the exit-criteria note on mutation-checking. |
+| ~~N17~~ | ~~No regenerate control exists~~ — **done, 21f8e16.** Wired end to end: `ChatSend` gains a `regenerate` flag, backend skips re-inserting the already-on-record question, frontend sends a `regenerate` response_feedback event and resends without duplicating the user bubble. First test coverage `subspace_chat.py` has ever had. |
+| ~~N18~~ | ~~`readSignal` duplicates `_IMPLICIT_PATTERNS`~~ — **done, 21f8e16 + 2026-08-12.** Two real drifts found and fixed: the frontend had zero pattern for "just give me the answer"/"stop asking" (that whole preference category could never suppress an ask); and a genuine disagreement on "I don't understand" — backend read it as directed evidence for "simpler," frontend read it as the strongest ask-trigger. Pinned with a parity test rather than silently picking a side (`test_implicit_signal_parity.py`), then **resolved 2026-08-12 as a product decision, not a refactor**: first occurrence asks, a repeat with nothing resolving it in between infers instead of interrupting again. `consecutiveConfusion` gates `askReason`'s `confusion` trigger; the classifiers themselves didn't change. See `decisions.md`. |
+| ~~N16~~ | ~~Untested pure logic~~ — **done, 21f8e16 + 2026-08-12.** `lib/retention.ts` (13 tests against the documented forgetting-curve formula, computed independently rather than copied from source) and `lib/sessionCache.ts` (12 tests, including the literal stale-shape-crashes-Home regression) closed in 21f8e16. `ImageBlock`'s `parseTitle`/`buildTitle` round-trip (16 tests, including the full round-trip property across every alignment/width) and `resolveDone` — the frontend counterpart of `rag.strip_invalid_citations`, extracted out of `handleEvent`'s closure to make it testable (8 tests) — closed 2026-08-12. |
 
 ### The end-to-end audit
 

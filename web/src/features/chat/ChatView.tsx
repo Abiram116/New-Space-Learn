@@ -35,6 +35,7 @@ import { NoteBriefDialog } from './NoteBriefDialog'
 import {
   askReason,
   chipsFor,
+  consecutiveConfusion,
   readSignal,
   type AskInput,
   type TurnSignal,
@@ -296,6 +297,12 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   const turnSignal: TurnSignal =
     regenerations > 0 ? 'regenerated' : readSignal(lastUserMessage?.content ?? '')
 
+  /* How many confusion signals in a row, ending at this one — the `confusion`
+     trigger only fires on the first (see feedbackPolicy's docstring). Every
+     user turn in order, not just the last one: consecutiveConfusion needs the
+     run leading up to it, not a single message. */
+  const userMessagesInOrder = messages.filter((m) => m.role === 'user').map((m) => m.content)
+
   /* Built once, used by both `chipsFor` and `askReason`. Calling them with
      independently-assembled inputs is how the row ends up showing chips with
      no reason, or a reason with no chips. */
@@ -310,6 +317,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       offerState.lastGivenAt === null ? null : assistantTurns - offerState.lastGivenAt,
     preferences: prefs,
     complete: true,
+    consecutiveConfusion: consecutiveConfusion(userMessagesInOrder),
   })
 
   /* Try that again.
@@ -461,6 +469,35 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
+/**
+ * What the finished message actually is, given the `done` event and
+ * whatever had streamed in so far. Pulled out of `handleEvent` so this
+ * decision is testable on its own, the same reason `clearAiPlaceholder` and
+ * `format.ts` are their own functions rather than logic buried in a closure.
+ *
+ * Mirrors the backend's `rag.strip_invalid_citations` reconciliation: tokens
+ * stream raw, so if the server stripped an out-of-range `[[n]]` marker after
+ * the fact, the streamed buffer and the stored row disagree. `evt.content`
+ * is canonical — prefer it, falling back to the streamed buffer only for an
+ * older backend that doesn't send it.
+ *
+ * Citations follow the opposite fallback direction on purpose: an *empty*
+ * `evt.citations` does not mean "no citations" — every citation the model
+ * used was already sent as a separate `citation` event during the stream,
+ * so falling back to `prev.citations` here (instead of the server's empty
+ * array) is what keeps the source cards the student already saw from
+ * disappearing the instant the stream ends.
+ */
+export function resolveDone(
+  evt: Pick<Extract<ChatStreamEvent, { type: 'done' }>, 'content' | 'citations'>,
+  prev: { text: string; citations: Citation[] } | null,
+): { text: string; citations: Citation[] } {
+  return {
+    text: (evt.content ?? prev?.text ?? '').trim() || '(no reply)',
+    citations: evt.citations.length ? evt.citations : (prev?.citations ?? []),
+  }
+}
+
 function handleEvent(
   evt: ChatStreamEvent,
   setPending: (fn: (prev: { text: string; citations: Citation[] } | null) => { text: string; citations: Citation[] }) => void,
@@ -482,16 +519,8 @@ function handleEvent(
   }
   if (evt.type === 'done') {
     setPending((prev) => {
-      // Prefer the server's canonical text: it's what got stored, and it has
-      // had any citation marker pointing at a non-existent source stripped.
-      // Falling back to the streamed buffer keeps this working if an older
-      // backend doesn't send `content`.
-      const finalText = (evt.content ?? prev?.text ?? '').trim() || '(no reply)'
-      onDone(
-        finalText,
-        evt.citations.length ? evt.citations : (prev?.citations ?? []),
-        evt.messageId,
-      )
+      const resolved = resolveDone(evt, prev)
+      onDone(resolved.text, resolved.citations, evt.messageId)
       return { text: '', citations: [] }
     })
     return
