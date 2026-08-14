@@ -22,6 +22,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
+import { noteAiInline } from '../../api/notes'
 import type { Note } from '../../api/types'
 
 /**
@@ -146,6 +147,29 @@ describe('the slash menu', () => {
     await user.type(surface, 'the working set exceeds physical memory')
 
     expect(screen.queryByText('Ask AI')).not.toBeInTheDocument()
+  })
+
+  it('sends the note\'s own text to the AI, not just the instruction', async () => {
+    // Whole-note commands ("Summarise" with nothing selected) fall back to
+    // "summarise the note so far" — but the endpoint only had indexed
+    // material and chat history to work from, never the note itself. An
+    // AI-generated note's words are in neither, so the command silently had
+    // nothing to act on. Pin that the note's current markdown travels with
+    // the request.
+    vi.mocked(noteAiInline).mockResolvedValue({ content_md: 'ok', citations: [] })
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, 'Photosynthesis converts light energy in plants.')
+    await user.type(surface, '{Enter}/summarise')
+    await waitFor(() => expect(screen.getByText('Summarise')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    await waitFor(() => expect(noteAiInline).toHaveBeenCalled())
+    const [, , noteText] = vi.mocked(noteAiInline).mock.calls[0]
+    expect(noteText).toContain('Photosynthesis converts light energy in plants.')
   })
 
   it('closes once a space follows the command name', async () => {

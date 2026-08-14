@@ -105,6 +105,7 @@ describe('client limits mirror the API schema', () => {
       // confirmed against the component that sends the field.
       'CardsGenerate.deck_name', // derived from the topic, never typed
       'CardsGenerate.source_text', // a chat reply, already bounded
+      'NoteAiInline.note_text', // the note's own body, sliced before sending
     ])
     const unmirrored = [...SCHEMA.keys()].filter((k) => !mirrored.has(k) && !skip.has(k))
     expect(unmirrored).toEqual([])

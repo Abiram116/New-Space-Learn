@@ -212,7 +212,9 @@ export function NoteEditor({
       const clearPlaceholder = () => clearAiPlaceholder(editor, from)
 
       try {
-        const { content_md, citations } = await noteAiInline(subspaceId, prompt)
+        // @ts-expect-error — added by the Markdown extension's storage
+        const noteText: string = editor.storage.markdown.getMarkdown().slice(0, 8000)
+        const { content_md, citations } = await noteAiInline(subspaceId, prompt, noteText)
 
         /**
          * Hand over the **raw markdown**, not a pre-parsed document.

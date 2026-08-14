@@ -162,6 +162,14 @@ class NoteAiInline(BaseModel):
     a fragment to insert at the cursor, not a whole new note."""
 
     prompt: str = Field(min_length=1, max_length=500)
+    #: The note's own markdown as it stands right now. Optional so an empty
+    #: note still validates, but load-bearing whenever the command has no
+    #: selection to fall back on ("Summarise the note so far") — without it
+    #: the model is asked to summarise a note it was never shown, which is
+    #: what made Summarise/Explain/Expand/Key points look broken on any note
+    #: whose own words never entered the indexed material or chat history
+    #: (every AI-generated note started via the "AI note" dialog, not chat).
+    note_text: str = Field(default="", max_length=8000)
 
 
 class NoteAiInlineOut(BaseModel):

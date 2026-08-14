@@ -38,8 +38,12 @@ export const generateNote = (
  *  structurally-identical local duplicate, `NoteCitation`, until the
  *  end-to-end audit found it; deduplicated so a future field added to
  *  `Citation` doesn't silently fail to reach here). */
-export const noteAiInline = (subspaceId: string, prompt: string) =>
+/** `noteText` is the note's own current markdown — the only way a whole-note
+ *  command ("Summarise the note so far") has anything to act on, since an
+ *  AI-generated note's own words never entered the indexed material or the
+ *  chat history the backend otherwise grounds itself in. */
+export const noteAiInline = (subspaceId: string, prompt: string, noteText: string) =>
   apiFetch<{ content_md: string; citations: Citation[] }>(
     `/subspaces/${subspaceId}/notes/ai-inline`,
-    { method: 'POST', body: { prompt } },
+    { method: 'POST', body: { prompt, note_text: noteText } },
   )

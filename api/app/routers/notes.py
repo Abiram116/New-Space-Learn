@@ -271,6 +271,18 @@ async def generate_note(
     return _to_note(inserted[0])
 
 
+def _note_context(note_text: str) -> str:
+    """What the model is shown of the note it's editing.
+
+    Whole-note commands ("Summarise the note so far", "Expand the last point
+    in this note") have nothing else to act on — an AI-generated note's own
+    words never entered the indexed material or the chat history the rest of
+    the prompt draws on, so without this the model was asked to summarise a
+    note it had never actually seen.
+    """
+    return note_text.strip() or "(the note is empty so far)"
+
+
 def _split_titled_note(raw: str) -> tuple[str | None, str | None, str | None]:
     """Pull `TITLE: …` / `---` / body out of a model response.
 
@@ -338,16 +350,18 @@ async def note_ai_inline(
     student_context = await personalization.build(
         user.id, "notes", subspace_id=subspace_id
     )
+    note_text = _note_context(body.note_text)
 
     prompt = (
         f"The student is writing a note and typed this inline request: "
         f"'{body.prompt}'.\n\n"
+        f"The note as it currently stands:\n{note_text}\n\n"
         f"Material:\n{context}\n\n"
         f"Recent conversation in this space:\n{recent}\n\n"
         "Write ONLY the markdown fragment to insert at their cursor — no "
         "title, no preamble, no restating the request. Ground it in the "
-        "material and conversation above; do not invent facts not present "
-        "in either.\n\n"
+        "note, material and conversation above; do not invent facts not present "
+        "in any of them.\n\n"
         "Output PLAIN MARKDOWN ONLY. Never emit HTML tags — no <p>, <br>, "
         "<h1>, <ul>, <div>, <strong>. The editor renders markdown and shows "
         "any HTML you write as literal visible text, so a stray <p> ends up "
