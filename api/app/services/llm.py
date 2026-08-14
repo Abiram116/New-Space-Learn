@@ -176,3 +176,30 @@ def loads_lenient(text: str) -> Any:
     """
 
     return json.JSONDecoder(strict=False).decode(text)
+
+
+def extract_title_line(raw: str, *, before: str = "[") -> str | None:
+    """Pull a short model-written title out of a `TITLE: ...` line.
+
+    Shared by quiz and flashcard-deck generation, which both ask the model
+    to precede its JSON payload with `TITLE: <3-6 words>` — the one place a
+    generated quiz or deck gets a real name instead of the caller's own
+    (often unset, or a raw excerpt of chat text) `topic` string. Originally
+    written for quizzes alone; decks had the exact same "topic ends up as
+    the visible name, unedited" problem — `firstSentence()` on the frontend
+    truncates a chat reply into a title-shaped string, `…` included, and
+    nothing downstream ever replaced it with something a model was actually
+    asked to write.
+
+    Only looks `before` the payload marker (default `[`, the JSON array both
+    callers use) rather than anywhere in the raw text, since a generated
+    question or card can otherwise contain the word "title" itself.
+    """
+    array_start = raw.find(before)
+    head = raw[:array_start] if array_start != -1 else raw
+    for line in head.splitlines():
+        line = line.strip().strip("*_# ")
+        if line.upper().startswith("TITLE:"):
+            title = line.split(":", 1)[1].strip().strip('"\'')
+            return title[:140] or None
+    return None

@@ -15,7 +15,7 @@ from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
 from ..services import activity, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import get_llm, loads_lenient
+from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
 from ..services.voice import QUIZ_AGENT_VOICE
 
@@ -112,9 +112,15 @@ async def generate_quiz(
         "explanation is 1-2 sentences saying WHY the correct answer is correct "
         "and, where there is an obvious trap, why the most tempting wrong "
         "choice is wrong. Write it to the student, in second person. "
-        "Return only the JSON array — no prose, no code fences."
+        "Before the array, on its own line, write a title for this quiz: "
+        "'TITLE: ' followed by 3-6 words naming what it actually covers "
+        "(e.g. 'TITLE: Policy Iteration Basics'), not a generic label like "
+        "'Quiz' or 'Chat Review' — this is the only place the student will "
+        "see what the quiz is about before opening it. "
+        "Then the JSON array — no other prose, no code fences."
     )
 
+    generated_title: str | None = None
     if not settings.llm_configured:
         # No key yet — hand back a placeholder set so the take/submit flow is
         # still clickable. This is the ONLY path that may fabricate questions.
@@ -135,7 +141,9 @@ async def generate_quiz(
                 temperature=0.3,
             ):
                 raw_parts.append(delta)
-            questions = _safe_parse_questions("".join(raw_parts).strip(), want=body.count)
+            raw = "".join(raw_parts).strip()
+            generated_title = extract_title_line(raw)
+            questions = _safe_parse_questions(raw, want=body.count)
         except ApiError:
             # Already a friendly, typed error (rate limit, upstream down) — let
             # it surface so the user knows to retry rather than being handed
@@ -150,12 +158,23 @@ async def generate_quiz(
                 "The quiz came back in an unexpected format. Try again."
             )
 
+    # The student rarely types a topic — "Quiz me on this chat" never asks for
+    # one — so falling back to the model's own title (or, failing that, the
+    # first question's subtopic) is what keeps the quiz list from filling up
+    # with "Untitled topic". Only reached for placeholders when unconfigured.
+    topic = (
+        body.topic
+        or generated_title
+        or (questions[0].subtopic if questions and questions[0].subtopic else None)
+        or label
+    )
+
     inserted = await supabase.db_insert(
         "quizzes",
         {
             "user_id": user.id,
             "subspace_id": subspace_id,
-            "topic": body.topic,
+            "topic": topic,
             "questions": [q.model_dump() for q in questions],
         },
     )

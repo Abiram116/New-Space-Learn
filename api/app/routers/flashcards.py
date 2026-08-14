@@ -29,7 +29,7 @@ from ..schemas import (
 )
 from ..services import activity, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import get_llm, loads_lenient
+from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
 from ..services.voice import CARDS_AGENT_VOICE
 
@@ -231,8 +231,11 @@ async def generate_cards(
             raise NothingIndexed()
         context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
 
+    generated_title: str | None = None
     if settings.llm_configured:
-        pairs = await _generate_pairs(topic, label, context, history, student_context, body.count)
+        pairs, generated_title = await _generate_pairs(
+            topic, label, context, history, student_context, body.count
+        )
     else:
         pairs = []
 
@@ -242,13 +245,26 @@ async def generate_cards(
             "add a card yourself."
         )
 
+    # Same priority as quizzes.generate_quiz's `topic`: an explicitly typed
+    # topic (from the Flashcards tab's "Generate a deck" modal) is a real
+    # name and wins outright. Only when the student didn't type one — the
+    # common case, since "Make cards from this chat" never asks — does the
+    # model's own generated title take over, ahead of the generic
+    # `_deck_name(topic)` fallback (which now only fires when the model
+    # somehow returned no title, or the AI isn't configured at all).
+    deck_name = (
+        body.deck_name
+        or (_deck_name(body.topic) if body.topic else None)
+        or generated_title
+        or _deck_name(topic)
+    )
     deck = (
         await supabase.db_insert(
             "decks",
             {
                 "user_id": user.id,
                 "subspace_id": subspace_id,
-                "name": body.deck_name or _deck_name(topic),
+                "name": deck_name,
             },
         )
     )[0]
@@ -348,9 +364,10 @@ async def _generate_pairs(
     history: list[dict[str, str]],
     student_context: str,
     count: int,
-) -> list[dict]:
-    """Ask for `count` Q/A pairs as JSON. Returns [] rather than raising on a
-    malformed reply, so the caller owns the user-facing message."""
+) -> tuple[list[dict], str | None]:
+    """Ask for `count` Q/A pairs as JSON, plus a real deck title. Returns
+    `([], None)` rather than raising on a malformed reply, so the caller
+    owns the user-facing message."""
 
     material = context.strip()
     recent = format_history(history) or "(no prior chat in this space)"
@@ -361,10 +378,17 @@ async def _generate_pairs(
         f"Recent conversation in this space (for context on what's actually "
         f"being studied — do not quote it directly):\n{recent}\n\n"
         f"Material:\n{material}\n\n"
-        'Return ONLY a JSON array. Each item: {"front": str, "back": str}. '
-        "front is a single question. back is a complete but compact answer, "
-        "2-3 sentences at most. Plain sentences only — no markdown, no "
-        "asterisks, no headings, no numbering. No prose outside the array."
+        "Before the array, on its own line, write a name for this deck: "
+        "'TITLE: ' followed by 3-6 words naming what it actually covers "
+        "(e.g. 'TITLE: Loop of Henle Basics') — not a generic label like "
+        "'Flashcards' or 'Chat Review', and not the raw topic text above, "
+        "which may be a stray sentence rather than a name. This is the only "
+        "place the student will see what the deck is about before opening "
+        "it.\n\n"
+        'Then the JSON array — no other prose, no code fences. Each item: '
+        '{"front": str, "back": str}. front is a single question. back is a '
+        "complete but compact answer, 2-3 sentences at most. Plain sentences "
+        "only — no markdown, no asterisks, no headings, no numbering."
     )
     system = CARDS_AGENT_VOICE + (f"\n\n{student_context}" if student_context else "")
     try:
@@ -385,13 +409,14 @@ async def _generate_pairs(
         log.exception("card generation failed")
         raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
 
+    title = extract_title_line(raw)
     start, end = raw.find("["), raw.rfind("]")
     if start == -1 or end <= start:
-        return []
+        return [], title
     try:
         data = loads_lenient(raw[start : end + 1])
     except json.JSONDecodeError:
-        return []
+        return [], title
 
     out: list[dict] = []
     for item in data[:count]:
@@ -400,7 +425,7 @@ async def _generate_pairs(
         front, back = str(item.get("front", "")).strip(), str(item.get("back", "")).strip()
         if front and back:
             out.append({"front": front, "back": back, "source": item.get("source")})
-    return out
+    return out, title
 
 
 def _to_dt(v: str | datetime) -> datetime:
