@@ -36,6 +36,15 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   // One buffer for both, because only one row can be in rename mode at a time —
   // opening a second rename closes the first by construction.
   const [renameText, setRenameText] = useState('')
+  // Pressing Enter to confirm a rename calls `commitRename`, which clears
+  // `renamingSpace` synchronously — that unmounts the input, and removing a
+  // focused element fires a native blur, which is *also* wired to
+  // `commitRename` (`onBlur`). Both calls read the same still-in-scope
+  // `renameText`/`id`, so without this guard every Enter-confirmed rename
+  // fired the PATCH twice. Set add happens before the first `await`, so the
+  // blur-triggered second call (which runs after React flushes the render
+  // that removed the input) sees the id already in flight and returns.
+  const committingRename = useRef<Set<string>>(new Set())
 
   /* Both the reader and the writer come from `treeState`, which is the point:
      they used to be separate expressions with different ideas of the default,
@@ -63,26 +72,34 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   const commitRename = async (id: string) => {
-    const name = renameText.trim()
-    setRenamingSpace(null)
-    const current = spaces.find((s) => s.id === id)
-    if (!name || name === current?.name) return
+    if (committingRename.current.has(id)) return
+    committingRename.current.add(id)
     try {
+      const name = renameText.trim()
+      setRenamingSpace(null)
+      const current = spaces.find((s) => s.id === id)
+      if (!name || name === current?.name) return
       await renameSpace(id, name)
     } catch (e) {
       show(friendlyMessage(e), 'error')
+    } finally {
+      committingRename.current.delete(id)
     }
   }
 
   const commitRenameSubspace = async (id: string) => {
-    const name = renameText.trim()
-    setRenamingSubspace(null)
-    const current = spaces.flatMap((s) => s.subspaces).find((sub) => sub.id === id)
-    if (!name || name === current?.name) return
+    if (committingRename.current.has(id)) return
+    committingRename.current.add(id)
     try {
+      const name = renameText.trim()
+      setRenamingSubspace(null)
+      const current = spaces.flatMap((s) => s.subspaces).find((sub) => sub.id === id)
+      if (!name || name === current?.name) return
       await renameSubspace(id, name)
     } catch (e) {
       show(friendlyMessage(e), 'error')
+    } finally {
+      committingRename.current.delete(id)
     }
   }
 

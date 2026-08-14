@@ -78,7 +78,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
                 key={d.id}
                 className="flex items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2"
               >
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{d.name}</span>
+                <span className="min-w-0 flex-1 leading-snug text-[12.5px] text-ink-3">{d.name}</span>
                 {d.due > 0 ? (
                   <button
                     type="button"
@@ -198,8 +198,15 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
           preserved-3d parent. Reusing it means the dock and the full page flip
           the same way instead of the dock quietly being the neglected copy.
           Fixed height and centred, so it reads as a card sitting on the table
-          rather than as the column's wallpaper. */}
-      <div className="flex min-h-0 flex-1 items-center justify-center">
+          rather than as the column's wallpaper.
+
+          The card and the grade row are centred TOGETHER as one group, not
+          separately — the card alone centred in a flex-1 area pushes the
+          buttons all the way to the panel's bottom edge, leaving a dead gap
+          between the answer and the grades on any dock taller than the card
+          itself. Grouping them keeps the grades right under the card, with
+          the leftover space split evenly above and below instead. */}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
         <div className="w-full [perspective:1400px]" style={{ height: 'min(52vh, 280px)' }}>
           <button
             type="button"
@@ -216,38 +223,47 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
             <CardFace side="back" text={card.back} source={card.source} compact />
           </button>
         </div>
-      </div>
 
-      {!flipped ? (
-        <button
-          type="button"
-          onClick={() => setFlipped(true)}
-          className="shrink-0 rounded-[10px] bg-brand px-3 py-2 text-[12.5px] font-bold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98]"
-        >
-          Show answer
-        </button>
-      ) : (
-        // Four figures on a rule, per the design track — grading is one
-        // ordered scale, not four categories, and the intervals say so in
-        // real numbers.
-        <div className="grid shrink-0 grid-cols-4 gap-1">
-          {GRADES.map((g) => (
-            <button
-              key={g.key}
-              type="button"
-              onClick={() => grade(g.key)}
-              className={cn(
-                'flex flex-col items-center gap-0.5 rounded-[9px] border border-line px-1 py-1.5',
-                'text-[11px] font-semibold text-ink-2 transition-colors cursor-pointer',
-                'hover:border-brand/50 hover:text-ink',
-              )}
-            >
-              {g.label}
-              <span className="setcode text-[9px]">{nextIntervalLabel(card, g.key)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+        {!flipped ? (
+          <button
+            type="button"
+            onClick={() => setFlipped(true)}
+            className="w-full shrink-0 rounded-[10px] bg-brand px-3 py-2 text-[12.5px] font-bold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98]"
+          >
+            Show answer
+          </button>
+        ) : (
+          <div className="flex w-full shrink-0 flex-col gap-2">
+            {/* Four figures on a rule, per the design track — grading is one
+                ordered scale, not four categories, and the intervals say so in
+                real numbers. */}
+            <div className="grid grid-cols-4 gap-1">
+              {GRADES.map((g) => (
+                <button
+                  key={g.key}
+                  type="button"
+                  onClick={() => grade(g.key)}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 rounded-[9px] border border-line px-1 py-1.5',
+                    'text-[11px] font-semibold text-ink-2 transition-colors cursor-pointer',
+                    'hover:border-brand/50 hover:text-ink',
+                  )}
+                >
+                  {g.label}
+                  <span className="setcode text-[9px]">{nextIntervalLabel(card, g.key)}</span>
+                </button>
+              ))}
+            </div>
+            {/* On a fresh card, Again/Hard/Good all preview the same "1d" —
+                that's real SM-2 math (nothing to compare a first rep against
+                yet), not a bug, but it reads as broken without this line. */}
+            <p className="px-0.5 text-[10.5px] leading-snug text-faint">
+              The number is when you'll see this card again — honest grading is
+              what makes it accurate.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

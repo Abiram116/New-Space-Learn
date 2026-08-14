@@ -144,7 +144,7 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
                 disabled={loadingId === q.id}
                 className="flex w-full items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors cursor-pointer hover:border-brand/40"
               >
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">
+                <span className="min-w-0 flex-1 leading-snug text-[12.5px] text-ink-3">
                   {q.topic || 'Quiz'}
                 </span>
                 <span className="setcode shrink-0">

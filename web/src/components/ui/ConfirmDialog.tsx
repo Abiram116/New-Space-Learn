@@ -29,11 +29,7 @@ export function ConfirmDialog({
           <Button variant="secondary" onClick={onCancel} disabled={loading}>
             Cancel
           </Button>
-          <Button
-            onClick={onConfirm}
-            disabled={loading}
-            className={destructive ? 'bg-coral-deep hover:bg-coral-deep/90' : undefined}
-          >
+          <Button onClick={onConfirm} disabled={loading} variant={destructive ? 'danger' : 'primary'}>
             {loading ? 'Working…' : confirmLabel}
           </Button>
         </div>

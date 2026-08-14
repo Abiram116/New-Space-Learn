@@ -133,7 +133,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
                 onClick={() => setOpenId(n.id)}
                 className="block w-full rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors cursor-pointer hover:border-brand/40"
               >
-                <div className="truncate text-[12.5px] font-semibold text-ink">
+                <div className="leading-snug text-[12.5px] font-semibold text-ink">
                   {n.title || 'Untitled note'}
                 </div>
                 <div className="setcode mt-0.5 flex items-center gap-1.5">

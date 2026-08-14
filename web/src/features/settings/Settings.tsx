@@ -505,11 +505,12 @@ export function Settings() {
                   ones you turn on there are what the chat here will use.
                 </p>
                 {hasAny ? (
-                  <Link
-                    to={`${base}/skills`}
-                    className="mt-1 self-start rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Open Skills →
+                  // `text-white` on the brand background used to be
+                  // hand-rolled here (~3.1:1 contrast, fails WCAG AA)
+                  // instead of going through `Button`'s `primary` variant,
+                  // which every other brand-colored control uses.
+                  <Link to={`${base}/skills`} className="mt-1 self-start">
+                    <Button size="sm">Open Skills →</Button>
                   </Link>
                 ) : (
                   <p className="text-xs text-faint">
@@ -528,10 +529,7 @@ export function Settings() {
                 <p className="text-muted">
                   Sign out on this device. Your data stays in your account.
                 </p>
-                <Button
-                  onClick={doSignOut}
-                  className="self-start bg-coral-deep hover:bg-coral-deep/90"
-                >
+                <Button onClick={doSignOut} variant="danger" className="self-start">
                   Sign out
                 </Button>
               </div>
@@ -543,10 +541,7 @@ export function Settings() {
                   subject, document, chat, note, deck, and quiz. This can't be
                   undone.
                 </p>
-                <Button
-                  onClick={() => setDeleteOpen(true)}
-                  className="self-start bg-coral-deep hover:bg-coral-deep/90"
-                >
+                <Button onClick={() => setDeleteOpen(true)} variant="danger" className="self-start">
                   Delete account
                 </Button>
               </div>
@@ -590,7 +585,7 @@ export function Settings() {
             <Button
               onClick={doDeleteAccount}
               disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
-              className="bg-coral-deep hover:bg-coral-deep/90"
+              variant="danger"
             >
               {deleteBusy ? 'Deleting…' : 'Delete my account'}
             </Button>

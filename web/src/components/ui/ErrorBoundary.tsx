@@ -7,6 +7,7 @@
  */
 
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Button } from './Button'
 import { Icon } from './Icon'
 
 type Props = { children: ReactNode }
@@ -39,18 +40,17 @@ export class ErrorBoundary extends Component<Props, State> {
           reload — your work is saved.
         </p>
         <div className="flex gap-2">
-          <button
-            onClick={this.reset}
-            className="rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white cursor-pointer"
-          >
-            Try again
-          </button>
-          <button
-            onClick={() => window.location.reload()}
-            className="rounded-xl border-[1.5px] border-line bg-surface px-4 py-2.5 text-sm font-semibold cursor-pointer"
-          >
+          {/* Hand-rolled buttons here used to set `text-white` on the brand
+              background — every other brand-colored control in the app uses
+              the dark `#1a120f` text `Button`'s `primary` variant defines,
+              because brand is a bright color: white measures ~3.1:1 against
+              it (fails WCAG AA's 4.5:1 for normal text), the dark text
+              ~6.1:1. Using the real component instead of a parallel copy of
+              its styling is what keeps the two from drifting apart again. */}
+          <Button onClick={this.reset}>Try again</Button>
+          <Button variant="secondary" onClick={() => window.location.reload()}>
             Reload
-          </button>
+          </Button>
         </div>
       </div>
     )

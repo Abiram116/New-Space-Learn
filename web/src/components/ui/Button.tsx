@@ -28,8 +28,16 @@ const variants: Record<Variant, string> = {
   dark: 'bg-well text-ink border border-line hover:border-line-dash active:translate-y-[1px]',
   soft: 'bg-brand-soft text-brand-deep hover:bg-brand-200/60 active:translate-y-[1px]',
   ghost: 'text-muted hover:bg-line-soft hover:text-ink',
-  danger:
-    'bg-coral-soft text-coral-deep border border-coral/30 hover:bg-coral/20 active:translate-y-[1px]',
+  // The confirm button on every destructive action (`ConfirmDialog`, plus
+  // Settings' sign-out/delete-account) hand-rolled this exact treatment via
+  // a `className` override on top of `primary` — same string, four places,
+  // never through this variant, which sat declared and unused. Consolidated
+  // here with zero visual change: `bg-coral-deep` (a light pink — this is a
+  // dark-themed app, see index.css) is what all four already rendered, and
+  // `#2a1210` is the dark text already paired with coral backgrounds
+  // elsewhere (see `QuizRunner.tsx`'s `Choice`) rather than reusing
+  // `primary`'s `#1a120f`, which was tuned for the orange brand color.
+  danger: 'bg-coral-deep text-[#2a1210] hover:bg-coral-deep/90 active:translate-y-[1px]',
 
   /* Fully dimensional. A lit top bevel, a shaded face, and a 5px base edge the
      button actually sinks into on press — the travel is real, not a colour

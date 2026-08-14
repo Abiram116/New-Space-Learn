@@ -24,12 +24,11 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
-import { firstSentence } from '../../lib/text'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
-import { ActiveSkillStrip, ContextDock } from './ContextDock'
+import { ActiveAgentsStrip, ActiveSkillStrip, ContextDock } from './ContextDock'
 import type { DockPanel } from './DockPanels'
 import { NoteBriefDialog } from './NoteBriefDialog'
 import {
@@ -226,12 +225,21 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
         if (agent === 'flashcards') {
           // Seed from the last answer when there is one; otherwise let the
           // generator draw on whatever this topic has indexed.
+          //
+          // `topic` here used to default to `firstSentence(summary.content,
+          // 60)` when nothing was typed — a raw excerpt of the assistant's
+          // own reply, "…" included, which is grounding text, not a name.
+          // The backend stores it verbatim as the deck's name when nothing
+          // better is available, which is exactly how decks ended up titled
+          // "We're working on the topic of Transformers…". `source_text`
+          // below already carries that same content as material for the
+          // model to draw on; `topic` only needs to be set when the student
+          // typed one, matching how `quiz`/`notes` build theirs — the
+          // backend now writes a real title itself when this is empty (see
+          // `flashcards.py::_generate_pairs`).
           const summary = lastAssistant(history.data ?? [])
           const cards = await generateCards(subspaceId, {
-            topic: clampTopic(
-              argument || (summary ? firstSentence(summary.content, 60) : undefined),
-              LIMITS.cardsTopic,
-            ),
+            topic: clampTopic(argument, LIMITS.cardsTopic),
             source_text: summary?.content,
             count: 8,
           })
@@ -436,7 +444,8 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           </div>
         </div>
 
-        {/* Only below lg, where the dock isn't there to say it. */}
+        {/* Only below lg, where the dock isn't there to say either of these. */}
+        <ActiveAgentsStrip onRunAgent={runAgent} />
         <ActiveSkillStrip subspaceId={subspaceId} base={base} />
 
         <Composer

@@ -162,15 +162,18 @@ export function QuizRunner({
       />
 
       {/* LEAF — a question stem is prose you read before you can answer, not an
-          object you own. The choices stay pressable controls. */}
-      <Leaf
-        className={cn(
-          'pr-4',
-          // Takes the growth and scrolls its own overflow, so a long stem never
-          // pushes the answer button off the bottom of a 320px column.
-          compact ? 'min-h-0 flex-1 overflow-y-auto py-1' : 'py-2 pr-6',
-        )}
-      >
+          object you own. The choices stay pressable controls.
+
+          Sized to its own content, not forced to fill the column. It used to
+          take `flex-1` + its own `overflow-y-auto` in the dock, on the theory
+          that a long stem needed room to scroll before scrolling the whole
+          panel — but the dock panel that hosts this (`QuizzesPanel.tsx`)
+          already scrolls, so that just meant a short question left Leaf
+          claiming empty space it didn't need, and shoved the verdict + Next
+          button down to wherever that empty space happened to end. One
+          scroll container, not two, and the verdict now sits directly under
+          the choices regardless of how much either one holds. */}
+      <Leaf className={cn('pr-4', compact ? 'py-1' : 'py-2 pr-6')}>
         {q.subtopic && <span className="setcode">{q.subtopic}</span>}
         <div
           className={cn(

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useSpaces } from './SpacesProvider'
@@ -34,12 +35,12 @@ export function SubspaceMissing() {
         icon="target"
         title="This topic isn't here"
         description="It may have been renamed or deleted. Pick another space from the sidebar."
+        // `text-white` on the brand background used to be hand-rolled here
+        // (~3.1:1 contrast, fails WCAG AA) instead of going through `Button`,
+        // whose `primary` variant every other brand-colored control uses.
         action={
-          <Link
-            to="/home"
-            className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white"
-          >
-            Back home
+          <Link to="/home">
+            <Button>Back home</Button>
           </Link>
         }
       />

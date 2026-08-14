@@ -7,14 +7,15 @@ import { cn } from '../../lib/cn'
 import { useAssessment } from '../../lib/assessment'
 
 /**
- * Typed shortcuts. Recognised, not advertised.
+ * Typed shortcuts. Recognised, not advertised here.
  *
  * The chip row that used to sit under the input showed `/notes /quiz
  * /flashcards` permanently — three buttons duplicating the "Do something with
  * this" panel already open on the right, and a row of syntax under an input
  * box reads as an instruction manual. Typing them still works for anyone who
- * knows them; discovery happens in the dock, where each action explains what
- * it produces.
+ * knows them; discovery happens in the dock at `lg:` and up, and in
+ * `ContextDock`'s `ActiveAgentsStrip` below it — not here, so this file never
+ * grows a second copy of that list.
  */
 const slashCommands: { command: string; agent: AgentKey }[] = [
   { command: '/notes', agent: 'notes' },

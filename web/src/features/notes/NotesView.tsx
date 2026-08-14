@@ -10,9 +10,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { labelFor, notePreview, relativeTime, type Filter } from './format'
 import { NoteEditor } from './NoteEditor'
-import { createNote, deleteNote, listNotes } from '../../api/notes'
+import { createNote, deleteNote, generateNote, listNotes } from '../../api/notes'
 import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
+import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
@@ -23,22 +24,21 @@ import { Stagger } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
+import { NoteBriefDialog } from '../chat/NoteBriefDialog'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
 
 export function NotesView() {
   const { space, subspace, base } = useActiveSubspace()
   if (!space || !subspace) return <SubspaceMissing />
-  return <Inner subspaceId={subspace.id} subspaceName={subspace.name} base={base} />
+  return <Inner subspaceId={subspace.id} base={base} />
 }
 
 function Inner({
   subspaceId,
-  subspaceName,
   base,
 }: {
   subspaceId: string
-  subspaceName: string
   /** Route prefix for this topic — citation links point inside it. */
   base: string
 }) {
@@ -50,6 +50,13 @@ function Inner({
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  // Below `lg:`, chat's dock — where "Write a note" otherwise lives — isn't
+  // rendered at all (see `ContextDock`'s `ActiveAgentsStrip`), and the Notes
+  // tab itself had no AI entry point at any width, unlike Quizzes/Flashcards'
+  // own "Generate" buttons. Same dialog and the same `generateNote` call the
+  // chat agent already uses — reached from a second place, not reimplemented.
+  const [noteBriefOpen, setNoteBriefOpen] = useState(false)
+  const [writingNote, setWritingNote] = useState(false)
 
   // Fetches once per subspace. `selectedId` is deliberately NOT a dependency:
   // including it rebuilt this callback on every note you clicked, which
@@ -117,6 +124,24 @@ function Inner({
     }
   }
 
+  const writeNote = async (input: { topic?: string; instructions?: string }) => {
+    setWritingNote(true)
+    try {
+      const note = await generateNote(subspaceId, input)
+      setNotes((prev) => (prev ? [note, ...prev] : [note]))
+      select(note.id)
+      setNoteBriefOpen(false)
+      show('Note written.', 'success')
+    } catch (err) {
+      // Dialog stays open on failure, same as the chat agent's version of
+      // this — a rate limit or dropped connection shouldn't cost the brief
+      // the student just typed.
+      showError(err)
+    } finally {
+      setWritingNote(false)
+    }
+  }
+
   const del = async () => {
     if (!confirmDelete) return
     try {
@@ -141,7 +166,36 @@ function Inner({
   const totalNotes = notes?.length ?? 0
 
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Every other subspace-scoped screen (Chat/Docs/Quizzes/Cards) uses
+          this for its breadcrumb, title, and tab strip — Notes rendered its
+          own one-off title block instead and so was the only one of the five
+          tabs where none of the five ever highlighted, and the only one with
+          no way back to the others except the sidebar. */}
+      <SubspaceHeader
+        title="Notes"
+        actions={
+          <div className="flex shrink-0 gap-1.5">
+            {/* "Write with AI" (the fuller label) lives in the empty state
+                below, where there's room. Here it's next to "New" in a
+                header shared with the tab strip, so it stays compact. */}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setNoteBriefOpen(true)}
+              aria-label="Write a note with AI"
+              title="Write a note with AI"
+            >
+              <Icon name="sparkle" size={13} /> AI note
+            </Button>
+            <Button size="sm" onClick={newBlank}>
+              <Icon name="plus" size={13} /> New
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="flex min-h-0 flex-1">
       {/* Master/detail. One pane at a time on phones: the list until you pick a
           note, then the editor (which offers its own way back). */}
       <aside
@@ -151,16 +205,6 @@ function Inner({
         )}
       >
         <div className="flex flex-col gap-3 px-4 pb-3 pt-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h1 className="nameplate text-[19px] leading-none text-ink">Notes</h1>
-              <span className="setcode mt-1 block truncate">{subspaceName}</span>
-            </div>
-            <Button size="sm" onClick={newBlank}>
-              <Icon name="plus" size={13} /> New
-            </Button>
-          </div>
-
           {/* Search and filters only exist once there is something to search or
               filter. On a fresh topic they were two dead controls above an
               empty state, which is three things saying "nothing here". */}
@@ -216,8 +260,15 @@ function Inner({
               <EmptyState
                 icon="note"
                 title="No notes yet"
-                description="Start a blank one, or save a note from a chat."
-                action={<Button onClick={newBlank}>New note</Button>}
+                description="Start a blank one, or have the AI write one from what's indexed here."
+                action={
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Button variant="secondary" onClick={() => setNoteBriefOpen(true)}>
+                      <Icon name="sparkle" size={14} /> Write with AI
+                    </Button>
+                    <Button onClick={newBlank}>New note</Button>
+                  </div>
+                }
               />
             </div>
           )}
@@ -311,6 +362,7 @@ function Inner({
           onBack={() => select(null)}
         />
       )}
+      </div>
 
       <ConfirmDialog
         open={Boolean(confirmDelete)}
@@ -319,6 +371,13 @@ function Inner({
         onCancel={() => setConfirmDelete(null)}
         onConfirm={del}
         destructive
+      />
+
+      <NoteBriefDialog
+        open={noteBriefOpen}
+        busy={writingNote}
+        onCancel={() => setNoteBriefOpen(false)}
+        onGenerate={writeNote}
       />
     </div>
   )

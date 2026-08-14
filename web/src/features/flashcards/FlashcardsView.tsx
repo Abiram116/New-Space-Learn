@@ -252,7 +252,7 @@ function Inner({
         open={Boolean(deleteDeckId)}
         title="Delete this deck?"
         description="Every card in it goes too. This can't be undone."
-        confirmLabel="Delete deck"
+        confirmLabel="Delete"
         onCancel={() => setDeleteDeckId(null)}
         onConfirm={removeDeck}
       />
@@ -447,7 +447,7 @@ function DeckDetail({
                         </span>
                       )
                     })()}
-                    <div className="flex shrink-0 gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                    <div className="flex shrink-0 gap-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                       <button
                         type="button"
                         onClick={() => setEditing(card)}
@@ -484,7 +484,7 @@ function DeckDetail({
         open={Boolean(deleteId)}
         title="Delete this card?"
         description="It won't come back."
-        confirmLabel="Delete card"
+        confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
         onConfirm={remove}
       />

@@ -38,9 +38,13 @@ const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
  * was rewriting every answer — the tutor's voice changed with no visible
  * cause. This strip is that one missing fact, sat directly above the composer.
  *
- * Deliberately skills only: agents are already one tap away on the composer's
- * slash pills at every width, and duplicating them here would just be the dock
- * again in a worse shape.
+ * Skills only, by design — see `ActiveAgentsStrip` below for the dock's other
+ * half (Notes/Quiz/Flashcards) at this width. Kept as two components rather
+ * than merged into one, because they answer different questions: this one is
+ * status ("here's what's on"), that one is actions ("here's what you can
+ * do") — collapsing them would blur exactly the Skills-vs-Agents distinction
+ * the rest of the product goes out of its way to keep separate (see
+ * `agents.ts`).
  */
 export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; base: string }) {
   const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId], `skills:${subspaceId}`)
@@ -81,6 +85,42 @@ export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; bas
           </Link>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * The dock's "Do something with this" section, at the one width the dock
+ * itself doesn't reach.
+ *
+ * Below `lg:` there was no way to generate a note, quiz, or deck from the
+ * conversation at all — a composer pill row that used to cover this was
+ * removed on the assumption the dock replaced it everywhere, but the dock is
+ * `lg:`-only, so below that width the assumption was simply wrong. Same three
+ * actions, same `AGENTS`/`onRunAgent` the dock and the composer's typed
+ * `/notes` `/quiz` `/flashcards` shortcuts already use — no new action logic,
+ * only a second surface for the existing one.
+ */
+export function ActiveAgentsStrip({ onRunAgent }: { onRunAgent: (agent: AgentKey) => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
+      <span className="setcode shrink-0">Make something</span>
+      {AGENTS.map((key) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onRunAgent(key)}
+          className={cn(
+            'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors cursor-pointer',
+            toneSoft[AGENT_TONE[key]],
+            toneText[AGENT_TONE[key]],
+            'hover:brightness-95',
+          )}
+        >
+          <Icon name={AGENT_ICON[key]} size={12} />
+          {AGENT_LABELS[key]}
+        </button>
+      ))}
     </div>
   )
 }
