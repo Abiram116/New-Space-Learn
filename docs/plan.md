@@ -77,11 +77,11 @@ shape. Doing it alone, first, keeps the risky part small and isolated.
 | 1.1 | **Extend `subtopic` tagging to flashcard generation** (`docs/plan.md`, part 1) — same pattern already shipped for quiz questions. | Dev A | half day |
 | 1.2 | **Change quiz `choices` to carry per-choice concept labels** — `list[str]` → `list[{text, concept}]` in the generation prompt and `QuizQuestion` schema. | Dev A | 1 day |
 | 1.3 | **Backward-compatible read path.** Existing `quizzes.questions` rows hold bare-string choices. The quiz-taking UI and scoring must handle both shapes — this is the one place in the redesign where a migration-shaped problem exists, and the answer is a tolerant reader, not a data migration (old quizzes simply won't contribute to confusion pairs). | Dev A | 1 day |
-| 1.4 | **Split `me.py`** (679 lines, largest backend file) into `me_brief.py` / `me_stats.py` / `me_student_model.py` **before** Phase 2 adds two more endpoints to it (`docs/plan.md`). | Dev B | 1 day |
-| 1.5 | **Split the three fat frontend files**, before new surfaces land in them. `FlashcardsView.tsx` (~1050 lines, 9 components) — extract `Review`/`CardFace`/`Summary` and the modals. `NotesView.tsx` (~850 lines) — extract the ~500-line `NoteEditor`. `Settings.tsx` (~660 lines) — its six `Row*` primitives (`RowShell`, `RowWithToggle`, `RowWithNumber`, `RowWithTime`, `RowWithText`, `RowWithSelect`) aren't settings-specific and belong in `components/ui/`. | Dev B | 2–3 days |
-| 1.6 | **Measure `/me/stats` for real** and replace the simulated estimate (`docs/operations/performance-and-cost.md §7`). Note the endpoint has since been parallelized with `asyncio.gather` (8 round trips → 1), so the old estimate is doubly stale. | Dev B | 1 hour |
-| 1.7 | **Delete `subspaces.py`'s private guard copies.** It defines its own `_get_owned_subspace` / `_assert_space_owned` instead of calling `guards.py`, and `_assert_space_owned` raises `Forbidden` (403) where `guards.assert_space` raises `NotFound` (404). `guards.py` documents the 404 as deliberate: a 403 confirms the row exists and belongs to *somebody*, which is an enumeration oracle. Two behaviours, one contradicting a documented security decision. Still unfixed as of 2026-08-09. | Dev A | 2 hours |
-| 1.8 | **Configure a frontend test runner.** `web/` has no test tooling at all. The backend's 34 tests came out of Phase 0; the frontend has nothing equivalent, and `schedule.ts` is currently only covered indirectly by the backend's parity test. | Dev B | half day |
+| ~~1.4~~ | ~~Split `me.py` (679 lines, largest backend file) into `me_brief.py` / `me_stats.py` / `me_student_model.py` **before** Phase 2 adds two more endpoints to it.~~ **Done** — verified by the 2026-08 end-to-end audit: `api/app/routers/me/` is now a package (`__init__.py`, `_common.py`, `account.py`, `brief.py`, `stats.py`). | Dev B | 1 day |
+| ~~1.5~~ | ~~Split the three fat frontend files.~~ **Done** — verified by the 2026-08 end-to-end audit: `Settings.tsx`'s six `Row*` primitives live in `components/ui/Row.tsx`; `NoteEditor` is its own file, split out of `NotesView.tsx` (now 329 lines); `FlashcardsView.tsx` is down to 558 lines. | Dev B | 2–3 days |
+| ~~1.6~~ | ~~Measure `/me/stats` for real~~ — **done** (`docs/operations/performance-and-cost.md §9`, its own "done" marker, re-confirmed by the 2026-08 end-to-end audit). | Dev B | 1 hour |
+| ~~1.7~~ | ~~Delete `subspaces.py`'s private guard copies.~~ **Done** — verified by the 2026-08 end-to-end audit: `subspaces.py` now imports `assert_space`/`assert_subspace` from `guards.py` and its module docstring records the 2026-08-10 fix and the reason (403 was an enumeration oracle). | Dev A | 2 hours |
+| ~~1.8~~ | ~~Configure a frontend test runner.~~ **Done** — verified by the 2026-08 end-to-end audit: Vitest is configured, 255+ frontend tests exist. | Dev B | half day |
 
 **Exit criteria:** new quizzes generate tagged choices; old quizzes still
 take and score correctly; typecheck and tests green.
@@ -417,14 +417,27 @@ engineering-gap pass:
 | ~~N17~~ | ~~No regenerate control exists~~ — **done, 21f8e16.** Wired end to end: `ChatSend` gains a `regenerate` flag, backend skips re-inserting the already-on-record question, frontend sends a `regenerate` response_feedback event and resends without duplicating the user bubble. First test coverage `subspace_chat.py` has ever had. |
 | ~~N18~~ | ~~`readSignal` duplicates `_IMPLICIT_PATTERNS`~~ — **done, 21f8e16 + 2026-08-12.** Two real drifts found and fixed: the frontend had zero pattern for "just give me the answer"/"stop asking" (that whole preference category could never suppress an ask); and a genuine disagreement on "I don't understand" — backend read it as directed evidence for "simpler," frontend read it as the strongest ask-trigger. Pinned with a parity test rather than silently picking a side (`test_implicit_signal_parity.py`), then **resolved 2026-08-12 as a product decision, not a refactor**: first occurrence asks, a repeat with nothing resolving it in between infers instead of interrupting again. `consecutiveConfusion` gates `askReason`'s `confusion` trigger; the classifiers themselves didn't change. See `decisions.md`. |
 | ~~N16~~ | ~~Untested pure logic~~ — **done, 21f8e16 + 2026-08-12.** `lib/retention.ts` (13 tests against the documented forgetting-curve formula, computed independently rather than copied from source) and `lib/sessionCache.ts` (12 tests, including the literal stale-shape-crashes-Home regression) closed in 21f8e16. `ImageBlock`'s `parseTitle`/`buildTitle` round-trip (16 tests, including the full round-trip property across every alignment/width) and `resolveDone` — the frontend counterpart of `rag.strip_invalid_citations`, extracted out of `handleEvent`'s closure to make it testable (8 tests) — closed 2026-08-12. |
+| ~~N19~~ | ~~Frontend `ErrorCode` missing two real backend codes~~ — **done, 2026-08-12.** `handle_http_exception` (`errors.py`) can emit `method_not_allowed` and `http_error`; neither existed in `errors.ts`'s union. `client.ts` parses the server's code with a bare `as ErrorCode` — no runtime check — so the gap didn't crash or type-error, it silently fell back to a generic message. Added both, plus `tests/errors.test.ts` (7 tests, mirroring `limits.test.ts`'s "read the real Python" discipline), which is what would have caught this originally and will catch the next one. Also fixed a stale `nothing_indexed` default that still said "Upload a document first" after the backend's own message changed — provably unreachable today (the server always sends a real message, which `friendlyMessage` prefers), but wrong text is wrong text. |
+| ~~N20~~ | ~~`NoteCitation` duplicated `Citation`~~ — **done, 2026-08-12.** Structurally identical, defined twice — `notes.ts` now imports the shared type. Zero behavior change; removes a place a future field on `Citation` could silently not reach note citations. |
+| **N21** | **A real asymmetry, found and deliberately left alone.** `quizzes.py`'s `NothingIndexed` gate is `not retrieved and not history and settings.llm_configured`; `flashcards.py`'s and `notes.py`'s are the same minus the `llm_configured` check. Practical effect: with no Groq key configured, quizzes fall through to a working placeholder flow (`_stub_questions`) regardless of material, while flashcards and notes always raise a real error. Not a crash either way — both are handled gracefully — but three structurally-parallel "generate" features shouldn't disagree on whether "no key configured" is demo-clickable. **Not fixed now**: building stub content for flashcards/notes is new feature surface, which is explicitly out of scope going into a review. Real-world impact is near-zero regardless — every deployment target configures a real `GROQ_API_KEY`; this only bites local dev with no key. Revisit after the review, not before. |
 
 ### The end-to-end audit
 
-Separate from the list above and worth its own pass: walk every feature and
-check that backend, API contract and frontend actually agree. The prompt for
-it is the class of bug found today — **code that believes one thing while
-the gate or the UI above it believes another**. Quizzes loading chat history
-and then refusing to use it is the canonical example; there are likely more.
+**Done, 2026-08-12.** Systematic pass, not a vibe check: every Pydantic
+response model in `schemas/__init__.py` diffed field-by-field against its
+TypeScript counterpart (`types.ts` plus the resource-specific files —
+`feedback.ts`, `notes.ts` — for the ones that live there instead); every
+`ApiError` code cross-checked against `errors.ts`'s union; every
+`NothingIndexed` gate compared across `quizzes.py`/`flashcards.py`/`notes.py`;
+the document status state machine checked against every frontend consumer.
+
+**Clean:** the shared type contract (`types.ts`), the feedback-kind taxonomy,
+document status handling, `PreferenceOut`/`Preference`. The class of bug this
+audit was named for — quizzes loading chat history and then refusing to use
+it — really was already fixed; re-verified rather than assumed.
+
+**Found:** N19–N21 above. Two real, low-risk contract gaps (fixed), one real
+architectural asymmetry (documented, deliberately not fixed — see N21).
 
 ---
 

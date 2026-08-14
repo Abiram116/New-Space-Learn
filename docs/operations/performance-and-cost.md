@@ -42,6 +42,24 @@ above as a to-do, not a claim.
   — **budget it as its own lazy-loaded route chunk from the start**, the
   same way Tiptap is isolated today. Do not import a charting/graph library
   into a shared module that the main chunk pulls in.
+- **The isolated Tiptap chunk itself (`NoteEditor`) is 656KB / 218KB
+  gzipped — attributed, not guessed, by the 2026-08 hardening pass.**
+  Hypothesis going in was `lowlight`'s `common` syntax-highlighting grammar
+  set (`NoteEditor.tsx`'s `createLowlight(common)`, ~35-40 languages) — a
+  build with `common` stripped to an empty grammar set measured **656.19KB,
+  a 10-byte difference from the real 656.20KB**, ruling it out as the
+  dominant cost. The real weight is ProseMirror itself, the editing engine
+  TipTap wraps: `prosemirror-view` (938K source), `prosemirror-model`
+  (568K), `prosemirror-tables` (476K), `prosemirror-markdown` (374K),
+  `prosemirror-transform` (358K) — the schema/transform/render/table/
+  markdown machinery a rich-text editor cannot function without, not an
+  optional extra bolted on top. **Conclusion: no further safe lazy-split
+  exists here.** It's already isolated at the route level (only loaded when
+  Notes/the chat dock's editor opens, not on initial app load), and the
+  remaining weight is the editor engine's own irreducible cost — shrinking
+  it further means dropping features (tables, markdown import/export) or
+  swapping the editor library entirely, both real architecture decisions,
+  not a hardening-pass cleanup.
 - **Motion:** governed by `docs/plan.md`'s six rules (nothing over
   ~320ms, stagger capped at ~240ms total, `prefers-reduced-motion` renders
   the final state, etc.) — not repeated here, just the pointer. Any new
@@ -87,11 +105,12 @@ above as a to-do, not a claim.
   and cheap at today's per-subspace volumes (typically dozens to low
   hundreds of chunks) — costs nothing to have even when unnecessary, so
   there's no reason to remove it while waiting to need it.
-- **Storage shape:** each `document_chunks` row carries a `vector(1536)` —
-  roughly 6KB per chunk just for the embedding, before the chunk's own text.
-  At the 500MB free-tier ceiling, the embedding vector is the dominant
-  per-row cost, not the text — worth knowing before assuming a storage
-  problem is a text-chunking problem.
+- **Storage shape:** each `document_chunks` row carries a `vector(384)` —
+  roughly 1.5KB per chunk just for the embedding (was `vector(1536)`,
+  ~6KB, before the migration in §3 below applied), before the chunk's own
+  text. At the 500MB free-tier ceiling, the embedding vector is still a
+  dominant per-row cost, not the text — worth knowing before assuming a
+  storage problem is a text-chunking problem.
 - **Superseded 2026-08-12 — embeddings are real now, and so is this
   measurement.** `rag.retrieve()` against the "transformer" subspace's 52
   real embedded chunks: **median 512ms** (k=4, 10 runs; one 2.7s cold-run
@@ -248,6 +267,29 @@ embeddings retrieve the right content (§4's similarity check), real chat
 TTFT is comfortably inside budget, and real document processing is
 comfortably inside both its hard cap and its target — all three were
 previously either simulated, estimated, or blocked on stub embeddings.
+
+### 9a. Re-verified, 2026-08 hardening pass
+
+Re-ran `measure_perf_pass.py` unmodified against the current code and the
+current live data, to check §9's numbers hadn't quietly gone stale:
+`/me/brief` 820.5ms (was 814.5ms), `/me/stats` 579.3ms (was 725.5ms, and
+518.8ms in §7 before that — still inside the range §9 already flagged as an
+open question, not a new one), retrieval (k=4) 521.3ms (was 512.0ms),
+document reprocess 5979.6ms (was 6157.6ms). All close enough to read as the
+same system, not drift. One value moved more than the rest: Groq TTFT
+300.9ms this pass vs. 187.4ms in §9 (n=5 both times) — plausibly ordinary
+LLM-API latency variance rather than a regression (nothing in this codebase
+changed the request path), but recorded rather than smoothed over, same
+discipline as §9's own stated policy: worth treating as a real trend only if
+a future re-measurement keeps climbing.
+
+Also fixed while re-running this: `scripts/measure_me_stats.py` had a stale
+`from app.routers.me import stats` import left over from the `me.py` → `me/`
+package split (§ recorded in `docs/plan.md`, item 1.4) — it imported the
+`stats` *submodule*, not the `stats()` handler, and crashed on every
+invocation. `measure_perf_pass.py` had already been updated correctly; only
+this narrower, less-used script had drifted. Fixed to
+`from app.routers.me.stats import stats`.
 
 ---
 
@@ -438,12 +480,14 @@ one. There is no automated check enforcing this today.
 
 ### 6. Optimization recommendations, ranked by value
 
-1. ~~**Wire real embeddings (~2¢/semester/user).**~~ **Superseded —
+1. ~~**Wire real embeddings (~2¢/semester/user).**~~ **Done —
    `docs/engineering/ai-pipeline.md §4`, docs/decisions.md.** Local BGE-small, not a hosted provider:
    $0 rather than 2¢, at the cost of ~200MB RAM (measured, fits) and a few
-   seconds of cold start. What remains is applying one migration
-   (`vector(1536)`→`vector(384)`) — still the highest-priority open item,
-   now for "flip the switch," not "find a provider."
+   seconds of cold start. The `vector(1536)`→`vector(384)` migration is
+   applied and `USE_STUB_EMBEDDINGS=false` is live — confirmed by the
+   2026-08 hardening pass's real-corpus retrieval eval
+   (`docs/engineering/ai-pipeline.md §5a`: Recall@5 0.944, MRR 0.713 on real
+   documents through the real retrieval path). Nothing left open here.
 2. **Reconsider the large tier for inline `/ai` in notes.** It currently uses
    `groq_model` (70B) for what is often a short continuation or a
    reformatting request. The fast tier may be sufficient for a large share of

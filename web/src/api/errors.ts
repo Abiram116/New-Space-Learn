@@ -15,6 +15,14 @@ export type ErrorCode =
   | 'upstream_unavailable'
   | 'not_configured'
   | 'nothing_indexed'
+  // Two codes `handle_http_exception` (api/app/errors.py) can also emit,
+  // missing here until the end-to-end audit found them: a real backend code
+  // with no frontend counterpart falls back to DEFAULTS.unknown silently —
+  // no crash, no type error, just a generic message where a specific one
+  // was available. errors.test.ts's exhaustiveness check is what would have
+  // caught this originally.
+  | 'method_not_allowed'
+  | 'http_error'
   | 'internal_error'
   | 'network'
   | 'config'
@@ -58,7 +66,14 @@ const DEFAULTS: Record<ErrorCode, string> = {
   rate_limited: 'Slow down for a moment and try again.',
   upstream_unavailable: 'A service we depend on is offline. Try again shortly.',
   not_configured: 'This feature is not connected yet.',
-  nothing_indexed: 'Nothing indexed on this topic yet. Upload a document first.',
+  // Was "Upload a document first" — stale since generation started accepting
+  // chat history as material too (api/app/errors.py's NothingIndexed carries
+  // the current wording, and friendlyMessage() prefers the server's own
+  // message whenever it sends one, so this default is a fallback of last
+  // resort rather than what's normally shown — still worth being correct).
+  nothing_indexed: 'Nothing to build from yet. Upload a document or chat about this topic first.',
+  method_not_allowed: "That action isn't available here.",
+  http_error: 'That request failed. Try again.',
   internal_error: 'Something went wrong on our side.',
   network: "Can't reach the server. Check your connection and try again.",
   config: 'The app is missing a required setting.',

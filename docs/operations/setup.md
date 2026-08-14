@@ -158,10 +158,10 @@ Both suites are fast enough to run on every change — there is no reason to
 push without them.
 
 ```bash
-# Backend — 107 tests
+# Backend — 237 tests (count as of the 2026-08 hardening pass; grows over time)
 cd api && uv run --extra dev pytest -q
 
-# Frontend — 44 tests
+# Frontend — 255 tests (same caveat)
 cd web && npm test
 
 # Lint (must be clean; B008 is ignored deliberately, see api/pyproject.toml)

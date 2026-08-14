@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { Note } from './types'
+import type { Citation, Note } from './types'
 
 export const listNotes = (subspaceId: string) =>
   apiFetch<Note[]>(`/subspaces/${subspaceId}/notes`)
@@ -33,18 +33,13 @@ export const generateNote = (
 ) => apiFetch<Note>(`/subspaces/${subspaceId}/notes/generate`, { method: 'POST', body: input })
 
 /** Backs the `/ai <prompt>` inline command — returns a markdown fragment
- *  to insert at the cursor, not a new note. */
-/** What an inline AI request was actually built from. */
-export type NoteCitation = {
-  marker: number
-  document_id: string
-  document_name: string
-  locator: string
-  snippet: string
-}
-
+ *  to insert at the cursor, not a new note. `citations` is what the answer
+ *  was actually built from — the same shape chat citations use (was a
+ *  structurally-identical local duplicate, `NoteCitation`, until the
+ *  end-to-end audit found it; deduplicated so a future field added to
+ *  `Citation` doesn't silently fail to reach here). */
 export const noteAiInline = (subspaceId: string, prompt: string) =>
-  apiFetch<{ content_md: string; citations: NoteCitation[] }>(
+  apiFetch<{ content_md: string; citations: Citation[] }>(
     `/subspaces/${subspaceId}/notes/ai-inline`,
     { method: 'POST', body: { prompt } },
   )

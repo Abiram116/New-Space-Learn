@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   deleteDocument,
   listDocuments,
@@ -45,6 +46,30 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<number | null>(null)
+  // A citation link (`notes/format.ts`'s `sourceLine`) reads `?d=<id>` to
+  // point back at the exact source a claim came from. Captured into state
+  // rather than read from `params` on every render, for two reasons: the
+  // highlight must survive the param being cleared from the URL (below), and
+  // it must also pick up a *second* citation click while already on this
+  // tab, which changes `params` without remounting the component.
+  const [params, setParams] = useSearchParams()
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const d = params.get('d')
+    if (!d) return
+    setHighlightId(d)
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('d')
+      return next
+    }, { replace: true })
+  }, [params, setParams])
+
+  useEffect(() => {
+    if (!docs || !highlightId) return
+    document.getElementById(highlightId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [docs, highlightId])
 
   const refresh = useCallback(async () => {
     try {
@@ -233,6 +258,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
                 key={doc.id}
                 doc={doc}
                 detailed
+                highlighted={doc.id === highlightId}
                 onDelete={() => setDeleteId(doc.id)}
                 onReprocess={() => reprocess(doc.id)}
               />

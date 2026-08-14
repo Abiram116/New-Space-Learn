@@ -1,20 +1,22 @@
 """Synthetic supplementary evaluation set for the embedding benchmark.
 
-Why this exists: the live product database has exactly one uploaded document
-(stuck mid-processing, never chunked) and zero rows in `document_chunks`. Two
-existing quizzes have a `source` field, but it holds a topic label
-("General Knowledge"), not a real page/chunk locator — they were generated
-without retrieval grounding, so they can't serve as ground truth for "did
-retrieval find the right passage."
+Why this exists: when it was written, the live database had exactly one
+uploaded document (stuck mid-processing, never chunked) and zero rows in
+`document_chunks` — no real corpus large enough for Recall@5/Recall@10/MRR to
+mean anything statistically. Rather than fabricate false precision from N=1
+document, this file is an honestly-labeled SYNTHETIC corpus — short, distinct
+study passages across several subjects, each with a query whose answer is
+only in one passage — sized so Recall@K has a denominator worth reporting.
 
-This means there is currently no real corpus large enough for Recall@5/
-Recall@10/MRR to mean anything statistically. Rather than fabricate false
-precision from N=1 document, this file is an honestly-labeled SYNTHETIC
-corpus — short, distinct study passages across several subjects, each with
-a query whose answer is only in one passage — sized so Recall@K has a
-denominator worth reporting. The real document supplements it separately;
-see bench_embeddings.py, which loads both and reports them apart, never
-blended into one misleading number.
+That gap is closed now: the 2026-08 hardening pass found 3 real, fully
+processed documents (80 real chunks) in the live database and built a real
+ground-truth eval against them — see `scripts/bench_real_corpus.py`, which
+runs through the actual production retrieval path
+(`app.services.rag.retrieve`), not an offline cosine-similarity proxy. This
+synthetic set still earns its place: it's larger (24 items vs. 18), it's
+independent of whatever documents happen to be uploaded at eval time, and
+`bench_embeddings.py` reports the two separately, never blended into one
+misleading number — see that file's docstring.
 """
 
 from __future__ import annotations

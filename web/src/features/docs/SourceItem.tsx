@@ -18,12 +18,17 @@ export function SourceItem({
   doc,
   detailed,
   progress,
+  highlighted,
   onReprocess,
   onDelete,
 }: {
   doc: Document
   detailed?: boolean
   progress?: number
+  /** True when this is the document a citation link (`/docs?d=<id>`) pointed
+   *  at — see `notes/format.ts`'s `sourceLine`. `id={doc.id}` below is what
+   *  the deep link's `scrollIntoView` target actually is. */
+  highlighted?: boolean
   onReprocess?: () => void
   onDelete?: () => void
 }) {
@@ -33,9 +38,11 @@ export function SourceItem({
 
   return (
     <div
+      id={doc.id}
       className={cn(
-        'cardstock group relative flex flex-col gap-2.5 rounded-xl p-3.5',
+        'cardstock group relative flex flex-col gap-2.5 rounded-xl p-3.5 scroll-mt-4',
         doc.status === 'failed' && 'ring-1 ring-coral/25',
+        highlighted && 'ring-2 ring-brand',
       )}
     >
       <div className="flex items-center gap-2.5">

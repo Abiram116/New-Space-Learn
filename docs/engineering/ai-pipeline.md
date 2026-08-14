@@ -105,7 +105,7 @@ stage — see §11 for why.
   comment). Revisit only if chunk-boundary quality is ever measured as a
   real retrieval problem, not preemptively.
 
-### 4. Embedding — real, local, and off pending one migration
+### 4. Embedding — real, local, and live
 
 **Code:** `api/app/services/embeddings.py::embed_texts`, `EmbeddingProvider`,
 `LocalBgeEmbeddingProvider`, `StubEmbeddingProvider`
@@ -114,16 +114,18 @@ stage — see §11 for why.
   semantically similar text is geometrically close.
 - **Input:** a batch of chunk strings.
 - **Output:** a `vector(384)` per chunk (was `vector(1536)` — see below).
-- **Status (updated 2026-08-10): local model wired, benchmarked, and
-  measured to fit — one migration away from live.** [docs/decisions.md](../decisions.md)
+- **Status (updated by the 2026-08 end-to-end audit): live, not pending.**
+  `supabase/migrations/20260810090000_embedding_dim_384.sql` is applied
+  (`document_chunks.embedding` is `vector(384)`), `USE_STUB_EMBEDDINGS=false`
+  in the active environment, and `document_chunks` holds real rows with real
+  384-dim BGE vectors — confirmed live by running `rag.retrieve()` against an
+  actual uploaded document (the Attention Is All You Need paper) and getting
+  correctly-ranked, semantically relevant chunks back (similarity 0.71–0.75
+  for a query about self-attention). [docs/decisions.md](../decisions.md)
   replaced the Phase-0.1 hosted OpenAI provider entirely, per an explicit
   product decision: $0 recurring cost, no external API dependency. Now
   **BGE-small-en-v1.5, quantized ONNX, via `fastembed`**, running
-  in-process — no API key, nothing to provision. `USE_STUB_EMBEDDINGS=true`
-  still holds, because `document_chunks.embedding` is still `vector(1536)`
-  and BGE-small outputs 384 dims — flipping the flag before the migration
-  runs would fail every real upload at the Postgres insert (loudly, not
-  silently — see the dimension check in `LocalBgeEmbeddingProvider`).
+  in-process — no API key, nothing to provision.
 - **Measured, not estimated, this time:** app baseline ~57–60MB, model
   marginal ~170–200MB loaded / ~230MB peak while embedding, combined
   ~250–290MB of Render's 512MB ceiling — full numbers and method in
@@ -131,11 +133,13 @@ stage — see §11 for why.
 - **BGE-M3 evaluated and rejected for production, kept as an offline
   quality benchmark only.** ~2.2GB model weights alone — 4–8x the entire
   memory ceiling before the app is counted. Not a close call.
-- **Turning it on:** apply `supabase/migrations/20260810090000_embedding_dim_384.sql`
-  by hand in the Supabase SQL editor **first**, then set
-  `USE_STUB_EMBEDDINGS=false`, then run `api/scripts/reembed_documents.py`
-  once. (Low-stakes right now: `document_chunks` has zero rows in the live
-  database — there's nothing to re-embed yet.)
+- **Already on.** The migration is applied and the flag is flipped in the
+  active environment; this is the record of what turning it on required, kept
+  for anyone standing up a fresh environment: apply
+  `supabase/migrations/20260810090000_embedding_dim_384.sql` by hand in the
+  Supabase SQL editor **first**, then set `USE_STUB_EMBEDDINGS=false`, then
+  run `api/scripts/reembed_documents.py` once to backfill any chunks that
+  were inserted under the stub.
 - **Cold start:** a real, one-time cost this design accepts — ~15–24s on
   the very first run after a fresh deploy (import + model download), ~3.4s
   on subsequent cold-start wake-ups once the model is cached on disk.
@@ -171,19 +175,55 @@ stage — see §11 for why.
   latency win at this data volume, and a second free-tier account to run out
   of.
 
+### 5a. Real-corpus retrieval evaluation (2026-08 hardening pass)
+
+**Code:** `api/scripts/bench_real_corpus.py`
+
+§4 and §5 above are real and live, not stubbed or projected — but a single
+retrieval query proves the pipe isn't broken, not that retrieval quality is
+good. This closes that gap with a small, honest, real-corpus measurement:
+18 hand-written questions, each checked by a human against the real, stored
+`document_chunks` content for the one `chunk_index` that actually answers
+it, run through the real production path
+(`app.services.rag.retrieve` → the real `match_document_chunks` RPC, scoped
+to the real `subspace_id` — not an offline cosine-similarity proxy).
+
+**Corpus, as measured:** 3 real, fully processed documents, 80 real chunks —
+a Java variables/typecasting lecture (13 chunks), a reinforcement-learning
+lecture (15 chunks), and "Attention Is All You Need" (52 chunks). Model:
+BGE-small-en-v1.5, 384-dim, real embeddings (§4).
+
+**Result:** Recall@5 = 0.944, Recall@10 = 0.944, MRR = 0.713 (n=18).
+17/18 questions found their gold chunk in the top 5; one missed the top 10
+entirely — a question about the Transformer's positional-encoding *formula*
+retrieved the two chunks immediately surrounding it (which discuss the
+concept but not the equation itself) instead of the chunk with the formula.
+That's a real, honest miss, not a fabricated one — recorded rather than
+excluded.
+
+**Limitations, stated plainly:** n=18 over 80 chunks is a smoke-eval, not a
+statistically powered benchmark — it answers "does retrieval work at all, on
+real content, through the real path," not "how does retrieval degrade at
+scale." Re-run `bench_real_corpus.py` (or extend its `CASES`) as the real
+document corpus grows. Full per-question results:
+`api/scripts/bench_real_corpus_results.json`.
+
 ### 6. Hybrid search — not built, and here's the actual reasoning
 
 Combining vector similarity with keyword/full-text search (e.g. Postgres
 `tsvector` + rank fusion) catches exact-term matches a pure embedding search
-sometimes misses — genuinely useful at scale. **Not worth building yet, for
-a reason that has nothing to do with effort:** the embeddings feeding
-today's vector search are stubbed (§4). Adding a second retrieval signal on
-top of a broken first one solves the wrong problem — it would make bad
-retrieval feel *slightly* less bad without fixing why it's bad. **Sequence
-matters: fix §4 first, measure real retrieval quality, and only then decide
-whether hybrid search earns its (genuinely small) implementation cost** — a
-`tsvector` generated column plus a weighted-union query, no new
-infrastructure. Don't build this before that measurement exists.
+sometimes misses — genuinely useful at scale. **Still not worth building —
+the reasoning has changed, not the conclusion.** This section originally
+deferred the decision until real embeddings existed and retrieval quality
+could be measured (§4 was stubbed when this was written). That measurement
+now exists (§5a): Recall@5 0.944, MRR 0.713 on real content through the real
+path. That doesn't change the call — a `tsvector` generated column plus a
+weighted-union query is still real, if genuinely small, implementation cost,
+and nothing in §5a's one honest miss (a formula the embedding search placed
+adjacent to, not on) looks like something exact-keyword matching would have
+caught either. Revisit if the real corpus grows and a future real-corpus eval
+shows a *specific, recurring* failure pattern keyword search would fix —
+not on effort grounds alone.
 
 ### 7. Reranking — not built, same class of reasoning
 
@@ -267,6 +307,30 @@ still a measured problem at that volume.
   turn for a failure mode that hasn't been observed or measured yet.
   Post-hoc range-checking is the right first move; a verification model call
   is not justified without evidence range-checking isn't enough.
+- **That failure mode is now observed, once, and recorded rather than
+  fixed (2026-08 hardening pass):** asked "what programming language was the
+  Transformer's reference implementation written in?" against the real
+  Attention Is All You Need corpus, the model answered "Python, using the
+  Tensor2Tensor and TensorFlow libraries [[3]]." Marker 3 correctly resolves
+  to a real, topically relevant passage — the paper does credit the
+  reference implementation to "our original codebase and tensor2tensor" —
+  but that passage never says Python or TensorFlow; those are true facts
+  about Tensor2Tensor supplied from the model's outside knowledge, attached
+  to a syntactically valid citation. Range-checking cannot catch this by
+  construction: the marker *is* in range and *does* point at relevant
+  material, so `strip_invalid_citations` correctly leaves it alone. This is
+  one observation, not a measured rate, and doesn't on its own justify the
+  verification-call cost rejected above — recorded so a future measurement
+  pass has a concrete example to test against rather than a hypothetical.
+- **The refusal path was also checked, and holds:** asked a question with no
+  connection to the corpus at all ("What is the recommended internal
+  temperature for cooking chicken?") against the same subspace, the model
+  correctly declined — "The sources provided do not cover the topic of
+  cooking chicken..." — with zero citation markers, even though `retrieve()`
+  still returned its usual k=4 chunks (low similarity, ~0.47–0.49, but
+  `retrieve()` doesn't itself threshold on similarity — see §5). The
+  `answer_only_from_docs` prompt instruction is what does the actual
+  refusing here, and on this real check it worked.
 
 ### 11. "Knowledge Object" — deliberately not a stage
 

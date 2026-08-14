@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.deps import CurrentUser  # noqa: E402
-from app.routers.me import stats  # noqa: E402
+from app.routers.me.stats import stats  # noqa: E402
 from app.services import supabase  # noqa: E402
 
 
