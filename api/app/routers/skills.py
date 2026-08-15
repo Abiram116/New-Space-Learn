@@ -129,7 +129,17 @@ async def list_active_skills(
     if not links:
         return []
     ids = ",".join(link["skill_id"] for link in links)
-    rows = await supabase.db_select("skills", filters={"id": f"in.({ids})"})
+    # Ordered: `for_skill`'s own docstring treats the LAST active skill as the
+    # most specific one when two give conflicting instructions ("a model reads
+    # the last constraint as the most specific"). An unordered `in.(...)` read
+    # leaves Postgres free to return rows in whatever order it likes, so which
+    # skill "won" a conflict could silently change between two requests with
+    # the exact same active set. created_at.asc makes it what a student would
+    # actually expect: the skill they turned on more recently is the one that
+    # takes precedence over an older one still switched on.
+    rows = await supabase.db_select(
+        "skills", filters={"id": f"in.({ids})"}, order="created_at.asc"
+    )
     return [_to_skill(r) for r in rows]
 
 
@@ -176,6 +186,13 @@ async def deactivate_skill(
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
+def _can_use_skill(skill: dict, user_id: str) -> bool:
+    """A library skill is everyone's to activate; a private one is only its
+    owner's. Pulled out of `_assert_can_use_skill` as a pure predicate so the
+    authorization rule itself — not the fetch around it — is what a test
+    exercises."""
+    return bool(skill.get("is_library")) or skill.get("user_id") == user_id
+
 
 async def _assert_can_use_skill(user_id: str, skill_id: str) -> None:
     rows = await supabase.db_select(
@@ -183,6 +200,5 @@ async def _assert_can_use_skill(user_id: str, skill_id: str) -> None:
     )
     if not rows:
         raise NotFound("Skill not found.")
-    skill = rows[0]
-    if not skill.get("is_library") and skill.get("user_id") != user_id:
+    if not _can_use_skill(rows[0], user_id):
         raise Forbidden("You can't use another user's private skill.")

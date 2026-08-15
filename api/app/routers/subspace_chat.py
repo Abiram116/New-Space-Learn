@@ -96,14 +96,7 @@ async def send_chat(
         student_model.snapshot(user.id),
     )
 
-    # A skill's memory_scope is a real behavior dimension, not decoration:
-    # "topic"/"all" pull a longer history window so the model actually has
-    # more to work with, not just a longer prompt for its own sake.
-    scope_limit = {"session": 8, "topic": 20, "all": 40}
-    history_limit = max(
-        (scope_limit.get(s.get("memory_scope", "session"), 8) for s in active_skills),
-        default=8,
-    )
+    history_limit = _history_limit(active_skills)
     prior, retrieved = await asyncio.gather(
         recent_history(user.id, subspace_id, limit=history_limit),
         rag.retrieve_with_links(subspace_id, body.text, linked_ids),
@@ -278,6 +271,29 @@ def _sse(event: str, data: dict) -> bytes:
 
 
 
+#: A skill's memory_scope is a real behavior dimension, not decoration:
+#: "topic"/"all" pull a longer history window so the model actually has more
+#: to work with, not just a longer prompt for its own sake.
+_SCOPE_LIMIT = {"session": 8, "topic": 20, "all": 40}
+
+
+def _history_limit(active_skills: list[dict]) -> int:
+    """How many prior turns to load, given whichever active skills ask for the
+    widest window.
+
+    One skill wanting "all" of the topic's history outweighs another still
+    set to "session" — a skill can only ask for *more* context than the
+    8-message default, never take it away from a skill that wants it. Pulled
+    out of `send_chat` as its own function because it is real branching logic
+    (unknown/missing memory_scope silently falls back to 8) that was
+    otherwise only reachable by mocking a live chat request.
+    """
+    return max(
+        (_SCOPE_LIMIT.get(s.get("memory_scope", "session"), 8) for s in active_skills),
+        default=8,
+    )
+
+
 async def _linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
     links = await supabase.db_select(
         "subspace_links",
@@ -308,7 +324,11 @@ async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
     if not links:
         return []
     ids = ",".join(link["skill_id"] for link in links)
+    # created_at.asc: see the identical comment on skills.list_active_skills —
+    # without an explicit order, which active skill "wins" a conflict (the
+    # last one in `active_skill_instructions`, per `for_skill`'s own
+    # docstring) could vary between two requests with the same active set.
     return await supabase.db_select(
-        "skills", filters={"id": f"in.({ids})"}
+        "skills", filters={"id": f"in.({ids})"}, order="created_at.asc"
     )
 

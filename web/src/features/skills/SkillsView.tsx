@@ -296,6 +296,17 @@ function Inner({ subspaceId }: { subspaceId: string }) {
 
       <div className="flex flex-col gap-1.5 text-xs">
         <span className="font-semibold text-muted">Remembers</span>
+        {/* The toggle above already controls WHERE this skill applies — every
+            space it's switched on in, forever, until switched off. This
+            row is a different axis entirely: how much of THIS topic's own
+            chat history the skill can see while it's answering. Worth
+            saying outright, because "Everything" sitting one row under a
+            per-space activation toggle reads like "every space" if you
+            don't stop to check — it isn't; it's still this topic only. */}
+        <p className="text-[11px] leading-snug text-faint">
+          How much of this topic's chat history it can see when answering —
+          not where it's active. It stays scoped to this space either way.
+        </p>
         <div className="flex flex-wrap gap-1.5">
           {MEMORY_SCOPE_OPTIONS.map((opt) => (
             <button

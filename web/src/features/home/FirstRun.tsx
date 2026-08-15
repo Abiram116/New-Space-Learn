@@ -371,7 +371,8 @@ function TwoKinds({ reveal, reduced }: { reveal: boolean; reduced: boolean }) {
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
             Change <em className="not-italic text-ink-3">how the tutor talks</em>, and
             stay on until you switch them off. Socratic Tutor refuses to hand you
-            the answer. Cite Everything won't make an uncited claim.
+            the answer. Debugging Mentor asks questions until you find the bug
+            yourself.
           </p>
         </div>
         <div>

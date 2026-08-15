@@ -56,8 +56,11 @@ legible in the UI, not collapsed:**
 - **Skills** are persistent AI *personalities* the student switches on for a
   subspace. They change how every answer in that topic is written (Socratic
   Tutor withholds the answer and asks questions; Exam Cram runs rapid-fire;
-  Cite Everything refuses uncited claims). They are configurable, cloneable from
-  a library, and stay on until turned off.
+  Debugging Mentor guides toward a bug instead of fixing it for you). They are
+  configurable, cloneable from a library, and stay on until turned off.
+  ("Cite Everything" was removed from the library — it restated, per-space and
+  as a soft "teaching style," what `user_settings.answer_only_from_docs` /
+  `.always_show_citations` already do account-wide and on by default.)
 - **Agents** are one-shot *actions* that consume the current conversation and
   produce an artifact: a note, a deck of cards, or a quiz. They run, they hand
   back something, they're done.
@@ -96,8 +99,10 @@ Name: Space Learn.
 
 - Working full-stack implementation: FastAPI + Supabase (Postgres/pgvector) +
   React, all features wired to real endpoints.
-- Live database with schema, RLS, RAG function, and four seeded library Skills:
-  Socratic Tutor, Exam Cram, Cite Everything, Paper Explainer.
+- Live database with schema, RLS, RAG function, and a seeded library of 10
+  Skills: Socratic Tutor, Exam Cram, Paper Explainer, Concept Simplifier,
+  Feynman Tutor, Debugging Mentor, Exam Examiner, Mistake Analyst, Compare &
+  Contrast, Code Review Mentor.
 - Real Groq and Supabase credentials configured; chat, retrieval, and citation
   verified working end-to-end.
 - No real users, usage data, testimonials, or performance benchmarks exist.

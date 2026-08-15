@@ -182,10 +182,8 @@ def build_prompt(
     #
     # So Skills go in the middle, framed as style rather than authority, and
     # the invariants go last where the same reasoning now works for us.
-    for extra in active_skill_instructions:
-        framed = guardrails.frame_skill(extra)
-        if framed:
-            system_parts.append(framed)
+    if skills_block := guardrails.frame_skills(active_skill_instructions):
+        system_parts.append(skills_block)
     if student_context:
         system_parts.append(student_context)
 

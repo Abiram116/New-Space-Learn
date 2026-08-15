@@ -78,6 +78,49 @@ def test_an_empty_skill_adds_nothing() -> None:
     assert "<teaching-style>" not in _system(skills=["  "])
 
 
+# ── Multiple active skills ───────────────────────────────────────────────
+
+
+def test_two_active_skills_both_reach_the_model() -> None:
+    text = _system(skills=["Ask one question at a time.", "Always cite a page number."])
+    assert "Ask one question at a time." in text
+    assert "Always cite a page number." in text
+    assert text.count("<teaching-style>") == 2
+    assert text.count("</teaching-style>") == 2
+
+
+def test_the_framing_header_is_not_repeated_per_skill() -> None:
+    """Regression: this used to loop `frame_skill` (header AND tag together)
+    once per active skill, so three skills put the same explanatory sentence
+    in the prompt three times — tokens spent repeating a fact the model
+    already has after the first copy."""
+    text = _system(skills=["Style A.", "Style B.", "Style C."])
+    assert text.count(guardrails.SKILL_FRAME_HEADER) == 1
+    assert text.count("<teaching-style>") == 3
+
+
+def test_an_empty_skill_among_real_ones_is_skipped_not_blanked() -> None:
+    """A blank slot in the active list (a skill with no instructions saved)
+    must not produce an empty <teaching-style></teaching-style> pair sitting
+    between two real ones."""
+    text = _system(skills=["Real style.", "   ", ""])
+    assert text.count("<teaching-style>") == 1
+    assert "Real style." in text
+
+
+def test_frame_skills_matches_looping_frame_skill_for_one() -> None:
+    """One active skill should read identically whether it went through the
+    single-skill or the multi-skill path — the two must not drift into two
+    different framings of the same case."""
+    solo = guardrails.frame_skills(["Be concise."])
+    assert solo == guardrails.SKILL_FRAME_HEADER + "\n\n" + guardrails.frame_skill("Be concise.")
+
+
+def test_frame_skills_of_nothing_is_empty() -> None:
+    assert guardrails.frame_skills([]) == ""
+    assert guardrails.frame_skills(["", "   "]) == ""
+
+
 # ── The invariants themselves ──────────────────────────────────────────
 
 

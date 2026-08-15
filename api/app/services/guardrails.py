@@ -110,7 +110,11 @@ SKILL_FRAME_HEADER = (
 
 
 def frame_skill(instructions: str) -> str:
-    """Wrap a Skill's own words so the model can tell whose words they are.
+    """Wrap one Skill's own words in the delimiter that marks whose words they
+    are — just the tag, not `SKILL_FRAME_HEADER`. The header explains what a
+    `<teaching-style>` block IS; it only needs saying once per prompt, however
+    many Skills are active. `frame_skills` below is what says it once and
+    calls this per Skill.
 
     Unframed, user text in the system role is indistinguishable from the
     product's own instructions — the model has no way to know that one line was
@@ -121,7 +125,23 @@ def frame_skill(instructions: str) -> str:
     body = instructions.strip()
     if not body:
         return ""
-    return f"{SKILL_FRAME_HEADER}\n\n<teaching-style>\n{body}\n</teaching-style>"
+    return f"<teaching-style>\n{body}\n</teaching-style>"
+
+
+def frame_skills(instructions: list[str]) -> str:
+    """Every active Skill, as the one system-prompt fragment `rag.build_prompt`
+    inserts.
+
+    A student can have several Skills active in one space at once — this is
+    where that stops being "loop over frame_skill and append N times", which
+    put `SKILL_FRAME_HEADER`'s explanatory sentence in the prompt once per
+    active Skill for no new information the second time. One header, then one
+    `<teaching-style>` block per Skill that actually has something in it.
+    """
+    blocks = [b for extra in instructions if (b := frame_skill(extra))]
+    if not blocks:
+        return ""
+    return SKILL_FRAME_HEADER + "\n\n" + "\n\n".join(blocks)
 
 
 #: Roughly 1.5MB of decoded image, expressed as data-URL characters.

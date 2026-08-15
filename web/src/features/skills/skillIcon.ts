@@ -28,6 +28,7 @@ const EMOJI_TO_ICON: Record<string, IconName> = {
 const KNOWN: ReadonlySet<string> = new Set<IconName>([
   'skill', 'target', 'doc', 'note', 'search', 'chat', 'sparkle',
   'agent', 'deck', 'quiz', 'flame', 'seal', 'clock', 'user',
+  'check', 'thumbDown',
 ])
 
 export function resolveSkillIcon(raw: string | null | undefined): IconName {
