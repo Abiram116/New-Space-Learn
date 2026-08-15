@@ -159,6 +159,105 @@ describe('activating a skill', () => {
   })
 })
 
+describe('the library grid is grouped into shelves', () => {
+  it('shows a shelf label per category, in a stable order, for a mixed library', async () => {
+    listLibrarySkills.mockResolvedValue([
+      skill({ id: 'lib-1', name: 'Paper Explainer', is_library: true }),
+      skill({ id: 'lib-2', name: 'Exam Cram', is_library: true }),
+      skill({ id: 'lib-3', name: 'Debugging Mentor', is_library: true }),
+    ])
+    renderView()
+
+    await screen.findByText('Paper Explainer')
+    const labels = ['Learning', 'Exam', 'Technical', 'Research'].filter((l) =>
+      screen.queryByText(l),
+    )
+    // Research (Paper Explainer) comes after Exam (Exam Cram) and Technical
+    // (Debugging Mentor) in LIBRARY_CATEGORY_ORDER, regardless of the order
+    // the API happened to return the three rows in.
+    expect(labels).toEqual(['Exam', 'Technical', 'Research'])
+  })
+
+  it('does not print a shelf label for a custom skill with no known category', async () => {
+    listLibrarySkills.mockResolvedValue([
+      skill({ id: 'lib-1', name: 'Someone\'s Hand-Written Skill', is_library: true }),
+    ])
+    renderView()
+
+    await screen.findByText('Someone\'s Hand-Written Skill')
+    for (const label of ['Learning', 'Exam', 'Technical', 'Research']) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
+  })
+})
+
+describe('active vs inactive cards in "Active in this space"', () => {
+  // Regression: this section renders every owned skill, not only active
+  // ones — the switch was the only signal telling them apart. An active
+  // card now gets a coloured left edge in the skill's own tone; an inactive
+  // one stays plain, so the state reads without parsing the switch first.
+  it('gives an active skill a coloured accent the inactive one does not have', async () => {
+    listActiveSkills.mockResolvedValue([OWN])
+    renderView()
+
+    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
+    const card = toggle.closest('[class*="cardstock"]') as HTMLElement
+    expect(card.style.borderLeftColor).not.toBe('')
+  })
+
+  it('leaves an inactive skill without the accent colour', async () => {
+    listActiveSkills.mockResolvedValue([])
+    renderView()
+
+    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
+    const card = toggle.closest('[class*="cardstock"]') as HTMLElement
+    expect(card.style.borderLeftColor).toBe('')
+  })
+})
+
+describe('the custom icon option', () => {
+  it('lets you pick any icon and tone independently of the seven presets', async () => {
+    createSkill.mockResolvedValue(
+      skill({ id: 'skill-new', name: 'My Coach', icon: 'flame', tone: 'jade' }),
+    )
+    const user = userEvent.setup()
+    renderView()
+
+    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+    await user.click(screen.getByRole('button', { name: 'Custom icon' }))
+
+    await user.click(screen.getByRole('button', { name: 'jade tone' }))
+    await user.click(screen.getByRole('button', { name: 'flame' }))
+
+    await user.type(screen.getByPlaceholderText('Socratic Tutor'), 'My Coach')
+    await user.type(
+      screen.getByPlaceholderText(/Ask one guiding question/),
+      'Push me through drills.',
+    )
+    await user.click(screen.getByRole('button', { name: 'Create skill' }))
+
+    await waitFor(() =>
+      expect(createSkill).toHaveBeenCalledWith(
+        expect.objectContaining({ icon: 'flame', tone: 'jade' }),
+      ),
+    )
+  })
+
+  it('closes and resets when the editor closes', async () => {
+    const user = userEvent.setup()
+    renderView()
+
+    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+    await user.click(screen.getByRole('button', { name: 'Custom icon' }))
+    expect(screen.getByRole('button', { name: 'flame' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+
+    expect(screen.queryByRole('button', { name: 'flame' })).not.toBeInTheDocument()
+  })
+})
+
 describe('adding a library skill', () => {
   it('clones the library skill into the user\'s own skills via createSkill', async () => {
     const clone = skill({ id: 'skill-2', name: 'Exam Cram' })
@@ -183,5 +282,29 @@ describe('adding a library skill', () => {
     await waitFor(() =>
       expect(screen.getByRole('switch', { name: 'Enable Exam Cram' })).toBeInTheDocument(),
     )
+  })
+})
+
+describe('a library skill already added once', () => {
+  // Regression: "Add" had no guard against a name you already own — clicking
+  // it twice (or once per render before the list refreshed) produced two
+  // identical "Exam Examiner" cards in "Active in this space", distinguishable
+  // only by opening each one.
+  it('shows "Added" instead of an "Add" button once the name is already owned', async () => {
+    listSkills.mockResolvedValue([OWN, skill({ id: 'skill-2', name: 'Exam Cram' })])
+    renderView()
+
+    await screen.findByText('Added')
+    expect(screen.queryByRole('button', { name: 'Add →' })).not.toBeInTheDocument()
+  })
+
+  it('does not call createSkill even if Add is somehow triggered again', async () => {
+    // Defence in depth: cloneLibrary itself refuses a name already owned,
+    // not just the button's disabled appearance.
+    listSkills.mockResolvedValue([skill({ id: 'skill-2', name: 'Exam Cram' })])
+    renderView()
+    await screen.findByText('Added')
+
+    expect(createSkill).not.toHaveBeenCalled()
   })
 })

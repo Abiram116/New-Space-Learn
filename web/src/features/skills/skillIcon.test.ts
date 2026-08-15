@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { resolveSkillIcon } from './skillIcon'
+import { LIBRARY_CATEGORY, LIBRARY_CATEGORY_ORDER, resolveSkillIcon, SKILL_ICON_CHOICES } from './skillIcon'
 
 describe('resolveSkillIcon', () => {
   it('passes a known IconName straight through', () => {
@@ -44,5 +44,41 @@ describe('resolveSkillIcon', () => {
     // Everything and Paper Explainer did.
     expect(resolveSkillIcon('thumbDown')).toBe('thumbDown')
     expect(resolveSkillIcon('check')).toBe('check')
+  })
+})
+
+describe('the skill icon picker', () => {
+  it('gives every choice its own tone — no two personas render as the same colour', () => {
+    // Regression: 'skill' and 'chat' both used 'brand', so two different
+    // personas were visually identical anywhere a skill's colour shows.
+    const tones = SKILL_ICON_CHOICES.map((c) => c.tone)
+    expect(new Set(tones).size).toBe(tones.length)
+  })
+
+  it('gives every choice its own icon', () => {
+    const icons = SKILL_ICON_CHOICES.map((c) => c.icon)
+    expect(new Set(icons).size).toBe(icons.length)
+  })
+})
+
+describe('the library shelf map', () => {
+  it('only ever assigns a category that has a render position', () => {
+    // A shelf with no entry in the render order would silently never
+    // appear — every category actually used must be listed.
+    const categories = new Set(Object.values(LIBRARY_CATEGORY))
+    for (const category of categories) {
+      expect(LIBRARY_CATEGORY_ORDER).toContain(category)
+    }
+  })
+
+  it('covers every current library skill', () => {
+    const seeded = [
+      'Socratic Tutor', 'Concept Simplifier', 'Feynman Tutor', 'Exam Examiner',
+      'Exam Cram', 'Mistake Analyst', 'Compare & Contrast', 'Debugging Mentor',
+      'Code Review Mentor', 'Paper Explainer',
+    ]
+    for (const name of seeded) {
+      expect(LIBRARY_CATEGORY[name], `${name} has no shelf`).toBeDefined()
+    }
   })
 })

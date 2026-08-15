@@ -21,7 +21,7 @@ import {
   updateSkill,
   type SkillInput,
 } from '../../api/skills'
-import type { MemoryScope, Skill } from '../../api/types'
+import type { MemoryScope, Skill, Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
@@ -32,12 +32,18 @@ import { Input, Textarea } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { SectionLabel, Toggle } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
-import { SKILL_ICON_CHOICES, resolveSkillIcon } from './skillIcon'
+import {
+  LIBRARY_CATEGORY,
+  LIBRARY_CATEGORY_ORDER,
+  SKILL_ICON_CHOICES,
+  SKILL_ICON_LIBRARY,
+  resolveSkillIcon,
+} from './skillIcon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
-import { toneSoft, toneText } from '../../lib/tone'
+import { toneDot, toneHex, toneSoft, toneText } from '../../lib/tone'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 
 
@@ -95,11 +101,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const isWide = useIsWide()
   const [editorOpen, setEditorOpen] = useState(false)
+  const [customIconOpen, setCustomIconOpen] = useState(false)
 
   /** Every entry point into the form goes through here, so the modal opens. */
   const openEditor = useCallback((id: string | null) => {
     setSelectedId(id)
     if (id === null) setForm(emptyForm())
+    setCustomIconOpen(false)
     setEditorOpen(true)
   }, [])
 
@@ -107,6 +115,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     setEditorOpen(false)
     setSelectedId(null)
     setForm(emptyForm())
+    setCustomIconOpen(false)
   }, [])
 
   const refresh = useCallback(async () => {
@@ -130,6 +139,31 @@ function Inner({ subspaceId }: { subspaceId: string }) {
   }, [refresh])
 
   const loading = own === null && !error
+
+  /** The library grouped into its fixed shelves (see LIBRARY_CATEGORY's own
+   *  comment on why this is a name lookup rather than a schema column). A
+   *  custom skill with no shelf lands under a plain, header-less "More"
+   *  bucket rather than silently vanishing from the grid. */
+  const libraryShelves = useMemo(() => {
+    if (!library) return []
+    const byCategory = new Map<string, Skill[]>()
+    const other: Skill[] = []
+    for (const lib of library) {
+      const category = LIBRARY_CATEGORY[lib.name]
+      if (!category) {
+        other.push(lib)
+        continue
+      }
+      const bucket = byCategory.get(category) ?? []
+      bucket.push(lib)
+      byCategory.set(category, bucket)
+    }
+    const shelves: { category: string | null; skills: Skill[] }[] = LIBRARY_CATEGORY_ORDER
+      .filter((c) => byCategory.has(c))
+      .map((category) => ({ category, skills: byCategory.get(category)! }))
+    if (other.length > 0) shelves.push({ category: null, skills: other })
+    return shelves
+  }, [library])
 
   const editingExisting = useMemo(
     () => own?.find((s) => s.id === selectedId) ?? null,
@@ -229,7 +263,16 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     }
   }
 
+  /** Own skills, by name — cloning "Exam Examiner" twice produced two
+   *  identical "Exam Examiner" cards with no way to tell them apart short of
+   *  opening each one, so a name already owned blocks a further clone. Name
+   *  rather than a library-source id: nothing on `Skill` records which
+   *  library row a clone came from, and a name collision is the actual
+   *  thing that read as broken on screen. */
+  const ownNames = useMemo(() => new Set((own ?? []).map((s) => s.name)), [own])
+
   const cloneLibrary = async (lib: Skill) => {
+    if (ownNames.has(lib.name)) return
     try {
       const created = await createSkill({
         name: lib.name,
@@ -282,7 +325,67 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               </button>
             )
           })}
+          {/* None of the seven presets pair icon and tone the way you want?
+              Pick both separately instead, rather than being stuck with one
+              of seven fixed combinations. */}
+          <button
+            type="button"
+            onClick={() => setCustomIconOpen((o) => !o)}
+            title="Custom icon"
+            aria-label="Custom icon"
+            aria-expanded={customIconOpen}
+            className={cn(
+              'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
+              customIconOpen
+                ? 'border-brand bg-line-soft text-ink'
+                : 'border-dashed border-line-dash text-faint hover:border-brand/50 hover:text-brand-deep',
+            )}
+          >
+            <Icon name="plus" size={16} />
+          </button>
         </div>
+
+        {customIconOpen && (
+          <div className="mt-1 flex flex-col gap-2 rounded-[10px] border border-line bg-well/60 p-2.5">
+            <div className="flex flex-wrap gap-1.5">
+              {(Object.keys(toneSoft) as Tone[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setForm({ ...form, tone: t })}
+                  aria-label={`${t} tone`}
+                  aria-pressed={form.tone === t}
+                  className={cn(
+                    'h-6 w-6 rounded-full border-2 cursor-pointer transition-transform',
+                    toneDot[t],
+                    form.tone === t ? 'border-ink scale-110' : 'border-transparent hover:scale-105',
+                  )}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SKILL_ICON_LIBRARY.map((iconName) => (
+                <button
+                  key={iconName}
+                  type="button"
+                  onClick={() => setForm({ ...form, icon: iconName })}
+                  title={iconName}
+                  aria-label={iconName}
+                  className={cn(
+                    'grid h-8 w-8 place-items-center rounded-md border cursor-pointer transition-colors',
+                    toneSoft[form.tone ?? 'brand'],
+                    toneText[form.tone ?? 'brand'],
+                    form.icon === iconName
+                      ? 'border-brand'
+                      : 'border-transparent hover:border-line-dash',
+                  )}
+                >
+                  <Icon name={iconName} size={14} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <Textarea
@@ -389,14 +492,29 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                 />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
-                  {own.map((skill) => (
-                    <Card key={skill.id} className="group flex flex-col gap-2 p-3.5 transition-transform duration-200 hover:-translate-y-0.5">
+                  {own.map((skill) => {
+                    const active = activeIds.has(skill.id)
+                    return (
+                    <Card
+                      key={skill.id}
+                      className={cn(
+                        'group flex flex-col gap-2 border-l-[3px] p-3.5 transition-[transform,border-color] duration-200 hover:-translate-y-0.5',
+                        !active && 'border-l-transparent',
+                      )}
+                      // This section shows every skill you own, active or
+                      // not — the switch was the only thing saying which is
+                      // which. A left edge in the skill's own colour, present
+                      // only while it's actually affecting this space, reads
+                      // at a glance without requiring the switch's state to
+                      // be parsed first.
+                      style={active ? { borderLeftColor: toneHex[skill.tone] } : undefined}
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
                             'grid h-8 w-8 shrink-0 place-items-center rounded-[10px]',
-                            toneSoft[skill.tone],
-                            toneText[skill.tone],
+                            active ? toneSoft[skill.tone] : 'bg-line-soft',
+                            active ? toneText[skill.tone] : 'text-faint',
                           )}
                         >
                           <Icon name={resolveSkillIcon(skill.icon)} size={16} />
@@ -411,7 +529,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           {skill.name}
                         </button>
                         <Toggle
-                          checked={activeIds.has(skill.id)}
+                          checked={active}
                           onChange={(next) => toggleActive(skill, next)}
                           label={`Enable ${skill.name}`}
                         />
@@ -421,7 +539,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           {skill.description}
                         </p>
                       )}
-                      <div className="flex items-center gap-3 text-[11px] text-faint">
+                      {/* CSS Grid stretches every card in a row to match the
+                          tallest one — a short description next to a longer
+                          neighbour's left dead air below this row instead of
+                          between it and the description above. mt-auto turns
+                          that into a footer that actually sits at the
+                          card's bottom edge, however tall the card gets. */}
+                      <div className="mt-auto flex items-center gap-3 text-[11px] text-faint">
                         <span>
                           Remembers {MEMORY_SCOPE_OPTIONS.find((o) => o.value === skill.memory_scope)?.label.toLowerCase() ?? 'this session'}
                         </span>
@@ -429,14 +553,20 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           onClick={() => setConfirmDelete(skill.id)}
                           className="ml-auto opacity-0 group-hover:opacity-100 hover:text-coral-deep transition-opacity cursor-pointer"
                         >
-                          Delete
+                          Remove
                         </button>
                       </div>
                     </Card>
-                  ))}
+                    )
+                  })}
                   <DashedCard
                     onClick={() => openEditor(null)}
-                    className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 p-3.5 text-[13px] text-muted transition-colors cursor-pointer hover:border-brand/50 hover:text-brand-deep"
+                    // self-start: without it, Grid's default row-stretch
+                    // matches this to the tallest real skill card sharing
+                    // its row, leaving the centered "+" floating in a box
+                    // far bigger than the deliberately compact 100px this
+                    // was designed at.
+                    className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 self-start p-3.5 text-[13px] text-muted transition-colors cursor-pointer hover:border-brand/50 hover:text-brand-deep"
                   >
                     <Icon name="plus" size={18} />
                     Write your own skill
@@ -456,31 +586,58 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           ) : library.length === 0 ? (
             <p className="text-xs text-muted">The library is empty right now.</p>
           ) : (
-            <div className="flex flex-wrap gap-2.5 text-xs">
-              {library.map((lib) => (
-                <Card key={lib.id} className="min-w-56 flex-1 p-3 transition-transform duration-200 hover:-translate-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        'grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                        toneSoft[lib.tone],
-                        toneText[lib.tone],
-                      )}
-                    >
-                      <Icon name={resolveSkillIcon(lib.icon)} size={14} />
-                    </span>
-                    <b>{lib.name}</b>
+            // Ten cards in one undifferentiated row read as a wall, not a
+            // menu — grouped by what each skill is actually for, "which one
+            // do I want" becomes a two-step scan (shelf, then card) instead
+            // of reading all ten descriptions. Shelves only exist for the
+            // fixed library set (see LIBRARY_CATEGORY); nothing here reads
+            // or needs a schema field.
+            <div className="flex flex-col gap-3">
+              {libraryShelves.map(({ category, skills }) => (
+                <div key={category ?? '__other'} className="flex flex-col gap-1.5">
+                  {category && <span className="setcode">{category}</span>}
+                  <div className="flex flex-wrap gap-2.5 text-xs">
+                    {skills.map((lib) => {
+                      const owned = ownNames.has(lib.name)
+                      return (
+                      <Card key={lib.id} className="min-w-56 flex-1 p-3 transition-transform duration-200 hover:-translate-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'grid h-7 w-7 shrink-0 place-items-center rounded-md',
+                              toneSoft[lib.tone],
+                              toneText[lib.tone],
+                            )}
+                          >
+                            <Icon name={resolveSkillIcon(lib.icon)} size={14} />
+                          </span>
+                          <b>{lib.name}</b>
+                        </div>
+                        {lib.description && (
+                          <div className="mt-1 text-muted">{lib.description}</div>
+                        )}
+                        {owned ? (
+                          // Already cloned — a second "Add" produced a second,
+                          // identical card with no way to tell the two apart
+                          // short of opening each one. Disabled rather than
+                          // hidden: still confirms the skill IS in your list,
+                          // just not addable again.
+                          <span className="mt-2 flex items-center gap-1 font-semibold text-faint">
+                            <Icon name="check" size={12} /> Added
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => cloneLibrary(lib)}
+                            className="mt-2 font-semibold text-brand cursor-pointer"
+                          >
+                            Add →
+                          </button>
+                        )}
+                      </Card>
+                      )
+                    })}
                   </div>
-                  {lib.description && (
-                    <div className="mt-1 text-muted">{lib.description}</div>
-                  )}
-                  <button
-                    onClick={() => cloneLibrary(lib)}
-                    className="mt-2 font-semibold text-brand cursor-pointer"
-                  >
-                    Add →
-                  </button>
-                </Card>
+                </div>
               ))}
             </div>
           )}
