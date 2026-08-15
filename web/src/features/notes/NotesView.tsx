@@ -91,13 +91,10 @@ function Inner({
 
   const current = notes?.find((n) => n.id === selectedId) ?? null
 
-  /* The origin filter is only meaningful when both kinds exist. */
-  const mixedOrigins = useMemo(() => {
-    if (!notes || notes.length < 2) return false
-    return (
-      notes.some((n) => n.origin === 'user') && notes.some((n) => n.origin !== 'user')
-    )
-  }, [notes])
+  /* Shown once there's more than one note to tell apart — even an all-AI or
+   * all-mine topic still benefits from seeing "Mine 0" rather than the row
+   * vanishing outright, which read as a bug rather than "none yet". */
+  const showOriginFilter = (notes?.length ?? 0) > 1
 
   /** Selects a note AND writes it to the URL, so the two never disagree.
    *  `?n=` was previously only written on create, so reloading or sharing the
@@ -224,9 +221,7 @@ function Inner({
             </label>
           )}
 
-          {/* Only when there is genuinely a mix. A "Mine 1 / AI 0" toggle row
-              filters nothing and just adds three numbers to read. */}
-          {mixedOrigins && (
+          {showOriginFilter && (
             <div className="flex gap-1">
               {(['all', 'ai', 'mine'] as Filter[]).map((f) => (
                 <button
@@ -320,7 +315,15 @@ function Inner({
                   )}
                   <div className="setcode mt-1.5 flex items-center gap-1.5">
                     {item.origin !== 'user' && (
-                      <Icon name="sparkle" size={9} className="text-sky-deep" />
+                      <span className="relative inline-flex shrink-0">
+                        <Icon name="note" size={9} className="text-sky-deep" />
+                        <Icon
+                          name="sparkle"
+                          size={5}
+                          filled
+                          className="absolute -right-0.5 -top-0.5 text-sky-deep"
+                        />
+                      </span>
                     )}
                     {relativeTime(item.updated_at)}
                   </div>

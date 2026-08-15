@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/react'
 import type { IconName } from '../../components/ui/Icon'
+import { BLOCK_ICON } from './toolbar'
 
 /**
  * The `/` command set.
@@ -32,6 +33,15 @@ import type { IconName } from '../../components/ui/Icon'
 export type SlashGroup = 'ai' | 'insert'
 
 /**
+ * Sub-grouping inside `insert`, so a light section label appears when the
+ * menu is scrolled through top to bottom rather than one flat 11-item list.
+ * `ai` commands don't get one — 7 items reads fine as a single list, and the
+ * "Ask the tutor" header already tells you what kind of thing you're
+ * looking at, which is the actual job a section label does here.
+ */
+export type SlashSection = 'text' | 'lists' | 'structure' | 'code'
+
+/**
  * What a command needs before it can do anything useful.
  *
  * - `nothing`  — always available (write from scratch, insert a block).
@@ -45,8 +55,15 @@ export type SlashCommand = {
   id: string
   label: string
   hint: string
-  icon: IconName
+  /** Most commands draw an icon; H1/H2/H3 draw their own glyph instead (see
+   *  `glyph`) — there is no icon for an arbitrary letter, the same reason
+   *  the selection bar's bold/italic buttons are drawn as literal "B"/"I"
+   *  rather than icons. Exactly one of `icon`/`glyph` is set. */
+  icon?: IconName
+  glyph?: string
   group: SlashGroup
+  /** Only meaningful within `insert` — see `SlashSection`. */
+  section?: SlashSection
   needs: SlashNeeds
   keywords: string[]
   /** AI commands take a prompt to the server; insert commands run locally. */
@@ -92,7 +109,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'explain',
     label: 'Explain simply',
-    hint: 'Plain-language version',
+    hint: 'Rewrites it so you could repeat it back from memory',
     icon: 'skill',
     group: 'ai',
     needs: 'text',
@@ -138,13 +155,19 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     keywords: ['questions', 'practice', 'test', 'quiz', 'self'],
     ai: (sel) =>
       sel
-        ? `Write three practice questions on this, with answers underneath each:\n\n${sel}`
-        : 'Write three practice questions on this note, with answers underneath each.',
+        ? `Write three practice questions on this, with answers underneath each. ` +
+          `Start with a "## Practice Questions" heading, then number the ` +
+          `questions and put each answer as an indented line below its ` +
+          `question, not as a separate list:\n\n${sel}`
+        : 'Write three practice questions on this note, with answers underneath ' +
+          'each. Start with a "## Practice Questions" heading, then number the ' +
+          'questions and put each answer as an indented line below its question, ' +
+          'not as a separate list.',
   },
   {
     id: 'toc',
     label: 'Table of contents',
-    hint: 'Outline of this note',
+    hint: 'Builds an outline from this note’s own headings',
     icon: 'doc',
     group: 'ai',
     needs: 'headings',
@@ -155,12 +178,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
 
   // ── Insert ───────────────────────────────────────────────────────────
+  // TEXT
   {
     id: 'h1',
     label: 'Heading 1',
-    hint: 'Big section title',
-    icon: 'note',
+    hint: 'Starts a new top-level section',
+    glyph: 'H1',
     group: 'insert',
+    section: 'text',
     needs: 'nothing',
     keywords: ['h1', 'title', 'heading', 'big'],
     run: (e) => e.chain().focus().toggleHeading({ level: 1 }).run(),
@@ -168,9 +193,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'h2',
     label: 'Heading 2',
-    hint: 'Section title',
-    icon: 'note',
+    hint: 'Starts a sub-section under a Heading 1',
+    glyph: 'H2',
     group: 'insert',
+    section: 'text',
     needs: 'nothing',
     keywords: ['h2', 'heading', 'subtitle'],
     run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run(),
@@ -178,19 +204,33 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'h3',
     label: 'Heading 3',
-    hint: 'Sub-section',
-    icon: 'note',
+    hint: 'Starts a smaller sub-section under a Heading 2',
+    glyph: 'H3',
     group: 'insert',
+    section: 'text',
     needs: 'nothing',
     keywords: ['h3', 'heading', 'small'],
     run: (e) => e.chain().focus().toggleHeading({ level: 3 }).run(),
   },
   {
+    id: 'quote',
+    label: 'Quote',
+    hint: 'Sets a passage apart from your own writing',
+    icon: BLOCK_ICON.blockquote,
+    group: 'insert',
+    section: 'text',
+    needs: 'nothing',
+    keywords: ['quote', 'blockquote', 'citation'],
+    run: (e) => e.chain().focus().toggleBlockquote().run(),
+  },
+  // LISTS
+  {
     id: 'bullet',
     label: 'Bulleted list',
-    hint: 'Unordered points',
-    icon: 'note',
+    hint: 'For points with no set order',
+    icon: BLOCK_ICON.bulletList,
     group: 'insert',
+    section: 'lists',
     needs: 'nothing',
     keywords: ['bullet', 'list', 'ul', 'points'],
     run: (e) => e.chain().focus().toggleBulletList().run(),
@@ -198,9 +238,10 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'ordered',
     label: 'Numbered list',
-    hint: 'Ordered steps',
-    icon: 'note',
+    hint: 'For steps that happen in sequence',
+    icon: BLOCK_ICON.orderedList,
     group: 'insert',
+    section: 'lists',
     needs: 'nothing',
     keywords: ['number', 'ordered', 'ol', 'steps'],
     run: (e) => e.chain().focus().toggleOrderedList().run(),
@@ -208,81 +249,74 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'todo',
     label: 'To-do list',
-    hint: 'Checkboxes you can tick',
-    icon: 'check',
+    hint: 'Checkboxes you can tick off as you revise',
+    icon: BLOCK_ICON.taskList,
     group: 'insert',
+    section: 'lists',
     needs: 'nothing',
     keywords: ['todo', 'task', 'check', 'checkbox', 'tick'],
     run: (e) => e.chain().focus().toggleTaskList().run(),
   },
-  {
-    id: 'quote',
-    label: 'Quote',
-    hint: 'Set a passage apart',
-    icon: 'note',
-    group: 'insert',
-    needs: 'nothing',
-    keywords: ['quote', 'blockquote', 'citation'],
-    run: (e) => e.chain().focus().toggleBlockquote().run(),
-  },
+  // CODE
   {
     id: 'code',
     label: 'Code block',
-    hint: 'Monospaced block',
-    icon: 'agent',
+    hint: 'Monospaced, keeps whitespace, never autoformats',
+    icon: 'code',
     group: 'insert',
+    section: 'code',
     needs: 'nothing',
     keywords: ['code', 'snippet', 'pre', 'monospace'],
     run: (e) => e.chain().focus().toggleCodeBlock().run(),
   },
+  // STRUCTURE
   {
     id: 'table',
     label: 'Table',
-    hint: '3×3 with a header row',
-    icon: 'deck',
+    hint: 'Choose rows and columns, then fill it in',
+    icon: 'table',
     group: 'insert',
+    section: 'structure',
     needs: 'nothing',
     keywords: ['table', 'grid', 'rows', 'columns'],
-    run: (e) =>
-      e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+    // No `run` — NoteEditor special-cases `cmd.id === 'table'` before this
+    // would ever be reached, opening a size picker instead of inserting a
+    // fixed grid. Every other `insert` command still runs straight from
+    // here; table is the one that needs a size first.
   },
   {
     id: 'toggle',
     label: 'Toggle section',
-    hint: 'Collapsible — fold away what you know',
+    hint: 'Click the summary to fold the content away, or back open',
     icon: 'chevronRight',
     group: 'insert',
+    section: 'structure',
     needs: 'nothing',
-    keywords: ['toggle', 'collapse', 'fold', 'accordion', 'details', 'expand'],
-    run: (e) => e.chain().focus().setDetails().run(),
-  },
-  ...([1, 2, 3] as const).map((level) => ({
-    id: `toggle-h${level}`,
-    label: `Toggle heading ${level}`,
-    hint: 'Collapsible section with a heading',
-    icon: 'chevronRight' as IconName,
-    group: 'insert' as SlashGroup,
-    needs: 'nothing' as SlashNeeds,
-    keywords: [`toggle${level}`, `toggleh${level}`, 'collapse', 'fold', 'heading', 'section'],
+    keywords: ['toggle', 'collapse', 'fold', 'accordion', 'details', 'expand', 'heading'],
     /**
-     * A toggle whose summary IS a heading, so a folded section still reads as
-     * structure in the document outline rather than as an anonymous row.
-     *
-     * Two steps, not one: `setDetails` wraps the current block and drops the
-     * caret into the summary, and only then can the heading be applied — the
-     * summary node does not exist until the wrap has happened.
+     * The summary is bolded on creation so a folded section still reads as
+     * structure, not an anonymous row — this used to be three separate
+     * "Toggle heading 1/2/3" commands that tried to `setNode('heading', ...)`
+     * inside the summary, which silently did nothing on every level: a
+     * `detailsSummary` node's content is declared `text*` by
+     * `@tiptap/extension-details` (a real block node like a heading is never
+     * a valid child of it), so `setNode` had nowhere valid to apply and
+     * ProseMirror rejected the command every time. Bold is the closest a
+     * plain-text-only node can get to "reads as a heading", and it actually
+     * works.
      */
     run: (e: Editor) => {
       e.chain().focus().setDetails().run()
-      e.chain().focus().setNode('heading', { level }).run()
+      e.chain().focus().setMark('bold').run()
     },
-  })),
+  },
   {
     id: 'divider',
     label: 'Divider',
-    hint: 'Horizontal rule',
+    hint: 'A visual break between unrelated sections',
     icon: 'minus',
     group: 'insert',
+    section: 'structure',
     needs: 'nothing',
     keywords: ['divider', 'hr', 'rule', 'separator', 'line'],
     run: (e) => e.chain().focus().setHorizontalRule().run(),

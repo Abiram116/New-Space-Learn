@@ -18,12 +18,19 @@
  * flaky integration test for a question it isn't asking.
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
 import { noteAiInline } from '../../api/notes'
 import type { Note } from '../../api/types'
+
+const navigateSpy = vi.fn()
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => navigateSpy }
+})
 
 /**
  * jsdom does no real layout, so `Range`/`Element.getClientRects()` are
@@ -72,16 +79,18 @@ function note(overrides: Partial<Note> = {}): Note {
 
 function renderEditor(overrides: Partial<Note> = {}) {
   return render(
-    <ToastProvider>
-      <NoteEditor
-        note={note(overrides)}
-        subspaceId="s1"
-        base="/s/subj1/s1"
-        onPatch={vi.fn()}
-        onDelete={vi.fn()}
-        onBack={vi.fn()}
-      />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <NoteEditor
+          note={note(overrides)}
+          subspaceId="s1"
+          base="/s/subj1/s1"
+          onPatch={vi.fn()}
+          onDelete={vi.fn()}
+          onBack={vi.fn()}
+        />
+      </ToastProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -97,6 +106,40 @@ beforeEach(() => {
 // itself.
 afterEach(() => {
   cleanup()
+})
+
+describe('clicking a link inside the note', () => {
+  // Regression: Link.configure({ openOnClick: false }) only stops Tiptap's
+  // own click handler from calling window.open() — it does not call
+  // preventDefault(), so the underlying <a href> still did a real, full-page
+  // browser navigation out of the SPA. Reported as "the website is loading
+  // and glitching" when clicking a citation link a note had inserted.
+  it('routes a same-origin link through the app router instead of reloading the page', async () => {
+    const user = userEvent.setup()
+    renderEditor({ body_md: 'See [the source](/s/subj1/s1/docs?d=doc1) for details.' })
+
+    const link = await screen.findByRole('link', { name: 'the source' })
+    await user.click(link)
+
+    expect(navigateSpy).toHaveBeenCalledWith('/s/subj1/s1/docs?d=doc1')
+  })
+
+  it('opens an external link in a new tab instead of navigating the note away', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const user = userEvent.setup()
+    renderEditor({ body_md: 'See [the paper](https://example.com/paper.pdf) for details.' })
+
+    const link = await screen.findByRole('link', { name: 'the paper' })
+    await user.click(link)
+
+    expect(openSpy).toHaveBeenCalledWith(
+      'https://example.com/paper.pdf',
+      '_blank',
+      'noopener,noreferrer',
+    )
+    expect(navigateSpy).not.toHaveBeenCalled()
+    openSpy.mockRestore()
+  })
 })
 
 describe('mounting', () => {
@@ -186,5 +229,160 @@ describe('the slash menu', () => {
 
     await user.type(surface, ' ')
     await waitFor(() => expect(screen.queryByText('Ask AI')).not.toBeInTheDocument())
+  })
+})
+
+describe('the table size picker', () => {
+  // Regression: "Table" used to insert a fixed 3×3 immediately, with no way
+  // to ask for a different size short of manually adding/removing rows and
+  // columns afterward.
+  it('inserts a table sized to whatever rows/columns were entered, not a fixed 3×3', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/table')
+    await waitFor(() => expect(screen.getByText('Table')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    // fireEvent.change, not user.clear()+type(): number inputs under jsdom
+    // don't reliably clear via userEvent, which made this test flaky in a
+    // way that had nothing to do with the picker itself.
+    const rows = await screen.findByLabelText('Rows')
+    fireEvent.change(rows, { target: { value: '5' } })
+    const cols = screen.getByLabelText('Columns')
+    fireEvent.change(cols, { target: { value: '2' } })
+
+    await user.click(screen.getByRole('button', { name: 'Insert table' }))
+
+    await waitFor(() => {
+      const table = document.querySelector('.notes-doc table')
+      expect(table).not.toBeNull()
+      expect(table!.querySelectorAll('tr').length).toBe(5)
+      expect(table!.querySelectorAll('tr')[0].querySelectorAll('th, td').length).toBe(2)
+    })
+  })
+
+  it('closes without inserting anything on Escape', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/table')
+    await waitFor(() => expect(screen.getByText('Table')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Insert table' })).toBeInTheDocument())
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Insert table' })).not.toBeInTheDocument(),
+    )
+    expect(document.querySelector('.notes-doc table')).toBeNull()
+  })
+})
+
+describe('a toggle section, as actually rendered while editing', () => {
+  // Regression: the extension's default toggle button sets only an
+  // aria-label — no visible glyph — so a real user saw an empty, seemingly
+  // dead control. `detailsMarkdown.test.ts` already proves the markdown
+  // round-trip is correct; this proves the thing a student actually clicks
+  // is visible and gives feedback, using the real mounted NodeView DOM
+  // (`addNodeView()`), not the schema-only shape `getHTML()` produces.
+  it('renders a visible chevron in the toggle button, not an empty control', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/toggle')
+    await waitFor(() => expect(screen.getByText('Toggle section')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>('.notes-toggle > button')
+      expect(button).not.toBeNull()
+      expect(button!.querySelector('svg')).not.toBeNull()
+    })
+  })
+
+  it('clicking the button hides the content and rotates the chevron; clicking again reverses it', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/toggle')
+    await waitFor(() => expect(screen.getByText('Toggle section')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    const button = await waitFor(() => {
+      const el = document.querySelector<HTMLButtonElement>('.notes-toggle > button')
+      expect(el).not.toBeNull()
+      return el!
+    })
+    const content = document.querySelector<HTMLElement>('.notes-toggle [data-type="detailsContent"]')!
+    const svg = () => button.querySelector<SVGElement>('svg')!
+
+    // setDetails() starts closed; the button starts un-rotated.
+    expect(content.hasAttribute('hidden')).toBe(true)
+    expect(svg().style.transform).toBe('rotate(0deg)')
+
+    await user.click(button)
+    expect(content.hasAttribute('hidden')).toBe(false)
+    expect(svg().style.transform).toBe('rotate(90deg)')
+    expect(button.closest('.notes-toggle')!.className).toContain('is-open')
+
+    await user.click(button)
+    expect(content.hasAttribute('hidden')).toBe(true)
+    expect(svg().style.transform).toBe('rotate(0deg)')
+  })
+})
+
+describe('the code block language picker', () => {
+  // Regression: it used to be `sticky top-0` on a div wrapping the entire
+  // editor surface — every block in the note, not just the code block — so
+  // it detached from the block and rode the top of the whole scroll
+  // container for as long as the caret sat inside any code block, no matter
+  // where that block actually was in a long note.
+  it('is not sticky-positioned to the top of the whole editor', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/code')
+    await waitFor(() => expect(screen.getByText('Code block')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    const bar = await waitFor(() => {
+      const el = screen.getByText('Language').closest('div')
+      expect(el).not.toBeNull()
+      return el!
+    })
+    expect(bar.className).not.toContain('sticky')
+    expect(bar.className).toContain('absolute')
+  })
+
+  it('changing the language updates the actual code block, not just the control', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, '/code')
+    await waitFor(() => expect(screen.getByText('Code block')).toBeInTheDocument())
+    await user.type(surface, '{Enter}')
+
+    const select = await screen.findByDisplayValue('plaintext')
+    fireEvent.change(select, { target: { value: 'python' } })
+
+    await waitFor(() => {
+      const code = document.querySelector('.notes-doc pre code')
+      expect(code).not.toBeNull()
+      expect(code!.className).toContain('language-python')
+    })
   })
 })

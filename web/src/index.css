@@ -617,34 +617,50 @@
   text-underline-offset: 2px;
 }
 
-/* Toggle sections. The marker is a real disclosure control, and the whole
-   summary row is the hit target — clicking only a 12px arrow is a miss most
-   of the time. */
+/* Toggle sections. `@tiptap/extension-details` renders a custom NodeView
+   while editing, not a plain <details><summary> — the disclosure button is
+   the toggle's true first child, and the (real, native) <summary> element
+   sits one level deeper, inside the node's own contentDOM wrapper. These
+   selectors target that actual shape, not the schema-only HTML shape
+   `editor.getHTML()` produces. */
 .notes-doc .notes-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
   border-left: 2px solid var(--color-line);
-  padding-left: 0.85rem;
+  padding-left: 0.6rem;
   margin: 0.75rem 0;
 }
-.notes-doc .notes-toggle > summary,
-.notes-doc .notes-toggle > div:first-child {
-  cursor: pointer;
-  font-weight: 700;
-  color: var(--color-ink);
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-.notes-doc .notes-toggle > summary::-webkit-details-marker { display: none; }
 .notes-doc .notes-toggle > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.25rem;
+  height: 1.5rem;
+  margin-top: 0.1rem;
   background: none;
   border: 0;
   color: var(--color-faint);
   cursor: pointer;
-  padding: 0 0.2rem 0 0;
+  padding: 0;
+  transition: color 160ms var(--ease-out-expo);
+}
+.notes-doc .notes-toggle > button:hover { color: var(--color-ink); }
+.notes-doc .notes-toggle > button svg {
   transition: transform 160ms var(--ease-out-expo);
 }
-.notes-doc .notes-toggle[open] > button { transform: rotate(90deg); }
+.notes-doc .notes-toggle > div {
+  min-width: 0;
+  flex: 1;
+}
+.notes-doc .notes-toggle summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--color-ink);
+  list-style: none;
+}
+.notes-doc .notes-toggle summary::-webkit-details-marker { display: none; }
 
 /* ── Notes: document typography ──────────────────────────────────────────
    `.chat-md` is tuned for a 13.5px assistant reply. A note is a document you

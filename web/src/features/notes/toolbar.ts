@@ -60,6 +60,26 @@ export const BLOCKS: {
   { key: 'orderedList', label: '', title: 'Numbered list', run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive('orderedList') },
   { key: 'taskList', label: '', title: 'To-do list', run: (e) => e.chain().focus().toggleTaskList().run(), active: (e) => e.isActive('taskList') },
   { key: 'blockquote', label: '', title: 'Quote', run: (e) => e.chain().focus().toggleBlockquote().run(), active: (e) => e.isActive('blockquote') },
+  {
+    key: 'toggle',
+    label: '',
+    title: 'Tuck into a toggle',
+    // setDetails() moves the selected passage into the toggle's body, not
+    // its summary — the summary comes out empty. Point the cursor there
+    // afterward, bolded, so typing a label is the very next thing that
+    // happens, the same as the `/` menu's own (selection-less) toggle.
+    run: (e) => {
+      e.chain().focus().setDetails().run()
+      const { $from } = e.state.selection
+      for (let d = $from.depth; d >= 0; d--) {
+        if ($from.node(d).type.name === 'details') {
+          e.chain().setTextSelection($from.before(d) + 1).setMark('bold').focus().run()
+          break
+        }
+      }
+    },
+    active: (e) => e.isActive('details'),
+  },
 ]
 
 /** Every block button draws the thing it makes. The row used to mix real
@@ -71,6 +91,7 @@ export const BLOCK_ICON: Record<string, IconName> = {
   orderedList: 'listOrdered',
   taskList: 'listTodo',
   blockquote: 'quote',
+  toggle: 'chevronRight',
 }
 
 /**
@@ -100,8 +121,12 @@ export const SELECTION_ACTIONS: SelectionAction[] = [
     label: 'Rewrite',
     replaces: true,
     prompt: (s) =>
-      `Rewrite this more clearly, keeping the meaning and every fact exactly ` +
-      `as stated. Return only the rewritten passage:\n\n${s}`,
+      `Rewrite the passage below more clearly, keeping the meaning and every ` +
+      `fact exactly as stated, and keeping its original form — if it is a ` +
+      `question, return a rewritten question, not an answer to it; if it is ` +
+      `a statement, return a rewritten statement. Do not answer, explain, or ` +
+      `add anything the passage did not already say. Return only the ` +
+      `rewritten passage, nothing else:\n\n${s}`,
   },
   {
     id: 'simplify',

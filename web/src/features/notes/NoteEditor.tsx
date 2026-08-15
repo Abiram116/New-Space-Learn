@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
 import { Editor, EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -25,16 +26,24 @@ import Link from '@tiptap/extension-link'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { TableKit } from '@tiptap/extension-table'
-import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details'
+import { DetailsContent, DetailsSummary } from '@tiptap/extension-details'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
 import { AI_PLACEHOLDER, clearAiPlaceholder } from './aiPlaceholder'
+import { DetailsWithMarkdown } from './detailsMarkdown'
 import { healEscapedHtml } from './healHtml'
+import { landInFreshParagraph } from './landInFreshParagraph'
 import { ImageBlock } from './ImageBlock'
 import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS, SELECTION_ACTIONS } from './toolbar'
 import { originLabel, relativeTime, sourceLine } from './format'
-import { availableCommands, readContext, type SlashCommand, type SlashContext } from './slashMenu'
+import {
+  availableCommands,
+  readContext,
+  type SlashCommand,
+  type SlashContext,
+  type SlashSection,
+} from './slashMenu'
 import { noteAiInline, updateNote } from '../../api/notes'
 import type { Note } from '../../api/types'
 import { Chip } from '../../components/ui/Bits'
@@ -50,6 +59,14 @@ const CODE_LANGUAGES = [
   'plaintext', 'python', 'javascript', 'typescript', 'java', 'cpp', 'c',
   'csharp', 'sql', 'bash', 'json', 'html', 'css', 'go', 'rust', 'r',
 ]
+
+/** The light sub-header shown between `Insert` commands of different kinds. */
+const SECTION_LABEL: Record<SlashSection, string> = {
+  text: 'Text',
+  lists: 'Lists',
+  structure: 'Structure',
+  code: 'Code',
+}
 
 export function NoteEditor({
   note,
@@ -83,12 +100,18 @@ export function NoteEditor({
   /** `sel` is the highlighted text, carried so the instruction has a subject. */
   const [askAi, setAskAi] = useState<{ from: number; to: number; sel: string } | null>(null)
   const [askText, setAskText] = useState('')
+  /** "Table" opens this instead of inserting a fixed 3×3 immediately —
+      see the picker's own comment further down for why. */
+  const [tablePicker, setTablePicker] = useState<{ from: number; to: number } | null>(null)
+  const [tableRows, setTableRows] = useState(3)
+  const [tableCols, setTableCols] = useState(3)
   // Title and body debounce separately. They used to share one timer, which meant
   // touching the title inside the 800ms window cleared the pending body save — the
   // edit was dropped while the header still reported "saved".
   const bodyTimer = useRef<number | null>(null)
   const titleTimer = useRef<number | null>(null)
   const { showError } = useToast()
+  const navigate = useNavigate()
   const editorRef = useRef<Editor | null>(null)
   const savedBodyRef = useRef(note.body_md)
 
@@ -238,12 +261,13 @@ export function NoteEditor({
          */
         const markdown = content_md + sourceLine(citations, base)
         if (clearPlaceholder()) {
-          editor.chain().insertContentAt(from, markdown).focus().run()
+          editor.chain().insertContentAt(from, markdown).run()
         } else {
           // The anchor moved under us, so append at the caret instead of
           // guessing — losing the position is not a reason to lose the answer.
-          editor.chain().focus().insertContent(markdown).run()
+          editor.chain().insertContent(markdown).run()
         }
+        landInFreshParagraph(editor)
       } catch (err) {
         clearPlaceholder()
         showError(err)
@@ -291,7 +315,23 @@ export function NoteEditor({
       // Toggle blocks. A long revision note is mostly things you already know
       // — being able to fold a section away is what keeps it usable in week
       // ten rather than something you scroll past.
-      Details.configure({ persist: true, HTMLAttributes: { class: 'notes-toggle' } }),
+      DetailsWithMarkdown.configure({
+        persist: true,
+        HTMLAttributes: { class: 'notes-toggle' },
+        // The extension's default button sets only an aria-label — no
+        // visible glyph at all, so the disclosure control renders as an
+        // empty, invisible box. Draw the same chevron used elsewhere in the
+        // app (see Icon.tsx's 'chevronRight') and rotate it in place.
+        renderToggleButton: ({ element, isOpen }) => {
+          element.setAttribute('aria-label', isOpen ? 'Collapse section' : 'Expand section')
+          if (!element.querySelector('svg')) {
+            element.innerHTML =
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6 6 6-6 6"/></svg>'
+          }
+          const svg = element.querySelector('svg')
+          if (svg) svg.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)'
+        },
+      }),
       DetailsSummary,
       DetailsContent,
       Markdown.configure({ html: false, transformPastedText: true }),
@@ -318,6 +358,34 @@ export function NoteEditor({
         spellcheck: 'true',
         autocorrect: 'on',
         autocapitalize: 'sentences',
+      },
+      // A citation link (Link.configure below sets openOnClick: false so a
+      // click doesn't fight with placing the cursor there while editing) is
+      // still a real <a href> in the DOM. `openOnClick: false` only stops
+      // Tiptap's own click handler from calling window.open() — it does NOT
+      // call preventDefault(), so the browser's native anchor click still
+      // fired underneath, doing a full page navigation away from the SPA
+      // (the "loading and glitching" before landing back on Docs). Handled
+      // here instead: same-origin links go through the router so the note
+      // stays mounted and the transition is instant; anything else opens in
+      // a new tab, matching how chat's own citation-adjacent links behave.
+      handleClick(view, _pos, event) {
+        const link = (event.target as HTMLElement | null)?.closest('a')
+        if (!link || !view.dom.contains(link)) return false
+        const href = link.getAttribute('href')
+        if (!href) return false
+        event.preventDefault()
+        try {
+          const url = new URL(href, window.location.origin)
+          if (url.origin === window.location.origin) {
+            navigate(url.pathname + url.search + url.hash)
+          } else {
+            window.open(href, '_blank', 'noopener,noreferrer')
+          }
+        } catch {
+          window.open(href, '_blank', 'noopener,noreferrer')
+        }
+        return true
       },
       // Drop an image straight into the note, at the point you dropped it.
       handleDrop(view, event) {
@@ -363,6 +431,104 @@ export function NoteEditor({
   useEffect(() => {
     editorRef.current = editor
   }, [editor])
+
+  /* Where the slash menu (and the Ask AI panel) actually renders — next to
+     the `/` you typed, not pinned to the top of the note.
+
+     The menu used to be `top-0` unconditionally: a fixed anchor that never
+     needed re-measuring, at the cost of being nowhere near the caret on any
+     note longer than one screen — typing `/` on line 40 popped the menu up
+     at line 1, disconnected from where you were looking. `coordsAtPos` only
+     needs recomputing when a NEW `/` is typed (`slash.from`, the position of
+     the `/` character itself, is stable while you keep typing the query
+     after it — only `to` moves), not on every keystroke, so the "re-measured
+     constantly" cost the original comment worried about doesn't apply here.
+     Clamped to the scroll container so it can't run off the right edge on a
+     wide note, and flips to open upward when there isn't ~340px below. */
+  const editorSurfaceRef = useRef<HTMLDivElement>(null)
+  const [menuPos, setMenuPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null)
+  const anchorPos = slash?.from ?? askAi?.from ?? tablePicker?.from ?? null
+  useEffect(() => {
+    const ed = editorRef.current
+    const container = editorSurfaceRef.current
+    if (anchorPos === null || !ed || !container) {
+      setMenuPos(null)
+      return
+    }
+    const coords = ed.view.coordsAtPos(anchorPos)
+    const box = container.getBoundingClientRect()
+    // Widest of the three panels this position also serves (Ask AI's 22rem —
+    // slash and the table picker are both narrower). A caret near the right
+    // edge of a wide, full-page note still needs the left offset pulled back
+    // so even the widest panel doesn't run off the container; each panel's
+    // own `w-[min(_, calc(100%-1rem))]` separately keeps it from ever being
+    // WIDER than a narrow dock column, which is a different overflow than
+    // this one guards against.
+    const WIDEST_PANEL_PX = 352
+    const left = Math.max(0, Math.min(coords.left - box.left, box.width - WIDEST_PANEL_PX))
+    const spaceBelow = window.innerHeight - coords.bottom
+    if (spaceBelow < 340 && coords.top - box.top > 340) {
+      setMenuPos({ bottom: box.bottom - coords.top + 8, left })
+    } else {
+      setMenuPos({ top: coords.bottom - box.top + 6, left })
+    }
+  }, [anchorPos])
+
+  /* The code block language bar — anchored to the actual code block, not to
+     the top of the note.
+     It used to be `sticky top-0` on a div that wrapped the ENTIRE editor
+     surface (every block in the note, not just the code block). `sticky`
+     pins to the nearest *scrolling* ancestor, which here is the whole note
+     page — so the bar detached completely from its code block and rode the
+     top of the scroll container for as long as the caret was anywhere
+     inside any code block, regardless of where that block actually sat in a
+     long note. Positioning it against the block's own `nodeDOM` — the same
+     "measure once, position in the container's local coordinate space"
+     technique `menuPos` above already uses — makes it scroll naturally with
+     the block it belongs to, with no scroll listener needed (the *local*
+     offset between the block and its container is scroll-invariant). */
+  const [codeLangPos, setCodeLangPos] = useState<{ top?: number; bottom?: number; left: number } | null>(
+    null,
+  )
+  const codeBlockPos = useMemo(() => {
+    if (!editor?.isActive('codeBlock')) return null
+    const { $from } = editor.state.selection
+    for (let d = $from.depth; d >= 0; d--) {
+      if ($from.node(d).type.name === 'codeBlock') return $from.before(d)
+    }
+    return null
+    // `editor.state` is a new object every transaction — exactly the signal
+    // needed to re-measure when the caret moves between code blocks (or out
+    // of one entirely), without re-measuring on every unrelated keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, editor?.state.selection])
+  useEffect(() => {
+    const ed = editorRef.current
+    const container = editorSurfaceRef.current
+    if (codeBlockPos === null || !ed || !container) {
+      setCodeLangPos(null)
+      return
+    }
+    const dom = ed.view.nodeDOM(codeBlockPos) as HTMLElement | null
+    if (!dom) {
+      setCodeLangPos(null)
+      return
+    }
+    const box = container.getBoundingClientRect()
+    const blockBox = dom.getBoundingClientRect()
+    const BAR_WIDTH_PX = 220
+    const left = Math.max(0, Math.min(blockBox.left - box.left, box.width - BAR_WIDTH_PX))
+    const spaceAbove = blockBox.top - box.top
+    // Sits just above the block, like a label for it — the same "flip when
+    // there's no room" rule as the other panels, just measured against the
+    // block's own top edge instead of a fixed 340px menu height, since this
+    // bar is a fraction of that size.
+    if (spaceAbove > 44) {
+      setCodeLangPos({ bottom: box.bottom - blockBox.top + 6, left })
+    } else {
+      setCodeLangPos({ top: blockBox.top - box.top + 6, left })
+    }
+  }, [codeBlockPos])
 
   /* Make the repair stick.
      `healEscapedHtml` fixes what's on screen the moment the note opens, but
@@ -413,11 +579,31 @@ export function NoteEditor({
         return
       }
 
+      // Table asks how big before inserting, rather than always dropping a
+      // fixed 3×3 — the same "ask, don't guess" shape as Ask AI above.
+      if (cmd.id === 'table') {
+        setTablePicker({ from, to })
+        return
+      }
+
       ed.chain().focus().deleteRange({ from, to }).run()
       cmd.run?.(ed)
     },
     [slash, runInlineAi],
   )
+
+  const insertSizedTable = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed || !tablePicker) return
+    const rows = Math.min(20, Math.max(1, tableRows))
+    const cols = Math.min(10, Math.max(1, tableCols))
+    ed.chain()
+      .focus()
+      .deleteRange(tablePicker)
+      .insertTable({ rows, cols, withHeaderRow: true })
+      .run()
+    setTablePicker(null)
+  }, [tablePicker, tableRows, tableCols])
 
   /* Keyboard for the menu, bound at the document while it is open. Attached
      here rather than in `handleKeyDown` because ProseMirror's handler does not
@@ -481,7 +667,16 @@ export function NoteEditor({
 
         {note.origin !== 'user' && (
           <Chip active>
-            <Icon name="sparkle" size={10} /> {originLabel(note.origin)}
+            <span className="relative inline-flex shrink-0">
+              <Icon name="note" size={13} />
+              <Icon
+                name="sparkle"
+                size={7}
+                filled
+                className="absolute -right-1 -top-1 text-brand"
+              />
+            </span>
+            {originLabel(note.origin)}
           </Chip>
         )}
 
@@ -618,13 +813,20 @@ export function NoteEditor({
               compact ? 'text-[20px]' : 'text-[clamp(26px,3.2vw,36px)]',
             )}
           />
-          <div className="relative min-h-0 flex-1">
+          <div ref={editorSurfaceRef} className="relative min-h-0 flex-1">
             {/* Language picker, shown only while the caret is inside a code
                 block. A permanent control would be a dead widget on every note
-                that has no code in it — which is most of them. */}
-            {editor?.isActive('codeBlock') && (
-              <div className="sticky top-0 z-20 -mt-1 mb-2 flex items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-1.5">
-                <span className="setcode">Language</span>
+                that has no code in it — which is most of them.
+                Positioned against the block itself (see codeLangPos above),
+                not `sticky` — an in-flow bar shifted every line below it down
+                the moment you clicked into a code block, which is exactly the
+                unexpected layout jump a picker opening shouldn't cause. */}
+            {editor?.isActive('codeBlock') && codeLangPos && (
+              <div
+                style={codeLangPos}
+                className="absolute z-20 flex max-w-[calc(100%-0.5rem)] items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-1.5 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.8)]"
+              >
+                <span className="setcode shrink-0">Language</span>
                 <select
                   value={editor.getAttributes('codeBlock').language || 'plaintext'}
                   onChange={(e) =>
@@ -632,7 +834,7 @@ export function NoteEditor({
                       language: e.target.value,
                     }).run()
                   }
-                  className="rounded-md border border-line bg-well px-2 py-1 font-mono text-[11.5px] text-ink-2 outline-none focus:border-brand"
+                  className="min-w-0 rounded-md border border-line bg-well px-2 py-1 font-mono text-[11.5px] text-ink-2 outline-none focus:border-brand"
                 >
                   {CODE_LANGUAGES.map((l) => (
                     <option key={l} value={l}>
@@ -645,17 +847,15 @@ export function NoteEditor({
 
             <EditorContent editor={editor} className="min-h-0" />
 
-            {/* The slash menu. Anchored to the top of the writing column
-                rather than to the caret: a caret-following popover has to be
-                re-measured on every keystroke and still ends up off-screen at
-                the bottom of the page. A fixed anchor is always readable, and
-                the list is short enough that it never obscures the line being
-                written. */}
-            {/* Asking, not guessing. Appears in the same place the command
-                list was, so the interaction reads as one continuous step:
-                press /, pick Ask AI, say what you want. */}
+            {/* Asking, not guessing. Appears right where you typed /ai, so the
+                interaction reads as one continuous step: press /, pick Ask
+                AI, say what you want — see menuPos above for why it tracks
+                the caret instead of always opening at the top of the note. */}
             {askAi && (
-              <div className="absolute left-0 right-0 top-0 z-30 rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
+              <div
+                style={menuPos ?? undefined}
+                className="absolute z-30 w-[min(22rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+              >
                 <div className="mb-2 flex items-center gap-1.5">
                   <Icon name="sparkle" size={12} className="text-sky-deep" />
                   <span className="setcode">
@@ -712,11 +912,91 @@ export function NoteEditor({
               </div>
             )}
 
-            {slash && (
-              <div className="absolute left-0 right-0 top-0 z-30 max-h-[340px] overflow-y-auto rounded-xl border border-line bg-raised p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]">
-                <div className="setcode px-2 py-1.5">
-                  {slash.query ? `Commands · ${slash.query}` : 'Commands'}
+            {/* Table used to always insert a fixed 3×3 — the one block type
+                in the menu with no size of its own to choose. Same panel
+                shape as Ask AI: ask once, in place, rather than dropping a
+                guess and making the student resize it by hand afterward. */}
+            {tablePicker && (
+              <div
+                style={menuPos ?? undefined}
+                className="absolute z-30 w-[min(16rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setTablePicker(null)
+                    editorRef.current?.commands.focus()
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    insertSizedTable()
+                  }
+                }}
+              >
+                <div className="mb-2.5 flex items-center gap-1.5">
+                  <Icon name="deck" size={12} className="text-ink-3" />
+                  <span className="setcode">Table size</span>
                 </div>
+                <div className="flex items-center gap-2 text-[13px]">
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted">Rows</span>
+                    <input
+                      autoFocus
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={tableRows}
+                      onChange={(e) => setTableRows(Number(e.target.value) || 1)}
+                      className="w-14 rounded-md border border-line bg-canvas px-2 py-1 text-ink outline-none focus:border-brand"
+                    />
+                  </label>
+                  <span className="text-faint">×</span>
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted">Columns</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={tableCols}
+                      onChange={(e) => setTableCols(Number(e.target.value) || 1)}
+                      className="w-14 rounded-md border border-line bg-canvas px-2 py-1 text-ink outline-none focus:border-brand"
+                    />
+                  </label>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={insertSizedTable}
+                    className="flex-1 rounded-[9px] bg-brand px-3 py-1.5 text-[12.5px] font-bold text-[#1a120f] cursor-pointer hover:brightness-110"
+                  >
+                    Insert table
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTablePicker(null)
+                      editorRef.current?.commands.focus()
+                    }}
+                    className="rounded-[9px] border border-line px-3 py-1.5 text-[12.5px] text-muted cursor-pointer hover:bg-line-soft"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {slash && (
+              <div
+                style={menuPos ?? undefined}
+                className="absolute z-30 max-h-[340px] w-[min(18rem,calc(100%-1rem))] overflow-y-auto rounded-xl border border-line bg-raised p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+              >
+                {/* No standalone "Commands" label — it stacked a second,
+                    less specific header directly above the "Ask the
+                    tutor"/"Insert" group label below, reading as two menus
+                    for one list. The query itself is worth showing (this
+                    can scroll below where you're typing), so it takes over
+                    that slot only once there's something to show. */}
+                {slash.query && (
+                  <div className="setcode px-2 py-1.5 text-faint">/{slash.query}</div>
+                )}
                 {/* Shown rather than hiding the menu on no match: silently
                     vanishing looks like the feature broke, and leaves you
                     guessing whether `/` did anything at all. */}
@@ -735,6 +1015,17 @@ export function NoteEditor({
                       {cmd.group === 'ai' ? 'Ask the tutor' : 'Insert'}
                     </div>
                   )}
+                  {/* A second, lighter tier inside Insert only — TEXT / LISTS /
+                      STRUCTURE / CODE. Insert is the group with 11 commands;
+                      AI's 7 read fine as one list under "Ask the tutor" and
+                      don't get this, matching SLASH_COMMANDS's own
+                      SlashSection doc comment on why it's insert-only. */}
+                  {cmd.group === 'insert' &&
+                    (i === 0 || matches[i - 1].section !== cmd.section) && (
+                      <div className="px-2 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-faint/70">
+                        {SECTION_LABEL[cmd.section!]}
+                      </div>
+                    )}
                   <button
                     type="button"
                     onMouseEnter={() => setSlashIndex(i)}
@@ -755,7 +1046,14 @@ export function NoteEditor({
                         cmd.ai ? 'bg-sky-soft text-sky-deep' : 'bg-well text-ink-3',
                       )}
                     >
-                      <Icon name={cmd.icon} size={12} />
+                      {/* H1/H2/H3 draw their own glyph — there is no icon for
+                          an arbitrary letter, same reason the selection bar's
+                          B/I buttons are literal text rather than icons. */}
+                      {cmd.icon ? (
+                        <Icon name={cmd.icon} size={12} />
+                      ) : (
+                        <span className="text-[10px] font-bold">{cmd.glyph}</span>
+                      )}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-semibold text-ink">

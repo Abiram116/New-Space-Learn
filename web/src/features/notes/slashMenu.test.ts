@@ -119,6 +119,21 @@ describe('the command being typed is not note content', () => {
   })
 })
 
+describe('the questions command asks for a real heading', () => {
+  // Regression: the AI wrote three numbered questions straight into the
+  // note with no lead-in at all — no "Practice Questions" heading, nothing
+  // marking the block as a distinct section from whatever came before it.
+  const questions = SLASH_COMMANDS.find((c) => c.id === 'questions')!
+
+  it('asks for a heading with no selection', () => {
+    expect(questions.ai!('')).toContain('## Practice Questions')
+  })
+
+  it('asks for a heading with a selection too', () => {
+    expect(questions.ai!('self-attention')).toContain('## Practice Questions')
+  })
+})
+
 describe('the command table itself stays well-formed', () => {
   it('has no duplicate ids', () => {
     const seen = SLASH_COMMANDS.map((c) => c.id)
@@ -127,12 +142,55 @@ describe('the command table itself stays well-formed', () => {
 
   it('gives every command exactly one behaviour', () => {
     // An entry with neither is a dead menu row; with both, it is ambiguous.
+    // `table` is the one deliberate exception: NoteEditor special-cases its
+    // id (the same way it does 'ai') to open a size picker instead of
+    // running anything from this table directly, so it has neither `ai`
+    // nor `run` here on purpose — see the comment on its entry above.
     for (const c of SLASH_COMMANDS) {
+      if (c.id === 'table') {
+        expect(c.ai, 'table must not also define ai').toBeUndefined()
+        expect(c.run, 'table must not also define run').toBeUndefined()
+        continue
+      }
       expect(Boolean(c.ai) !== Boolean(c.run), `${c.id} must have ai xor run`).toBe(true)
     }
   })
 
   it('does not offer an image command — paste and drag already do that', () => {
     expect(SLASH_COMMANDS.map((c) => c.id)).not.toContain('image')
+  })
+
+  it('gives every command exactly one way to draw itself', () => {
+    // H1/H2/H3 are the deliberate exception (`glyph`, not `icon` — see
+    // SlashCommand's own comment): there is no icon for an arbitrary
+    // letter. Everything else must have a real icon and nothing else.
+    for (const c of SLASH_COMMANDS) {
+      expect(Boolean(c.icon) !== Boolean(c.glyph), `${c.id} must have icon xor glyph`).toBe(true)
+    }
+  })
+
+  it('every insert command in a section has one assigned', () => {
+    // section only matters within `insert` — the render only reads it
+    // there — but a command silently missing one would just never get a
+    // sub-header, not fail loudly, so it's worth pinning directly.
+    for (const c of SLASH_COMMANDS.filter((cmd) => cmd.group === 'insert')) {
+      expect(c.section, `${c.id} has no section`).toBeDefined()
+    }
+  })
+
+  it('regression: the six commands that all drew the same generic doc icon now draw distinct ones', () => {
+    // h1/h2/h3/bullet/ordered/quote (plus code and table, wrong rather than
+    // generic) all rendered the same 'note' icon, or one unrelated to what
+    // they do — a lightning bolt for code, a card deck for a data table.
+    // Bullet/ordered/todo/quote now reuse BLOCK_ICON — the selection bar's
+    // own, already-correct map — rather than a second, independent (and
+    // previously wrong) assignment.
+    const icons = ['bullet', 'ordered', 'todo', 'quote', 'code', 'table', 'toggle', 'divider'].map(
+      (id) => SLASH_COMMANDS.find((c) => c.id === id)!.icon,
+    )
+    expect(new Set(icons).size).toBe(icons.length)
+    expect(icons).not.toContain('note')
+    expect(icons).not.toContain('agent')
+    expect(icons).not.toContain('deck')
   })
 })

@@ -55,6 +55,7 @@ export type IconName =
   | 'listTodo'
   | 'quote'
   | 'code'
+  | 'table'
   | 'pencil'
   | 'wrapLeft'
   | 'wrapNone'
@@ -62,6 +63,7 @@ export type IconName =
   | 'alignLeft'
   | 'alignCenter'
   | 'alignRight'
+  | 'copy'
 
 type Props = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   name: IconName
@@ -254,6 +256,13 @@ function paths(name: IconName, filled: boolean) {
           <path d="M4.5 15.5v3a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3" />
         </>
       )
+    case 'copy':
+      return (
+        <>
+          <rect x="9.5" y="9.5" width="10" height="10" rx="1.6" />
+          <path d="M14.5 9.5V6a1.6 1.6 0 0 0-1.6-1.6H6a1.6 1.6 0 0 0-1.6 1.6v6.9A1.6 1.6 0 0 0 6 14.5h3.5" />
+        </>
+      )
     case 'check':
       return <path d="m5 12.5 4.5 4.5L19 7.5" />
     // Flame: the streak mark. Two shapes rather than one — an outer body and
@@ -420,6 +429,17 @@ function paths(name: IconName, filled: boolean) {
         <>
           <path d="m8.5 8.5-4 3.5 4 3.5" />
           <path d="m15.5 8.5 4 3.5-4 3.5" />
+        </>
+      )
+    // Table: a ruled grid — the frame plus one row line and one column line,
+    // which is the minimum that still reads as rows-and-columns rather than
+    // as a plain rectangle (a single card/document outline, already used
+    // elsewhere for `note`/`doc`/`deck`).
+    case 'table':
+      return (
+        <>
+          <rect x="3.5" y="4.5" width="17" height="15" rx="1.6" />
+          <path d="M3.5 10.2h17M9.8 4.5v15" />
         </>
       )
     /* Thumbs.
