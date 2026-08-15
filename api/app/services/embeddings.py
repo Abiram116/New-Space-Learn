@@ -45,11 +45,23 @@ class Chunk:
     locator: str        # human-readable page / slide / offset
 
 
-def chunk_text(text: str, *, source_label: str = "text") -> list[Chunk]:
+def chunk_text(text: str) -> list[Chunk]:
     """Split `text` into overlapping windows.
 
     We look for the nearest paragraph boundary near the chunk edge so answers
     read as full sentences, not mid-word cuts.
+
+    `locator` is the position ALONE ("offset 5306") — never the document
+    name. Every consumer (ChatMessage's citation cards, notes' `sourceLine`,
+    DocsView) already pairs `document_name` with `locator` itself, on the
+    assumption that the two are complementary. This used to bake
+    `source_label` (the filename) into `locator` too — harmless-looking in
+    isolation, but every pairing then showed the filename twice: once as
+    `document_name`, once again as the front half of `locator`. Two
+    citations to the same document with different offsets rendered as
+    "file.pdf · file.pdf · offset 5306" and "file.pdf · file.pdf · offset
+    1765" — reads as a rendering bug even though the data underneath was
+    merely redundant, not wrong.
     """
 
     text = text.strip()
@@ -72,7 +84,7 @@ def chunk_text(text: str, *, source_label: str = "text") -> list[Chunk]:
         piece = text[start:end].strip()
         if piece:
             chunks.append(
-                Chunk(index=idx, content=piece, locator=f"{source_label} · offset {start}")
+                Chunk(index=idx, content=piece, locator=f"offset {start}")
             )
             idx += 1
         # This was an infinite loop for any document whose final chunk is

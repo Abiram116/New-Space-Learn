@@ -32,7 +32,7 @@ def test_the_exact_length_that_used_to_hang_forever():
     # this bug during manual verification — three windows in, the remaining
     # tail landed inside CHUNK_OVERLAP of the text's end.
     text = ("word " * 500)[:2062]
-    chunks = chunk_text(text, source_label="regression")
+    chunks = chunk_text(text)
     assert len(chunks) > 0
     assert all(c.content for c in chunks)
 
@@ -42,10 +42,25 @@ def test_every_length_near_the_chunk_boundary_terminates(n: int):
     # Sweeps lengths across and just past CHUNK_SIZE / CHUNK_OVERLAP
     # boundaries, since the bug only manifested for specific remainders.
     text = ("sentence. " * (n // 10 + 1))[:n]
-    chunks = chunk_text(text, source_label="sweep")
+    chunks = chunk_text(text)
     if text.strip():
         assert len(chunks) > 0
     assert all(c.content for c in chunks)
+
+
+def test_locator_is_position_only_never_the_document_name():
+    """Regression: `locator` used to be built as `f"{source_label} · offset
+    {start}"`, baking the document's filename into the position string.
+    Every consumer (ChatMessage's citation cards, notes' `sourceLine`,
+    DocsView) already pairs `document_name` with `locator` on the assumption
+    the two are complementary — with the filename inside `locator` too, two
+    citations to the same document rendered as "file.pdf · file.pdf ·
+    offset 5306". `chunk_text` no longer takes a document name at all, so
+    there is nothing left for it to bake in."""
+    chunks = chunk_text("word " * 500)
+    for c in chunks:
+        assert c.locator.startswith("offset ")
+        assert c.locator == f"offset {c.locator.split(' ')[1]}"
 
 
 def test_start_always_advances():
@@ -53,7 +68,7 @@ def test_start_always_advances():
     # start offset must be strictly greater than the previous one, so the
     # loop provably cannot repeat the same window forever.
     text = "Paragraph one is here.\n\n" * 5 + "x" * (CHUNK_SIZE + CHUNK_OVERLAP + 5)
-    chunks = chunk_text(text, source_label="advance")
+    chunks = chunk_text(text)
     offsets = [int(c.locator.rsplit(" ", 1)[-1]) for c in chunks]
     assert offsets == sorted(set(offsets))
     assert all(b > a for a, b in zip(offsets, offsets[1:], strict=False))

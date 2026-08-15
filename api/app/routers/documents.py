@@ -219,7 +219,7 @@ async def _process_inline(doc: dict, data: bytes, mime_type: str) -> dict:
                 )
             )[0]
 
-        chunks = chunk_text(text, source_label=doc.get("name", "document"))
+        chunks = chunk_text(text)
         if not chunks:
             return (
                 await supabase.db_update(
