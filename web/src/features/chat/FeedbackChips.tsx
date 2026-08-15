@@ -46,6 +46,7 @@ export function FeedbackChips({
   reason,
   messageId,
   subspaceId,
+  content,
   onRecorded,
   onRegenerate,
 }: {
@@ -55,6 +56,9 @@ export function FeedbackChips({
   reason: AskReason
   messageId: string
   subspaceId: string
+  /** The answer's own text — copied verbatim, not a feedback signal, so it
+   *  doesn't touch `record()` or the API at all. */
+  content: string
   onRecorded: () => void
   /** Try that answer again — an action, not a feedback tap, though clicking
    *  it also records one (kind: 'regenerate'). Always available, same row as
@@ -65,6 +69,14 @@ export function FeedbackChips({
   const [given, setGiven] = useState<FeedbackKind | null>(null)
   /** Set by thumbs-down: the student asked to say more, so chips are welcome. */
   const [invited, setInvited] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const copy = () => {
+    void navigator.clipboard.writeText(content).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const record = (kind: FeedbackKind) => {
     setGiven(kind)
@@ -111,6 +123,15 @@ export function FeedbackChips({
   return (
     <div className="flex flex-col gap-1.5 pl-4">
       <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={copy}
+          aria-label={copied ? 'Copied' : 'Copy answer'}
+          title={copied ? 'Copied' : 'Copy answer'}
+          className="grid h-7 w-7 place-items-center rounded-md text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+        >
+          <Icon name={copied ? 'check' : 'copy'} size={14} className={copied ? 'text-mint-deep' : undefined} />
+        </button>
         <Thumb name="thumbUp" label="This helped" onClick={() => record('useful')} />
         <Thumb
           name="thumbDown"

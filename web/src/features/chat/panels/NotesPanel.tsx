@@ -137,7 +137,17 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
                   {n.title || 'Untitled note'}
                 </div>
                 <div className="setcode mt-0.5 flex items-center gap-1.5">
-                  {n.origin !== 'user' && <Icon name="sparkle" size={9} className="text-sky-deep" />}
+                  {n.origin !== 'user' && (
+                    <span className="relative inline-flex shrink-0">
+                      <Icon name="note" size={9} className="text-sky-deep" />
+                      <Icon
+                        name="sparkle"
+                        size={5}
+                        filled
+                        className="absolute -right-0.5 -top-0.5 text-sky-deep"
+                      />
+                    </span>
+                  )}
                   {/* Where it lives, but only when that isn't obvious — in
                       topic scope every row is from here, and repeating it on
                       every line is noise. */}

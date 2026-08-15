@@ -4,6 +4,7 @@ import type { AskReason } from './feedbackPolicy'
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
+import { AddToNoteButton } from './AddToNote'
 import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
 
@@ -28,9 +29,13 @@ export type MessageFeedback = {
 export function ChatMessage({
   message,
   feedback,
+  subspaceId,
 }: {
   message: Message
   feedback?: MessageFeedback
+  /** Omitted only for the transient pending-stream bubble, which has no
+   *  real content yet to add anywhere. */
+  subspaceId?: string
 }) {
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
@@ -98,18 +103,27 @@ export function ChatMessage({
         </div>
       )}
     </div>
-    {/* Outside the answer: this is a control, not part of what was written.
-        A `srv-` id means the server sent no message_id (an older backend), so
+    {/* Outside the answer: these are controls, not part of what was written. */}
+    <div className="mt-2 flex items-center gap-1">
+      {/* Available on every real answer, not just the latest — saving
+          something you asked about five turns ago is completely ordinary,
+          and gating this the way FeedbackRow gates on "last + complete"
+          would make it disappear the moment you asked a follow-up. */}
+      {subspaceId && message.content !== '…' && (
+        <AddToNoteButton subspaceId={subspaceId} content={message.content} />
+      )}
+    </div>
+    {/* A `srv-` id means the server sent no message_id (an older backend), so
         there is nothing to attach feedback to — the row is skipped rather than
         posting against an id the server would reject. */}
     {feedback && !feedback.messageId.startsWith('srv-') && (
-      <FeedbackRow feedback={feedback} />
+      <FeedbackRow feedback={feedback} content={message.content} />
     )}
     </Rise>
   )
 }
 
-function FeedbackRow({ feedback }: { feedback: MessageFeedback }) {
+function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content: string }) {
   const { onOffered, reason } = feedback
   const asked = reason !== null && feedback.chips.length > 0
   // Reported on mount, not during render: telling the parent to advance its
@@ -126,6 +140,7 @@ function FeedbackRow({ feedback }: { feedback: MessageFeedback }) {
         reason={reason}
         messageId={feedback.messageId}
         subspaceId={feedback.subspaceId}
+        content={content}
         onRecorded={feedback.onRecorded}
         onRegenerate={feedback.onRegenerate}
       />

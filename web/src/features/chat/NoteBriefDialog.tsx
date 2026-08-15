@@ -23,6 +23,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { LIMITS } from '../../lib/limits'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Modal'
@@ -81,6 +82,7 @@ export function NoteBriefDialog({
             value={topicText}
             onChange={(e) => setTopicText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && submit()}
+            maxLength={LIMITS.noteTopic}
             placeholder="Leave blank to cover the key concepts so far"
             className="w-full rounded-[10px] border border-line bg-canvas px-3 py-2 text-[13.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
           />
@@ -101,7 +103,7 @@ export function NoteBriefDialog({
                 submit()
               }
             }}
-            maxLength={500}
+            maxLength={LIMITS.noteInstructions}
             placeholder="In your own words — anything here beats the default shape"
             className="w-full resize-none rounded-[10px] border border-line bg-canvas px-3 py-2 text-[13.5px] leading-relaxed text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
           />

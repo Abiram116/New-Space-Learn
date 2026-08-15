@@ -404,6 +404,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             <ChatMessage
               key={m.id}
               message={m}
+              subspaceId={subspaceId}
               // Chips only under the LAST answer, and only when it is complete.
               // Under an older message they'd be asking about something the
               // student has already moved past, and a row of stale controls up
