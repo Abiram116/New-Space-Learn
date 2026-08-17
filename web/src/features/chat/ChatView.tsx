@@ -244,7 +244,11 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             count: 8,
           })
           show(`Wrote ${cards.length} cards.`, 'success')
-          onNavigate(`${base}/flashcards`)
+          // Land on the deck itself, not the plain grid — Notes and Quiz
+          // generation from chat both already open what they just wrote
+          // (`?n=`/`?q=`); this was the one path that dropped you
+          // somewhere you'd have to go hunting from.
+          onNavigate(cards[0] ? `${base}/flashcards?deck=${cards[0].deck_id}` : `${base}/flashcards`)
           return
         }
       } catch (err) {
@@ -405,6 +409,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
               key={m.id}
               message={m}
               subspaceId={subspaceId}
+              base={base}
               // Chips only under the LAST answer, and only when it is complete.
               // Under an older message they'd be asking about something the
               // student has already moved past, and a row of stale controls up
@@ -440,6 +445,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
                 citations: pending.citations,
                 created_at: new Date().toISOString(),
               }}
+              base={base}
             />
           )}
           </div>

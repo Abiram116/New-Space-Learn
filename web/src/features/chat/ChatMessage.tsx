@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import type { FeedbackKind } from '../../api/feedback'
 import type { AskReason } from './feedbackPolicy'
 import type { ChatMessage as Message } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
+import { cn } from '../../lib/cn'
 import { AddToNoteButton } from './AddToNote'
 import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
@@ -30,12 +32,17 @@ export function ChatMessage({
   message,
   feedback,
   subspaceId,
+  base,
 }: {
   message: Message
   feedback?: MessageFeedback
   /** Omitted only for the transient pending-stream bubble, which has no
    *  real content yet to add anywhere. */
   subspaceId?: string
+  /** Route prefix for this topic — citations link into `${base}/docs?d=`,
+   *  the same convention NoteEditor's own citation links already use.
+   *  Omitted only for the pending bubble, same as `subspaceId`. */
+  base?: string
 }) {
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
@@ -81,25 +88,42 @@ export function ChatMessage({
       {message.content === '\u2026' ? (
         <Thinking />
       ) : (
-        <MarkdownMessage content={message.content} />
+        <MarkdownMessage content={message.content} citations={citations} base={base} />
       )}
 
       {citations.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {citations.map((c) => (
-            <div
-              key={c.marker}
-              className="min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-2.5 py-2 text-[11.5px]"
-            >
-              <div className="flex gap-1.5 font-bold">
-                <span className="text-brand">{c.marker}</span>
-                <span className="truncate">{c.document_name}</span>
+          {citations.map((c) => {
+            const cardClass =
+              'min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-2.5 py-2 text-[11.5px]'
+            const inner = (
+              <>
+                <div className="flex gap-1.5 font-bold">
+                  <span className="text-brand">{c.marker}</span>
+                  <span className="truncate">{c.document_name}</span>
+                </div>
+                <div className="text-muted">
+                  {c.locator} · {c.snippet}
+                </div>
+              </>
+            )
+            // `base` is only omitted for the pending/streaming bubble, which
+            // never has real citations yet — but guard anyway rather than
+            // ever emit a link to `undefined/docs`.
+            return base ? (
+              <Link
+                key={c.marker}
+                to={`${base}/docs?d=${c.document_id}`}
+                className={cn(cardClass, 'transition-colors hover:border-brand/40 hover:bg-raised')}
+              >
+                {inner}
+              </Link>
+            ) : (
+              <div key={c.marker} className={cardClass}>
+                {inner}
               </div>
-              <div className="text-muted">
-                {c.locator} · {c.snippet}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

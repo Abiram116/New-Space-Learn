@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import type { Citation } from '../../api/types'
+import { cn } from '../../lib/cn'
 
 /**
  * Renders assistant replies as markdown (bold, lists, tables, fenced code
@@ -14,8 +17,22 @@ import rehypeHighlight from 'rehype-highlight'
  * markdown's own grammar — no `rehype-raw`, so nothing the model outputs is
  * ever interpreted as literal HTML.
  */
-export function MarkdownMessage({ content }: { content: string }) {
+export function MarkdownMessage({
+  content,
+  citations = [],
+  base,
+}: {
+  content: string
+  /** Resolves a `[[n]]` marker to the document it cites, so the badge can
+   *  link into Docs the same way NoteEditor's own citation links already
+   *  do — without this the marker was styled to look clickable but did
+   *  nothing at all. */
+  citations?: Citation[]
+  base?: string
+}) {
   const withCiteLinks = content.replace(/\[\[(\d+)\]\]/g, '[$1](#cite-$1)')
+  const byMarker = useMemo(() => new Map(citations.map((c) => [String(c.marker), c])), [citations])
+  const components = useMemo(() => buildComponents(byMarker, base), [byMarker, base])
   return (
     <div className="chat-md">
       <ReactMarkdown
@@ -29,24 +46,41 @@ export function MarkdownMessage({ content }: { content: string }) {
   )
 }
 
-const components: Components = {
-  a({ href, children, ...props }) {
-    if (href?.startsWith('#cite-')) {
+function buildComponents(byMarker: Map<string, Citation>, base?: string): Components {
+  return {
+    a({ href, children, ...props }) {
+      if (href?.startsWith('#cite-')) {
+        const marker = href.slice('#cite-'.length)
+        const citation = byMarker.get(marker)
+        const badgeClass =
+          'ml-0.5 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-bold text-brand-deep'
+        // No link when the marker doesn't resolve to a real citation (a
+        // model occasionally emits `[[n]]` for an `n` outside the list it
+        // was given) or `base` isn't known yet (the streaming bubble) —
+        // still shown as the same badge, just not clickable.
+        if (citation && base) {
+          return (
+            <Link
+              to={`${base}/docs?d=${citation.document_id}`}
+              title={citation.document_name}
+              className={cn(badgeClass, 'cursor-pointer transition-colors hover:bg-brand/30')}
+            >
+              {children}
+            </Link>
+          )
+        }
+        return <span className={badgeClass}>{children}</span>
+      }
       return (
-        <span className="ml-0.5 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-bold text-brand-deep">
+        <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
           {children}
-        </span>
+        </a>
       )
-    }
-    return (
-      <a href={href} target="_blank" rel="noreferrer noopener" {...props}>
-        {children}
-      </a>
-    )
-  },
-  pre({ children, ...props }) {
-    return <CodeBlock {...props}>{children}</CodeBlock>
-  },
+    },
+    pre({ children, ...props }) {
+      return <CodeBlock {...props}>{children}</CodeBlock>
+    },
+  }
 }
 
 /** Wraps `<pre>` so we can add a language chip and a copy button. */

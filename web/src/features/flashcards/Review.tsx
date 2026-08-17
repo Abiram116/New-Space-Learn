@@ -41,6 +41,17 @@ export function Review({
   // Keep the handler in a ref so the key listener never goes stale.
   const stateRef = useRef({ mode, card })
   stateRef.current = { mode, card }
+  // Blocks a second `grade()` for the *same* card — a fast double-click, or
+  // a mouse click landing right after the same hotkey fires, reads the same
+  // `stateRef.current.card` before the advance-to-the-next-card render has
+  // committed (grading is deliberately optimistic/synchronous, so nothing
+  // else was gating this). Two calls meant two `gradeCard` PATCHes for one
+  // card — a plain read-modify-write on the server, so whichever lands last
+  // silently wins and the other grade is discarded from the SM-2 state,
+  // while `activity.bump` still counts both as a card reviewed. Keyed by
+  // card id, not a plain boolean, so it never needs a manual reset: the
+  // next card has a different id and is ungated from its first render.
+  const gradedRef = useRef<string | null>(null)
 
   /* What each grade costs, computed from this card's own ease/interval/reps
      with the same arithmetic the server runs. Shown on the button so the
@@ -59,7 +70,8 @@ export function Review({
   const grade = useCallback(
     (g: Grade) => {
       const { mode: m, card: c } = stateRef.current
-      if (!c) return
+      if (!c || gradedRef.current === c.id) return
+      gradedRef.current = c.id
       void gradeCard(c.id, g).catch(showError)
       // Due counts and the streak just moved; don't let Home serve the
       // pre-review numbers from cache.

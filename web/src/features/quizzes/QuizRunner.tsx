@@ -134,12 +134,6 @@ export function QuizRunner({
     }
   }, [quiz.id, answers, onFinished])
 
-  if (error) {
-    return (
-      <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">{error}</div>
-    )
-  }
-
   return (
     <div
       className={cn(
@@ -159,6 +153,11 @@ export function QuizRunner({
         seconds={seconds}
         compact={compact}
         onExit={onExit}
+        // A student who submits and then immediately leaves before the
+        // response lands would abandon an attempt that may well have
+        // already been recorded server-side — the quiz was answered, the
+        // score exists, and nothing on screen would ever have shown it.
+        exitDisabled={busy}
       />
 
       {/* LEAF — a question stem is prose you read before you can answer, not an
@@ -213,6 +212,18 @@ export function QuizRunner({
         />
       )}
 
+      {/* Inline, not a full replacement of the runner — losing
+          `ProgressHeader` (and its "Leave") on a submit failure turned one
+          bad request into a dead end: no retry, and the only way out was
+          abandoning a fully-answered quiz. The answers are all still in
+          state; the "Try again" button below just calls `finish()` again
+          with the same ones. */}
+      {error && (
+        <div className="rounded-xl bg-coral-soft px-3.5 py-2.5 text-[13px] text-coral-deep">
+          {error}
+        </div>
+      )}
+
       <div className={cn('flex items-center justify-between gap-2', compact && 'shrink-0')}>
         <span className="setcode">
           {isRevealed ? '' : 'Pick an answer to see how you did'}
@@ -220,7 +231,7 @@ export function QuizRunner({
         {isRevealed &&
           (isLast ? (
             <Button onClick={finish} disabled={busy} size={compact ? 'sm' : 'md'}>
-              {busy ? 'Scoring…' : 'See results'}
+              {busy ? 'Scoring…' : error ? 'Try again' : 'See results'}
             </Button>
           ) : (
             <Button onClick={() => setIndex((i) => i + 1)} size={compact ? 'sm' : 'md'}>
@@ -241,6 +252,7 @@ function ProgressHeader({
   seconds,
   compact,
   onExit,
+  exitDisabled = false,
 }: {
   index: number
   total: number
@@ -248,6 +260,9 @@ function ProgressHeader({
   seconds: number
   compact: boolean
   onExit: () => void
+  /** True while a submission is in flight — leaving now wouldn't cancel it,
+   *  just abandon the student before they see whether it landed. */
+  exitDisabled?: boolean
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -255,7 +270,9 @@ function ProgressHeader({
         <button
           type="button"
           onClick={onExit}
-          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-ink"
+          disabled={exitDisabled}
+          title={exitDisabled ? 'Scoring your quiz — one moment' : undefined}
+          className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-ink disabled:cursor-default disabled:opacity-40"
         >
           <Icon name="arrowLeft" size={12} /> Leave
         </button>
