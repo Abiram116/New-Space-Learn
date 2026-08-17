@@ -1,0 +1,44 @@
+<svg width="1200" height="320" viewBox="0 0 1200 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#1e1a17"/>
+      <rect width="2" height="2" fill="#2e251f"/>
+    </pattern>
+  </defs>
+
+  <!-- Canvas -->
+  <rect width="1200" height="320" fill="url(#grid)"/>
+
+  <!-- Pixel-frame border (chamfered corners, retro cartridge window) -->
+  <rect x="8" y="8" width="1184" height="304" fill="none" stroke="#ff5a3c" stroke-width="4"/>
+  <rect x="20" y="20" width="1160" height="280" fill="none" stroke="#3b3028" stroke-width="2"/>
+  <rect x="4" y="4" width="12" height="12" fill="#1e1a17"/>
+  <rect x="1184" y="4" width="12" height="12" fill="#1e1a17"/>
+  <rect x="4" y="304" width="12" height="12" fill="#1e1a17"/>
+  <rect x="1184" y="304" width="12" height="12" fill="#1e1a17"/>
+
+  <!-- Title, chromatic pixel-shadow stack -->
+  <text x="606" y="153" text-anchor="middle" font-family="'Courier New', monospace"
+        font-weight="700" font-size="66" letter-spacing="8" fill="#35d6e8" opacity="0.55">SPACE LEARN</text>
+  <text x="603" y="150" text-anchor="middle" font-family="'Courier New', monospace"
+        font-weight="700" font-size="66" letter-spacing="8" fill="#ff3d8b" opacity="0.6">SPACE LEARN</text>
+  <text x="600" y="147" text-anchor="middle" font-family="'Courier New', monospace"
+        font-weight="700" font-size="66" letter-spacing="8" fill="#f5ede4">SPACE LEARN</text>
+
+  <!-- Subtitle, terminal style -->
+  <text x="600" y="192" text-anchor="middle" font-family="'Courier New', monospace"
+        font-size="18" letter-spacing="4" fill="#d3c5b9">&gt; UPLOAD.CHAT.NOTE.REHEARSE.PROVE_</text>
+
+  <!-- Palette strip — the real seven "foil" tones, honestly rendered -->
+  <g>
+    <rect x="472" y="238" width="28" height="28" fill="#ff5a3c"/>
+    <rect x="510" y="238" width="28" height="28" fill="#35d6e8"/>
+    <rect x="548" y="238" width="28" height="28" fill="#b8ff3c"/>
+    <rect x="586" y="238" width="28" height="28" fill="#ffc53d"/>
+    <rect x="624" y="238" width="28" height="28" fill="#ff3d8b"/>
+    <rect x="662" y="238" width="28" height="28" fill="#5590ff"/>
+    <rect x="700" y="238" width="28" height="28" fill="#22d3a0"/>
+  </g>
+  <text x="600" y="292" text-anchor="middle" font-family="'Courier New', monospace"
+        font-size="11" letter-spacing="3" fill="#4a3c32">SEVEN FOIL TONES // ONE DESIGN SYSTEM</text>
+</svg>

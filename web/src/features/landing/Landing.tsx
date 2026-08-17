@@ -910,7 +910,20 @@ function Close() {
             times over — stamped behind the figure, again as a corner label, and
             a third time in a footer under it. Repetition at the close reads as
             filler; the stamped one is the statement, so the others go. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-end justify-end px-5 pb-5 sm:px-8">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-end justify-between px-5 pb-5 sm:px-8">
+          {/* Same small-print register as the corner claim opposite it — a
+              fact about the code, not a pitch, so it earns the same quiet
+              treatment rather than a branded footer bar. */}
+          <a
+            href="https://github.com/Abiram116/New-Space-Learn"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="setcode pointer-events-auto transition-colors hover:text-ink"
+          >
+            MIT Licensed
+            <br />
+            Source on GitHub
+          </a>
           <span className="setcode text-right">
             No card needed
             <br />
