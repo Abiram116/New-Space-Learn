@@ -63,6 +63,12 @@ export function useAsync<T>(
   // results for un-keyed callers.
   const data = (cached as T | undefined) ?? local
 
+  // Tracks the last value this hook actually rendered, kept in sync with
+  // `data` on every render — see `updateData` below for why `setData`
+  // needs this rather than reading straight from the cache at call time.
+  const dataRef = useRef<T | null>(null)
+  dataRef.current = data ?? null
+
   useEffect(() => {
     const gen = ++generation.current
     setValidating(true)
@@ -88,8 +94,29 @@ export function useAsync<T>(
     (updater: (prev: T | null) => T | null) => {
       // An optimistic edit has to land in the cache, or the next mount of this
       // key serves the pre-edit value and the change appears to undo itself.
-      if (key) writeCache(key, updater(readCache<T>(key)?.data ?? null))
-      else setLocal(updater)
+      //
+      // `prev` falls back to `dataRef.current`, not just `readCache(key)?.data`
+      // — a mutation that's already succeeded by the time its caller runs
+      // `setData` (creating a card, deleting a deck, ...) has, by then,
+      // *also* already invalidated this exact cache key (`client.ts` clears
+      // it synchronously right after a successful non-GET response, before
+      // the caller's own `await` even resumes). Reading the cache alone at
+      // that moment sees nothing and `prev` becomes `null` — an optimistic
+      // "append the new item" silently turns into "replace the whole list
+      // with just the new item", and "update one item" turns into "the list
+      // is now empty". `dataRef` still holds this hook's last real render —
+      // untouched by the cache being cleared out from under it — so the
+      // append/update/remove lands on the actual list instead of nothing.
+      if (key) {
+        const prev = readCache<T>(key)?.data ?? dataRef.current
+        writeCache(key, updater(prev))
+      } else {
+        // Unaffected by the race above — no cache entry involved, and
+        // passing the updater straight to `setState` lets React supply its
+        // own latest `local`, which stays correct even across more than one
+        // `setData` call in the same tick (unlike reading `dataRef` twice).
+        setLocal(updater)
+      }
     },
     [key],
   )

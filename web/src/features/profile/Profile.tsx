@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getStudentModel } from '../../api/me'
 import type { Badge, Stats } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
 import { Card } from '../../components/ui/Card'
@@ -41,6 +42,13 @@ export function Profile() {
   // Shared cache with Home — Profile was refetching the same payload on
   // every visit, which is the exact back-navigation cost fixed elsewhere.
   const stats = useAsync(() => getCachedStats(), [])
+  // The 2026-08 UX audit found this data computed and already exposed via
+  // `/me/student-model` — real quiz-derived weak topics, not a guess — but
+  // rendered only in Settings, nowhere on the page that's actually meant to
+  // be the student's own record. A second read of the same endpoint, not a
+  // new one; Settings fetches it separately with a plain effect, so this
+  // doesn't touch that page at all.
+  const student = useAsync(() => getStudentModel(), [], 'student-model')
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -269,6 +277,28 @@ export function Profile() {
           </section>
         )}
 
+        {/* Real quiz-derived weak topics — the same `TopicSignal` data
+            Settings' "Learning" tab already shows, surfaced here too since
+            this is the page meant to answer "how am I actually doing",
+            not just "what have I built". Silent when there's nothing yet —
+            a few quiz attempts, not a guess from account age. */}
+        {student.data && student.data.weak_areas.length > 0 && (
+          <section className="flex flex-col gap-2 border-t border-line pt-4">
+            <span className="setcode-strong">Where to focus</span>
+            <div className="flex flex-col gap-1.5 text-[13px]">
+              {student.data.weak_areas.slice(0, 3).map((a) => (
+                <div key={a.subspace_id} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-ink-2">
+                    {a.topic}
+                    {a.subject && <span className="text-faint"> · {a.subject}</span>}
+                  </span>
+                  <span className="shrink-0 text-coral-deep">{a.average}% avg</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* `flex-1` on the row, not just the page: this is the part with
             content that scales, so it is the part that should absorb the
             leftover height. */}
@@ -304,6 +334,11 @@ export function Profile() {
                 ))}
               </div>
               <span className="setcode">More</span>
+              {/* The scale is relative to your OWN busiest day in this
+                  window, not a fixed number of minutes — without this, the
+                  darkest cell reads as "a lot" with no way to know if that
+                  means 20 minutes or 3 hours short of hovering every cell. */}
+              <span className="text-[11px] text-faint">— relative to your busiest day here</span>
             </div>
           </Ledger>
 
@@ -547,14 +582,26 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
 
   // Month ticks, placed on the first week that enters a new month.
+  //
+  // `day` is a date-ONLY string ("2026-03-01") — `new Date(str)` parses that
+  // as UTC midnight, and plain `.getMonth()`/`toLocaleDateString()` then read
+  // it back in the *browser's local* timezone. For anyone west of UTC that
+  // rolls back to 11pm the previous day, so the 1st of a month reads as still
+  // being the last day of the one before it — a tick lands a week late (or a
+  // week's worth of cells get mis-labelled), which is exactly the "days
+  // don't match the months" symptom. Read every field back out in UTC so the
+  // calendar day never moves.
   const months: { label: string; col: number }[] = []
   let lastMonth = -1
   weeks.forEach((week, i) => {
     const d = new Date(week[0]?.day ?? '')
     if (Number.isNaN(d.getTime())) return
-    if (d.getMonth() !== lastMonth) {
-      lastMonth = d.getMonth()
-      months.push({ label: d.toLocaleDateString(undefined, { month: 'short' }), col: i })
+    if (d.getUTCMonth() !== lastMonth) {
+      lastMonth = d.getUTCMonth()
+      months.push({
+        label: d.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' }),
+        col: i,
+      })
     }
   })
 
