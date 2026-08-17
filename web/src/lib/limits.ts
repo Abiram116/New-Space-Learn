@@ -53,8 +53,11 @@ export const LIMITS = {
   noteInstructions: 500,
   /** `NoteGenerate.topic`. */
   noteTopic: 140,
-  /** `NoteAiInline.prompt` — the inline `/ai` box. */
-  notePrompt: 500,
+  /** `NoteAiInline.prompt` — shared by the typed `/ai` box and the
+   *  selection actions (Rewrite, Simplify, …), which wrap a selected
+   *  passage inside instruction boilerplate before sending it through this
+   *  same field — sized for that, not just a short typed line. */
+  notePrompt: 4000,
 
   /**
    * `CardsGenerate.topic` — "generate a deck about…".

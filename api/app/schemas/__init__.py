@@ -172,7 +172,16 @@ class NoteAiInline(BaseModel):
     """A prompt typed inline as `/ai <prompt>` in the notes editor — returns
     a fragment to insert at the cursor, not a whole new note."""
 
-    prompt: str = Field(min_length=1, max_length=500)
+    # Two very different callers share this field: the typed `/ai <prompt>`
+    # box (short by construction, and separately capped client-side at 500 —
+    # see `LIMITS.notePrompt`), and the selection actions in `toolbar.ts`
+    # (Rewrite, Simplify, Example, Quiz), which wrap a selected PASSAGE
+    # inside ~250 characters of instruction boilerplate and send the whole
+    # thing here. 500 was sized for the first caller only — any selection
+    # past a sentence or two blew straight through it. Sized to comfortably
+    # fit a selected paragraph plus the boilerplate.
+    prompt: str = Field(min_length=1, max_length=4000)
+    
     #: The note's own markdown as it stands right now. Optional so an empty
     #: note still validates, but load-bearing whenever the command has no
     #: selection to fall back on ("Summarise the note so far") — without it

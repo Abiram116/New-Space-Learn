@@ -608,6 +608,44 @@
   border-top: 1px solid var(--color-line);
   margin: 1.4rem 0;
 }
+/* An AI reply inserted via `/ai` (or a slash-AI command like "Practice
+   questions") is preceded by a real `---` — see NoteEditor.tsx's
+   `runInlineAi` — precisely so this can key off it. No new mark, no new
+   persistence: a heading landing right after a divider IS "the start of
+   what the AI just added", in plain markdown that already round-trips
+   exactly as written. A heading anywhere else — including one under a
+   divider a student typed themselves — is untouched. */
+.notes-doc hr:has(+ :is(h1, h2, h3)) { border-top-color: var(--color-brand); opacity: 0.55; }
+.notes-doc hr + :is(h1, h2, h3) {
+  color: var(--color-brand-deep);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.notes-doc hr + :is(h1, h2, h3)::before {
+  content: '✦';
+  font-size: 0.75em;
+  color: var(--color-brand);
+}
+
+/* Math preview (mathPreview.ts) — the raw `\[...\]`/`\(...\)` source stays
+   real, editable text the whole time; this just hides it while the caret
+   is elsewhere and shows the KaTeX render in its place. */
+.math-source-hidden {
+  display: none;
+}
+.math-rendered {
+  color: var(--color-ink);
+  cursor: text;
+}
+.math-rendered-block {
+  display: block;
+  margin: 0.9rem 0;
+  overflow-x: auto;
+}
+.math-rendered .katex-display {
+  margin: 0;
+}
 
 /* Links are underlined rather than colour-only, so they survive a
    grayscale print and are distinguishable without relying on hue. */

@@ -73,6 +73,8 @@ function note(overrides: Partial<Note> = {}): Note {
     origin: 'user',
     source_ids: null,
     updated_at: new Date().toISOString(),
+    touched_by_user: true,
+    touched_by_agent: false,
     ...overrides,
   }
 }
@@ -376,13 +378,86 @@ describe('the code block language picker', () => {
     await waitFor(() => expect(screen.getByText('Code block')).toBeInTheDocument())
     await user.type(surface, '{Enter}')
 
-    const select = await screen.findByDisplayValue('plaintext')
-    fireEvent.change(select, { target: { value: 'python' } })
+    await user.click(await screen.findByRole('button', { name: 'Code block language' }))
+    await user.click(screen.getByRole('option', { name: 'python' }))
 
     await waitFor(() => {
       const code = document.querySelector('.notes-doc pre code')
       expect(code).not.toBeNull()
       expect(code!.className).toContain('language-python')
+    })
+  })
+})
+
+describe('warns before leaving with unsaved work', () => {
+  // Regression: there was no `beforeunload` guard anywhere in the app — a
+  // closed tab, hard refresh, or followed link inside the 800ms autosave
+  // debounce silently dropped whatever was just typed, with zero warning.
+  // Switching to a DIFFERENT note in-app was already safe (the pending
+  // `setTimeout` isn't tied to this component and still fires — see
+  // `saveBody`'s own comment) — this is specifically about actually
+  // leaving the page.
+  it('prevents unload while a save is pending, and stops once it settles', async () => {
+    const user = userEvent.setup()
+    renderEditor()
+    const surface = document.querySelector<HTMLElement>('.notes-doc[contenteditable="true"]')!
+
+    await user.click(surface)
+    await user.type(surface, 'x')
+
+    // `status` flips to 'saving' synchronously with the keystroke, before
+    // the 800ms debounce timer is even set — still inside that window,
+    // nothing has reached the server yet, so this is exactly the moment a
+    // warning is owed.
+    const duringSave = new Event('beforeunload', { cancelable: true })
+    expect(window.dispatchEvent(duringSave)).toBe(false) // false = preventDefault() was called
+
+    // The guard lifts the instant `status` leaves 'saving' — that's
+    // 'saved', not the later 'idle' settle — so this only has to outlast
+    // the real 800ms debounce plus the (mocked, near-instant) save itself.
+    // Polls by re-dispatching on each attempt rather than sleeping a fixed
+    // amount.
+    await waitFor(
+      () => {
+        const afterSave = new Event('beforeunload', { cancelable: true })
+        expect(window.dispatchEvent(afterSave)).toBe(true) // true = never prevented
+      },
+      { timeout: 3000 },
+    )
+  }, 8000)
+
+  it('does not warn on a note with nothing typed yet', () => {
+    renderEditor()
+    const event = new Event('beforeunload', { cancelable: true })
+    expect(window.dispatchEvent(event)).toBe(true)
+  })
+})
+
+describe('LaTeX math renders, without corrupting on repeated saves', () => {
+  // A never-saved note (fresh from `generateNote`, backend output only) has
+  // its backslashes exactly as the model wrote them — needs the one-time
+  // protection before markdown-it's parser eats `\[`/`\)`.
+  it('renders a formula from a pristine, never-saved AI note', async () => {
+    renderEditor({ touched_by_user: false, origin: 'agent', body_md: String.raw`\[ x \]` })
+    await waitFor(() => expect(document.querySelector('.katex')).not.toBeNull())
+  })
+
+  // Regression: once a note has been saved at least once, `body_md` is
+  // whatever `prosemirror-markdown`'s own serializer wrote — already
+  // correctly double-escaped. Re-running our own protection on top of that
+  // used to add a stray backslash every load; this note simulates exactly
+  // that already-serialized shape and must still render as ONE clean
+  // formula, not accumulate.
+  it('does not double-escape a note that has already been saved once', async () => {
+    // The exact shape `prosemirror-markdown`'s own `esc()` produces for a
+    // literal `\[ x \]`: each of `\`, `[`, `]` is independently escaped, so
+    // the backslash before each bracket triples rather than doubles.
+    // Verified against the real function, not hand-derived — see the
+    // reasoning above the `content:` line in NoteEditor.tsx.
+    renderEditor({ touched_by_user: true, body_md: String.raw`\\\[ x \\\]` })
+    await waitFor(() => {
+      const formulas = document.querySelectorAll('.katex')
+      expect(formulas.length).toBe(1)
     })
   })
 })

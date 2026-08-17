@@ -31,8 +31,11 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { createLowlight, common } from 'lowlight'
 import { Markdown } from 'tiptap-markdown'
 import { AI_PLACEHOLDER, clearAiPlaceholder } from './aiPlaceholder'
+import { handleCodeBlockTextInput, handleCodeBlockBackspace } from './codeBlockAutoClose'
 import { DetailsWithMarkdown } from './detailsMarkdown'
 import { healEscapedHtml } from './healHtml'
+import { preserveLatexBackslashes } from './mathMarkdown'
+import { MathPreview } from './mathPreview'
 import { landInFreshParagraph } from './landInFreshParagraph'
 import { ImageBlock } from './ImageBlock'
 import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS, SELECTION_ACTIONS } from './toolbar'
@@ -48,6 +51,7 @@ import { noteAiInline, updateNote } from '../../api/notes'
 import type { Note } from '../../api/types'
 import { Chip } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
+import { Select } from '../../components/ui/Select'
 import { Rise } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
@@ -94,6 +98,25 @@ export function NoteEditor({
 }) {
   const [title, setTitle] = useState(note.title)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  // Both `saveBody` and the title-save effect below set `status` to
+  // 'saving' the instant an edit differs from what's on the server, and
+  // hold it there through the full 800ms debounce plus the request itself —
+  // exactly the window a closed tab, a hard refresh, or a followed link
+  // would silently drop. There was no warning of any kind: switching to a
+  // DIFFERENT note is safe (the raw `setTimeout` isn't tied to this
+  // component's lifecycle and still fires — see `saveBody`'s own note on
+  // this), but actually leaving the page is not. This is the browser's own
+  // native confirmation, not a new persistence system.
+  useEffect(() => {
+    if (status !== 'saving') return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [status])
   const [aiBusy, setAiBusy] = useState(false)
   /** Set when "Ask AI" fires with nothing to work from — holds the range the
       answer should replace while the student types what they actually want. */
@@ -114,6 +137,13 @@ export function NoteEditor({
   const navigate = useNavigate()
   const editorRef = useRef<Editor | null>(null)
   const savedBodyRef = useRef(note.body_md)
+  /** Set right after an `/ai` suggestion is inserted, read (and cleared) by
+   *  the very next autosave. The insert itself doesn't save — it just edits
+   *  the document, and the debounced autosave in `saveBody` below is what
+   *  actually persists it — so this is the only place that knows "the save
+   *  about to fire is the one that just accepted an AI suggestion" without
+   *  threading that fact through every other keystroke's save too. */
+  const aiTouchedRef = useRef(false)
 
   const saveBody = useCallback(
     (markdown: string) => {
@@ -122,7 +152,12 @@ export function NoteEditor({
       if (bodyTimer.current) window.clearTimeout(bodyTimer.current)
       bodyTimer.current = window.setTimeout(async () => {
         try {
-          const updated = await updateNote(note.id, { body_md: markdown })
+          const aiTouched = aiTouchedRef.current
+          aiTouchedRef.current = false
+          const updated = await updateNote(note.id, {
+            body_md: markdown,
+            ...(aiTouched ? { ai_touched: true } : {}),
+          })
           savedBodyRef.current = markdown
           onPatch({ body_md: updated.body_md, updated_at: updated.updated_at })
           setStatus('saved')
@@ -259,7 +294,19 @@ export function NoteEditor({
          * output of a parser being run one time too many. Do not "helpfully"
          * pre-parse this again; the commands are already markdown-aware.
          */
-        const markdown = content_md + sourceLine(citations, base)
+        // A visible break before AI-written content, not just the same
+        // paragraph flow as whatever you typed — a divider marks where your
+        // own writing stops and the AI's starts, and (see index.css's
+        // `hr + h1/h2/h3` rule) any heading landing right after one — "##
+        // Practice Questions" and the like — picks up the brand accent for
+        // free, no new mark or persistence needed: it's plain markdown `---`
+        // followed by a plain heading, both already round-tripping exactly
+        // as written. Skipped on an empty note — there is nothing yet for a
+        // divider to divide.
+        const hasContentBefore = editor.state.doc.textBetween(0, from, '\n').trim().length > 0
+        const markdown = preserveLatexBackslashes(
+          (hasContentBefore ? '---\n\n' : '') + content_md + sourceLine(citations, base),
+        )
         if (clearPlaceholder()) {
           editor.chain().insertContentAt(from, markdown).run()
         } else {
@@ -268,6 +315,7 @@ export function NoteEditor({
           editor.chain().insertContent(markdown).run()
         }
         landInFreshParagraph(editor)
+        aiTouchedRef.current = true
       } catch (err) {
         clearPlaceholder()
         showError(err)
@@ -335,13 +383,31 @@ export function NoteEditor({
       DetailsSummary,
       DetailsContent,
       Markdown.configure({ html: false, transformPastedText: true }),
+      // Renders `\[...\]` / `\(...\)` LaTeX as live KaTeX — see mathPreview.ts.
+      MathPreview,
     ],
     // Healed on the way in. Notes written before the backend stopped
     // emitting escaped HTML have `&amp;lt;p&amp;gt;` saved in them, and every
     // save added another layer — see healHtml.ts. Repairing here means
     // opening the note fixes it, and the effect below writes the clean
     // version back so it stays fixed.
-    content: healEscapedHtml(note.body_md),
+    //
+    // `preserveLatexBackslashes` only runs while `!touched_by_user` — once
+    // true, `body_md` has been through at least one frontend save, and
+    // `prosemirror-markdown`'s own serializer already escapes `\`/`[`/`]`
+    // correctly on the way out (confirmed by reading its `esc()` method).
+    // Re-applying our own protection on top of an already-correct
+    // round-trip would double-escape it — one extra backslash added on
+    // every save/reload cycle. `touched_by_user` is set on ANY body_md
+    // save regardless of who/what wrote it (see the backend's
+    // `update_note`), so it's a reliable "has this ever been
+    // frontend-serialized" flag, not specifically "did a human type in
+    // it". Before that first save, `body_md` is guaranteed to still be
+    // whatever the backend wrote directly (a fresh AI-generated note, or a
+    // blank one) — never serialized, still needing the fix.
+    content: note.touched_by_user
+      ? healEscapedHtml(note.body_md)
+      : preserveLatexBackslashes(healEscapedHtml(note.body_md)),
     editorProps: {
       attributes: {
         // `notes-doc` ONLY — `chat-md` used to be applied alongside it and the
@@ -409,6 +475,10 @@ export function NoteEditor({
         return true
       },
       handleKeyDown(view, event) {
+        if (event.key === 'Backspace' && handleCodeBlockBackspace(view)) {
+          event.preventDefault()
+          return true
+        }
         if (event.key !== 'Enter' || aiBusy) return false
         const { $from } = view.state.selection
         const text = $from.parent.textContent
@@ -419,6 +489,7 @@ export function NoteEditor({
         void runInlineAi(prompt, $from.before(), $from.after())
         return true
       },
+      handleTextInput: (view, from, to, text) => handleCodeBlockTextInput(view, from, to, text),
     },
     onUpdate: ({ editor }) => {
       // @ts-expect-error — added by the Markdown extension's storage
@@ -682,8 +753,13 @@ export function NoteEditor({
 
         {/* Save state is a fact about the document, so it reads as one line of
             plain text rather than a badge — a green "Saved" pill on every
-            keystroke is a reward for typing, which is not what this is. */}
-        <span className="setcode flex items-center gap-1.5">
+            keystroke is a reward for typing, which is not what this is.
+            AI actually working is the one exception: `aiBusy` swaps in
+            `setcode-hot` (the brand-coloured variant already used for
+            labels meant to lead) so "the AI is writing right now" reads as
+            a live, active thing happening — not the same quiet grey as
+            "saved 2 minutes ago". */}
+        <span className={cn('flex items-center gap-1.5', aiBusy ? 'setcode-hot' : 'setcode')}>
           {aiBusy ? (
             <>
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
@@ -827,21 +903,17 @@ export function NoteEditor({
                 className="absolute z-20 flex max-w-[calc(100%-0.5rem)] items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-1.5 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.8)]"
               >
                 <span className="setcode shrink-0">Language</span>
-                <select
+                <Select
                   value={editor.getAttributes('codeBlock').language || 'plaintext'}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     editor.chain().focus().updateAttributes('codeBlock', {
-                      language: e.target.value,
+                      language: value,
                     }).run()
                   }
-                  className="min-w-0 rounded-md border border-line bg-well px-2 py-1 font-mono text-[11.5px] text-ink-2 outline-none focus:border-brand"
-                >
-                  {CODE_LANGUAGES.map((l) => (
-                    <option key={l} value={l}>
-                      {l}
-                    </option>
-                  ))}
-                </select>
+                  ariaLabel="Code block language"
+                  className="w-28 font-mono text-[11.5px]"
+                  options={CODE_LANGUAGES.map((l) => ({ value: l, label: l }))}
+                />
               </div>
             )}
 
