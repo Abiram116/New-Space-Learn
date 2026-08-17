@@ -57,6 +57,7 @@ export type IconName =
   | 'code'
   | 'table'
   | 'pencil'
+  | 'userEdit'
   | 'wrapLeft'
   | 'wrapNone'
   | 'wrapRight'
@@ -483,6 +484,18 @@ function paths(name: IconName, filled: boolean) {
         <>
           <path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Z" />
           <path d="M14.5 6.5 17.5 9.5" />
+        </>
+      )
+    case 'userEdit':
+      // A person (small, top-left) plus a pencil (bottom-right) — for marks
+      // that specifically mean "a human edited this", not just "editable".
+      // A bare pencil reads as the second; this is unambiguous at a glance.
+      return (
+        <>
+          <circle cx="8" cy="7.3" r="3" />
+          <path d="M3.3 18.2a5 5 0 0 1 9.4-2.2" />
+          <path d="M13.3 20.6h3.1L22.7 14a1.7 1.7 0 0 0-2.4-2.4l-6.3 6.3Z" />
+          <path d="M18.5 12.4 20.6 14.5" />
         </>
       )
     case 'alert':

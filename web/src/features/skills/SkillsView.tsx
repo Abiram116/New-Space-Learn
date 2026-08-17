@@ -9,7 +9,7 @@
  *   `selectedId` is null it saves a new skill.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   activateSkill,
   createSkill,
@@ -99,9 +99,21 @@ function Inner({ subspaceId }: { subspaceId: string }) {
   const [form, setForm] = useState<SkillInput>(emptyForm)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const isWide = useIsWide()
   const [editorOpen, setEditorOpen] = useState(false)
   const [customIconOpen, setCustomIconOpen] = useState(false)
+  const outputFormatRef = useRef<HTMLTextAreaElement>(null)
+
+  // Grows the box to fit what's typed instead of clipping it — a one-line
+  // `Input` scrolled its own text sideways the moment a rule ran past the
+  // field's width, which read as broken, not just cramped.
+  useEffect(() => {
+    const el = outputFormatRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [form.output_format, editorOpen])
 
   /** Every entry point into the form goes through here, so the modal opens. */
   const openEditor = useCallback((id: string | null) => {
@@ -244,6 +256,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
 
   const del = async () => {
     if (!confirmDelete) return
+    setDeleting(true)
     try {
       await deleteSkill(confirmDelete)
       setOwn((prev) => (prev ? prev.filter((s) => s.id !== confirmDelete) : prev))
@@ -260,6 +273,8 @@ function Inner({ subspaceId }: { subspaceId: string }) {
       show('Skill deleted.', 'success')
     } catch (err) {
       showError(err)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -285,7 +300,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         output_format: lib.output_format,
       })
       setOwn((prev) => (prev ? [created, ...prev] : [created]))
-      setSelectedId(created.id)
       show(`Added "${lib.name}" — activate it below to apply to this space.`, 'success')
     } catch (err) {
       showError(err)
@@ -430,12 +444,15 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         </div>
       </div>
 
-      <Input
+      <Textarea
         label="Output format"
+        ref={outputFormatRef}
+        rows={1}
         value={form.output_format ?? ''}
         onChange={(e) => setForm({ ...form, output_format: e.target.value })}
         placeholder="e.g. bullet points only, or one short paragraph"
         hint="Optional — a formatting rule added on top of the instructions above."
+        className="resize-none overflow-hidden"
       />
 
       <div className="mt-auto flex gap-2 pt-3">
@@ -643,11 +660,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           )}
         </div>
 
-        {/* At xl the editor is a panel that lives beside the list. Below xl
-            that panel was simply `hidden`, which meant no way to create or
-            edit a skill at all — so the same form becomes a modal instead. */}
-        {isWide ? (
-          <aside className="hidden w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l-[1.5px] border-line bg-surface p-5 xl:flex">
+        {/* At xl the editor is a panel that lives beside the list; below xl
+            it's a modal instead. Either way it only exists once you've
+            actually asked for it — "Write your own skill", "+ New skill",
+            or opening an existing one to edit. A form sitting open with
+            nothing to fill in yet read as unfinished, not helpful. */}
+        {editorOpen && (isWide ? (
+          <aside className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l-[1.5px] border-line bg-surface p-5">
             <h2 className="font-display text-[15px] font-semibold">
               {editingExisting ? 'Edit skill' : 'New skill'}
             </h2>
@@ -664,7 +683,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               {editorBody}
             </div>
           </Modal>
-        )}
+        ))}
       </div>
 
       <ConfirmDialog
@@ -675,6 +694,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         onCancel={() => setConfirmDelete(null)}
         onConfirm={del}
         destructive
+        loading={deleting}
       />
     </div>
   )

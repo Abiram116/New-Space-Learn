@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from 'react'
 import { cn } from '../../lib/cn'
 
 type Common = {
@@ -57,8 +57,9 @@ export function Textarea({
   containerClassName,
   className,
   id,
+  ref,
   ...rest
-}: TextareaHTMLAttributes<HTMLTextAreaElement> & Common) {
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & Common & { ref?: Ref<HTMLTextAreaElement> }) {
   const inputId = id ?? rest.name
   return (
     <div className={cn('flex flex-col gap-1.5', containerClassName)}>
@@ -69,6 +70,7 @@ export function Textarea({
       )}
       <textarea
         id={inputId}
+        ref={ref}
         {...rest}
         className={cn(
           'resize-y rounded-[11px] border bg-well px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition-colors placeholder:text-faint',
