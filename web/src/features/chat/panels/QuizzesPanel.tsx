@@ -120,8 +120,10 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
         className={cn(
           'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
           'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
+          // Busy stays the same live orange, not a greyed-out "disabled" look —
+          // the AI actively writing should read as more alive, not less.
           generating
-            ? 'cursor-default bg-line-soft text-muted'
+            ? 'cursor-default bg-brand text-[#1a120f] animate-pulse'
             : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',
         )}
       >
@@ -132,6 +134,10 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
         {quizzes.loading ? (
           <Skeleton className="h-12 rounded-[10px]" />
+        ) : quizzes.error ? (
+          // A failed fetch used to fall through to `list.length === 0` and
+          // read as "you've never generated a quiz here" — silently wrong.
+          <p className="text-[12px] text-coral-deep">{quizzes.error}</p>
         ) : list.length === 0 ? (
           <p className="text-[12px] text-muted">None yet.</p>
         ) : (

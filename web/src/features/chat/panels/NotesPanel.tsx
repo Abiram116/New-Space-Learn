@@ -22,7 +22,8 @@
 
 import { lazy, Suspense, useCallback, useState } from 'react'
 import { LIMITS } from '../../../lib/limits'
-import { generateNote, listAllNotes, listNotes } from '../../../api/notes'
+import { deleteNote, generateNote, listAllNotes, listNotes } from '../../../api/notes'
+import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
@@ -46,6 +47,9 @@ type Scope = 'topic' | 'all'
 export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
   const [scope, setScope] = useState<Scope>('topic')
   const [openId, setOpenId] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const { show, showError } = useToast()
   const notes = useAsync(
     () => (scope === 'all' ? listAllNotes() : listNotes(subspaceId)),
     [scope, subspaceId],
@@ -53,6 +57,25 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
   )
   const list = notes.data ?? []
   const open = list.find((n) => n.id === openId) ?? null
+
+  // Regression: `onDelete` used to just close the panel back to the list
+  // (`setOpenId(null)`) without calling the API at all — the note read as
+  // deleted for exactly as long as you didn't reopen the panel.
+  const del = useCallback(async () => {
+    if (!open) return
+    setDeleting(true)
+    try {
+      await deleteNote(open.id)
+      notes.setData((prev) => (prev ?? []).filter((n) => n.id !== open.id))
+      setConfirmDelete(false)
+      setOpenId(null)
+      show('Note deleted.', 'success')
+    } catch (err) {
+      showError(err)
+    } finally {
+      setDeleting(false)
+    }
+  }, [open, notes, show, showError])
 
   if (open) {
     return (
@@ -64,6 +87,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
          and escaped-HTML healing were all silently missing in here.
          `compact` trims gutters and the title size; every behaviour is
          identical, because it is the same code. */
+      <>
       <Suspense
         fallback={
           <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
@@ -80,7 +104,7 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
         base={base}
         compact
         onBack={() => setOpenId(null)}
-        onDelete={() => setOpenId(null)}
+        onDelete={() => setConfirmDelete(true)}
         onPatch={(patch) =>
           notes.setData((prev) =>
             (prev ?? []).map((n) => (n.id === open.id ? { ...n, ...patch } : n)),
@@ -88,6 +112,16 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
         }
       />
       </Suspense>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this note?"
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={del}
+        destructive
+        loading={deleting}
+      />
+      </>
     )
   }
 

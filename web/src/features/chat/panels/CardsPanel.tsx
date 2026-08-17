@@ -12,7 +12,7 @@
  * management, the session summary. Those genuinely want room.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { generateCards, gradeCard, listCards, listDecks } from '../../../api/flashcards'
 import type { Deck, Flashcard, Grade } from '../../../api/types'
@@ -69,6 +69,10 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
         {decks.loading ? (
           <Skeleton className="h-12 rounded-[10px]" />
+        ) : decks.error ? (
+          // Same fix as QuizzesPanel's own list — a failed fetch used to
+          // read as "you've never made a deck here".
+          <p className="text-[12px] text-coral-deep">{decks.error}</p>
         ) : list.length === 0 ? (
           <p className="text-[12px] text-muted">No decks yet.</p>
         ) : (
@@ -123,14 +127,30 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
   useEffect(() => {
     listCards(deck.id, { dueOnly: true })
       .then(setCards)
-      .catch((err) => showError(err))
+      .catch((err) => {
+        showError(err)
+        // Without this, a failed fetch leaves `cards` at its initial `null`
+        // forever — `!cards` below never becomes false, so the panel is
+        // stuck on the loading skeleton for the rest of the session with no
+        // escape but the outer dock chrome (not an obvious way out of what
+        // looks like a stuck spinner). Falling to `[]` reaches the deck's
+        // own "nothing due" state instead, which at least has a way out —
+        // the toast above already said what actually went wrong.
+        setCards([])
+      })
   }, [deck.id, showError])
 
   const card = cards?.[index] ?? null
+  // Blocks a second `grade()` for the same card — see the identical guard
+  // and its full reasoning on `Review.tsx`'s own `gradedRef`. Same bug,
+  // same fix, independently implemented here since this is a second,
+  // separate review UI (the chat dock), not a shared component.
+  const gradedRef = useRef<string | null>(null)
 
   const grade = useCallback(
     async (g: Grade) => {
-      if (!card) return
+      if (!card || gradedRef.current === card.id) return
+      gradedRef.current = card.id
       // Optimistic: advance immediately and PATCH behind it. SM-2 runs
       // identically on the server, so the only cost is briefly stale interval
       // maths — and waiting on a round trip between cards is what makes a
@@ -295,8 +315,10 @@ function MakeCards({ subspaceId, onMade }: { subspaceId: string; onMade: () => v
       className={cn(
         'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
         'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
+        // Busy stays the same live orange, not a greyed-out "disabled" look —
+        // the AI actively writing should read as more alive, not less.
         busy
-          ? 'cursor-default bg-line-soft text-muted'
+          ? 'cursor-default bg-brand text-[#1a120f] animate-pulse'
           : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',
       )}
     >
