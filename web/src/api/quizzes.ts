@@ -4,6 +4,11 @@ import type { Quiz, QuizResult } from './types'
 export const listQuizzes = (subspaceId: string) =>
   apiFetch<Quiz[]>(`/subspaces/${subspaceId}/quizzes`)
 
+/** Every quiz the user has, wherever it lives — same reasoning as
+ *  `listAllNotes`. Each row carries its subspace/subject name so the list
+ *  can say where a quiz came from. */
+export const listAllQuizzes = () => apiFetch<Quiz[]>('/quizzes')
+
 export const getQuiz = (id: string) => apiFetch<Quiz>(`/quizzes/${id}`)
 
 export const generateQuiz = (

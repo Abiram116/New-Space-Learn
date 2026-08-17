@@ -40,6 +40,50 @@ async def list_quizzes(
     return [_to_quiz(r) for r in rows]
 
 
+@router.get("/quizzes", response_model=list[QuizOut])
+async def list_all_quizzes(
+    user: CurrentUser = Depends(get_current_user), limit: int = 300
+) -> list[QuizOut]:
+    """Every quiz this user has taken or generated, wherever it lives — same
+    shape and same reasoning as `notes.list_all_notes`.
+
+    No `assert_*` guard for the same reason `list_all_notes` has none: the
+    filter IS `user_id`, applied server-side. `test_guard_coverage.py`
+    accepts this shape explicitly.
+    """
+    quizzes, subspaces, subjects = await asyncio.gather(
+        supabase.db_select(
+            "quizzes",
+            filters={"user_id": f"eq.{user.id}"},
+            order="created_at.desc",
+            limit=min(limit, 500),
+        ),
+        supabase.db_select(
+            "subspaces", filters={"user_id": f"eq.{user.id}"}, select="id,subject_id,name"
+        ),
+        supabase.db_select("subjects", filters={"user_id": f"eq.{user.id}"}, select="id,name"),
+    )
+    subject_name = {s["id"]: s.get("name") for s in subjects}
+    place = {
+        s["id"]: (s.get("name"), subject_name.get(s.get("subject_id")))
+        for s in subspaces
+    }
+    out: list[QuizOut] = []
+    for row in quizzes:
+        quiz = _to_quiz(row)
+        sub_name, subj_name = place.get(row.get("subspace_id"), (None, None))
+        out.append(
+            quiz.model_copy(
+                update={
+                    "subspace_id": row.get("subspace_id"),
+                    "subspace_name": sub_name,
+                    "subject_name": subj_name,
+                }
+            )
+        )
+    return out
+
+
 @router.get("/quizzes/{quiz_id}", response_model=QuizOut)
 async def get_quiz(
     quiz_id: str, user: CurrentUser = Depends(get_current_user)

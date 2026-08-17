@@ -4,6 +4,12 @@ import type { Deck, Flashcard, Grade } from './types'
 export const listDecks = (subspaceId: string) =>
   apiFetch<Deck[]>(`/subspaces/${subspaceId}/decks`)
 
+/** Every deck the user has, wherever it lives — same reasoning as
+ *  `listAllNotes`: a deck belongs to the student, not to whichever topic
+ *  they happened to create it in. Each row carries its subspace/subject
+ *  name so the list can say where a deck came from. */
+export const listAllDecks = () => apiFetch<Deck[]>('/decks')
+
 export const createDeck = (subspaceId: string, input: { name: string }) =>
   apiFetch<Deck>(`/subspaces/${subspaceId}/decks`, { method: 'POST', body: input })
 

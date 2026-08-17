@@ -43,6 +43,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [uploads, setUploads] = useState<LocalUpload[]>([])
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const pollRef = useRef<number | null>(null)
@@ -142,13 +143,21 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
 
   const del = useCallback(async () => {
     if (!deleteId) return
+    setDeleting(true)
     try {
       await deleteDocument(deleteId)
       setDocs((prev) => (prev ? prev.filter((d) => d.id !== deleteId) : prev))
       setDeleteId(null)
       show('Document deleted.', 'success')
     } catch (err) {
+      // Unlike notes/decks/skills, `DELETE /documents/{id}` 404s if the row
+      // is already gone rather than being a silent no-op — without the
+      // `loading` guard below, a fast double-click on "Delete" fired this
+      // twice and showed "Document not found" right after the toast
+      // confirming a successful delete.
       showError(err)
+    } finally {
+      setDeleting(false)
     }
   }, [deleteId, show, showError])
 
@@ -283,6 +292,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
         onCancel={() => setDeleteId(null)}
         onConfirm={del}
         destructive
+        loading={deleting}
       />
     </div>
   )

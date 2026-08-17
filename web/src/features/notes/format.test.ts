@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { labelFor, notePreview, originLabel, relativeTime, sourceLine } from './format'
+import { labelFor, notePreview, originLabel, provenanceLabel, relativeTime, sourceLine } from './format'
 import type { Note } from '../../api/types'
 
 const note = (over: Partial<Note> = {}): Note => ({
@@ -19,6 +19,8 @@ const note = (over: Partial<Note> = {}): Note => ({
   origin: 'user',
   source_ids: null,
   updated_at: new Date().toISOString(),
+  touched_by_user: (over.origin ?? 'user') === 'user',
+  touched_by_agent: over.origin === 'agent',
   ...over,
 })
 
@@ -72,11 +74,47 @@ describe('labelFor', () => {
   it('omits counts while still loading', () => {
     expect(labelFor('all', null)).toBe('All')
   })
+
+  it('counts a note both AI and Mine once the other party has touched it — AI/Mine are not exclusive', () => {
+    // Regression: counts used to come from `origin` alone, which only ever
+    // says who created a note — an AI-created note a student then edited
+    // still counted only under AI, never under Mine.
+    const notes = [note({ id: 'n1', origin: 'agent', touched_by_agent: true, touched_by_user: true })]
+    expect(labelFor('ai', notes)).toContain('1')
+    expect(labelFor('mine', notes)).toContain('1')
+  })
 })
 
 describe('originLabel', () => {
   it('distinguishes who wrote the note', () => {
     expect(originLabel('user')).not.toBe(originLabel('agent'))
+  })
+})
+
+describe('provenanceLabel', () => {
+  it('reads "Created by AI" for an untouched AI note', () => {
+    expect(provenanceLabel(note({ origin: 'agent', touched_by_agent: true, touched_by_user: false })))
+      .toBe('Created by AI')
+  })
+
+  it('reads "Created by you" for an untouched user note', () => {
+    expect(provenanceLabel(note({ origin: 'user', touched_by_user: true, touched_by_agent: false })))
+      .toBe('Created by you')
+  })
+
+  it('reads "Created by AI · Edited by you" once a user has edited an AI note', () => {
+    expect(provenanceLabel(note({ origin: 'agent', touched_by_agent: true, touched_by_user: true })))
+      .toBe('Created by AI · Edited by you')
+  })
+
+  it('reads "Created by you · Edited by AI" once AI has touched a user note', () => {
+    expect(provenanceLabel(note({ origin: 'user', touched_by_user: true, touched_by_agent: true })))
+      .toBe('Created by you · Edited by AI')
+  })
+
+  it('reads "From a document" for a doc-origin note regardless of touched flags', () => {
+    expect(provenanceLabel(note({ origin: 'doc', touched_by_user: true, touched_by_agent: true })))
+      .toBe('From a document')
   })
 })
 

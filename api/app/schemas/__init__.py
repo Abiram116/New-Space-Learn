@@ -128,6 +128,12 @@ class NoteOut(BaseModel):
     origin: Literal["user", "agent", "doc"]
     source_ids: list[str] | None = None
     updated_at: datetime
+    # `origin` only ever records who created the row. These two track who has
+    # actually touched the content since — independent, not "last touched
+    # by", because an AI-created note a student then edits belongs in BOTH
+    # the AI and Mine filters, not just one or the other.
+    touched_by_user: bool = False
+    touched_by_agent: bool = False
     # Where the note lives. Only populated by the cross-topic listing, which
     # shows notes from everywhere and so has to say where each one came from —
     # a title alone is ambiguous once you are looking at every subject at once.
@@ -145,6 +151,11 @@ class NoteCreate(BaseModel):
 class NoteUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=140)
     body_md: str | None = None
+    # Set by the editor on the one PATCH that immediately follows accepting
+    # an `/ai` inline suggestion into the note — every other save (ordinary
+    # typing) leaves this unset. Never clears `touched_by_user`: a student
+    # who typed `/ai` and accepted the result still edited the note.
+    ai_touched: bool = False
 
 
 class NoteGenerate(BaseModel):
@@ -194,6 +205,12 @@ class DeckOut(BaseModel):
     total: int
     due: int
     known_pct: int
+    # Only populated by the cross-topic listing — see NoteOut's identical
+    # fields for why (a title alone is ambiguous once every subject is
+    # visible at once).
+    subspace_id: str | None = None
+    subspace_name: str | None = None
+    subject_name: str | None = None
 
 
 class DeckCreate(BaseModel):
@@ -257,6 +274,11 @@ class QuizOut(BaseModel):
     topic: str | None
     questions: list[QuizQuestion]
     created_at: datetime
+    # Only populated by the cross-topic listing — see NoteOut's identical
+    # fields for why.
+    subspace_id: str | None = None
+    subspace_name: str | None = None
+    subject_name: str | None = None
 
 
 class QuizGenerate(BaseModel):

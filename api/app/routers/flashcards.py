@@ -88,6 +88,74 @@ async def list_decks(
     ]
 
 
+@router.get("/decks", response_model=list[DeckOut])
+async def list_all_decks(
+    user: CurrentUser = Depends(get_current_user), limit: int = 300
+) -> list[DeckOut]:
+    """Every deck this user has, wherever it lives — same shape and same
+    reasoning as `notes.list_all_notes`: a deck belongs to the student, not
+    to whichever topic they happened to create it in.
+
+    No `assert_*` guard for the same reason `list_all_notes` has none: the
+    filter IS `user_id`, applied server-side, so it cannot leak another
+    user's rows. `test_guard_coverage.py` accepts this shape explicitly
+    (see the note on that file for `list_all_notes`).
+    """
+    decks, subspaces, subjects = await asyncio.gather(
+        supabase.db_select(
+            "decks",
+            filters={"user_id": f"eq.{user.id}"},
+            order="created_at.desc",
+            limit=min(limit, 500),
+        ),
+        supabase.db_select(
+            "subspaces", filters={"user_id": f"eq.{user.id}"}, select="id,subject_id,name"
+        ),
+        supabase.db_select("subjects", filters={"user_id": f"eq.{user.id}"}, select="id,name"),
+    )
+    subject_name = {s["id"]: s.get("name") for s in subjects}
+    place = {
+        s["id"]: (s.get("name"), subject_name.get(s.get("subject_id")))
+        for s in subspaces
+    }
+    if not decks:
+        return []
+
+    ids = ",".join(d["id"] for d in decks)
+    cards = await supabase.db_select(
+        "flashcards",
+        filters={"user_id": f"eq.{user.id}", "deck_id": f"in.({ids})"},
+        select="id,deck_id,reps,due_at",
+    )
+    now = datetime.now(UTC)
+    counts: dict[str, dict[str, int]] = {d["id"]: {"total": 0, "due": 0, "known": 0} for d in decks}
+    for c in cards:
+        did = c["deck_id"]
+        counts[did]["total"] += 1
+        if _to_dt(c["due_at"]) <= now:
+            counts[did]["due"] += 1
+        if int(c.get("reps", 0)) > 0:
+            counts[did]["known"] += 1
+
+    out: list[DeckOut] = []
+    for d in decks:
+        sub_name, subj_name = place.get(d.get("subspace_id"), (None, None))
+        total = counts[d["id"]]["total"]
+        out.append(
+            DeckOut(
+                id=d["id"],
+                name=d["name"],
+                total=total,
+                due=counts[d["id"]]["due"],
+                known_pct=round(counts[d["id"]]["known"] * 100 / total) if total else 0,
+                subspace_id=d.get("subspace_id"),
+                subspace_name=sub_name,
+                subject_name=subj_name,
+            )
+        )
+    return out
+
+
 @router.post(
     "/subspaces/{subspace_id}/decks", response_model=DeckOut, status_code=201
 )

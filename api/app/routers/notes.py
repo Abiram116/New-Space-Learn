@@ -42,6 +42,8 @@ def _to_note(row: dict) -> NoteOut:
         origin=row.get("origin", "user"),
         source_ids=row.get("source_ids"),
         updated_at=row["updated_at"],
+        touched_by_user=bool(row.get("touched_by_user", False)),
+        touched_by_agent=bool(row.get("touched_by_agent", False)),
     )
 
 
@@ -138,6 +140,8 @@ async def create_note(
             "title": body.title,
             "body_md": body.body_md,
             "origin": body.origin,
+            "touched_by_user": body.origin == "user",
+            "touched_by_agent": body.origin == "agent",
             "updated_at": now,
         },
     )
@@ -264,6 +268,8 @@ async def generate_note(
             "title": title,
             "body_md": note_body,
             "origin": "agent",
+            "touched_by_user": False,
+            "touched_by_agent": True,
             "updated_at": now,
         },
     )
@@ -561,8 +567,12 @@ async def update_note(
     body: NoteUpdate,
     user: CurrentUser = Depends(get_current_user),
 ) -> NoteOut:
-    patch = body.model_dump(exclude_unset=True)
-    if not patch:
+    patch = body.model_dump(exclude_unset=True, exclude={"ai_touched"})
+    # Checked on the raw input, not `patch`: `ai_touched` is excluded from
+    # `patch` above, so a call carrying only `ai_touched=True` (no title or
+    # body_md set) would otherwise look empty here and return early with
+    # that flag silently dropped, never written anywhere.
+    if not patch and not body.ai_touched:
         rows = await supabase.db_select(
             "notes",
             filters={"user_id": f"eq.{user.id}", "id": f"eq.{note_id}"},
@@ -571,6 +581,14 @@ async def update_note(
         if not rows:
             raise NotFound("Note not found.")
         return _to_note(rows[0])
+    # This endpoint is the editor's own save path — reaching it at all means
+    # a human is editing, typed content or not. `ai_touched` additionally
+    # marks the one save that just accepted an `/ai` suggestion; it never
+    # substitutes for `touched_by_user`, only adds to it.
+    if "title" in patch or "body_md" in patch:
+        patch["touched_by_user"] = True
+    if body.ai_touched:
+        patch["touched_by_agent"] = True
     patch["updated_at"] = datetime.now(UTC).isoformat()
     updated = await supabase.db_update(
         "notes",

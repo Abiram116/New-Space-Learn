@@ -9,7 +9,8 @@
  * stale interval math.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
 import {
   createCard,
@@ -17,17 +18,18 @@ import {
   deleteCard,
   deleteDeck,
   generateCards,
+  listAllDecks,
   listCards,
-  listDecks,
   updateCard,
 } from '../../api/flashcards'
-import type { Deck, Flashcard } from '../../api/types'
+import type { Deck, Flashcard, Tone } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
+import { Select } from '../../components/ui/Select'
 import { Textarea } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { ProgressBar } from '../../components/ui/Bits'
@@ -37,7 +39,9 @@ import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
 import { estimateRetention } from '../../lib/retention'
 import { stripMarkdown } from '../../lib/text'
+import { toneBar } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
+import { useSpaces } from '../spaces/SpacesProvider'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { Review } from './Review'
 import { Summary } from './Summary'
@@ -67,11 +71,43 @@ function Inner({
   base: string
 }) {
   const { show, showError } = useToast()
-  const decks = useAsync(() => listDecks(subspaceId), [subspaceId], `decks:${subspaceId}`)
-  const [mode, setMode] = useState<Mode>({ kind: 'decks' })
+  // Global on purpose — see the identical note on `listAllNotes` in
+  // NotesView. `subspaceId` still decides where a NEW deck is created; it
+  // no longer decides what's visible.
+  const decks = useAsync(() => listAllDecks(), [], 'decks:all')
+  const { spaces } = useSpaces()
+  const subspaceToSpace = useMemo(() => {
+    const map = new Map<string, (typeof spaces)[number]>()
+    for (const s of spaces) for (const sub of s.subspaces) map.set(sub.id, s)
+    return map
+  }, [spaces])
+  // `?deck=` mirrors Notes' `?n=` / Quizzes' `?q=` — without it, a deck
+  // opened by clicking a tile (or landed on straight from chat's "Make
+  // cards from this chat", which used to always drop you on the plain grid
+  // with no way to tell which of possibly many decks it just wrote to) had
+  // no URL of its own: a refresh while reviewing or browsing one deck's
+  // cards silently bounced back to the grid, losing the place you were in.
+  const [params, setParams] = useSearchParams()
+  const [mode, setMode] = useState<Mode>(() => {
+    const deckId = params.get('deck')
+    return deckId ? { kind: 'deck', deckId } : { kind: 'decks' }
+  })
+  const openDeck = useCallback(
+    (deckId: string) => {
+      setMode({ kind: 'deck', deckId })
+      setParams({ deck: deckId }, { replace: true })
+    },
+    [setParams],
+  )
+  const backToDecks = useCallback(() => {
+    setMode({ kind: 'decks' })
+    setParams({}, { replace: true })
+    decks.refresh()
+  }, [setParams, decks])
   const [newDeckOpen, setNewDeckOpen] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
   const [deleteDeckId, setDeleteDeckId] = useState<string | null>(null)
+  const [subjectFilter, setSubjectFilter] = useState<string>('all')
 
   const beginReview = useCallback(
     async (deckId: string) => {
@@ -124,7 +160,7 @@ function Inner({
       <Summary
         grades={mode.grades}
         deckName={deck?.name ?? 'Deck'}
-        onDone={() => setMode({ kind: 'decks' })}
+        onDone={backToDecks}
         nextDeck={nextDeck}
         onReviewNext={beginReview}
         quizHref={`${base}/quizzes`}
@@ -138,22 +174,28 @@ function Inner({
       <DeckDetail
         deckId={mode.deckId}
         deckName={deck?.name ?? 'Deck'}
-        onBack={() => {
-          setMode({ kind: 'decks' })
-          decks.refresh()
-        }}
+        onBack={backToDecks}
         onReview={() => beginReview(mode.deckId)}
       />
     )
   }
 
-  const list = decks.data ?? []
-  const totalDue = list.reduce((n, d) => n + d.due, 0)
+  const all = decks.data ?? []
+  const totalDue = all.reduce((n, d) => n + d.due, 0)
+  const subjectOptions = spaces.filter((s) => all.some((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === s.id))
+  const list =
+    subjectFilter === 'all'
+      ? all
+      : all.filter((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === subjectFilter)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title="Cards"
+        // Cards is an account-wide library now (2026-08 audit), not scoped
+        // to the topic that happened to be open — see the identical note on
+        // NotesView's own SubspaceHeader call.
+        tabs={false}
         actions={
           /* Manual deck creation belongs to the dashed slot in the grid — the
              one empty binder pocket. The header keeps the one action the grid
@@ -165,6 +207,21 @@ function Inner({
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6">
+        {/* Only once decks span more than one subject — a single-subject
+            library has nothing for this to narrow down. */}
+        {subjectOptions.length > 1 && (
+          <Select
+            value={subjectFilter}
+            onChange={setSubjectFilter}
+            ariaLabel="Filter by subject"
+            className="mb-4 max-w-xs"
+            options={[
+              { value: 'all', label: 'All subjects' },
+              ...subjectOptions.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+        )}
+
         {totalDue > 0 && (
           <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-brand/25 bg-brand-tint px-4 py-3">
             <span className="nameplate text-[26px] tabular-nums text-brand">{totalDue}</span>
@@ -182,7 +239,20 @@ function Inner({
           </div>
         )}
 
-        {!decks.loading && list.length === 0 && (
+        {/* A failed fetch must not read as "you have no decks" — `decks.error`
+            used to be ignored entirely here, so it did exactly that. Retry
+            just re-runs the same `useAsync` fetch — no new error framework,
+            the capability already existed and only needed a button. */}
+        {!decks.loading && decks.error && (
+          <div className="mx-auto flex max-w-lg flex-col items-start gap-2 rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <p>{decks.error}</p>
+            <Button size="sm" variant="secondary" onClick={decks.refresh}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!decks.loading && !decks.error && list.length === 0 && (
           <div className="flex flex-1 items-center justify-center py-6">
           <EmptyState
             className="w-full max-w-lg"
@@ -209,7 +279,8 @@ function Inner({
               <DeckTile
                 key={deck.id}
                 deck={deck}
-                onOpen={() => setMode({ kind: 'deck', deckId: deck.id })}
+                tone={deck.subspace_id ? subspaceToSpace.get(deck.subspace_id)?.tone : undefined}
+                onOpen={() => openDeck(deck.id)}
                 onReview={() => beginReview(deck.id)}
                 onDelete={() => setDeleteDeckId(deck.id)}
               />
@@ -232,7 +303,7 @@ function Inner({
           const deck = await createDeck(subspaceId, { name })
           decks.setData((prev) => [...(prev ?? []), deck])
           setNewDeckOpen(false)
-          setMode({ kind: 'deck', deckId: deck.id })
+          openDeck(deck.id)
         }}
       />
 
@@ -243,8 +314,13 @@ function Inner({
         onGenerate={async (topic, count) => {
           const cards = await generateCards(subspaceId, { topic, count })
           setGenOpen(false)
-          decks.refresh()
+          await decks.refresh()
           show(`Wrote ${cards.length} cards.`, 'success')
+          // Land on the deck it just wrote, same as "Write with AI" selects
+          // the new note and quiz generation opens the new quiz — this used
+          // to leave you on the plain grid with no way to tell which of
+          // possibly many decks the cards just went into.
+          if (cards[0]) openDeck(cards[0].deck_id)
         }}
       />
 
@@ -264,11 +340,15 @@ function Inner({
 
 function DeckTile({
   deck,
+  tone,
   onOpen,
   onReview,
   onDelete,
 }: {
   deck: Deck
+  /** The subject this deck's topic belongs to — undefined only if the
+   *  sidebar's space list hasn't resolved it (never during normal use). */
+  tone?: Tone
   onOpen: () => void
   onReview: () => void
   onDelete: () => void
@@ -296,6 +376,17 @@ function DeckTile({
         <div className="flex items-baseline gap-2">
           <span className="nameplate text-[20px] leading-none text-ink">{deck.name}</span>
         </div>
+
+        {(deck.subject_name || deck.subspace_name) && (
+          <div className="-mt-2 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
+            <span aria-hidden className={cn('h-2.5 w-[3px] shrink-0 rounded-full', toneBar[tone ?? 'brand'])} />
+            <span className="truncate">
+              {deck.subject_name}
+              {deck.subject_name && deck.subspace_name ? ' · ' : ''}
+              {deck.subspace_name}
+            </span>
+          </div>
+        )}
 
         <div className="flex items-baseline gap-1.5">
           <span
@@ -380,6 +471,7 @@ function DeckDetail({
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title={deckName}
+        tabs={false}
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={onBack}>
@@ -404,7 +496,18 @@ function DeckDetail({
           </div>
         )}
 
-        {!cards.loading && list.length === 0 && (
+        {/* Same fix as the deck grid above — a failed fetch must not read
+            as "this deck really is empty". */}
+        {!cards.loading && cards.error && (
+          <div className="mx-auto flex max-w-lg flex-col items-start gap-2 rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <p>{cards.error}</p>
+            <Button size="sm" variant="secondary" onClick={cards.refresh}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!cards.loading && !cards.error && list.length === 0 && (
           <EmptyState
             icon="deck"
             title="This deck is empty"

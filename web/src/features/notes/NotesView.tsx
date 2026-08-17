@@ -8,14 +8,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { labelFor, notePreview, relativeTime, type Filter } from './format'
+import { labelFor, notePreview, provenanceLabel, relativeTime, type Filter } from './format'
 import { NoteEditor } from './NoteEditor'
-import { createNote, deleteNote, generateNote, listNotes } from '../../api/notes'
+import { createNote, deleteNote, generateNote, listAllNotes } from '../../api/notes'
 import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
+import { Select } from '../../components/ui/Select'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
@@ -24,8 +25,10 @@ import { Stagger } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
+import { toneBar } from '../../lib/tone'
 import { NoteBriefDialog } from '../chat/NoteBriefDialog'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { useSpaces } from '../spaces/SpacesProvider'
 
 
 export function NotesView() {
@@ -44,12 +47,17 @@ function Inner({
 }) {
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
+  const { spaces } = useSpaces()
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('n'))
   const [filter, setFilter] = useState<Filter>('all')
+  /** 'all' or a subject id — a subject rather than a name, so two subjects
+   *  that happen to share a name still filter independently. */
+  const [subjectFilter, setSubjectFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
   // Below `lg:`, chat's dock — where "Write a note" otherwise lives — isn't
   // rendered at all (see `ContextDock`'s `ActiveAgentsStrip`), and the Notes
   // tab itself had no AI entry point at any width, unlike Quizzes/Flashcards'
@@ -58,36 +66,57 @@ function Inner({
   const [noteBriefOpen, setNoteBriefOpen] = useState(false)
   const [writingNote, setWritingNote] = useState(false)
 
-  // Fetches once per subspace. `selectedId` is deliberately NOT a dependency:
-  // including it rebuilt this callback on every note you clicked, which
-  // re-ran the effect below and refetched the entire note list just to change
-  // which one was highlighted. The default-selection is applied inside the
-  // setter instead, so it still works without making selection a fetch
-  // trigger.
+  // Global on purpose: a note is a thing the student wrote, and it should be
+  // reachable from anywhere they might want it, not hidden the moment they
+  // navigate to a different topic. `subspaceId` still decides where a NEW
+  // note is created (below), it just no longer decides what's visible.
+  // Fetches once on mount — `selectedId` is deliberately not a dependency,
+  // see the original note on this pattern in the git history.
   const refresh = useCallback(async () => {
     try {
-      const data = await listNotes(subspaceId)
+      const data = await listAllNotes()
       setNotes(data)
       setError(null)
       setSelectedId((cur) => cur ?? data[0]?.id ?? null)
     } catch (err) {
       setError(friendlyMessage(err))
     }
-  }, [subspaceId])
+  }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
+  /** Which subject a note's subspace belongs to, and that subject's own
+   *  accent tone — resolved from the sidebar's already-loaded space list
+   *  (`useSpaces`) rather than a second fetch, since every note already
+   *  carries its `subspace_id`. */
+  const subspaceToSpace = useMemo(() => {
+    const map = new Map<string, (typeof spaces)[number]>()
+    for (const s of spaces) {
+      for (const sub of s.subspaces) map.set(sub.id, s)
+    }
+    return map
+  }, [spaces])
+
+  const subjectOptions = useMemo(
+    () => spaces.filter((s) => (notes ?? []).some((n) => n.subspace_id && subspaceToSpace.get(n.subspace_id)?.id === s.id)),
+    [spaces, notes, subspaceToSpace],
+  )
+
   const visible = useMemo(() => {
     if (!notes) return []
     return notes.filter((n) => {
-      if (filter === 'ai' && n.origin === 'user') return false
-      if (filter === 'mine' && n.origin !== 'user') return false
+      if (filter === 'ai' && !n.touched_by_agent) return false
+      if (filter === 'mine' && !n.touched_by_user) return false
+      if (subjectFilter !== 'all') {
+        const space = n.subspace_id ? subspaceToSpace.get(n.subspace_id) : undefined
+        if (space?.id !== subjectFilter) return false
+      }
       if (search && !n.title.toLowerCase().includes(search.toLowerCase())) return false
       return true
     })
-  }, [notes, filter, search])
+  }, [notes, filter, subjectFilter, subspaceToSpace, search])
 
   const current = notes?.find((n) => n.id === selectedId) ?? null
 
@@ -141,6 +170,7 @@ function Inner({
 
   const del = async () => {
     if (!confirmDelete) return
+    setDeleting(true)
     try {
       await deleteNote(confirmDelete)
       setNotes((prev) => (prev ? prev.filter((n) => n.id !== confirmDelete) : prev))
@@ -152,6 +182,8 @@ function Inner({
       show('Note deleted.', 'success')
     } catch (err) {
       showError(err)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -164,13 +196,16 @@ function Inner({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Every other subspace-scoped screen (Chat/Docs/Quizzes/Cards) uses
-          this for its breadcrumb, title, and tab strip — Notes rendered its
-          own one-off title block instead and so was the only one of the five
-          tabs where none of the five ever highlighted, and the only one with
-          no way back to the others except the sidebar. */}
+      {/* Still uses SubspaceHeader for the breadcrumb, title and actions row
+          — but not its tab strip. Notes stopped being a per-topic screen
+          (see the 2026-08 audit: it's an account-wide library now, reached
+          from whichever topic happens to be open), so a row of five tabs
+          implying "which of THIS topic's screens am I on" was actively
+          misleading here. Chat/Docs keep theirs; they're still genuinely
+          scoped to one topic. */}
       <SubspaceHeader
         title="Notes"
+        tabs={false}
         actions={
           <div className="flex shrink-0 gap-1.5">
             {/* "Write with AI" (the fuller label) lives in the empty state
@@ -227,6 +262,18 @@ function Inner({
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
+                  // AI and Mine count how many notes each PARTY has touched,
+                  // not a three-way split of All — a note the AI wrote and
+                  // you then edited counts in both, so AI + Mine can add up
+                  // to more than All. The title spells that out on hover
+                  // rather than leaving the mismatch looking like a bug.
+                  title={
+                    f === 'all'
+                      ? 'Every note in this topic'
+                      : f === 'ai'
+                        ? 'Notes the AI has written or edited — some may also be yours'
+                        : 'Notes you have written or edited — some may also be AI-written'
+                  }
                   className={cn(
                     'flex-1 rounded-[8px] px-2 py-1 text-[11.5px] transition-colors cursor-pointer',
                     filter === f
@@ -239,6 +286,20 @@ function Inner({
               ))}
             </div>
           )}
+
+          {/* Only once notes span more than one subject — a single-subject
+              library has nothing for this to narrow down. */}
+          {subjectOptions.length > 1 && (
+            <Select
+              value={subjectFilter}
+              onChange={setSubjectFilter}
+              ariaLabel="Filter by subject"
+              options={[
+                { value: 'all', label: 'All subjects' },
+                ...subjectOptions.map((s) => ({ value: s.id, label: s.name })),
+              ]}
+            />
+          )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -249,7 +310,14 @@ function Inner({
               <Skeleton className="h-16 rounded-lg" />
             </div>
           )}
-          {error && <p className="p-4 text-xs text-coral-deep">{error}</p>}
+          {error && (
+            <div className="flex flex-col items-start gap-2 p-4 text-xs text-coral-deep">
+              <p>{error}</p>
+              <Button size="sm" variant="secondary" onClick={() => void refresh()}>
+                Retry
+              </Button>
+            </div>
+          )}
           {!loading && !error && totalNotes === 0 && (
             <div className="p-4">
               <EmptyState
@@ -313,19 +381,56 @@ function Inner({
                       {preview}
                     </div>
                   )}
+                  {/* Subject · Topic, with the subject's own accent as a small
+                      bar rather than a full-colour badge — a cue, not a
+                      second thing shouting for attention next to the title. */}
+                  {(item.subject_name || item.subspace_name) && (
+                    <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'h-2.5 w-[3px] shrink-0 rounded-full',
+                          item.subspace_id
+                            ? toneBar[subspaceToSpace.get(item.subspace_id)?.tone ?? 'brand']
+                            : 'bg-line',
+                        )}
+                      />
+                      <span className="truncate">
+                        {item.subject_name}
+                        {item.subject_name && item.subspace_name ? ' · ' : ''}
+                        {item.subspace_name}
+                      </span>
+                    </div>
+                  )}
+                  {/* Provenance is an icon + a tooltip, not a sentence in the
+                      row — "CREATED BY AI · EDITED BY YOU" at setcode's
+                      letter-spacing ran wider than the 288px sidebar itself,
+                      wrapping mid-word and clipping. The badge alone still
+                      says "AI was involved"; the exact story (created vs.
+                      edited, by whom) is one hover away via `title`, the
+                      same trade every icon-with-a-title in this app makes. */}
                   <div className="setcode mt-1.5 flex items-center gap-1.5">
-                    {item.origin !== 'user' && (
-                      <span className="relative inline-flex shrink-0">
-                        <Icon name="note" size={9} className="text-sky-deep" />
-                        <Icon
-                          name="sparkle"
-                          size={5}
-                          filled
-                          className="absolute -right-0.5 -top-0.5 text-sky-deep"
-                        />
+                    {item.touched_by_agent && (
+                      <span className="flex shrink-0 items-center gap-1" title={provenanceLabel(item)}>
+                        <span className="relative inline-flex shrink-0">
+                          <Icon name="note" size={9} className="text-sky-deep" />
+                          <Icon
+                            name="sparkle"
+                            size={5}
+                            filled
+                            className="absolute -right-0.5 -top-0.5 text-sky-deep"
+                          />
+                        </span>
+                        {/* A second, separate mark for "and a human has
+                            too" — without it, an AI-created note you've
+                            since rewritten looks identical to one nobody
+                            has touched since the AI wrote it. Beside the
+                            badge, not stacked on it — a third icon crammed
+                            onto a 9px glyph stops reading as anything. */}
+                        {item.touched_by_user && <Icon name="userEdit" size={10} className="text-brand-deep" />}
                       </span>
                     )}
-                    {relativeTime(item.updated_at)}
+                    <span className="truncate">{relativeTime(item.updated_at)}</span>
                   </div>
                 </button>
               )
@@ -374,6 +479,7 @@ function Inner({
         onCancel={() => setConfirmDelete(null)}
         onConfirm={del}
         destructive
+        loading={deleting}
       />
 
       <NoteBriefDialog

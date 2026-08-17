@@ -30,8 +30,12 @@ export function notePreview(bodyMd: string, limit = 110): string {
 export function labelFor(f: Filter, notes: Note[] | null): string {
   if (!notes) return f === 'all' ? 'All' : f === 'ai' ? 'AI' : 'Mine'
   const all = notes.length
-  const mine = notes.filter((n) => n.origin === 'user').length
-  const ai = all - mine
+  // AI and Mine are not mutually exclusive — a note the AI wrote and you then
+  // edited counts in both, so `ai + mine` can genuinely exceed `all`. That's
+  // not a bug: `all` says how many notes exist, AI/Mine say how many of them
+  // each party has touched.
+  const mine = notes.filter((n) => n.touched_by_user).length
+  const ai = notes.filter((n) => n.touched_by_agent).length
   if (f === 'all') return `All ${all}`
   if (f === 'ai') return `AI ${ai}`
   return `Mine ${mine}`
@@ -41,6 +45,25 @@ export function originLabel(origin: Note['origin']): string {
   if (origin === 'user') return 'Written by me'
   if (origin === 'doc') return 'From a document'
   return 'Notes agent'
+}
+
+/**
+ * Who created this note, and whether the other party has since touched it —
+ * `origin` alone only ever says who created it, and never updates, so a note
+ * that's since been edited by the other side needs a second clause or the
+ * label quietly goes stale relative to the note's real content.
+ *
+ * Deliberately not a running edit history or an "AI-assisted" catch-all: with
+ * only two booleans (see `Note.touched_by_user`/`touched_by_agent`) there is
+ * no edit count to summarise, so "Created by X · Edited by Y" already IS the
+ * compact form — it says what happened once, not every time it happened.
+ */
+export function provenanceLabel(note: Pick<Note, 'origin' | 'touched_by_user' | 'touched_by_agent'>): string {
+  if (note.origin === 'doc') return 'From a document'
+  if (note.origin === 'agent') {
+    return note.touched_by_user ? 'Created by AI · Edited by you' : 'Created by AI'
+  }
+  return note.touched_by_agent ? 'Created by you · Edited by AI' : 'Created by you'
 }
 
 export function relativeTime(iso: string): string {

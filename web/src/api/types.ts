@@ -57,6 +57,12 @@ export type Note = {
   origin: 'user' | 'agent' | 'doc'
   source_ids: string[] | null
   updated_at: string
+  /** `origin` only records who created the note. These track who has
+   *  actually touched its content since, independently — an AI-created
+   *  note a student later edits is `touched_by_agent: true, touched_by_user:
+   *  true` at once, so it belongs in both the AI and Mine filters. */
+  touched_by_user: boolean
+  touched_by_agent: boolean
   /** Where the note lives. Only sent by the cross-topic listing — a title
    *  alone is ambiguous once you're looking at every subject at once. */
   subspace_id?: string | null
@@ -70,6 +76,11 @@ export type Deck = {
   total: number
   due: number
   known_pct: number
+  /** Where the deck lives. Only sent by the cross-topic listing — see
+   *  Note's identical fields. */
+  subspace_id?: string | null
+  subspace_name?: string | null
+  subject_name?: string | null
 }
 
 export type Flashcard = {
@@ -102,6 +113,11 @@ export type Quiz = {
   topic: string | null
   questions: QuizQuestion[]
   created_at: string
+  /** Where the quiz lives. Only sent by the cross-topic listing — see
+   *  Note's identical fields. */
+  subspace_id?: string | null
+  subspace_name?: string | null
+  subject_name?: string | null
 }
 
 export type QuizResult = {
