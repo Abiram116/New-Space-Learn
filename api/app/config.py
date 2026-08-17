@@ -28,10 +28,12 @@ class Settings(BaseSettings):
     supabase_storage_bucket: str = "documents"
 
     # Groq / LLM
-    # Three tiers so we don't pay 70B latency + quota for work an 8B model
-    # handles fine. Verified available on the account as of 2026-08-04.
+    # Three tiers so we don't pay 70B-class latency + quota for work an 8B
+    # model handles fine. `groq_model` was `llama-3.3-70b-versatile` until
+    # Groq decommissioned it on 2026-08-16 (requests now 400); swapped to
+    # their own recommended free replacement, GPT-OSS-120B.
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"     # RAG chat, quiz generation
+    groq_model: str = "openai/gpt-oss-120b"         # RAG chat, quiz generation
     groq_model_fast: str = "llama-3.1-8b-instant"   # short, low-stakes prompts
     groq_model_vision: str = "qwen/qwen3.6-27b"     # only image-capable model here
     groq_base_url: str = "https://api.groq.com/openai/v1"
