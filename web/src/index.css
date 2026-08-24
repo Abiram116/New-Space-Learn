@@ -38,7 +38,13 @@
   --color-ink-2: #e0d3c8;
   --color-ink-3: #d3c5b9;
   --color-muted: #c4b5aa;
-  --color-faint: #9c8b80;
+  /* Was #9c8b80 — measured at 4.46:1 on --color-raised and 4.88:1 on
+     --color-surface, both under the 4.5:1 AA floor for normal-size text
+     (`.setcode` runs at 11.5px, so it IS normal text, never large). Lightened
+     to clear every surface in the stack with margin (5.45:1 worst case, on
+     raised) while staying in the same warm taupe family — no shift toward
+     grey, per the rule that secondary text tints from the ground's own hue. */
+  --color-faint: #a99c92;
 
   --color-line: #3b3028;
   --color-line-soft: #2e251f;
@@ -124,10 +130,18 @@
     /* A drafting table under a lamp: a faint graticule ruled across the whole
        surface, then light pooling where the work is and falling off at the
        edges. The grid sits under the light so it reads as the table's own
-       ruling rather than an overlay. */
+       ruling rather than an overlay.
+
+       The two corner blobs used to be near-identical warm browns (#2b221c,
+       #2c1b18) — same hue, different position, so the sitewide ground had no
+       colour of its own anywhere a component wasn't actively drawing one.
+       The second corner now leans toward the blueprint-blue this file's own
+       header already claims ("blueprint accents") instead of repeating the
+       first corner's warmth, so the base page itself carries a warm/cool
+       duality everywhere, not just landing. Still dark, still no violet. */
     background-image:
       radial-gradient(120ch 80ch at 18% -10%, #2b221c 0%, transparent 60%),
-      radial-gradient(90ch 60ch at 100% 0%, #2c1b18 0%, transparent 55%),
+      radial-gradient(90ch 60ch at 100% 0%, #182234 0%, transparent 58%),
       linear-gradient(to right, rgba(245, 237, 228, 0.022) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(245, 237, 228, 0.022) 1px, transparent 1px);
     background-size:

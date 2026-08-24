@@ -1,0 +1,26 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "codex-grid-background",
+        "value": "*",
+        "files": [
+          "web/src/index.css"
+        ],
+        "createdAt": "2026-08-22T05:32:43.094Z",
+        "reason": "the body's hairline grid is the drafting table's own ruling, not decoration — the file's own header comment names the whole system 'A dark drafting table under a lamp... hairline linework, blueprint accents' and this exact grid is what makes text and cards read as resting on that table. It is the literal blueprint/measurement surface the finding's own carve-out describes, present since before this session; only the corner gradient colors beside it changed this pass."
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "web/src/features/landing/Landing.tsx"
+        ],
+        "createdAt": "2026-08-22T05:57:01.128Z",
+        "reason": "the Close section's original foil-stamped wordmark: background-clip:text simulating a raking-light pass over metallic ink, the same physical device .foil already documents elsewhere in index.css for card hover sweeps — a background watermark, not a heading using gradient in place of real hierarchy. Restored to its pre-session state after a same-session neubrutalist rewrite (rejected by the user) was reverted."
+      }
+    ]
+  }
+}
