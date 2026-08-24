@@ -168,6 +168,85 @@ export function Magnetic({
 }
 
 /**
+ * Depth-of-field parallax. The wrapped layer drifts opposite the cursor,
+ * scaled by `depth` — the thing this simulates is a camera whose focal plane
+ * sits behind the page: as the "eye" (cursor) shifts, closer objects swing
+ * more than the plane the eye is looking past, exactly the way a foreground
+ * subject shifts against a background when you move your head.
+ *
+ * A global normalized pointer position (`-1..1` on each axis, relative to
+ * the viewport centre) rather than `Magnetic`'s local proximity-to-cursor:
+ * `Magnetic` is one control reaching toward your pointer; this is a whole
+ * layer of one shared scene, so every `Parallax` instance on screen has to
+ * read the SAME pointer coordinate to move in a way that reads as one
+ * coherent depth stack rather than several independent things each
+ * noticing the cursor on their own.
+ *
+ * Same leaf-content-only rule as everything else in this file: wrap the art
+ * itself, never a section that has a `position: sticky` or `fixed`
+ * descendant inside it.
+ */
+export function Parallax({
+  children,
+  className,
+  depth = 1,
+  strength = 16,
+}: {
+  children: ReactNode
+  className?: string
+  /** Relative distance from the focal plane. Bigger = reads as closer. */
+  depth?: number
+  /** Max travel, in px, at depth 1. */
+  strength?: number
+}) {
+  const el = useRef<HTMLDivElement>(null)
+  const still = useReducedMotion()
+
+  useEffect(() => {
+    const node = el.current
+    if (!node) return
+    if (still || coarse()) return
+
+    let raf = 0
+    let targetX = 0
+    let targetY = 0
+    let curX = 0
+    let curY = 0
+
+    const onMove = (e: PointerEvent) => {
+      const nx = (e.clientX / window.innerWidth - 0.5) * 2
+      const ny = (e.clientY / window.innerHeight - 0.5) * 2
+      targetX = nx * strength * depth
+      targetY = ny * strength * depth
+    }
+
+    const tick = () => {
+      // Eased toward the target rather than snapped to it, same smoothing
+      // constant as `VelocityTilt` — the layer trails the cursor by a beat,
+      // which is what makes it read as a heavy, physical plane rather than
+      // type glued to the pointer.
+      curX += (targetX - curX) * 0.08
+      curY += (targetY - curY) * 0.08
+      node.style.transform = `translate3d(${curX.toFixed(2)}px, ${curY.toFixed(2)}px, 0)`
+      raf = requestAnimationFrame(tick)
+    }
+
+    window.addEventListener('pointermove', onMove, { passive: true })
+    raf = requestAnimationFrame(tick)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('pointermove', onMove)
+    }
+  }, [depth, strength, still])
+
+  return (
+    <div ref={el} className={className} style={{ willChange: 'transform' }}>
+      {children}
+    </div>
+  )
+}
+
+/**
  * The landing page's one call to action, used at the top and at the bottom.
  *
  * There used to be two different buttons on this page: the app's bevelled

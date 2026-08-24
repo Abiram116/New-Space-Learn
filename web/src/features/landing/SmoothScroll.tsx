@@ -26,6 +26,20 @@ import Lenis from 'lenis'
 
 gsap.registerPlugin(ScrollTrigger)
 
+/**
+ * The live Lenis instance, for anyone downstream who needs to drive a
+ * programmatic scroll (a magnetic snap, a "jump to section" link) through
+ * the SAME smoothing engine the page's own scrolling uses. A raw
+ * `window.scrollTo` would fight Lenis's virtual scroll position rather than
+ * animating it, producing a stutter or a snap-back.
+ *
+ * A mutable singleton rather than context, matching `attractor` in
+ * `wow.tsx` — the instance is owned by one `useEffect` here and only ever
+ * read elsewhere, so a full context provider would be ceremony around a
+ * value that already has exactly one writer.
+ */
+export const lenisRef: { current: Lenis | null } = { current: null }
+
 export function SmoothScroll({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -42,6 +56,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     })
 
     lenis.on('scroll', ScrollTrigger.update)
+    lenisRef.current = lenis
 
     const raf = (time: number) => {
       // GSAP's ticker is in seconds, Lenis expects milliseconds.
@@ -53,6 +68,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     gsap.ticker.lagSmoothing(0)
 
     return () => {
+      lenisRef.current = null
       gsap.ticker.remove(raf)
       lenis.destroy()
       gsap.ticker.lagSmoothing(500, 33)

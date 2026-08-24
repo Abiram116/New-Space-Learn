@@ -112,34 +112,15 @@
         align-items: center;
         gap: 22px;
       }
-      /* The mark, drawn rather than loaded: a stacked set of cards on a table,
-         which is the product's own object. */
-      #boot .boot-mark {
-        position: relative;
-        width: 54px;
-        height: 54px;
-      }
-      #boot .boot-mark i {
-        position: absolute;
-        inset: 0;
-        border-radius: 9px;
-        border: 1.5px solid #3b3028;
-        background: linear-gradient(180deg, #352b24, #262119);
-        animation: bootDeal 1.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-      }
-      #boot .boot-mark i:nth-child(1) { animation-delay: 0s; }
-      #boot .boot-mark i:nth-child(2) { animation-delay: 0.14s; }
-      #boot .boot-mark i:nth-child(3) {
-        animation-delay: 0.28s;
-        border-color: rgba(255, 90, 60, 0.55);
-        background: linear-gradient(180deg, #ff8b76, #ff5a3c);
-      }
-      @keyframes bootDeal {
-        0%   { transform: translate(0, 0) rotate(0deg); opacity: 0.35; }
-        35%  { transform: translate(-7px, -9px) rotate(-7deg); opacity: 1; }
-        70%  { transform: translate(6px, -4px) rotate(5deg); opacity: 1; }
-        100% { transform: translate(0, 0) rotate(0deg); opacity: 0.35; }
-      }
+      /* No standalone mark above the wordmark any more — two earlier
+         passes here (a card deal, then a four-corner viewfinder) both got
+         replaced for the same underlying reason: this is a product for
+         students, and both read as borrowed objects (a card trick, a
+         camera or gun sight) rather than the product's own. What's left
+         below draws the loading state entirely out of the pencil that
+         also IS the live cursor (`DraftingCursor.tsx`) — the ruled
+         progress line is the page, and a nib actually drawing it is the
+         one mark this screen needs. */
       #boot .boot-word {
         font-family: ui-sans-serif, system-ui, sans-serif;
         font-size: 11px;
@@ -149,20 +130,38 @@
         color: #9c8b80;
       }
       /* A ruled progress line rather than a spinner: a spinner says "busy",
-         a filling rule says "getting there", and this is a finite wait. */
+         a filling rule says "getting there", and this is a finite wait.
+         The tick marks are new — a plain flat track read as generic; a
+         ruled one ties the bar to the same drafting-instrument vocabulary
+         as the mark above it instead of sitting next to it unrelated. */
       #boot .boot-rule {
         width: 132px;
-        height: 2px;
-        border-radius: 2px;
-        background: #3b3028;
+        height: 3px;
+        border-radius: 1px;
+        background:
+          repeating-linear-gradient(
+            to right,
+            rgba(245, 237, 228, 0.22) 0,
+            rgba(245, 237, 228, 0.22) 1px,
+            transparent 1px,
+            transparent 11px
+          ),
+          #2a2119;
         overflow: hidden;
       }
+      /* The fill is a wedge, not a rectangle: `clip-path` tapers its
+         leading edge to a point, so the shape reading the sweep is a
+         chisel-tip nib actually drawing the rule as it travels rather
+         than a generic bar scanning across it. Same element the old
+         rectangular fill was — nothing new to clip against `.boot-rule`'s
+         own `overflow: hidden`, which still has to stay so the sweep can
+         run past both ends without a visible bar hanging off them. */
       #boot .boot-rule span {
         display: block;
         height: 100%;
         width: 40%;
-        border-radius: 2px;
         background: #ff5a3c;
+        clip-path: polygon(0 0, 82% 0, 100% 50%, 82% 100%, 0 100%);
         animation: bootSweep 1.35s ease-in-out infinite;
       }
       @keyframes bootSweep {
@@ -170,15 +169,15 @@
         100% { transform: translateX(330%); }
       }
       @media (prefers-reduced-motion: reduce) {
-        #boot .boot-mark i,
-        #boot .boot-rule span { animation: none; }
-        #boot .boot-mark i { opacity: 1; }
-        #boot .boot-rule span { width: 100%; }
+        #boot .boot-rule span {
+          animation: none;
+          width: 100%;
+          clip-path: none;
+        }
       }
     </style>
     <div id="boot" role="status" aria-live="polite" aria-label="Loading Space Learn">
       <div class="boot-inner">
-        <div class="boot-mark"><i></i><i></i><i></i></div>
         <div class="boot-word">Space Learn</div>
         <div class="boot-rule"><span></span></div>
       </div>

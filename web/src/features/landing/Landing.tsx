@@ -1,46 +1,37 @@
 /**
- * Landing — one continuous film, not a stack of sections.
+ * Landing — a hero, four typographic statements, then a close.
  *
- * Two structural rules, both learned the hard way:
+ * There used to be a single continuous scroll-jacked "film" here, built
+ * around one physiology example. It staged a fictional student's document to
+ * demonstrate the product instead of showing the product's own interface, so
+ * it came out. Two more attempts at what should replace it — a subject-by-
+ * subject demo, then a set of scroll-locked full-bleed colour panels copied
+ * from an unrelated reference — both missed too. `FeatureType.tsx` is the
+ * fourth: no scene, no borrowed look, four real capabilities stated directly
+ * at display scale, locked in one at a time by the same `position: sticky`
+ * mechanism `Close` (below) already uses. See `FeatureType.tsx`'s header for
+ * the actual reasoning; this one just wires it in.
  *
- * 1. THE LIGHT IS ONE LIGHT. Every section used to carry its own radial-gradient
- *    "lamp" inside an `overflow-hidden` box, so the gradient was clipped at each
- *    section boundary and left a hard horizontal seam across the page. There is
- *    now exactly one `<Lamp/>`, fixed to the viewport, behind everything. Never
- *    add a per-section background again — that is what made it look cheap.
- *
- * 2. IT IS ONE OBJECT. The page does not list features. A single page of the
- *    student's own material enters, and then keeps becoming the next thing:
- *    the passage that answered you, the deck built from it, the test that comes
- *    back. Nothing new ever appears; you only watch the same thing transform.
- *    That IS the product's claim, so the page argues by demonstration rather
- *    than by bullet.
- *
- * No numbered section markers. The order is felt through the transformation,
- * and labelling it "01 / RETRIEVAL" turned a film into a brochure.
+ * One structural rule survives every rebuild, because it's true regardless of
+ * what fills this section: THE LIGHT IS ONE LIGHT. Every section used to
+ * carry its own radial-gradient "lamp" inside an `overflow-hidden` box, so
+ * the gradient was clipped at each section boundary and left a hard
+ * horizontal seam across the page. There is exactly one `<Lamp/>`, fixed to
+ * the viewport, behind everything. Never give a section its own background
+ * again — that's what made the page look cheap.
  *
  * Every claim here is one the build can keep. No usage numbers, customers,
  * testimonials or benchmarks appear anywhere, because none exist.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { prefetchAuthChunks } from '../../routes/lazyRoutes'
 import { Link } from 'react-router-dom'
-import { Icon } from '../../components/ui/Icon'
-import { Logo, LogoMark } from '../../components/ui/Logo'
-import { cn } from '../../lib/cn'
-import { mapRange, useScrollProgress } from '../../lib/useScrollProgress'
+import { Logo } from '../../components/ui/Logo'
+import { FeatureType } from './FeatureType'
 import { HeroReveal } from './HeroReveal'
-import { EASE_CSS } from './language'
 import { SmoothScroll } from './SmoothScroll'
-import {
-  attractor,
-  CTA,
-  DraftingCursor,
-  MaskedLines,
-  SourceDrift,
-  VelocityTilt,
-} from './wow'
+import { attractor, CTA, DraftingCursor, SourceDrift } from './wow'
 
 export function Landing() {
   // The warm-up ping moved to AuthProvider (mounts above the router, fires on
@@ -52,6 +43,22 @@ export function Landing() {
   // the click comes from. Warming them on idle means the split costs a
   // signed-in session 4KB less on every load and costs a visitor nothing.
   useEffect(prefetchAuthChunks, [])
+
+  // THE HANDOFF. `FeatureType` now measures its own scroll room (see its
+  // header: a `172svh` wrapper with a `sticky top-0 h-[100svh]` child) and
+  // reports `closeProgress` up through this callback, rather than `Landing`
+  // owning a separate spacer element for the same purpose. Two things used
+  // to live in two different places — the pinned content and the scroll
+  // distance that measures it — which is what let them drift out of sync
+  // (a spacer shorter than the viewport silently zeroed `closeProgress` for
+  // the whole page; see git blame here for the exact math). One component
+  // owning both closes that gap structurally instead of by convention.
+  //
+  // `Close` stays `position: fixed` and outside `FeatureType` entirely —
+  // it isn't part of what's being measured, only what's driven by the
+  // measurement — so it's still rendered here as a sibling, fed the same
+  // number.
+  const [closeProgress, setCloseProgress] = useState(0)
 
   return (
     <SmoothScroll>
@@ -68,9 +75,9 @@ export function Landing() {
             fallbackSrc="/story.mp4"
             poster="/story-poster.webp"
           />
-          <Film />
-          <Close />
+          <FeatureType onCloseProgress={setCloseProgress} />
         </div>
+        <Close progress={closeProgress} />
       </div>
     </SmoothScroll>
   )
@@ -306,630 +313,290 @@ function TopBar() {
   )
 }
 
-/* ── The pack, and going through it ────────────────────────────────────
-   The card is not decoration and not a logo plate. It is a topic you have
-   not opened yet — your own uploads, sealed. So the transition is not the
-   card sliding away to reveal a headline underneath; the camera goes THROUGH
-   it. The pack scales past the viewport and you come out inside, which is
-   the literal claim: everything after this point is what was in there. */
-
-/**
- * One pinned take, from sealed pack to finished test.
- *
- * This used to be two separate pinned sections back to back, and that is
- * precisely what made the page feel like slides: each pinned scene is a
- * self-contained full-screen composition, so every boundary between them
- * reads as a cut. Merged into a single sticky viewport, the pack fly-through
- * and the transformation are one continuous camera move with no seam to see.
- *
- * Ranges overlap deliberately — the next thing starts arriving before the
- * previous one has finished leaving, which is the difference between a
- * dissolve and a cut.
- */
-function Film() {
-  const { ref, progress } = useScrollProgress<HTMLDivElement>()
-
-  const sweep = mapRange(progress, 0, 0.07, 0, 1)
-  const through = mapRange(progress, 0.05, 0.17, 0, 1)
-  const inside = mapRange(progress, 0.13, 0.24, 0, 1)
-  const insideOut = mapRange(progress, 0.29, 0.37, 0, 1)
-  const stage = mapRange(progress, 0.32, 0.4, 0, 1)
-
-  // Four beats across the back two-thirds of the take.
-  const BEAT_FROM = 0.38
-  const slot = (i: number) => {
-    const size = (1 - BEAT_FROM) / BEATS.length
-    const start = BEAT_FROM + i * size
-    const end = start + size
-    const inn = mapRange(progress, start, start + size * 0.26, 0, 1)
-    const out = i === BEATS.length - 1 ? 0 : mapRange(progress, end - size * 0.26, end, 0, 1)
-    return inn * (1 - out)
-  }
-  // Whichever beat is actually most visible — not a floor() of raw progress.
-  // The floor flipped the caption at the arithmetic boundary while the old
-  // beat was still the one on screen, so for the length of every crossfade the
-  // label described something you could no longer see.
-  const active = [0, 1, 2, 3].reduce((best, i) => (slot(i) > slot(best) ? i : best), 0)
-
-  // ── Everything originates from one point ──────────────────────────────
-  // The highlighted sentence in the source passage is the origin. Its centre
-  // is measured once laid out, and every beat then GROWS FROM IT rather than
-  // fading in place — the answer, the deck and the quiz all expand out of the
-  // exact spot on the page they were derived from. That is the single mental
-  // image the whole landing exists to leave behind: this all starts from your
-  // material.
-  const stageRef = useRef<HTMLDivElement>(null)
-  const markRef = useRef<HTMLElement>(null)
-  const [origin, setOrigin] = useState({ x: -1, y: -1 })
-
-  useLayoutEffect(() => {
-    const measure = () => {
-      const s = stageRef.current
-      const m = markRef.current
-      if (!s || !m) return
-      const sr = s.getBoundingClientRect()
-      const mr = m.getBoundingClientRect()
-      if (mr.width === 0) return
-      setOrigin({
-        x: mr.left + mr.width / 2 - sr.left,
-        y: mr.top + mr.height / 2 - sr.top,
-      })
-    }
-    measure()
-    // Re-measure after fonts land: the mark moves when the display face swaps
-    // in, and an origin measured against the fallback is wrong by a line.
-    document.fonts?.ready.then(measure)
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
-
-  // Feed the dust. It pulls toward the origin while the page is actively
-  // producing something from it, and lets go once the deck is out.
-  useEffect(() => {
-    const s = stageRef.current
-    if (!s || origin.x < 0) {
-      attractor.pull = 0
-      return
-    }
-    const sr = s.getBoundingClientRect()
-    attractor.x = sr.left + origin.x
-    attractor.y = sr.top + origin.y
-    attractor.pull = Math.max(slot(0), slot(1)) * stage
-    return () => {
-      attractor.pull = 0
-    }
-  })
-
-  // Colour progression. The room takes the temperature of the surface you are
-  // reading — warm for the page, mint where the citation is, pink at the deck,
-  // orange at the quiz. Written to the root so the fixed lamp can pick it up
-  // without the two components having to know about each other, and only while
-  // the stage is actually on screen.
-  useEffect(() => {
-    const root = document.documentElement
-    const TINTS = ['51 36 29', '18 62 62', '62 26 44', '64 40 20']
-    root.style.setProperty('--tint', stage > 0.35 ? TINTS[active] : TINTS[0])
-    return () => {
-      root.style.removeProperty('--tint')
-    }
-  }, [active, stage])
-
-  return (
-    <div ref={ref} className="relative h-[620svh]">
-      <div className="sticky top-0 flex h-[100svh] items-center justify-center overflow-hidden">
-        {/* The sealed pack. Scales past the frame rather than shrinking away —
-            you are moving toward it, not it away from you. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center"
-          style={{
-            opacity: 1 - through,
-            transform: `scale(${1 + through * 7})`,
-            filter: `blur(${through * 7}px)`,
-          }}
-        >
-          <div
-            className="relative h-[62svh] max-h-[560px] w-[min(78vw,440px)] overflow-hidden rounded-[26px]"
-            style={{
-              background:
-                'linear-gradient(150deg,#3a2620 0%,#2b1e1a 30%,#41291f 55%,#2a1d19 78%,#3c2721 100%)',
-              boxShadow:
-                'inset 0 2px 0 rgba(255,237,220,0.18), inset 0 -40px 80px rgba(0,0,0,0.55), 0 60px 120px -30px rgba(0,0,0,0.95)',
-            }}
-          >
-            <div
-              aria-hidden
-              className="absolute inset-[-30%]"
-              style={{
-                background:
-                  'linear-gradient(115deg,transparent 40%,rgba(255,197,61,0.22) 46%,rgba(53,214,232,0.28) 51%,rgba(255,61,139,0.22) 56%,transparent 62%)',
-                transform: `translateX(${-55 + sweep * 110}%)`,
-              }}
-            />
-            <div className="relative flex h-full flex-col items-center justify-center gap-4 px-8 text-center">
-              <LogoMark size={72} />
-              <span className="nameplate text-[38px] leading-[0.9] text-ink">Space Learn</span>
-              <span className="setcode">Everything you uploaded · still sealed</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Inside. Arrives from further away than the pack left, so the two
-            movements read as one continuous push rather than a cut. Then it
-            recedes as the work itself comes forward. */}
-        <div
-          className="pointer-events-none absolute inset-x-0 top-1/2 z-10"
-          style={{
-            opacity: inside * (1 - insideOut),
-            transform: `translateY(-50%) scale(${0.82 + inside * 0.18 + insideOut * 0.5})`,
-            filter: `blur(${insideOut * 10}px)`,
-          }}
-        >
-          <h2 className="nameplate -mx-[8vw] select-none text-center leading-[0.78] tracking-[-0.02em] text-ink">
-            <span className="block -rotate-[1.5deg]">
-              <span className="text-[clamp(64px,15vw,230px)]">One</span>{' '}
-              <span className="align-top text-[clamp(22px,3.6vw,58px)] text-ink-3">
-                conversation.
-              </span>
-            </span>
-            <span className="block rotate-[1deg] text-brand">
-              <span className="align-top text-[clamp(18px,3vw,48px)] text-ink-3">
-                everything it
-              </span>{' '}
-              <span className="text-[clamp(64px,15vw,230px)]">becomes.</span>
-            </span>
-          </h2>
-        </div>
-
-        {/* …and the same take keeps rolling into the work itself. Same sticky
-            viewport, so there is no boundary between the promise and the proof. */}
-        {/* CAMERA. The scene is very slightly pushed in and panned across the
-            length of the take — about 3% of zoom and a dozen pixels of drift,
-            far too little to notice as movement and just enough that the shot
-            is never geometrically still. That is the difference between
-            watching a scene and watching a screenshot of one.
-
-            Applied to the scene's CONTENT, never to a page-level wrapper: a
-            transform on an ancestor re-parents `position: fixed` and
-            `sticky`, which would unpin every scene on the page and stop the
-            lamp covering the viewport. A camera has to move inside the frame,
-            not move the frame. */}
-        <div
-          className="absolute inset-0 z-10 flex flex-col justify-center"
-          style={{
-            opacity: stage,
-            transform:
-              `scale(${(0.94 + stage * 0.06 + progress * 0.03).toFixed(4)}) ` +
-              `translate3d(${((progress - 0.5) * -16).toFixed(2)}px, ${((progress - 0.5) * -11).toFixed(2)}px, 0)`,
-          }}
-        >
-          <div className="mx-auto w-full max-w-5xl px-5">
-            {/* The standing headline. It was lost when the pack scene and the
-                transformation were merged into one take, which left the stage
-                floating in ~40svh of dead space — the blank band that made the
-                bottom of this scene look unfinished. It also gives the four
-                beats something to be an answer to. */}
-            {/* Wiped in line by line rather than faded. At display size a fade
-                makes type appear; a wipe makes it arrive. */}
-            <MaskedLines
-              className="nameplate mb-7 block max-w-2xl text-[clamp(24px,3.8vw,46px)] leading-[0.94]"
-              progress={stage}
-              lines={[
-                'Watch one page become',
-                <span key="b" className="text-brand">
-                  everything you'll be tested on.
-                </span>,
-              ]}
-            />
-
-            {/* The stage carries the scroll's inertia — it skews with the
-                direction of travel and settles when you stop. Safe to wrap
-                here because nothing inside is sticky or fixed. */}
-            <VelocityTilt className="relative h-[42svh] min-h-[270px]">
-              <div ref={stageRef} className="absolute inset-0">
-                {/* The SHEET PERSISTS. It is one element for all four beats, so
-                    the paper never leaves — only what is printed on it changes.
-                    Beats used to be four separate panels cross-fading, which
-                    reads as one thing REPLACING another; a page that stays while
-                    its contents transform is the actual claim being made. */}
-                <div
-                  className="leaf absolute inset-0"
-                  style={{
-                    // Driven off the stage, NOT off a max() of the beat slots.
-                    // With max() the sheet bottomed out to ~0.09 halfway through
-                    // every crossfade — the paper blinked out between beats,
-                    // which is the exact opposite of "the page persists". This
-                    // way it is simply present for the whole take, dimming to a
-                    // third only under the deck, because those cards were pulled
-                    // OUT of that page and it has to still be lying there.
-                    opacity: stage * (1 - slot(2) * 0.66),
-                  }}
-                />
-                <Sheet o={slot(0)} origin={origin} markRef={markRef} />
-                <AnswerStage o={slot(1)} origin={origin} />
-                <DeckStage o={slot(2)} origin={origin} />
-                <TestStage o={slot(3)} origin={origin} />
-
-                {/* No drawn threads. Literal curved lines from the sentence to
-                    the artifacts looked like clip-art over the type — the
-                    traceability idea was right, the rendering was not. It is
-                    already carried better and more quietly by the fact that
-                    every beat SCALES OUT OF the highlighted sentence, and by
-                    the dust leaning toward it. Motion states the relationship;
-                    it does not need to be annotated. */}
-              </div>
-            </VelocityTilt>
-
-            {/* Says what you're looking at. The only thing that tells you the
-                page has moved on — no numbered markers. */}
-            <div className="mt-7 flex min-h-[3.5rem] flex-col gap-1.5">
-              <span className="nameplate text-[17px] text-ink">{BEATS[active].at}</span>
-              <span className="max-w-lg text-[13.5px] leading-relaxed text-ink-3">
-                {BEATS[active].note}
-              </span>
-            </div>
-
-            <div className="mt-5 flex gap-1.5">
-              {BEATS.map((b, i) => (
-                <span
-                  key={b.at}
-                  className={cn(
-                    'h-px flex-1 transition-colors duration-300',
-                    i === active ? 'bg-brand' : 'bg-line',
-                  )}
-                  style={{ transitionTimingFunction: EASE_CSS }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const BEATS = [
-  { at: 'The page you uploaded', note: 'Split into passages and indexed the moment it lands.' },
-  { at: 'The answer it produced', note: 'Built only from passages your document actually contains.' },
-  { at: 'The deck it turned into', note: 'One conversation, a whole deck — each card keeps its page.' },
-  { at: 'The test it comes back as', note: 'Wrong answers point at the paragraph that would have fixed them.' },
-]
-
-type Origin = { x: number; y: number }
-
-/**
- * Shared frame for a beat.
- *
- * Beats do not fade in place — they SCALE OUT OF THE ORIGIN. Setting
- * `transform-origin` to the measured centre of the highlighted sentence means
- * the answer, the deck and the quiz each visibly expand from the exact spot on
- * the page they were derived from. Opacity still rides along, because without
- * it the outgoing beat would sit behind the incoming one at full strength, but
- * the movement is what the eye reads, and the movement says "this came from
- * there".
- */
-function Beat({
-  o,
-  origin,
-  children,
-}: {
-  o: number
-  origin?: Origin
-  children: React.ReactNode
-}) {
-  const hasOrigin = origin && origin.x >= 0
-  return (
-    <div
-      className="absolute inset-0"
-      style={{
-        opacity: o,
-        transformOrigin: hasOrigin ? `${origin.x}px ${origin.y}px` : '50% 50%',
-        transform: `scale(${(0.82 + o * 0.18).toFixed(4)})`,
-        pointerEvents: o > 0.5 ? 'auto' : 'none',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
-function Sheet({
-  o,
-  origin,
-  markRef,
-}: {
-  o: number
-  origin?: Origin
-  markRef?: React.Ref<HTMLElement>
-}) {
-  return (
-    <Beat o={o} origin={origin}>
-      {/* No `leaf` class here — the sheet behind these beats is a single
-          persistent element, so each beat only prints ON it. */}
-      <div className="h-full overflow-hidden py-6 pl-[clamp(16px,3vw,34px)]">
-        <div className="setcode mb-4">physiology-wk6.pdf · p.31</div>
-        <p className="max-w-2xl text-[15px] leading-[2] text-ink-3">
-          The descending limb is permeable to water but not to salt, so fluid
-          leaving it grows steadily more concentrated.{' '}
-          {/* THE ORIGIN. Everything the page produces is measured from the
-              centre of this element and grows out of it. */}
-          <mark ref={markRef} className="bg-sky-soft px-1 text-sky-deep">
-            The ascending limb reverses the arrangement: it pumps salt out and
-            holds water in.
-          </mark>{' '}
-          Running the two side by side multiplies a modest gradient into a steep
-          one along the length of the loop.
-        </p>
-      </div>
-    </Beat>
-  )
-}
-
-function AnswerStage({ o, origin }: { o: number; origin?: Origin }) {
-  return (
-    <Beat o={o} origin={origin}>
-      <div className="h-full py-6 pl-[clamp(16px,3vw,34px)]">
-        <div className="setcode mb-3">Answer</div>
-        <p className="max-w-2xl text-[16px] leading-[1.8] text-ink">
-          Because the two limbs do opposite jobs. One sheds water, the other
-          pumps out salt — stacked against each other they turn a small
-          difference into a steep one.
-        </p>
-        <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-sky/30 bg-sky-soft px-3 py-1.5">
-          <Icon name="doc" size={12} className="text-sky-deep" />
-          <span className="setcode text-sky-deep">physiology-wk6.pdf · p.31</span>
-        </div>
-      </div>
-    </Beat>
-  )
-}
-
-const CARDS = [
-  'What does the descending limb do?',
-  'What does the ascending limb do?',
-  'Why does the arrangement matter?',
-  'What is countercurrent multiplication?',
-  'Where does the steep gradient form?',
-]
-
-function DeckStage({ o, origin }: { o: number; origin?: Origin }) {
-  return (
-    <Beat o={o} origin={origin}>
-      <div className="flex h-full items-center justify-center">
-        <div className="relative h-full w-full">
-          {CARDS.map((q, i) => {
-            const mid = (CARDS.length - 1) / 2
-            const off = i - mid
-            return (
-              // Two nested boxes on purpose: the OUTER one carries the
-              // scroll-driven fan, the INNER one carries the hover lift. They
-              // both animate `transform`, so sharing a node would mean the
-              // scroll value overwrites the hover value every frame.
-              <div
-                key={q}
-                className="absolute left-1/2 top-1/2 w-[min(56vw,220px)]"
-                style={{
-                  height: 'min(34svh,230px)',
-                  // The deck LIFTS OFF the sheet rather than appearing on it:
-                  // it rises as it fans, so the cards read as having been
-                  // pulled out of the page you were just reading.
-                  transform: `translate(-50%,-50%) translateX(${off * 34 * o}px) translateY(${(Math.abs(off) * -7 - 26) * o}px) rotate(${off * 6 * o}deg)`,
-                  zIndex: 10 - Math.abs(Math.round(off)),
-                }}
-              >
-                <div
-                  className="cardstock group flex h-full w-full flex-col justify-between rounded-xl p-4 transition-transform duration-300 hover:-translate-y-2.5 hover:rotate-[-1.5deg]"
-                  style={{ transitionTimingFunction: EASE_CSS }}
-                >
-                  <span className="setcode text-sun">Card {i + 1}</span>
-                  <p className="text-[13.5px] font-semibold leading-snug text-ink">{q}</p>
-                  <span className="setcode transition-colors group-hover:text-sun-deep">
-                    p.31 · due today
-                  </span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </Beat>
-  )
-}
-
-function TestStage({ o, origin }: { o: number; origin?: Origin }) {
-  const options = [
-    'It pumps salt out and holds water in',
-    'It absorbs water and holds salt in',
-    'It is impermeable to both',
-    'It reverses only under load',
-  ]
-  return (
-    <Beat o={o} origin={origin}>
-      <div className="h-full py-6 pl-[clamp(16px,3vw,34px)]">
-        <div className="setcode mb-3">Question 2 of 5</div>
-        <p className="max-w-2xl text-[15.5px] font-semibold leading-snug text-ink">
-          What does the ascending limb of the loop of Henle do?
-        </p>
-        <ul className="mt-4 flex max-w-xl flex-col gap-2">
-          {options.map((opt, i) => (
-            <li
-              key={opt}
-              className={cn(
-                'flex items-center gap-2.5 rounded-[10px] border px-3 py-2 text-[13px]',
-                // Options lift on hover. A quiz answer is a thing you pick up,
-                // so it should move under the cursor before you commit.
-                'transition-transform duration-200 hover:-translate-y-0.5',
-                i === 0
-                  ? 'border-mint/40 bg-mint-soft text-mint-deep'
-                  : 'border-line text-muted hover:border-line-dash',
-              )}
-              style={{ transitionTimingFunction: EASE_CSS }}
-            >
-              <span
-                className={cn(
-                  'grid h-4 w-4 shrink-0 place-items-center rounded-full border',
-                  i === 0 ? 'border-mint text-mint' : 'border-line-dash',
-                )}
-              >
-                {i === 0 && <Icon name="check" size={10} />}
-              </span>
-              {opt}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Beat>
-  )
-}
-
 /* ── Close ─────────────────────────────────────────────────────────────
+   A FIXED OVERLAY, RISING WITH SCROLL — not a pinned scroll section with
+   its own height (three earlier versions each gave it a wrapper height —
+   220svh, then 150svh, then a boolean-triggered instant transition with
+   none at all — and each missed differently: the first two left leftover
+   scroll distance mapped to nothing happening; the boolean version arrived
+   all at once instead of tracking the gesture that was supposed to drive
+   it, reported live as "it should be scroll trigger linked... not come up
+   fully at once").
+
+   The fix that actually holds both properties at once: `Close` itself is
+   `position: fixed` and owns no height of its own — so there's still
+   nothing here to create a dead-scroll gap — but its entrance is driven by
+   a CONTINUOUS `progress` value (0→1), not a boolean. `Landing()` builds
+   that value from a plain spacer div sized to exactly the reveal distance
+   (see there), so scrolling through that spacer scrubs this panel up from
+   `translateY(100%)` to `0%` in lockstep, the way the reference this was
+   built against actually behaves. Reaching `progress === 1` is the same
+   moment as reaching the real bottom of the page's scrollable content —
+   this is the last thing in document flow — which is what makes "no more
+   scroll down beyond that" true with no extra clamping logic: there's
+   nowhere further to go.
+
    The wordmark is set on ONE line and sits in the band above the figure's
    head rather than behind its body. Stacked over two lines it was buried:
-   the figure covered the middle of both words and neither read. One line,
-   higher up, and the whole thing is legible with the figure crossing only
-   its lower edge. */
+   the figure covered the middle of both words and neither read. */
 
-function Close() {
-  const { ref, progress } = useScrollProgress<HTMLDivElement>()
+function Close({ progress }: { progress: number }) {
+  // "Landed" — close enough to fully revealed that the panel reads as
+  // settled rather than still arriving. Drives the things that should
+  // happen ONCE, after the scrub finishes, not continuously across it: the
+  // ambient tint, the foil sweep, and whether the panel is interactive.
+  // 0.97 rather than a strict 1 because scroll rarely lands on an exact
+  // integer and "almost entirely revealed" should count as landed.
+  const landed = progress >= 0.97
+  const hidden = progress <= 0.001
 
-  // Front-loaded on purpose. These used to ramp across the first quarter of a
-  // 220svh section, so the opening screen of the close was simply empty — a
-  // large blank hold that read as the page having ended early.
-  const copy = mapRange(progress, 0, 0.12, 0, 1)
-  const press = mapRange(progress, 0.06, 0.55, 0, 1)
-  // Starts only once this section is genuinely pinned. Beginning at ~0 meant
-  // the figure was already climbing while the previous scene still owned the
-  // screen, so its head appeared over the fold as a stray second cutout.
-  const rise = mapRange(progress, 0.08, 0.42, 0, 1)
+  useEffect(() => {
+    if (!landed) {
+      document.documentElement.style.removeProperty('--tint')
+      return
+    }
+    document.documentElement.style.setProperty('--tint', '70 30 14')
+    return () => {
+      document.documentElement.style.removeProperty('--tint')
+    }
+  }, [landed])
 
   return (
-    <div ref={ref} className="relative h-[220svh]">
-      <div className="sticky top-0 h-[100svh] overflow-hidden">
-        {/* Copy and figure get SEPARATE BANDS — they are never stacked.
-            Layering them behind a scrim put the "Start free" button squarely
-            on the reader's head, and no amount of scrim fixes type sitting on
-            a face. A two-column grid guarantees they cannot collide: copy
-            left, figure right. Below `lg` the grid stacks to two rows, copy
-            above, figure below — still no overlap. */}
-        <div
-          className="relative z-30 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1fr_1fr] lg:grid-rows-1 lg:items-center lg:gap-8"
-        >
-          <div
-            className="flex flex-col items-center gap-5 pt-[11svh] text-center lg:items-start lg:pt-0 lg:text-left"
-            style={{ opacity: copy, transform: `translateY(${(1 - copy) * 22}px)` }}
-          >
-            <h2 className="nameplate max-w-lg text-[clamp(30px,5vw,66px)] leading-[0.9]">
-              Bring one subject
-              <br />
-              <span className="text-brand">you're behind on.</span>
-            </h2>
-            <p className="max-w-sm text-[15px] leading-relaxed text-ink-3">
-              One PDF is enough to see whether this works the way you study.
-              Nothing to configure first.
-            </p>
-            <CTA to="/signup">Start free</CTA>
-          </div>
-
-          {/* The figure owns the second band and sits on the floor of it.
-              Parked a full 100% below its own box until the rise starts, so it
-              is completely out of frame rather than poking a head above the
-              fold during the scene before this one — that early peek read as a
-              second, smaller cutout. */}
-          <div
-            className="relative flex min-h-0 items-end justify-center lg:h-full lg:justify-end"
-            style={{ transform: `translateY(${(1 - rise) * 100}%)` }}
-          >
-            <img
-              src="/student-reading.webp"
-              alt=""
-              aria-hidden
-              className="max-h-full max-w-full select-none object-contain object-bottom"
-            />
-          </div>
+    // `inert` only while truly untouched (`progress` at 0) — not just
+    // `pointer-events: none` — so the CTA and the GitHub link aren't
+    // reachable by keyboard Tab before any of the panel has scrolled into
+    // view. Once scrubbing has started at all, the visible portion is
+    // real and should be interactive, matching how the reference site's
+    // own scroll-linked reveal behaves.
+    <div
+      className="fixed inset-0 z-30 overflow-hidden"
+      style={{
+        // Continuous, not transitioned — `progress` already comes from
+        // Lenis-smoothed scroll (see `useScrollProgress`), so mapping it
+        // straight to `translateY` is what makes this track the gesture
+        // 1:1 instead of catching up to it after the fact.
+        transform: `translateY(${((1 - progress) * 100).toFixed(2)}%)`,
+        // Bold and orange, on purpose — asked to specifically NOT read as a
+        // continuation of the page's warm-graphite canvas. Anchored
+        // bottom-right (roughly where the figure stands) so the brightest
+        // orange sits behind the art, while the copy column on the left
+        // rests on the darker ember end of the same gradient — checked at
+        // 15:1+ for the existing light ink-on-dark text there, so nothing
+        // needed to change colour to stay legible; only the CTA button,
+        // whose fill is this same brand orange, benefits from sitting on
+        // the darker side rather than blending into a matching background.
+        background:
+          'radial-gradient(150ch 115ch at 88% 72%, #ff6b45 0%, #b23a1b 42%, #1f0d08 100%)',
+        boxShadow: `0 ${(40 * progress).toFixed(0)}px ${(100 * progress).toFixed(0)}px -30px rgba(0,0,0,${(0.55 * progress).toFixed(2)})`,
+      }}
+      aria-hidden={hidden}
+      {...(hidden ? ({ inert: '' } as Record<string, string>) : {})}
+    >
+      {/* THE DEPTH CUE. As this panel rises, its top edge is the leading
+          surface sliding up and over whatever was on screen before it —
+          the moment asked to read as "3D depth... at the top edge as it
+          comes on top". A dark gradient hugging that edge, strongest at the
+          midpoint of the scrub and fading out as the panel settles, reads
+          as the edge casting a shadow onto the ground it's passing over
+          rather than a flat sheet with no thickness. `sin(progress * π)`
+          peaks exactly at progress 0.5 and returns to 0 at both ends, so
+          the shadow is absent when the panel is barely visible (nothing
+          to cast a shadow yet) AND absent once fully landed (nothing left
+          to cast it onto). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 z-40 h-24"
+        style={{
+          opacity: Math.sin(Math.min(1, progress) * Math.PI) * 0.8,
+          background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), transparent)',
+        }}
+      />
+      {/* Copy and figure get SEPARATE BANDS — they are never stacked.
+          Layering them behind a scrim put the "Start free" button squarely
+          on the reader's head, and no amount of scrim fixes type sitting on
+          a face. A two-column grid guarantees they cannot collide: copy
+          left, figure right. Below `lg` the grid stacks to two rows, copy
+          above, figure below — still no overlap. */}
+      <div className="relative z-30 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1fr_1.3fr] lg:grid-rows-1 lg:items-center lg:gap-8">
+        {/* Content is no longer independently animated — see the note
+            below the panel's own transform. It's simply part of the
+            panel now, present the instant the slide lands. */}
+        <div className="flex flex-col items-center gap-5 pt-[11svh] text-center lg:items-start lg:pt-0 lg:text-left">
+          <h2 className="nameplate max-w-lg text-[clamp(30px,5vw,66px)] leading-[0.9]">
+            Bring one subject
+            <br />
+            <span className="text-brand">you're behind on.</span>
+          </h2>
+          <p className="max-w-sm text-[15px] leading-relaxed text-ink-3">
+            One PDF is enough to see whether this works the way you study.
+            Nothing to configure first.
+          </p>
+          <CTA to="/signup">Start free</CTA>
         </div>
 
-        {/* Centering and animation live on DIFFERENT elements on purpose. Both
-            used to sit on one node as `translateX(-50%)` in a class and a
-            second `transform` inline — same CSS property, so the inline one
-            silently destroyed the centering and both the wordmark and the
-            figure drifted hundreds of pixels off axis. Flex centers the outer
-            box; the inner box only ever carries the scroll transform. */}
-        <div
-          aria-hidden
-          /* Sits BELOW the copy column, not behind it. At 13svh the stamp's
-             top edge landed around the same y as the CTA, so "Start free"
-             printed straight over the S of SPACE. The copy block is vertically
-             centred, so dropping the stamp to the floor clears it at every
-             viewport height while still leaving the left half of the wordmark
-             in open space beside the figure. */
-          className="pointer-events-none absolute inset-x-0 bottom-[2svh] z-0 flex justify-center"
-          style={{ transform: `scale(${0.95 + press * 0.05})` }}
-        >
-          {/* FOIL STAMP, not an outline and not a mono wireframe.
-              A hairline outline at this scale reads as a placeholder — thin,
-              even, and lifeless. Real foil stamping is the opposite: the ink
-              is only visible where light rakes across it, so the letterform
-              brightens through the middle and falls away at both ends.
+        {/* The figure owns the second band and sits on the floor of it.
+            Unlike copy (below), it rises in on its OWN clock, gated by
+            `landed` rather than the continuous `progress` scrub — asked
+            for directly: once the panel "feels like [a full] screen", the
+            figure should arrive afterward as its own beat, "shinin[g]"
+            in the same spirit as the foil sweep rather than riding the
+            panel's rise in lockstep with everything else.
 
-              That is exactly what a `background-clip: text` gradient does, and
-              it is already this brand's own device (`.foil`). Set in the heavy
-              display face at tight tracking so it reads as one designed
-              lockup rather than spaced-out characters, and the whole sweep
-              travels as you scroll, so the light moves across the metal
-              instead of the type merely fading up. */}
-          <span
-            className="nameplate select-none whitespace-nowrap text-center text-[clamp(38px,11.5vw,196px)] leading-[0.86] tracking-[-0.035em]"
+            Sized up on two axes: the grid column itself is wider than
+            copy's (`1.3fr` vs `1fr`, was an even split), and the image is
+            scaled 1.14× on top of that, anchored to `bottom` so it grows
+            upward off the floor it's already standing on rather than
+            growing from its own centre and floating up.
+
+            No pointer parallax on this element — tried, and asked to drop
+            it: constant motion on the one thing the eye rests on longest
+            here worked against the "picture rises into place, done" beat
+            rather than adding to it. The `filter: drop-shadow` pair stays
+            — `drop-shadow` follows the artwork's actual alpha silhouette
+            rather than its bounding box the way `box-shadow` would, so
+            the shadow reads as genuinely cast BY the figure onto the
+            panel, which is what still sells depth without any motion
+            attached to it.
+
+            No opacity fade either — asked for a plain, complete rise from
+            below the frame, not a cross-fade with a slide riding along.
+            `65svh` (not a small px offset) is what makes that literal:
+            large enough that the resting position starts entirely below
+            this panel's own `overflow-hidden` bounds, so before `landed`
+            the figure isn't invisible because it's transparent, it's
+            invisible because it is genuinely off-screen — the rise is
+            the only thing that ever makes it appear. */}
+        <div className="relative flex min-h-0 items-end justify-center lg:h-full lg:justify-end">
+          <img
+            src="/student-reading.webp"
+            alt=""
+            aria-hidden
+            className="max-h-full max-w-full select-none object-contain object-bottom"
             style={{
-              backgroundImage:
-                'linear-gradient(100deg,' +
-                'rgba(245,237,228,0.02) 18%,' +
-                'rgba(255,197,61,0.10) 34%,' +
-                'rgba(245,237,228,0.20) 46%,' +
-                'rgba(53,214,232,0.10) 57%,' +
-                'rgba(255,90,60,0.07) 68%,' +
-                'rgba(245,237,228,0.02) 84%)',
-              backgroundSize: '260% 100%',
-              backgroundPosition: `${120 - press * 150}% 0`,
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              color: 'transparent',
+              transform: `translateY(${landed ? 0 : 65}svh) scale(1.14)`,
+              transformOrigin: 'bottom',
+              filter:
+                'drop-shadow(0 10px 14px rgba(0,0,0,0.35)) drop-shadow(0 30px 46px rgba(0,0,0,0.45))',
+              // 1300ms still read as quick for a 65svh climb — same
+              // front-loaded-curve issue as the wordmark sweep above.
+              // 2100ms is where the rise itself becomes something to
+              // watch rather than something that's already resolved by
+              // the time it's noticed.
+              transition: 'transform 2100ms var(--ease-out-expo) 150ms',
             }}
-          >
-            Space Learn
-          </span>
+          />
         </div>
+      </div>
+      {/* WHY THE COPY NO LONGER FADES IN ON ITS OWN CLOCK.
+          A first version staggered copy and figure behind the panel — copy
+          160ms in, figure 240ms in, each with its own opacity/transform
+          transition — reasoning that a beat of internal sequencing would
+          read as considered. Live, it read as the opposite: "the
+          background arrives, then separately the text arrives, then
+          separately the figure arrives" was three things happening, not
+          one. Copy stays fixed to that fix — it's simply part of the panel,
+          present the instant the slide lands, carried along by the single
+          `transform` on the outer element. The figure went back to its own
+          clock deliberately (see above): asked for by name, and it isn't
+          the same kind of stagger this note was written to rule out —
+          it's gated on arrival being COMPLETE rather than merely started,
+          same as the foil sweep already was. */}
 
-        {/* No scrim here any more. It existed to keep the headline readable
-            while the copy sat ON TOP of the figure — and its own top edge was
-            a flat full-width band that hid the continuous lamp behind it,
-            which is one of the seams that made the page read as slides. Now
-            that copy and figure occupy separate columns, nothing overlaps, so
-            the scrim has no job and the light runs uninterrupted. */}
+      {/* FOIL STAMP, not an outline and not a mono wireframe. A hairline
+          outline at this scale reads as a placeholder — thin, even, and
+          lifeless. Real foil stamping is the opposite: the ink is only
+          visible where light rakes across it, so the letterform brightens
+          through the middle and falls away at both ends. That is exactly
+          what a `background-clip: text` gradient does, and it is already
+          this brand's own device (`.foil`).
 
-        {/* One mark, bottom right. The page used to end with the wordmark three
-            times over — stamped behind the figure, again as a corner label, and
-            a third time in a footer under it. Repetition at the close reads as
-            filler; the stamped one is the statement, so the others go. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex items-end justify-between px-5 pb-5 sm:px-8">
-          {/* Same small-print register as the corner claim opposite it — a
-              fact about the code, not a pitch, so it earns the same quiet
-              treatment rather than a branded footer bar. */}
-          <a
-            href="https://github.com/Abiram116/New-Space-Learn"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="setcode pointer-events-auto transition-colors hover:text-ink"
-          >
-            MIT Licensed
-            <br />
-            Source on GitHub
-          </a>
-          <span className="setcode text-right">
-            No card needed
-            <br />
-            Nothing to pay
-          </span>
-        </div>
+          Same mechanism, same hues, same stop positions as before — asked
+          to be improved, not changed. What moved: every stop's peak
+          opacity is raised (0.10→0.16 gold, 0.20→0.34 the central flare,
+          0.07→0.12 the brand-orange tail), so the light reads as
+          genuinely catching the metal instead of a faint pass over it.
+          The sweep is also slower still (900ms→1150ms→2200ms→3400ms).
+          `--ease-out-expo` front-loads nearly all of its travel into the
+          first third of whatever duration it's given, so each of these
+          increases bought less perceived slowness than the raw number
+          suggests — 3400ms is what it actually took for the front-loaded
+          burst itself, not just the trailing settle, to stop reading as
+          a snap. Deliberately long: this is a one-time flourish, not a
+          UI affordance anyone is waiting on.
+
+          Added on top: a layered `text-shadow`, which still renders
+          against `background-clip: text` — the clip only affects the
+          fill, not the shadow. First attempt read as the wordmark turning
+          solid black: the gradient fill is deliberately faint everywhere
+          the sweep isn't currently raking it (most stops sit at
+          0.02–0.16 alpha), so a shadow strong enough to read on its own
+          shows straight through that near-transparent fill instead of
+          sitting behind it. Fixed by cutting every layer's opacity hard
+          and dropping the wide 10px/26px spread entirely — that one
+          layer alone was the black blob.
+
+          Direction also matters and was backwards: a light edge on top
+          with dark below is EMBOSSED, popping toward the viewer, which is
+          not what a stamp does — a stamp presses IN. So: a faint dark
+          line above the glyphs (the near wall of the impression, in its
+          own shadow) and a fainter light line below (the far lip
+          catching the same light the sweep does), both barely-there —
+          just enough to read as a groove in the surface than a shine
+          resting on top of it. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-[2svh] z-0 flex justify-center"
+      >
+        <span
+          className="nameplate select-none whitespace-nowrap text-center text-[clamp(38px,11.5vw,196px)] leading-[0.86] tracking-[-0.035em]"
+          style={{
+            backgroundImage:
+              'linear-gradient(100deg,' +
+              'rgba(245,237,228,0.02) 18%,' +
+              'rgba(255,197,61,0.16) 34%,' +
+              'rgba(245,237,228,0.34) 46%,' +
+              'rgba(53,214,232,0.16) 57%,' +
+              'rgba(255,90,60,0.12) 68%,' +
+              'rgba(245,237,228,0.02) 84%)',
+            backgroundSize: '260% 100%',
+            backgroundPosition: landed ? '-30% 0' : '120% 0',
+            transition: 'background-position 3400ms var(--ease-out-expo) 220ms',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            color: 'transparent',
+            textShadow:
+              '0 -1px 1px rgba(10,5,2,0.32), 0 1px 0 rgba(255,240,215,0.16)',
+          }}
+        >
+          Space Learn
+        </span>
+      </div>
+
+      {/* One mark, bottom right. The page used to end with the wordmark
+          three times over — stamped behind the figure, again as a corner
+          label, and a third time in a footer under it. Repetition at the
+          close reads as filler; the stamped one is the statement, so the
+          others go. */}
+      {/* No independent fade here either — same reasoning as the copy and
+          figure above; this rides with the panel's own transform instead
+          of arriving on its own delayed clock. */}
+      {/* The "No card needed / Nothing to pay" pairing that used to sit
+          opposite this is gone — asked to keep only the licence mark. What's
+          left is sized up from `.setcode`'s 11.5px (a system-wide
+          small-print size, so bumped locally rather than in the shared
+          class) since standing alone at the old size read as too faint to
+          register as this panel's one closing credit. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-5 pb-5 sm:px-8">
+        <a
+          href="https://github.com/Abiram116/New-Space-Learn"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="setcode pointer-events-auto text-[13.5px] transition-colors hover:text-ink"
+        >
+          MIT Licensed
+          <br />
+          Source on GitHub
+        </a>
       </div>
     </div>
   )
