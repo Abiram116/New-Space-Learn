@@ -14,7 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, setUnauthorizedHandler } from './client'
+import { apiFetch, apiFetchRaw, setUnauthorizedHandler } from './client'
 import { clearCache, readCache, writeCache } from '../lib/asyncCache'
 
 const ok = (body: unknown = {}) =>
@@ -147,5 +147,149 @@ describe('cache invalidation from writes', () => {
       expect(readCache('decks:s1'), `${path} should clear decks`).toBeUndefined()
       expect(readCache('cards:d1'), `${path} should clear cards`).toBeUndefined()
     }
+  })
+})
+
+/* ── Timeout and retry ───────────────────────────────────────────────── */
+
+/**
+ * Only GET is ever retried, and only for a network failure or a
+ * 502/503/504 — the exact set of failures a cold-starting backend or a
+ * flaky connection produce, where nothing suggests the request itself was
+ * wrong. See `apiFetchRaw`'s own comments for why writes are excluded
+ * outright: a write that times out might already have reached the server.
+ */
+describe('retry', () => {
+  it('retries a GET once after a 503 and succeeds', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++
+        return calls === 1 ? status(503) : ok({ id: 1 })
+      }),
+    )
+    await expect(apiFetch('/me')).resolves.toEqual({ id: 1 })
+    expect(calls).toBe(2)
+  })
+
+  it('retries a GET once after a network error and succeeds', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++
+        if (calls === 1) throw new TypeError('Failed to fetch')
+        return ok({ id: 2 })
+      }),
+    )
+    await expect(apiFetch('/me')).resolves.toEqual({ id: 2 })
+    expect(calls).toBe(2)
+  })
+
+  it('does not retry a write on a 503 — it might already have landed', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++
+        return status(503)
+      }),
+    )
+    await expect(apiFetch('/notes', { method: 'POST', body: {} })).rejects.toThrow()
+    expect(calls).toBe(1)
+  })
+
+  it('does not retry a plain 500 — not one of the transient-infra codes', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++
+        return status(500)
+      }),
+    )
+    await expect(apiFetch('/x')).rejects.toThrow()
+    expect(calls).toBe(1)
+  })
+
+  it('gives up after exhausting retries and reports the last failure', async () => {
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++
+        return status(503)
+      }),
+    )
+    await expect(apiFetch('/me')).rejects.toThrow()
+    // Three attempts total: the first, plus the two retries `RETRY_DELAYS_MS` allows.
+    expect(calls).toBe(3)
+  })
+})
+
+describe('timeout', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('aborts a hung request and reports it distinctly from a network failure', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            )
+          }),
+      ),
+    )
+    const pending = expect(apiFetch('/slow')).rejects.toThrow(/taking too long/)
+    await vi.advanceTimersByTimeAsync(35_000)
+    await pending
+  })
+
+  it('does not fire for a call that opts out with timeoutMs: 0', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(async () => ok({ streaming: true })))
+    const res = await apiFetchRaw('/stream', { timeoutMs: 0 })
+    expect(res.ok).toBe(true)
+    // Nothing to advance past — if a timer had been armed despite
+    // `timeoutMs: 0`, this call would already be hanging above.
+  })
+})
+
+describe('cancellation', () => {
+  it('rethrows a caller-initiated abort without wrapping or retrying it', async () => {
+    const controller = new AbortController()
+    let calls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            calls++
+            // Real `fetch` checks `signal.aborted` synchronously as well as
+            // listening for a future `abort` event — by the time this mock
+            // runs (after the `await buildInit(...)` inside `apiFetchRaw`
+            // yields once), the signal aborted below has often already
+            // fired, so a listener alone would never see it and this
+            // promise would hang forever.
+            if (init?.signal?.aborted) {
+              reject(new DOMException('aborted', 'AbortError'))
+              return
+            }
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('aborted', 'AbortError')),
+            )
+          }),
+      ),
+    )
+    const promise = apiFetch('/me', { signal: controller.signal })
+    controller.abort()
+    await expect(promise).rejects.toThrow()
+    expect(calls).toBe(1)
   })
 })

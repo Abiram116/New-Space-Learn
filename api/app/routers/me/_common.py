@@ -42,5 +42,4 @@ async def _count(user_id: str, table: str, *, extra: dict[str, str] | None = Non
     filters = {"user_id": f"eq.{user_id}"}
     if extra:
         filters.update(extra)
-    rows = await supabase.db_select(table, filters=filters, select="id")
-    return len(rows)
+    return await supabase.db_count(table, filters=filters)

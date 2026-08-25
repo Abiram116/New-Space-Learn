@@ -46,6 +46,12 @@ export async function* streamChat(
     method: 'POST',
     body: { text, regenerate, images },
     signal,
+    // A long, thoughtful answer can legitimately take longer than the
+    // client's default request timeout to finish streaming — this call
+    // already has its own cancellation path via `signal` (stop/regenerate),
+    // so the generic timeout would only ever cut off a real answer in
+    // progress, never catch anything the caller couldn't already cancel.
+    timeoutMs: 0,
   })
   if (!res.body) {
     throw new ApiError('upstream_unavailable', 'Chat is offline.')

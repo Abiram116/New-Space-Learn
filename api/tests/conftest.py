@@ -64,6 +64,10 @@ class FakeDb:
             rows = [r for r in rows if str(r.get(key)) == wanted]
         return rows[:limit] if limit else rows
 
+    async def db_count(self, table: str, *, filters: dict[str, str] | None = None) -> int:
+        rows = await self.db_select(table, filters=filters, select="id")
+        return len(rows)
+
     async def db_update(
         self, table: str, *, filters: dict[str, str], patch: dict[str, Any]
     ) -> list[dict[str, Any]]:
@@ -91,6 +95,7 @@ def db(monkeypatch: pytest.MonkeyPatch) -> FakeDb:
 
     fake = FakeDb()
     monkeypatch.setattr(supabase_module, "db_select", fake.db_select)
+    monkeypatch.setattr(supabase_module, "db_count", fake.db_count)
     monkeypatch.setattr(supabase_module, "db_rpc", fake.db_rpc)
     monkeypatch.setattr(supabase_module, "db_update", fake.db_update)
     monkeypatch.setattr(supabase_module, "db_insert", fake.db_insert)

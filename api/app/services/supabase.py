@@ -229,6 +229,37 @@ async def db_select(
     return r.json()
 
 
+async def db_count(table: str, *, filters: dict[str, str] | None = None) -> int:
+    """Exact row count without transferring any rows.
+
+    Every caller that only wanted a count used to go through `db_select`
+    and call `len()` on the result — correct, but it means the response
+    payload (and the query planner's work) scales with however many rows
+    match, for a number that was thrown away the instant it arrived. A
+    `HEAD` request with `Prefer: count=exact` asks PostgREST to compute the
+    same count server-side and hand it back in the `Content-Range` response
+    header instead, with an empty body — the query itself still touches
+    every matching row, but nothing is serialized or sent over the wire for
+    them. This is the kind of gap that isn't obvious in testing, where a
+    handful of rows costs almost nothing either way, and shows up later as
+    unexplained latency drift once real usage has actually grown a table.
+    """
+    client = await get_client()
+    params: dict[str, str] = {"select": "id"}
+    if filters:
+        params.update(filters)
+    r = await client.head(
+        f"/rest/v1/{table}",
+        params=params,
+        headers={"Prefer": "count=exact"},
+    )
+    _raise_if_bad(r)
+    # PostgREST's own format for this header is "<range>/<total>" — a HEAD
+    # request has no range to report, so it comes back as "*/<total>".
+    total = r.headers.get("content-range", "").split("/")[-1]
+    return int(total) if total.isdigit() else 0
+
+
 async def db_insert(table: str, rows: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
     client = await get_client()
     r = await client.post(

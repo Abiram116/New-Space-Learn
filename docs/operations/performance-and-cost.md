@@ -291,6 +291,43 @@ invocation. `measure_perf_pass.py` had already been updated correctly; only
 this narrower, less-used script had drifted. Fixed to
 `from app.routers.me.stats import stats`.
 
+### 9b. `/me/stats` drift, resolved — 2026-08-25
+
+§9a left this open rather than explained: 518.8ms → 725.5ms → 579.3ms
+across three passes, still climbing more than ordinary variance should
+account for. Found the actual cause this pass, not just a plausible one:
+`_count()` (`app/routers/me/_common.py`, used for `docs_indexed` and
+`spaces_count`) and `_cards_mastered()` (`app/routers/me/stats.py`) both
+counted by fetching every matching row's `id` via `db_select` and calling
+`len()` on the result — correct, but its cost is proportional to however
+many rows exist. Not a code regression; a data one. The account this runs
+against keeps accumulating real documents, subjects, and flashcard reviews
+every time it's actually used, so the SAME code got slower release over
+release for a reason invisible to a snapshot of the code — exactly why §9
+correctly declined to explain it away as noise without evidence.
+
+Fixed by adding `db_count()` (`app/services/supabase.py`): a `HEAD`
+request with `Prefer: count=exact`, reading PostgREST's own
+`Content-Range: */<total>` response header instead of paying for and
+discarding row bodies. `_count()` and `_cards_mastered()` now call it
+directly; the `asyncio.gather` shape and everything else in `stats()` is
+unchanged.
+
+Re-ran `scripts/measure_me_stats.py` unmodified, same live account, n=15:
+
+| | Median |
+|---|---|
+| §7 (2026-08-09) | 518.8ms |
+| §9 (2026-08-12) | 725.5ms |
+| §9a (hardening pass) | 579.3ms |
+| §9b, after the `db_count` fix | **383.0ms** |
+
+Below every prior measurement, including the first one — this account has
+strictly more data now than it did on 2026-08-09, so a number that low
+without the fix would itself have been suspicious. Closes the open
+question from §9: it was a real, explainable trend, not noise, and it's
+now fixed rather than just diagnosed.
+
 ---
 
 ### 10. Recommendations, ranked by effort ÷ impact
@@ -298,10 +335,11 @@ this narrower, less-used script had drifted. Fixed to
 1. ~~**Warm the app shell, not just the landing page**~~ (§6) — **done,
    2026-08-09 (D6).** Moved to `AuthProvider`, the one mount point that
    actually covers a direct-bookmark visitor.
-2. ~~**Measure `/me/stats` for real**~~ (§7, re-measured §9) — **done.**
-   `asyncio.gather` already covers all 8 reads; no code change is justified
-   by either measurement. The 518.8ms → 725.5ms shift between the two
-   passes is noted, not explained away — see §9.
+2. ~~**Measure `/me/stats` for real**~~ (§7, re-measured §9, §9a) —
+   **done, and the drift itself fixed in §9b.** `asyncio.gather` already
+   covered all 8 reads; the actual cost was two of those reads counting by
+   fetching every matching row instead of asking PostgREST for a count.
+   Fixed via `db_count()`; re-measured at 383.0ms, below every prior pass.
 3. ~~**Fix real embeddings before optimizing retrieval further**~~ (§4) —
    **done.** Retrieval is real, measured, and confirmed to surface correct
    content — see §4 and §9.

@@ -236,12 +236,10 @@ async def _quiz_average(user_id: str) -> int | None:
 
 async def _cards_mastered(user_id: str) -> int:
     """Cards seen at least once — the honest denominator for "known"."""
-    rows = await supabase.db_select(
+    return await supabase.db_count(
         "flashcards",
         filters={"user_id": f"eq.{user_id}", "reps": "gte.1"},
-        select="id",
     )
-    return len(rows)
 
 
 async def _has_perfect_quiz(user_id: str) -> bool:
