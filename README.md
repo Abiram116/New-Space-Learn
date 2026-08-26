@@ -2,39 +2,52 @@
 
 <img src="docs/assets/readme-banner.svg" alt="Space Learn" width="100%" />
 
-**The study app that never makes something up — every answer is cited back
-to the page it came from, and becomes a note, a flashcard, or a quiz in one
-click.**
+**A study app designed not to make things up — every grounded answer is
+cited back to the page it came from, and becomes a note, a flashcard, or a
+quiz in one click.**
 
 [![License](https://img.shields.io/badge/LICENSE-MIT-ff5a3c?style=for-the-badge&labelColor=1e1a17)](LICENSE)
 [![React](https://img.shields.io/badge/REACT-19-35d6e8?style=for-the-badge&labelColor=1e1a17)](web/package.json)
 [![TypeScript](https://img.shields.io/badge/TYPESCRIPT-~6.0-5590ff?style=for-the-badge&labelColor=1e1a17)](web/package.json)
 [![FastAPI](https://img.shields.io/badge/FASTAPI-ASYNC-22d3a0?style=for-the-badge&labelColor=1e1a17)](api/pyproject.toml)
 
-A full production app, not a prototype — **58 API routes**, **688 passing
-tests**, **$0/month** to run it end to end.
+A full production app, not a prototype — **58 API routes**, **720 passing
+tests**, **$0 infrastructure** on free hosting tiers (inference cost scales
+with usage).
 
 </div>
 
 <br/>
 
-A document you upload isn't "done" once it's indexed — it's the raw material
-for a conversation, and that conversation is the raw material for a note, a
-flashcard deck, and a quiz. Organized as **Subjects → Subspaces**, so the AI
-is never guessing which class you mean, and nothing is ever silently made
-up: a failed retrieval is a handled state, not a hallucinated answer.
+Built for students who study from their own material — lecture PDFs, course
+notes, papers — where studying is one continuous loop, not five disconnected
+tools: what you upload becomes what you ask, what you ask becomes what you
+keep, and what you keep is what you're tested on. Organized as
+**Subjects → Subspaces**, so the AI is never guessing which class you mean,
+and a failed retrieval stays a handled state instead of turning into a
+hallucinated answer.
 
 <br/>
 
 <div align="center">
-<img src="docs/assets/readme-loop.svg" alt="Ingest → Interrogate → Consolidate → Rehearse → Prove" width="100%" />
+<img src="docs/assets/readme-loop.svg" alt="One study loop: Ingest, Interrogate, Consolidate, Rehearse, Prove, arranged in a circle with the Student Model as a small central hub that reads each Prove result and feeds forward into the next cycle" width="100%" />
 </div>
+
+<sub>Five stages, one cycle — the Student Model at center is the feedback
+layer, not a sixth stage.</sub>
 
 <br/>
 
 Every card above is a real feature, not a diagram aspiration — a chat answer
 becomes a note in one click, a note becomes flashcards, a quiz is generated
-from whatever the student actually studied.
+from whatever the student actually studied. Followed through as one thread:
+
+<div align="center">
+<img src="docs/assets/readme-journey.svg" alt="One artifact through the loop: a lecture PDF becomes a grounded chat answer, a note, flashcards, and a quiz — with the Student Model, shown separately as a feedback layer, reading the quiz result and shaping what comes next" width="100%" />
+</div>
+
+<sub>Student Model sits outside the five artifact stages — it reads the
+result, it isn't one.</sub>
 
 **If that's the kind of engineering you'd want on your team, the receipts are
 below — real guard code, real spaced-repetition math, real measured
@@ -46,75 +59,74 @@ latency, not adjectives.** ⭐ a star goes a long way.
 - [What it looks like](#what-it-looks-like)
 - [Highlights](#whats-actually-in-it)
 - [Proof, not claims](#proof-not-claims)
+- [Where SpaceLearn is intentionally different](#where-spacelearn-is-intentionally-different)
+- [What makes this technically interesting](#what-makes-this-technically-interesting)
 - [AI Agents & custom Skills](#ai-agents--custom-skills)
 - [Design system](#design-system-foil-binder)
 - [Architecture](#architecture)
 - [The AI pipeline](#the-ai-pipeline)
 - [Personalization](#the-student-model--personalization)
-- [How this compares](#how-this-compares)
 - [Engineering deep-dive](#engineering-decisions-worth-reading)
+- [What we actually built](#what-we-actually-built)
 - [Tech stack](#tech-stack)
+- [Trade-offs I chose deliberately](#trade-offs-i-chose-deliberately)
 - [Quick start / one-click deploy](#quick-start)
 - [Testing](#testing)
 - [Project structure](#project-structure)
 - [Full documentation](#full-documentation)
+- [Contributing](#contributing)
 
 </details>
 
 ## What it looks like
 
-<img src="docs/assets/readme-screens.svg" alt="Chat with a citation card, a note with live LaTeX and an AI-touched paragraph, a flashcard with SM-2 grading buttons" width="100%" />
+<img src="docs/assets/readme-screens.svg" alt="Chat with a citation card, a note with live LaTeX and an AI-touched paragraph, a flashcard with SM-2 grading buttons, and a student model panel showing a weak concept, an improving concept, and an observed study habit" width="100%" />
 
-<sub>Stylized mockup, not a screenshot — no public demo is live yet.</sub>
+<sub>Stylized mockup, not a screenshot — a real 30–40s walkthrough (upload →
+grounded chat → citation → note → cards/quiz → review) replaces this once
+it's recorded.</sub>
 
 ## What's actually in it
 
-- **Chat, grounded in your own documents** — RAG over uploaded PDFs/text via
-  pgvector, streamed token-by-token over SSE, with citation cards that render
-  *before* the first token arrives and link straight to the source page.
-- **A real rich-text note editor** — Tiptap-based, slash commands, tables,
-  images, code blocks with language detection and bracket auto-close, task
-  lists, collapsible sections — and **live LaTeX rendering** (`\[...\]` /
-  `\(...\)` → KaTeX), including a from-scratch fix for a CommonMark parser
-  quirk that silently eats backslashes on save/reload.
-- **AI that writes *in* the note, not just *about* it** — inline `/ai`
-  commands and selection actions (Rewrite, Simplify, Explain) insert directly
-  into the document, visually distinguished from what you typed, with full
-  provenance tracking (`touched_by_user` / `touched_by_agent` — independent
-  booleans, because a note can legitimately be both).
-- **Spaced-repetition flashcards** — a real SM-2 implementation deliberately
-  implemented **twice** — Python (server) and TypeScript (client) — so
-  grading feels instant (optimistic) while staying identical server-side,
-  with a parity test running 480 real cases against both to catch drift.
-- **Auto-generated, auto-graded quizzes** — topic-scoped and scored, with
-  every question tagged with a `subtopic` concept at generation time, which
-  is what powers weak-area detection later without any extra pipeline.
-- **A student model that's actually derived from data** — weak-topic and
-  weak-*concept* detection from real quiz scores, not a guess from account
-  age (see [The Student Model](#the-student-model--personalization) below).
+- **Chat, grounded in your own documents** — pgvector retrieval, streamed
+  token-by-token, with citation cards that render *before* the first token
+  and link straight to the source page.
+- **A real rich-text note editor** — Tiptap-based, with live LaTeX rendering
+  (KaTeX) and a from-scratch fix for a CommonMark parser bug that silently
+  ate backslashes on save (more in [Engineering decisions](#engineering-decisions-worth-reading)).
+- **AI that writes *in* the note, not just *about* it** — inline `/ai` and
+  selection actions (Rewrite, Simplify, Explain), with provenance tracking
+  (`touched_by_user` / `touched_by_agent` — independent, since a note can
+  legitimately be both).
+- **Spaced-repetition flashcards** — real SM-2, implemented twice (server +
+  client) and kept honest by a parity test (see [Proof](#proof-not-claims)).
+- **Auto-generated, auto-graded quizzes** — topic-scoped, with every
+  question tagged with a concept at generation time, feeding weak-area
+  detection with no extra pipeline.
+- **A student model derived from data** — weak-topic and weak-concept
+  detection from real quiz scores, not account age (see
+  [The Student Model](#the-student-model--personalization)).
 - **Account-wide libraries** — Notes/Cards/Quizzes are reachable from
-  wherever you are, not locked to whichever topic you happened to create them
-  in, with subject filtering once a library spans more than one.
-- **Onboarding that actually feeds the model** — a short intake quiz
-  (learning style, explanation depth, session length) seeds the *explicit*
-  layer of the student model on day one, before any behavior exists to
-  observe.
+  anywhere, not locked to the topic they were created in.
+- **Onboarding that feeds the model** — a short intake quiz seeds the
+  student model's explicit layer before any behavior exists to observe.
 - **Settings that don't lie** — every control is live-wired to something
-  real; a fake "reminder time" toggle was deliberately removed rather than
-  shipped, because "a setting that cannot take effect is a promise the app
-  shouldn't make."
+  real; a fake toggle was removed rather than shipped, on principle.
 
 ## Proof, not claims
 
 Three things that are easy to say about a codebase and hard to actually show.
 
-**Every route is guarded the same way.** The backend runs on a service-role
-key that bypasses Postgres RLS entirely, so this shared guard — not the
-database — is the real authorization boundary. Verbatim, `api/app/guards.py`:
+**The application layer is the real authorization boundary, not the
+database.** The backend runs on a service-role key that bypasses Postgres
+RLS entirely, so ownership is enforced in code — either by a shared
+`assert_*` guard or by scoping the query itself to `user_id = <caller>`.
+Verbatim, `api/app/guards.py`:
 
 ```python
 async def assert_subspace(user_id: str, subspace_id: str) -> dict:
-    """Return the subspace row, or 404 if it isn't this user's."""
+    """Return the subspace row (with its parent subject's name embedded, as
+    `row["subjects"]["name"]`), or 404 if it isn't this user's."""
     rows = await supabase.db_select(
         "subspaces",
         filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
@@ -127,8 +139,11 @@ async def assert_subspace(user_id: str, subspace_id: str) -> dict:
     return rows[0]
 ```
 
-Every one of the 58 routes that accepts a caller-supplied id calls this
-first — and `test_guard_coverage.py` fails CI if a new one doesn't.
+Of the 38 routes that accept a caller-supplied resource id, every one proves
+ownership before touching the row — 24 call a guard like this one, the rest
+scope their own query to `user_id = <caller>` instead, which PostgREST
+enforces server-side. `test_guard_coverage.py` checks both paths and fails
+the test suite if a new route does neither.
 
 **Spaced repetition, the real SM-2 arithmetic** — implemented twice
 (Python server, TypeScript client) and kept honest by a 480-case parity
@@ -136,17 +151,19 @@ test. Verbatim, `api/app/routers/flashcards.py`:
 
 ```python
 if body.grade == "again":
-    ease, interval, reps = max(1.3, ease - 0.2), 1, 0
+    ease = max(1.3, ease - 0.2)
+    interval = 1
+    reps = 0
 elif body.grade == "hard":
     ease = max(1.3, ease - 0.15)
-    interval = max(1, round(interval * 1.2))
+    interval = max(1, int(round(interval * 1.2)))
     reps += 1
 elif body.grade == "good":
-    interval = max(1, round(interval * ease)) if reps > 0 else 1
+    interval = max(1, int(round(interval * ease))) if reps > 0 else 1
     reps += 1
 else:  # easy
-    ease += 0.15
-    interval = max(2, round((interval or 1) * ease * 1.3))
+    ease = ease + 0.15
+    interval = max(2, int(round((interval or 1) * ease * 1.3)))
     reps += 1
 ```
 
@@ -160,22 +177,56 @@ clock.
 <img src="docs/assets/readme-trust.svg" alt="Trust weights: explicit 0.60, experiment 0.35, feedback 0.25, observed 0.10 (ceiling 0.75)" width="100%" />
 </div>
 
+<sub>Higher weight = stronger evidence for personalization.</sub>
+
 Per the project's own decision log: *"contradicting evidence outweighs
 confirming evidence 1.5:1 — being wrong about a student costs more than
 being unsure about them."*
 
-## How this compares
+**Built, not mocked** — the same claims, as a scoreboard:
 
-Not a knock on any of these — they're good at what they do. This is what's
-actually different about doing all of it in one loop:
+| | |
+|---|---|
+| **Security** | 38 owned-id routes, every one ownership-checked, anti-enumeration 404s |
+| **Retrieval** | Local BGE-small + pgvector — Recall@5 0.944, MRR 0.713 |
+| **Performance** | ~699ms chat time-to-first-token, ~158KB entry bundle |
+| **Correctness** | SM-2 implemented twice, kept honest by a 480-case parity test |
+| **Cost** | $0 infra — Vercel + Render + Supabase free tiers; inference scales with usage |
 
-| | Space Learn | Plain ChatGPT / Claude | Anki | Quizlet |
-|---|:---:|:---:|:---:|:---:|
-| Cites the source page, before the answer | ✅ | — | — | — |
-| Chat → note → cards → quiz, no copy-pasting between apps | ✅ | — | — | — |
-| Real SM-2 spaced repetition | ✅ | — | ✅ | partial |
-| Weak-topic detection from your actual quiz scores | ✅ | — | — | — |
-| Self-hostable, $0/month to run | ✅ | — | ✅ (local) | — |
+## Where SpaceLearn is intentionally different
+
+Not a knock on any of these — they're good at what they do, and how you use
+either one depends heavily on setup. This is what Space Learn is built
+*around*, by default, without extra configuration:
+
+| | Space Learn | General AI chat | Spaced-repetition tools |
+|---|:---:|:---:|:---:|
+| Cites the source page before the answer | ✅ | depends on setup | — |
+| Chat → note → cards → quiz, one workspace | ✅ | manual copy-paste | manual entry |
+| SM-2 spaced repetition, built in | ✅ | — | ✅ (that's their job) |
+| Weak-topic detection from your own quiz scores | ✅ | — | limited |
+| Self-hostable on free infra tiers | ✅ | varies | varies |
+
+## What makes this technically interesting
+
+The short version, for anyone who doesn't want to read the next ten sections
+to find it:
+
+- **[Grounded retrieval](#the-ai-pipeline)** — local BGE-small → pgvector →
+  citation-integrity validation, not a raw prompt-and-hope.
+- **[An adaptive learning model](#the-student-model--personalization)** —
+  quiz evidence turns into weak-topic and weak-concept detection, which
+  becomes personalized AI context, all derived at read time from data that
+  already exists.
+- **[Sandboxed user-authored Skills](#ai-agents--custom-skills)** —
+  untrusted prompt injection turned into a controlled feature, positioned so
+  it can't outrank the app's own grounding rules.
+- **[Correctness that survives two runtimes](#proof-not-claims)** — SM-2
+  spaced repetition implemented independently in Python and TypeScript, kept
+  honest by a 480-case parity test.
+- **[Free-tier architecture discipline](#trade-offs-i-chose-deliberately)**
+  — a single-worker backend, local embeddings, and a hand-rolled data
+  client, each a deliberate trade-off, not a corner cut by accident.
 
 ## AI Agents & custom Skills
 
@@ -195,7 +246,7 @@ reusable system-prompt behavior ("Socratic Tutor," "Code Review Mentor," or
 one you write yourself) that can be scoped to remember a single session, one
 topic, or everything — and multiple can be active on one subspace at once
 (ordered `created_at.asc`, so the newest activation wins a real conflict).
-4 seeded **library Skills** are globally readable but unwritable (RLS
+10 seeded **library Skills** are globally readable but unwritable (RLS
 two-tier policy: `user_id = auth.uid() OR is_library`), so every account
 starts with working examples, not a blank text box.
 
@@ -287,7 +338,7 @@ boundary first, an architecture choice second.
 sequenceDiagram
     participant U as Browser
     participant A as FastAPI
-    participant D as Postgres (Supabase)
+    participant D as Postgres
     participant G as Groq
 
     U->>A: POST /subspaces/{id}/chat
@@ -312,6 +363,15 @@ into a hallucinated answer.
 
 `api/app/services/rag.py`, `guardrails.py`, `embeddings.py` —
 [full write-up](docs/engineering/ai-pipeline.md).
+
+Under the hood, every chat request is one path, in this order:
+
+```
+Request → Ownership → Retrieval → Grounding → Skills → Personalization → Integrity → Stream
+```
+
+> No evidence → no fake certainty. A failed retrieval stays a handled state,
+> not a hallucinated answer.
 
 - **Chunking**: 900-char windows (~200 tokens), 120-char overlap, boundary-aware
   — prefers a paragraph break, falls back to sentence-ish punctuation, so a
@@ -368,6 +428,15 @@ exists — **no extra pipeline, no scheduled job**:
   **3+ questions** before its accuracy means anything (below that, "a coin
   flip with extra steps"), and **<60% accuracy** flags it weak.
 
+Illustrative, not a real captured session — but this is the shape of what
+falls out of those two views once a student has a few quizzes in:
+
+> **Weak concept** — *countercurrent multiplication*, 2 of 5 recent
+> questions right.
+> **Improving** — *cellular respiration*, up from 58% to 81% average.
+> **Observed** — *tends to ask for a worked example after the first
+> explanation, on 6 of the last 9 sessions.*
+
 **One read pass, not six.** `snapshot()` used to be called independently by
 chat, quiz generation, flashcard generation, the notes agent, inline `/ai`,
 and the daily brief — six near-identical fetches of `quiz_results` /
@@ -394,7 +463,7 @@ The parts of this codebase that took actual judgment, not just typing:
 
 | Decision | The problem it solves | The cost accepted |
 |---|---|---|
-| **Guards, not RLS, are the real authorization boundary** | The backend uses Supabase's service-role key, which bypasses Row Level Security entirely — so every route accepting a caller-supplied id (`subspace_id`, `deck_id`, …) calls a shared `assert_*` helper *before* touching the row. RLS still exists as defense-in-depth, but it isn't what's actually stopping a cross-user read. A dedicated `test_guard_coverage.py` fails the build if a new endpoint forgets to call one. | A missed `assert_*` call is a silent leak, not a loud RLS error — discipline (and tests) matter more than the framework. |
+| **Guards, not RLS, are the real authorization boundary** | The backend uses Supabase's service-role key, which bypasses Row Level Security entirely — so every route accepting a caller-supplied id (`subspace_id`, `deck_id`, …) either calls a shared `assert_*` helper or scopes its own query to `user_id = <caller>` *before* touching the row. RLS still exists as defense-in-depth, but it isn't what's actually stopping a cross-user read. A dedicated `test_guard_coverage.py` fails the test suite if a new endpoint does neither. | A missed check is a silent leak, not a loud RLS error — discipline (and tests) matter more than the framework. |
 | **A concept is a normalized tag, never a stored row** | `normalize(t) = trim(t).lower()` on data already sitting in existing tables (a quiz question's `subtopic`), aggregated with `GROUP BY` at read time. An entire concepts/concept-graph schema proposal was rejected — twice, once when it crept back in under a different name — in favor of this. | No graph database, no NLP resolution pipeline, no schema migration when the model's tagging vocabulary drifts — but concept matching is exact-string, not semantic. |
 | **One Groq key, three model tiers** | Chat/quiz generation don't need the same model as a short low-stakes prompt (like the daily brief) — routing by request avoids paying 70B-class latency and quota for work an 8B model handles fine. | An extra layer of indirection (`llm.py`'s `LLM` protocol) that has to stay provider-agnostic. |
 | **No background workers, on purpose** | Render's free tier gives 512MB RAM and spins down after 15 minutes idle — a queue-based embedding pipeline would need infrastructure the free tier can't run reliably. Document embedding runs inline, capped at 25s, with a `reprocess` endpoint for the timeout case. | Nothing runs "later" — every embed either finishes in-request or gets a second chance on demand, never silently in the background. |
@@ -413,13 +482,14 @@ contract, free-tier discipline, trade-offs table, scalability roadmap) live in
 Not claims — every line below is a real, checkable mechanism in this repo,
 not a description of intent.
 
-- **A test fails the build if you forget a security check.**
+- **A test fails if you forget a security check.**
   [`test_guard_coverage.py`](api/tests/test_guard_coverage.py) doesn't test
   one endpoint — it inspects every router and asserts each one that accepts
-  a caller-supplied id calls an `assert_*` ownership guard before touching
-  it (guard code in [Proof, not claims](#proof-not-claims) above). A new
-  endpoint that forgets this doesn't get caught by a human reviewer
-  noticing; it gets caught by CI, every time.
+  a caller-supplied id either calls an `assert_*` ownership guard (guard
+  code in [Proof, not claims](#proof-not-claims) above) or scopes its own
+  query to the caller's `user_id`. A new endpoint that does neither doesn't
+  get caught by a human reviewer noticing; it gets caught by the test suite,
+  every time.
 - **One error shape, everywhere.** Every backend error — expected or not —
   returns the identical envelope: `{"error": {"code", "message"}}`. No raw
   exception, stack trace, or upstream provider error body is ever allowed to
@@ -502,7 +572,7 @@ Measured against the live app, not estimated — full detail in
 | Retrieval (`k=4`, 10-run median) | **512–521ms** | — |
 | Retrieval quality (real corpus) | **Recall@5 0.944, MRR 0.713** | — |
 | Document reprocess (52 chunks) | **~6.0s median** | < 8s target, 25s hard cap |
-| First-load JS bundle (entry) | **147KB gzipped** (down from 451KB pre-split) | 250KB self-imposed ceiling |
+| First-load JS bundle (entry) | **~158KB gzipped** (down from 451KB pre-split) | 250KB self-imposed ceiling |
 | Cost per student / month | **well under $1** (20 sessions, 10 turns each) | — |
 | Projected cost at ~1,000 users | **~$300–500/month**, dominated by chat | — |
 | Total infra cost today | **$0/month** (Vercel + Render + Supabase free tiers) | — |
@@ -542,7 +612,27 @@ honesty about scope is a feature, not an omission:
 <img src="docs/assets/readme-divider.svg" width="640" alt="" />
 </div>
 
+## What we actually built
+
+Not just wiring libraries together. The tech stack below is *where* — this
+is *what*:
+
+| | |
+|---|---|
+| **Frontend engineering** | Shared UI primitives (`Modal`, `Select`, `ConfirmDialog`), a rich-text editor with live LaTeX, token-by-token streaming UI, a scroll-driven landing scene, 50+ hand-drawn icons |
+| **Backend engineering** | Async FastAPI services, a shared ownership-guard pattern enforced by a dedicated coverage test, an in-process rate limiter, a hand-rolled Supabase client for memory discipline |
+| **AI engineering** | Local embedding inference, retrieval + citation-integrity checking, deliberate prompt-assembly ordering, a sandboxed user-authored-Skill system, structured quiz/card generation |
+
 ## Tech stack
+
+![React](https://img.shields.io/badge/-React-1e1a17?style=flat-square&logo=react&logoColor=35d6e8)
+![TypeScript](https://img.shields.io/badge/-TypeScript-1e1a17?style=flat-square&logo=typescript&logoColor=5590ff)
+![Vite](https://img.shields.io/badge/-Vite-1e1a17?style=flat-square&logo=vite&logoColor=ffc53d)
+![Tailwind CSS](https://img.shields.io/badge/-Tailwind_CSS-1e1a17?style=flat-square&logo=tailwindcss&logoColor=22d3a0)
+![FastAPI](https://img.shields.io/badge/-FastAPI-1e1a17?style=flat-square&logo=fastapi&logoColor=22d3a0)
+![Python](https://img.shields.io/badge/-Python-1e1a17?style=flat-square&logo=python&logoColor=ffc53d)
+![PostgreSQL](https://img.shields.io/badge/-PostgreSQL-1e1a17?style=flat-square&logo=postgresql&logoColor=35d6e8)
+![Supabase](https://img.shields.io/badge/-Supabase-1e1a17?style=flat-square&logo=supabase&logoColor=22d3a0)
 
 | | |
 |---|---|
@@ -550,8 +640,29 @@ honesty about scope is a feature, not an omission:
 | **Backend** | FastAPI (async, single-worker), Pydantic v2, httpx, `python-jose` (JWT), `fastembed` (local ONNX embeddings — no external embedding API) |
 | **Data** | Supabase (Postgres + pgvector + Row Level Security + Auth + Storage) |
 | **Inference** | Groq — three model tiers routed per request |
-| **Testing** | Vitest + Testing Library (400+ frontend tests), pytest (287 backend tests) |
-| **Hosting** | Vercel (frontend, static) · Render (backend, free tier) · Supabase (data, free tier) — the whole stack runs on $0/month |
+| **Testing** | Vitest + Testing Library (430 frontend tests), pytest (290 backend tests) |
+| **Hosting** | Vercel (frontend, static) · Render (backend, free tier) · Supabase (data, free tier) — infra runs on $0/month; inference cost scales with usage |
+
+## Trade-offs I chose deliberately
+
+Not a roadmap item — a real cost accepted for each, not an oversight:
+
+- **Single backend worker**, not a queue. Render's free tier gives one
+  process; there's no horizontal scaling yet, and a slow request can queue
+  behind others. Accepted to stay on $0 infra.
+- **An in-process rate limiter, not a shared one.** Resets on every
+  redeploy — fine for one backend instance, wrong the moment there's more
+  than one.
+- **Exact-string concept matching, not semantic.** `"the mitochondria"` and
+  `"mitochondria"` are two different concepts today. No NLP resolution
+  pipeline, no schema migration when the tagging vocabulary drifts — but a
+  drift quietly diverges weak-area data until it's normalized by hand.
+- **The student model needs evidence before it says anything.** `ConceptView`
+  requires 3+ questions before reporting an accuracy — a handful of answers
+  isn't signal, it's noise.
+- **BGE-small over BGE-M3.** BGE-M3 measured better in isolation but its
+  weights alone are 4× the entire 512MB memory ceiling. Chosen to fit the
+  free tier, not to maximize retrieval quality.
 
 ## Quick start
 
@@ -588,15 +699,15 @@ config, and deploying to Render + Vercel.
 ## Testing
 
 ```bash
-cd web && npm test          # 400+ frontend tests — Vitest + Testing Library
-cd api && pytest            # 287 backend tests — pytest + pytest-asyncio
+cd web && npm test          # 430 frontend tests — Vitest + Testing Library
+cd api && pytest            # 290 backend tests — pytest + pytest-asyncio
 ```
 
 No mocked-database shortcuts on the paths that matter: authorization guards,
 RAG retrieval, and the SM-2 grading arithmetic are all tested against real
 logic, not stubs standing in for it. A dedicated `test_guard_coverage.py`
-fails the build outright if a new endpoint accepts a caller-supplied id
-without calling an ownership guard first.
+fails the test suite outright if a new endpoint accepts a caller-supplied id
+without proving ownership — a guard call or a `user_id`-scoped query.
 
 ## Project structure
 
@@ -625,8 +736,9 @@ render.yaml  Backend deploy manifest
   (the AI pipeline), `student_model.py`, `personalization.py` (the
   student model), `activity.py`, `streaks.py` (gamification), `llm.py`
   (provider abstraction), `supabase.py` (the hand-rolled data client).
-- **`api/app/guards.py`** — the ownership-assertion helpers every router
-  calls before touching a caller-supplied row id.
+- **`api/app/guards.py`** — the ownership-assertion helpers most routers call
+  before touching a caller-supplied row id; the rest scope their own query
+  to the caller instead.
 - **`supabase/migrations/`** — 18 files, timestamped and additive-only;
   never edit an already-applied migration.
 
@@ -654,10 +766,21 @@ render.yaml  Backend deploy manifest
   the full roadmap, built and unbuilt.
 - [**plan.md**](docs/plan.md) — what's left to build, in what order.
 
+## Contributing
+
+Before a PR: `npm test` and `pytest` pass, `oxlint` / `ruff` are clean, and a
+new caller-supplied-id endpoint proves ownership — an `assert_*` guard or a
+`user_id`-scoped query (`test_guard_coverage.py` enforces this). A change
+worth explaining gets a line in [`docs/decisions.md`](docs/decisions.md) —
+especially an approach
+that was tried and rejected. Open an issue before a large PR; small fixes
+and honest bug reports are always welcome.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
 <div align="center">
-<sub>Built end to end — frontend, backend, data model, AI pipeline, and the pixels above.</sub>
+<sub>Built end to end — product, frontend, backend, data model, AI pipeline,
+and the pixels above.</sub>
 </div>

@@ -1,0 +1,54 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect width="20" height="20" fill="#1e1a17"/>
+      <rect width="2" height="2" fill="#2e251f"/>
+    </pattern>
+    <radialGradient id="glow" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#2e2820"/>
+      <stop offset="55%" stop-color="#262119"/>
+      <stop offset="100%" stop-color="#1e1a17"/>
+    </radialGradient>
+    <radialGradient id="corner-brand" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff5a3c" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#ff5a3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="corner-sky" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#35d6e8" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#35d6e8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sw-brand" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff8b76"/><stop offset="100%" stop-color="#ff5a3c"/></linearGradient>
+    <linearGradient id="sw-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#92eaf4"/><stop offset="100%" stop-color="#35d6e8"/></linearGradient>
+    <linearGradient id="sw-mint" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#d8ff92"/><stop offset="100%" stop-color="#b8ff3c"/></linearGradient>
+    <linearGradient id="sw-sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffdd8f"/><stop offset="100%" stop-color="#ffc53d"/></linearGradient>
+    <linearGradient id="sw-coral" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9ac1"/><stop offset="100%" stop-color="#ff3d8b"/></linearGradient>
+    <linearGradient id="sw-azure" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a6c6ff"/><stop offset="100%" stop-color="#5590ff"/></linearGradient>
+    <linearGradient id="sw-jade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#86e9c9"/><stop offset="100%" stop-color="#22d3a0"/></linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <rect width="1280" height="640" fill="url(#grid)" opacity="0.5"/>
+  <circle cx="140" cy="160" r="260" fill="url(#corner-brand)"/>
+  <circle cx="1140" cy="480" r="260" fill="url(#corner-sky)"/>
+
+  <rect x="16" y="16" width="1248" height="608" fill="none" stroke="#ff5a3c" stroke-width="5"/>
+  <rect x="36" y="36" width="1208" height="568" fill="none" stroke="#3b3028" stroke-width="2"/>
+
+  <text x="649" y="333" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="84" letter-spacing="3" fill="#35d6e8" opacity="0.55">SPACE LEARN</text>
+  <text x="645" y="329" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="84" letter-spacing="3" fill="#ff3d8b" opacity="0.6">SPACE LEARN</text>
+  <text x="640" y="325" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="84" letter-spacing="3" fill="#f5ede4">SPACE LEARN</text>
+
+  <text x="640" y="382" text-anchor="middle" font-family="'Courier New', monospace" font-size="22" letter-spacing="3" fill="#c4b5aa">Upload it. Chat with it, cited. Rehearse until it's yours.</text>
+
+  <g>
+    <rect x="472" y="440" width="34" height="34" fill="url(#sw-brand)"/>
+    <rect x="516" y="440" width="34" height="34" fill="url(#sw-sky)"/>
+    <rect x="560" y="440" width="34" height="34" fill="url(#sw-mint)"/>
+    <rect x="604" y="440" width="34" height="34" fill="url(#sw-sun)"/>
+    <rect x="648" y="440" width="34" height="34" fill="url(#sw-coral)"/>
+    <rect x="692" y="440" width="34" height="34" fill="url(#sw-azure)"/>
+    <rect x="736" y="440" width="34" height="34" fill="url(#sw-jade)"/>
+  </g>
+
+  <text x="640" y="510" text-anchor="middle" font-family="'Courier New', monospace" font-size="14" letter-spacing="3" fill="#9c8b80">58 API ROUTES · 688 PASSING TESTS · $0/MONTH</text>
+</svg>

@@ -1,4 +1,4 @@
-<svg width="1200" height="470" viewBox="0 0 1200 470" xmlns="http://www.w3.org/2000/svg">
+<svg width="1300" height="660" viewBox="0 0 1300 660" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="node-sky" cx="35%" cy="30%" r="80%">
       <stop offset="0%" stop-color="#0e2f34"/><stop offset="100%" stop-color="#131f38"/>
@@ -15,73 +15,100 @@
     <radialGradient id="node-coral" cx="35%" cy="30%" r="80%">
       <stop offset="0%" stop-color="#351122"/><stop offset="100%" stop-color="#250c18"/>
     </radialGradient>
+    <marker id="feedback-arrow" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 Z" fill="#7aa8ff" opacity="0.85"/>
+    </marker>
   </defs>
 
-  <rect width="1200" height="470" fill="#1e1a17"/>
-  <text x="40" y="34" font-family="'Courier New', monospace" font-size="12" letter-spacing="2"
-        fill="#9c8b80">THE STUDY LOOP — NOT FIVE TOOLS, ONE CYCLE</text>
+  <rect width="1300" height="660" fill="#1e1a17"/>
 
-  <!-- Track — center pushed down so top node clears the header -->
-  <circle cx="300" cy="265" r="150" fill="none" stroke="#3b3028" stroke-width="2" stroke-dasharray="3 7"/>
+  <!-- Headline -->
+  <text x="650" y="38" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="19" letter-spacing="3"
+        fill="#f5ede4">ONE STUDY LOOP — FROM MATERIAL TO MASTERY</text>
 
-  <!-- Direction arrows along the track (clockwise) -->
-  <g fill="#4a3c32">
-    <polygon points="6,0 -4,-4 -4,4" transform="translate(388.17,143.65) rotate(36)"/>
-    <polygon points="6,0 -4,-4 -4,4" transform="translate(442.67,311.35) rotate(108)"/>
-    <polygon points="6,0 -4,-4 -4,4" transform="translate(300,415) rotate(180)"/>
-    <polygon points="6,0 -4,-4 -4,4" transform="translate(157.33,311.35) rotate(252)"/>
-    <polygon points="6,0 -4,-4 -4,4" transform="translate(211.83,143.65) rotate(324)"/>
+  <!-- Main track -->
+  <circle cx="620" cy="355" r="190" fill="none" stroke="#3b3028" stroke-width="2" stroke-dasharray="2 8"/>
+
+  <!-- Directional arrows around the track — brightened for visibility -->
+  <g fill="#8a7663">
+    <polygon points="7,0 -5,-5 -5,5" transform="translate(731.7,201.3) rotate(36)"/>
+    <polygon points="7,0 -5,-5 -5,5" transform="translate(800.7,413.7) rotate(108)"/>
+    <polygon points="7,0 -5,-5 -5,5" transform="translate(620,545) rotate(180)"/>
+    <polygon points="7,0 -5,-5 -5,5" transform="translate(439.3,413.7) rotate(252)"/>
+  </g>
+  <!-- Return arrow PROVE → INGEST, emphasized: brightest + labeled, this is the one that closes the cycle -->
+  <g fill="#ffb37a">
+    <polygon points="9,0 -6,-6 -6,6" transform="translate(508.3,201.3) rotate(324)"/>
+  </g>
+  <text x="508.3" y="177" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="10" letter-spacing="1.5"
+        fill="#d3af8f">NEXT CYCLE</text>
+
+  <!-- Central feedback hub — Student Model. A pill, not a node: no circular
+       ring, no stroke-weight competing with the 5 stages, sits inside the
+       loop as the feedback layer between PROVE and the next cycle. -->
+  <rect x="505" y="326" width="230" height="58" rx="29" fill="#20293b" fill-opacity="0.55" stroke="#5590ff" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="620" y="347" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="1.5" fill="#a6c6ff">STUDENT MODEL</text>
+  <text x="620" y="360" text-anchor="middle" font-family="'Courier New', monospace" font-size="9" fill="#7f97c2">Learns from performance.</text>
+  <text x="620" y="372" text-anchor="middle" font-family="'Courier New', monospace" font-size="9" fill="#7f97c2">Shapes what comes next.</text>
+
+  <!-- Feedback path, made explicit: PROVE → Student Model → next cycle -->
+  <g stroke="#5590ff" stroke-width="1.5" stroke-dasharray="1 4" opacity="0.7" fill="none">
+    <path d="M 487,312 L 518,338" marker-end="url(#feedback-arrow)"/>
+    <path d="M 620,326 L 620,235" marker-end="url(#feedback-arrow)"/>
   </g>
 
-  <!-- Nodes -->
+  <!-- ============ INGEST — top ============ -->
   <g>
-    <circle cx="300" cy="115" r="34" fill="url(#node-sky)" stroke="#35d6e8" stroke-width="2.5"/>
-    <rect x="292" y="107" width="16" height="16" fill="#92eaf4"/>
-    <text x="300" y="68" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#92eaf4">INGEST</text>
+    <circle cx="620" cy="165" r="46" fill="url(#node-sky)" stroke="#35d6e8" stroke-width="2.5"/>
+    <g transform="translate(620,165)" stroke="#92eaf4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M0,-13 L0,4 M-6,-5 L0,-13 L6,-5 M-10,10 L10,10"/>
+    </g>
+    <text x="620" y="85" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="16" fill="#92eaf4">INGEST</text>
+    <text x="620" y="105" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" fill="#a89484">Upload and embed study material.</text>
   </g>
+
+  <!-- ============ INTERROGATE — upper right ============ -->
   <g>
-    <circle cx="442.67" cy="218.65" r="34" fill="url(#node-brand)" stroke="#ff5a3c" stroke-width="2.5"/>
-    <rect x="434.67" y="210.65" width="16" height="16" fill="#ffb3a0"/>
-    <text x="487" y="224" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ffb3a0">INTERROGATE</text>
+    <circle cx="800.7" cy="296.3" r="46" fill="url(#node-brand)" stroke="#ff5a3c" stroke-width="2.5"/>
+    <g transform="translate(800.7,296.3)" stroke="#ffb3a0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M-11,-9 L11,-9 L11,6 L-3,6 L-8,12 L-8,6 L-11,6 Z"/>
+    </g>
+    <text x="856" y="293" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="16" fill="#ffb3a0">INTERROGATE</text>
+    <text x="856" y="313" text-anchor="start" font-family="'Courier New', monospace" font-size="11" fill="#a89484">Ask grounded questions, live citations.</text>
   </g>
+
+  <!-- ============ CONSOLIDATE — lower right ============ -->
   <g>
-    <circle cx="388.17" cy="386.35" r="34" fill="url(#node-sun)" stroke="#ffc53d" stroke-width="2.5"/>
-    <rect x="380.17" y="378.35" width="16" height="16" fill="#ffdd8f"/>
-    <text x="432" y="391" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ffdd8f">CONSOLIDATE</text>
+    <circle cx="731.7" cy="508.7" r="46" fill="url(#node-sun)" stroke="#ffc53d" stroke-width="2.5"/>
+    <g transform="translate(731.7,508.7)" stroke="#ffdd8f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M-9,-12 L4,-12 L9,-7 L9,12 L-9,12 Z M4,-12 L4,-7 L9,-7"/>
+      <path d="M-5,-1 L5,-1 M-5,3 L5,3 M-5,7 L2,7" stroke-width="1.5"/>
+    </g>
+    <text x="787" y="505" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="16" fill="#ffdd8f">CONSOLIDATE</text>
+    <text x="787" y="525" text-anchor="start" font-family="'Courier New', monospace" font-size="11" fill="#a89484">Turn answers into editable notes.</text>
   </g>
+
+  <!-- ============ REHEARSE — lower left ============ -->
   <g>
-    <circle cx="211.83" cy="386.35" r="34" fill="url(#node-mint)" stroke="#b8ff3c" stroke-width="2.5"/>
-    <rect x="203.83" y="378.35" width="16" height="16" fill="#d8ff92"/>
-    <text x="168" y="391" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#d8ff92">REHEARSE</text>
+    <circle cx="508.3" cy="508.7" r="46" fill="url(#node-mint)" stroke="#b8ff3c" stroke-width="2.5"/>
+    <g transform="translate(508.3,508.7)" stroke="#d8ff92" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <path d="M-7,-3 A7,7 0 0 1 6,-7"/>
+      <polygon points="6,-7 1,-8 3,-3" fill="#d8ff92" stroke="none"/>
+      <path d="M7,3 A7,7 0 0 1 -6,7"/>
+      <polygon points="-6,7 -1,8 -3,3" fill="#d8ff92" stroke="none"/>
+    </g>
+    <text x="453" y="505" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="16" fill="#d8ff92">REHEARSE</text>
+    <text x="453" y="525" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#a89484">Practice with spaced repetition.</text>
   </g>
+
+  <!-- ============ PROVE — upper left ============ -->
   <g>
-    <circle cx="157.33" cy="218.65" r="34" fill="url(#node-coral)" stroke="#ff3d8b" stroke-width="2.5"/>
-    <rect x="149.33" y="210.65" width="16" height="16" fill="#ff9ac1"/>
-    <text x="113" y="224" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ff9ac1">PROVE</text>
-  </g>
-
-  <!-- Legend -->
-  <g font-family="'Courier New', monospace">
-    <rect x="640" y="90" width="14" height="14" fill="#35d6e8"/>
-    <text x="664" y="102" font-size="13" font-weight="700" fill="#92eaf4">INGEST</text>
-    <text x="640" y="122" font-size="11" fill="#d3c5b9">Upload a PDF or text doc — chunked and embedded for retrieval.</text>
-
-    <rect x="640" y="156" width="14" height="14" fill="#ff5a3c"/>
-    <text x="664" y="168" font-size="13" font-weight="700" fill="#ffb3a0">INTERROGATE</text>
-    <text x="640" y="188" font-size="11" fill="#d3c5b9">Chat, grounded in the source — cited before the first token streams in.</text>
-
-    <rect x="640" y="222" width="14" height="14" fill="#ffc53d"/>
-    <text x="664" y="234" font-size="13" font-weight="700" fill="#ffdd8f">CONSOLIDATE</text>
-    <text x="640" y="254" font-size="11" fill="#d3c5b9">The answer becomes a note — LaTeX renders live, AI edits stay marked.</text>
-
-    <rect x="640" y="288" width="14" height="14" fill="#b8ff3c"/>
-    <text x="664" y="300" font-size="13" font-weight="700" fill="#d8ff92">REHEARSE</text>
-    <text x="640" y="320" font-size="11" fill="#d3c5b9">Flashcards, real SM-2 spacing — ease, interval and reps, done right.</text>
-
-    <rect x="640" y="354" width="14" height="14" fill="#ff3d8b"/>
-    <text x="664" y="366" font-size="13" font-weight="700" fill="#ff9ac1">PROVE</text>
-    <text x="640" y="386" font-size="11" fill="#d3c5b9">Auto-generated, auto-graded quiz — scored, with what to review next.</text>
-
-    <text x="640" y="428" font-size="11" fill="#4a3c32">→ then PROVE feeds back into what INGEST prioritizes next.</text>
+    <circle cx="439.3" cy="296.3" r="46" fill="url(#node-coral)" stroke="#ff3d8b" stroke-width="2.5"/>
+    <g transform="translate(439.3,296.3)" stroke="#ff9ac1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+      <rect x="-10" y="-10" width="20" height="20" rx="4"/>
+      <path d="M-5,0 L-1,5 L6,-6"/>
+    </g>
+    <text x="384" y="293" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="16" fill="#ff9ac1">PROVE</text>
+    <text x="384" y="313" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#a89484">Measure understanding with quizzes.</text>
   </g>
 </svg>

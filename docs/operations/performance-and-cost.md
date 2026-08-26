@@ -21,7 +21,7 @@ against the other.
 | Chat time-to-first-token, warm | <1.5s | **Measured 2026-08-12: ~699ms** (retrieval 512ms + Groq TTFT 187ms, real call against 52 real embedded chunks — see §9). Comfortably inside budget. |
 | Quiz/flashcard generation (full artifact) | <6s | One 70B call generating N structured items — the slowest routine user-facing wait in the product; must always show a real loading state, never a bare spinner with no explanation |
 | Document processing (upload → ready) | Hard cap 25s (`PROCESSING_BUDGET_S`); target median <8s for a typical lecture PDF | **Measured 2026-08-12: 6.2s median** re-embedding a real 52-chunk academic paper (extract+chunk+embed+insert, real local BGE-small) — inside both the hard cap and the target, for a document larger than "typical." |
-| First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-09: 147KB** entry (app), **~209KB** for a landing visit (entry + the lazy `Landing` chunk). The 245KB previously recorded here predates the landing rebuild and further splitting. |
+| First-load JS bundle (gzipped) | ≤250KB | **Measured 2026-08-26: ~158KB** entry (app) — the entry chunk plus every `modulepreload`ed dependency at first paint (main bundle, auth, AuthProvider, `cn`, react-dom, errors, client, bootSplash), summed from a real `npm run build`. The 147KB figure recorded 2026-08-09 predates feature growth since; re-measure after any auth or entry-path change. |
 | Any in-app animation | ≤320ms (`docs/plan.md`'s existing rule) | Enforced by convention (`components/ui/motion.tsx`), not a runtime check |
 
 These are planning targets, not SLAs verified by a monitoring system —

@@ -230,7 +230,6 @@ export function Sidebar({
             {!collapsed && (
               <span className="min-w-0 text-[12.5px]">
                 <span className="block truncate font-bold text-ink">{displayName}</span>
-                <span className="setcode">Free</span>
               </span>
             )}
           </Link>
