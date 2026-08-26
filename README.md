@@ -2,30 +2,27 @@
 
 <img src="docs/assets/readme-banner.svg" alt="Space Learn" width="100%" />
 
-**Upload what you're studying. Chat with it, cited. Turn the answer into notes,
-flashcards, and a quiz — without leaving the topic.**
+**The study app that never makes something up — every answer is cited back
+to the page it came from, and becomes a note, a flashcard, or a quiz in one
+click.**
 
 [![License](https://img.shields.io/badge/LICENSE-MIT-ff5a3c?style=for-the-badge&labelColor=1e1a17)](LICENSE)
 [![React](https://img.shields.io/badge/REACT-19-35d6e8?style=for-the-badge&labelColor=1e1a17)](web/package.json)
-[![TypeScript](https://img.shields.io/badge/TYPESCRIPT-6-5590ff?style=for-the-badge&labelColor=1e1a17)](web/package.json)
+[![TypeScript](https://img.shields.io/badge/TYPESCRIPT-~6.0-5590ff?style=for-the-badge&labelColor=1e1a17)](web/package.json)
 [![FastAPI](https://img.shields.io/badge/FASTAPI-ASYNC-22d3a0?style=for-the-badge&labelColor=1e1a17)](api/pyproject.toml)
-[![Tests](https://img.shields.io/badge/TESTS-690%20PASSING-b8ff3c?style=for-the-badge&labelColor=1e1a17)](#testing)
-[![Cost](https://img.shields.io/badge/HOSTING-%240%2Fmonth-ffc53d?style=for-the-badge&labelColor=1e1a17)](#tech-stack)
+
+A full production app, not a prototype — **58 API routes**, **688 passing
+tests**, **$0/month** to run it end to end.
 
 </div>
 
 <br/>
 
-Space Learn is a full-stack study platform built around one idea: studying is
-one continuous loop, not five disconnected tools. A document you upload isn't
-"done" once it's indexed — it's the raw material for a conversation, and that
-conversation is the raw material for a note, a flashcard deck, and a quiz.
-**58 API routes, ~38,800 lines of code, 690 passing tests** — built and
-verified end to end, not a prototype.
-
-Organized as **Subjects → Subspaces** — a subject you're studying, broken into
-the specific topics inside it — with every document, chat, note, deck, and
-quiz scoped to a topic so the AI is never guessing which class you mean.
+A document you upload isn't "done" once it's indexed — it's the raw material
+for a conversation, and that conversation is the raw material for a note, a
+flashcard deck, and a quiz. Organized as **Subjects → Subspaces**, so the AI
+is never guessing which class you mean, and nothing is ever silently made
+up: a failed retrieval is a handled state, not a hallucinated answer.
 
 <br/>
 
@@ -36,23 +33,39 @@ quiz scoped to a topic so the AI is never guessing which class you mean.
 <br/>
 
 Every card above is a real feature, not a diagram aspiration — a chat answer
-becomes a note in one click (carrying its citations and an "AI wrote this"
-marker), a note becomes flashcards, and a quiz is generated from whatever the
-student actually studied. Nothing crosses a topic boundary implicitly, and
-nothing is ever silently made up: retrieval failure is a distinct, handled
-state, not a hallucinated answer.
+becomes a note in one click, a note becomes flashcards, a quiz is generated
+from whatever the student actually studied.
 
-### Contents
+**If that's the kind of engineering you'd want on your team, the receipts are
+below — real guard code, real spaced-repetition math, real measured
+latency, not adjectives.** ⭐ a star goes a long way.
 
-[Features](#whats-actually-in-it) · [AI Agents](#ai-agents--custom-skills) ·
-[Design](#design-system-foil-binder) · [Architecture](#architecture) ·
-[AI Pipeline](#the-ai-pipeline) · [Personalization](#the-student-model--personalization) ·
-[Engineering Decisions](#engineering-decisions-worth-reading) ·
-[Code Quality](#code-quality--engineering-discipline) ·
-[Security](#security) · [Performance & Cost](#performance--cost-real-numbers) ·
-[Roadmap](#designed-but-not-built-yet) · [Tech Stack](#tech-stack) ·
-[By the Numbers](#by-the-numbers) · [Quick Start](#quick-start) ·
-[Testing](#testing) · [Docs](#full-documentation) · [License](#license)
+<details>
+<summary><b>Contents</b></summary>
+
+- [What it looks like](#what-it-looks-like)
+- [Highlights](#whats-actually-in-it)
+- [Proof, not claims](#proof-not-claims)
+- [AI Agents & custom Skills](#ai-agents--custom-skills)
+- [Design system](#design-system-foil-binder)
+- [Architecture](#architecture)
+- [The AI pipeline](#the-ai-pipeline)
+- [Personalization](#the-student-model--personalization)
+- [How this compares](#how-this-compares)
+- [Engineering deep-dive](#engineering-decisions-worth-reading)
+- [Tech stack](#tech-stack)
+- [Quick start / one-click deploy](#quick-start)
+- [Testing](#testing)
+- [Project structure](#project-structure)
+- [Full documentation](#full-documentation)
+
+</details>
+
+## What it looks like
+
+<img src="docs/assets/readme-screens.svg" alt="Chat with a citation card, a note with live LaTeX and an AI-touched paragraph, a flashcard with SM-2 grading buttons" width="100%" />
+
+<sub>Stylized mockup, not a screenshot — no public demo is live yet.</sub>
 
 ## What's actually in it
 
@@ -73,36 +86,6 @@ state, not a hallucinated answer.
   implemented **twice** — Python (server) and TypeScript (client) — so
   grading feels instant (optimistic) while staying identical server-side,
   with a parity test running 480 real cases against both to catch drift.
-
-  <details>
-  <summary>The actual grading step, verbatim (<code>api/app/routers/flashcards.py</code>)</summary>
-
-  ```python
-  if body.grade == "again":
-      ease = max(1.3, ease - 0.2)
-      interval = 1
-      reps = 0
-  elif body.grade == "hard":
-      ease = max(1.3, ease - 0.15)
-      interval = max(1, int(round(interval * 1.2)))
-      reps += 1
-  elif body.grade == "good":
-      interval = max(1, int(round(interval * ease))) if reps > 0 else 1
-      reps += 1
-  else:  # easy
-      ease = ease + 0.15
-      interval = max(2, int(round((interval or 1) * ease * 1.3)))
-      reps += 1
-
-  due_at = datetime.now(UTC) + timedelta(days=interval)
-  ```
-
-  Ease floors at **1.3** (SM-2's own hard floor, below which cards would
-  never stop being "due tomorrow"); a wrong answer doesn't just shorten the
-  interval, it resets `reps` to 0 — the card re-enters the learning phase
-  rather than just repeating on a shorter clock.
-
-  </details>
 - **Auto-generated, auto-graded quizzes** — topic-scoped and scored, with
   every question tagged with a `subtopic` concept at generation time, which
   is what powers weak-area detection later without any extra pipeline.
@@ -120,6 +103,79 @@ state, not a hallucinated answer.
   real; a fake "reminder time" toggle was deliberately removed rather than
   shipped, because "a setting that cannot take effect is a promise the app
   shouldn't make."
+
+## Proof, not claims
+
+Three things that are easy to say about a codebase and hard to actually show.
+
+**Every route is guarded the same way.** The backend runs on a service-role
+key that bypasses Postgres RLS entirely, so this shared guard — not the
+database — is the real authorization boundary. Verbatim, `api/app/guards.py`:
+
+```python
+async def assert_subspace(user_id: str, subspace_id: str) -> dict:
+    """Return the subspace row, or 404 if it isn't this user's."""
+    rows = await supabase.db_select(
+        "subspaces",
+        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
+        select="*,subjects(name)",
+        limit=1,
+    )
+    if not rows:
+        # 404 rather than 403: don't confirm that someone else's id exists.
+        raise NotFound("Subspace not found.")
+    return rows[0]
+```
+
+Every one of the 58 routes that accepts a caller-supplied id calls this
+first — and `test_guard_coverage.py` fails CI if a new one doesn't.
+
+**Spaced repetition, the real SM-2 arithmetic** — implemented twice
+(Python server, TypeScript client) and kept honest by a 480-case parity
+test. Verbatim, `api/app/routers/flashcards.py`:
+
+```python
+if body.grade == "again":
+    ease, interval, reps = max(1.3, ease - 0.2), 1, 0
+elif body.grade == "hard":
+    ease = max(1.3, ease - 0.15)
+    interval = max(1, round(interval * 1.2))
+    reps += 1
+elif body.grade == "good":
+    interval = max(1, round(interval * ease)) if reps > 0 else 1
+    reps += 1
+else:  # easy
+    ease += 0.15
+    interval = max(2, round((interval or 1) * ease * 1.3))
+    reps += 1
+```
+
+A wrong answer doesn't just shorten the interval — it resets `reps` to 0,
+so the card re-enters the learning phase instead of repeating on a shorter
+clock.
+
+**Personalization has real, weighted trust levels — not one bucket.**
+
+<div align="center">
+<img src="docs/assets/readme-trust.svg" alt="Trust weights: explicit 0.60, experiment 0.35, feedback 0.25, observed 0.10 (ceiling 0.75)" width="100%" />
+</div>
+
+Per the project's own decision log: *"contradicting evidence outweighs
+confirming evidence 1.5:1 — being wrong about a student costs more than
+being unsure about them."*
+
+## How this compares
+
+Not a knock on any of these — they're good at what they do. This is what's
+actually different about doing all of it in one loop:
+
+| | Space Learn | Plain ChatGPT / Claude | Anki | Quizlet |
+|---|:---:|:---:|:---:|:---:|
+| Cites the source page, before the answer | ✅ | — | — | — |
+| Chat → note → cards → quiz, no copy-pasting between apps | ✅ | — | — | — |
+| Real SM-2 spaced repetition | ✅ | — | ✅ | partial |
+| Weak-topic detection from your actual quiz scores | ✅ | — | — | — |
+| Self-hostable, $0/month to run | ✅ | — | ✅ (local) | — |
 
 ## AI Agents & custom Skills
 
@@ -157,7 +213,7 @@ restricting what a Skill can say. See
 ## Design system: "Foil Binder"
 
 Not a default theme — a deliberate world, and the seven squares in the banner
-above are it, not decoration. Dark-only, warm ground (`#1E1815`), no violet
+above are it, not decoration. Dark-only, warm ground (`#1e1a17`), no violet
 anywhere (explicitly banned mid-redesign). The seven foil tones double as both
 a subject's color identity *and* a badge's rarity tier — the same system does
 two jobs. Every card-shaped surface in the app (a flashcard, a deck tile, a
@@ -170,6 +226,13 @@ specifically to avoid the seams that make a landing page read as slides.
 ## Architecture
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor': '#262119', 'primaryTextColor': '#f5ede4', 'primaryBorderColor': '#ff5a3c',
+  'lineColor': '#ff8b76', 'secondaryColor': '#0e2f34', 'tertiaryColor': '#1e1a17',
+  'background': '#1e1a17', 'mainBkg': '#262119', 'nodeBorder': '#3b3028',
+  'clusterBkg': '#1e1a17', 'clusterBorder': '#3b3028', 'edgeLabelBackground': '#1e1a17',
+  'fontFamily': 'Courier New, monospace', 'fontSize': '13px'
+}}}%%
 flowchart TB
     subgraph Client["Browser — React 19 SPA"]
         UI[React app<br/>Vite build, lazy-routed]
@@ -193,13 +256,13 @@ flowchart TB
         Groq[Groq API<br/>3-tier model routing]
     end
 
-    UI -- "sign-in / sign-up only" --> Auth
+    UI -- "sign-in only" --> Auth
     UI -- "static assets" --> Static
-    UI -- "every other read/write, JWT bearer" --> API
-    API -- "service-role key, bypasses RLS" --> PG
-    API -- "verify JWT (local secret or network fallback)" --> Auth
-    API -- "upload/download files" --> Storage
-    API -- "chat/quiz/card/vision calls" --> Groq
+    UI -- "JWT bearer" --> API
+    API -- "service-role key" --> PG
+    API -- "verify JWT" --> Auth
+    API -- "upload/download" --> Storage
+    API -- "chat/quiz/vision" --> Groq
 ```
 
 **The one rule that explains most of this diagram:** the browser never talks
@@ -211,21 +274,31 @@ boundary first, an architecture choice second.
 <summary><b>A chat turn, sequenced</b> — the highest-traffic request in the app</summary>
 
 ```mermaid
+%%{init: {'theme':'base', 'themeVariables': {
+  'primaryColor': '#262119', 'primaryTextColor': '#f5ede4', 'primaryBorderColor': '#ff5a3c',
+  'lineColor': '#ff8b76', 'background': '#1e1a17', 'mainBkg': '#262119',
+  'actorBkg': '#241713', 'actorBorder': '#ff5a3c', 'actorTextColor': '#f5ede4',
+  'actorLineColor': '#3b3028', 'signalColor': '#ff8b76', 'signalTextColor': '#e0d3c8',
+  'labelBoxBkgColor': '#0e2f34', 'labelBoxBorderColor': '#35d6e8', 'labelTextColor': '#f5ede4',
+  'noteBkgColor': '#34260c', 'noteBorderColor': '#ffc53d', 'noteTextColor': '#ffdd8f',
+  'activationBkgColor': '#22320f', 'activationBorderColor': '#b8ff3c',
+  'sequenceNumberColor': '#1e1a17', 'fontFamily': 'Courier New, monospace', 'fontSize': '13px'
+}}}%%
 sequenceDiagram
     participant U as Browser
     participant A as FastAPI
     participant D as Postgres (Supabase)
     participant G as Groq
 
-    U->>A: POST /subspaces/{id}/chat  {text}
-    A->>D: assert_subspace(user, id) — ownership check
-    A->>A: consume_llm_quota(user) — in-process token bucket
-    A->>D: match_document_chunks RPC — pgvector similarity search
-    A-->>U: SSE: event: citation  (sent before any token)
+    U->>A: POST /subspaces/{id}/chat
+    A->>D: assert_subspace(user, id)
+    A->>A: consume_llm_quota(user)
+    A->>D: match_document_chunks RPC
+    A-->>U: SSE: citation
     A->>G: stream_chat(messages)
     G-->>A: token deltas
-    A-->>U: SSE: event: token  (repeated)
-    A-->>U: SSE: event: done  {message_id, citations}
+    A-->>U: SSE: token (repeated)
+    A-->>U: SSE: done
 ```
 
 Citations are computed **before** the model call and streamed first — the
@@ -306,19 +379,16 @@ excluding streaks, badges, and other subjects' state it can't act on anyway.
 
 **Preferences fold, with real, weighted trust levels** — a closed whitelist
 of 8 modelable dimensions (explanation length/depth, session length, study
-goal, …), each blended from four sources with different trust:
+goal, …), each blended from four sources with different trust (chart in
+[Proof, not claims](#proof-not-claims) above). Observed-habit sentences
+("works mostly by asking questions on 7 of the last 12 active days") are
+always labeled as observed, never phrased as fact — *"a model may propose
+but may never assert."*
 
-<div align="center">
-<img src="docs/assets/readme-trust.svg" alt="Trust weights: explicit 0.60, experiment 0.35, feedback 0.25, observed 0.10 (ceiling 0.75)" width="100%" />
-</div>
+<details>
+<summary><b>Engineering deep-dive</b> — decisions, code discipline, security, performance, roadmap</summary>
 
-Per the project's own decision log: *"contradicting evidence outweighs
-confirming evidence 1.5:1 — being wrong about a student costs more than being
-unsure about them."* Observed-habit sentences ("works mostly by asking
-questions on 7 of the last 12 active days") are always labeled as observed,
-never phrased as fact — *"a model may propose but may never assert."*
-
-## Engineering decisions worth reading
+### Engineering decisions worth reading
 
 The parts of this codebase that took actual judgment, not just typing:
 
@@ -338,7 +408,7 @@ contract, free-tier discipline, trade-offs table, scalability roadmap) live in
 [`docs/engineering/architecture.md`](docs/engineering/architecture.md) and
 [`docs/decisions.md`](docs/decisions.md).
 
-## Code quality & engineering discipline
+### Code quality & engineering discipline
 
 Not claims — every line below is a real, checkable mechanism in this repo,
 not a description of intent.
@@ -347,18 +417,19 @@ not a description of intent.
   [`test_guard_coverage.py`](api/tests/test_guard_coverage.py) doesn't test
   one endpoint — it inspects every router and asserts each one that accepts
   a caller-supplied id calls an `assert_*` ownership guard before touching
-  it. A new endpoint that forgets this doesn't get caught by a human
-  reviewer noticing; it gets caught by CI, every time.
+  it (guard code in [Proof, not claims](#proof-not-claims) above). A new
+  endpoint that forgets this doesn't get caught by a human reviewer
+  noticing; it gets caught by CI, every time.
 - **One error shape, everywhere.** Every backend error — expected or not —
   returns the identical envelope: `{"error": {"code", "message"}}`. No raw
   exception, stack trace, or upstream provider error body is ever allowed to
   reach the screen; the frontend's `friendlyMessage()` maps every code to
   plain-English copy in exactly one place.
-- **Correctness that survives two languages.** SM-2 grading is implemented
-  independently in Python (server) and TypeScript (client, for optimistic
-  UI), and a dedicated parity test runs 480 real cases through both and
-  diffs the output — not "we wrote it twice and hoped," a test that fails if
-  they ever disagree.
+- **Correctness that survives two languages.** SM-2 grading (arithmetic
+  above) is implemented independently in Python (server) and TypeScript
+  (client, for optimistic UI), and a dedicated parity test runs 480 real
+  cases through both and diffs the output — not "we wrote it twice and
+  hoped," a test that fails if they ever disagree.
 - **Root-cause fixes over per-symptom patches**, evidenced twice above: the
   `useAsync` cache race was fixed once, at the shared hook, instead of
   patched at every screen that hit it; the LaTeX backslash bug was diagnosed
@@ -392,34 +463,13 @@ not a description of intent.
   the abandoned parallel-DB-call optimization that measured slower) — so the
   reasoning survives past the person who made the call.
 
-## Security
+### Security
 
 [Full write-up](docs/engineering/security.md).
 
 - **Every ownership guard returns 404, not 403**, on a foreign id —
   deliberately anti-enumeration, so a request can't distinguish "doesn't
-  exist" from "exists but isn't yours." The actual guard, verbatim
-  (`api/app/guards.py`):
-
-  ```python
-  async def assert_subspace(user_id: str, subspace_id: str) -> dict:
-      """Return the subspace row (with its parent subject's name embedded, as
-      `row["subjects"]["name"]`), or 404 if it isn't this user's."""
-      rows = await supabase.db_select(
-          "subspaces",
-          filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-          select="*,subjects(name)",
-          limit=1,
-      )
-      if not rows:
-          # 404 rather than 403: don't confirm that someone else's id exists.
-          raise NotFound("Subspace not found.")
-      return rows[0]
-  ```
-
-  Every one of the 58 routes that accepts a caller-supplied id calls this
-  (or its `assert_deck` / `assert_space` siblings) as its first line — and
-  `test_guard_coverage.py` fails the build if a new one doesn't.
+  exist" from "exists but isn't yours." See the guard function above.
 - **Dual-path JWT verification**: local HS256 (no network hop, preferred),
   falling back to a network call for projects on newer asymmetric signing
   keys — the fallback is cached 60s, since it was measured as the single
@@ -441,7 +491,7 @@ not a description of intent.
 - **API docs gated**: `/docs`, `/redoc`, and the OpenAPI schema are behind an
   `EXPOSE_API_DOCS` flag, off in production.
 
-## Performance & cost, real numbers
+### Performance & cost, real numbers
 
 Measured against the live app, not estimated — full detail in
 [`docs/operations/performance-and-cost.md`](docs/operations/performance-and-cost.md).
@@ -463,11 +513,11 @@ calls in the spaces-list endpoint measured **slower** (1566ms gathered vs.
 connection — reverted, and left in the codebase as a documented
 anti-pattern-in-context rather than quietly deleted.
 
-## Designed but not built yet
+### What's next
 
-Honesty about scope is a feature, not an omission. From
-[`docs/product/vision.md`](docs/product/vision.md), designed in real detail
-but intentionally not shipped:
+Designed in real detail in
+[`docs/product/vision.md`](docs/product/vision.md), not yet shipped —
+honesty about scope is a feature, not an omission:
 
 - **The Gap Map** — a per-subject weak-area graph, computed at render time
   and never stored: node = concept, size = how much material covers it,
@@ -486,6 +536,12 @@ but intentionally not shipped:
   *"gamification beyond honest streaks."* No XP, no leagues, no inflated
   numbers.
 
+</details>
+
+<div align="center">
+<img src="docs/assets/readme-divider.svg" width="640" alt="" />
+</div>
+
 ## Tech stack
 
 | | |
@@ -497,18 +553,15 @@ but intentionally not shipped:
 | **Testing** | Vitest + Testing Library (400+ frontend tests), pytest (287 backend tests) |
 | **Hosting** | Vercel (frontend, static) · Render (backend, free tier) · Supabase (data, free tier) — the whole stack runs on $0/month |
 
-## By the numbers
-
-All independently verified against the working tree, not estimated:
-
-| | | | |
-|---|---|---|---|
-| **58** API routes | **18** SQL migrations | **690** passing tests | **14** feature areas |
-| **~30,950** lines TypeScript | **~7,850** lines Python | **137** frontend source files | **44** test files |
-| **6** badges | **8** preference dimensions | **3** LLM model tiers | **4** seeded library Skills |
-| **50+** hand-drawn icons | **7** foil accent tones | **$0** monthly hosting cost | **25s** hard embed budget |
-
 ## Quick start
+
+Deploy your own copy directly, no local setup — you'll still need a free
+Supabase project and Groq key to configure after deploying:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAbiram116%2FNew-Space-Learn&root-directory=web&project-name=space-learn)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Abiram116/New-Space-Learn)
+
+Or run it locally:
 
 **Prerequisites:** a recent Node.js LTS, Python 3.11–3.12, a free
 [Supabase](https://supabase.com) project, a free
@@ -556,7 +609,7 @@ render.yaml  Backend deploy manifest
 ```
 
 <details>
-<summary><b>Repo tour</b></summary>
+<summary><b>Repo tour</b> — one line per folder that matters</summary>
 
 - **`web/src/api/`** — the only place that talks HTTP; one file per resource.
 - **`web/src/components/ui/`** — small primitives with no app-specific logic

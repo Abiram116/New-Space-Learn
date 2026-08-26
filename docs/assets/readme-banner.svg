@@ -4,10 +4,56 @@
       <rect width="20" height="20" fill="#1e1a17"/>
       <rect width="2" height="2" fill="#2e251f"/>
     </pattern>
+    <radialGradient id="glow" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#2e2820"/>
+      <stop offset="55%" stop-color="#262119"/>
+      <stop offset="100%" stop-color="#1e1a17"/>
+    </radialGradient>
+    <radialGradient id="corner-brand" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ff5a3c" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#ff5a3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="corner-sky" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#35d6e8" stop-opacity="0.14"/>
+      <stop offset="100%" stop-color="#35d6e8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sw-brand" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff8b76"/>
+      <stop offset="100%" stop-color="#ff5a3c"/>
+    </linearGradient>
+    <linearGradient id="sw-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#92eaf4"/>
+      <stop offset="100%" stop-color="#35d6e8"/>
+    </linearGradient>
+    <linearGradient id="sw-mint" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d8ff92"/>
+      <stop offset="100%" stop-color="#b8ff3c"/>
+    </linearGradient>
+    <linearGradient id="sw-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffdd8f"/>
+      <stop offset="100%" stop-color="#ffc53d"/>
+    </linearGradient>
+    <linearGradient id="sw-coral" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff9ac1"/>
+      <stop offset="100%" stop-color="#ff3d8b"/>
+    </linearGradient>
+    <linearGradient id="sw-azure" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a6c6ff"/>
+      <stop offset="100%" stop-color="#5590ff"/>
+    </linearGradient>
+    <linearGradient id="sw-jade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#86e9c9"/>
+      <stop offset="100%" stop-color="#22d3a0"/>
+    </linearGradient>
   </defs>
 
-  <!-- Canvas -->
-  <rect width="1200" height="320" fill="url(#grid)"/>
+  <!-- Canvas: radial depth (surface → canvas), pixel grid on top -->
+  <rect width="1200" height="320" fill="url(#glow)"/>
+  <rect width="1200" height="320" fill="url(#grid)" opacity="0.5"/>
+
+  <!-- Soft corner glows, one per accent hue — feathered, not hard-edged -->
+  <circle cx="120" cy="90" r="220" fill="url(#corner-brand)"/>
+  <circle cx="1080" cy="230" r="220" fill="url(#corner-sky)"/>
 
   <!-- Pixel-frame border (chamfered corners, retro cartridge window) -->
   <rect x="8" y="8" width="1184" height="304" fill="none" stroke="#ff5a3c" stroke-width="4"/>
@@ -17,28 +63,28 @@
   <rect x="4" y="304" width="12" height="12" fill="#1e1a17"/>
   <rect x="1184" y="304" width="12" height="12" fill="#1e1a17"/>
 
-  <!-- Title, chromatic pixel-shadow stack -->
+  <!-- Title, chromatic pixel-shadow stack — tight tracking, no oversized word gap -->
   <text x="606" y="153" text-anchor="middle" font-family="'Courier New', monospace"
-        font-weight="700" font-size="66" letter-spacing="8" fill="#35d6e8" opacity="0.55">SPACE LEARN</text>
+        font-weight="700" font-size="64" letter-spacing="2" fill="#35d6e8" opacity="0.55">SPACE LEARN</text>
   <text x="603" y="150" text-anchor="middle" font-family="'Courier New', monospace"
-        font-weight="700" font-size="66" letter-spacing="8" fill="#ff3d8b" opacity="0.6">SPACE LEARN</text>
+        font-weight="700" font-size="64" letter-spacing="2" fill="#ff3d8b" opacity="0.6">SPACE LEARN</text>
   <text x="600" y="147" text-anchor="middle" font-family="'Courier New', monospace"
-        font-weight="700" font-size="66" letter-spacing="8" fill="#f5ede4">SPACE LEARN</text>
+        font-weight="700" font-size="64" letter-spacing="2" fill="#f5ede4">SPACE LEARN</text>
 
   <!-- Subtitle, terminal style -->
   <text x="600" y="192" text-anchor="middle" font-family="'Courier New', monospace"
-        font-size="18" letter-spacing="4" fill="#d3c5b9">&gt; UPLOAD.CHAT.NOTE.REHEARSE.PROVE_</text>
+        font-size="18" letter-spacing="4" fill="#c4b5aa">&gt; UPLOAD.CHAT.NOTE.REHEARSE.PROVE_</text>
 
-  <!-- Palette strip — the real seven "foil" tones, honestly rendered -->
+  <!-- Palette strip — the real seven "foil" tones, each swatch a base→deep gradient -->
   <g>
-    <rect x="472" y="238" width="28" height="28" fill="#ff5a3c"/>
-    <rect x="510" y="238" width="28" height="28" fill="#35d6e8"/>
-    <rect x="548" y="238" width="28" height="28" fill="#b8ff3c"/>
-    <rect x="586" y="238" width="28" height="28" fill="#ffc53d"/>
-    <rect x="624" y="238" width="28" height="28" fill="#ff3d8b"/>
-    <rect x="662" y="238" width="28" height="28" fill="#5590ff"/>
-    <rect x="700" y="238" width="28" height="28" fill="#22d3a0"/>
+    <rect x="472" y="238" width="28" height="28" fill="url(#sw-brand)"/>
+    <rect x="510" y="238" width="28" height="28" fill="url(#sw-sky)"/>
+    <rect x="548" y="238" width="28" height="28" fill="url(#sw-mint)"/>
+    <rect x="586" y="238" width="28" height="28" fill="url(#sw-sun)"/>
+    <rect x="624" y="238" width="28" height="28" fill="url(#sw-coral)"/>
+    <rect x="662" y="238" width="28" height="28" fill="url(#sw-azure)"/>
+    <rect x="700" y="238" width="28" height="28" fill="url(#sw-jade)"/>
   </g>
   <text x="600" y="292" text-anchor="middle" font-family="'Courier New', monospace"
-        font-size="11" letter-spacing="3" fill="#4a3c32">SEVEN FOIL TONES // ONE DESIGN SYSTEM</text>
+        font-size="11" letter-spacing="3" fill="#9c8b80">SEVEN FOIL TONES // ONE DESIGN SYSTEM</text>
 </svg>

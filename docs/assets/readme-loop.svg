@@ -1,66 +1,87 @@
-<svg width="1200" height="230" viewBox="0 0 1200 230" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="230" fill="#1e1a17"/>
+<svg width="1200" height="470" viewBox="0 0 1200 470" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="node-sky" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#0e2f34"/><stop offset="100%" stop-color="#131f38"/>
+    </radialGradient>
+    <radialGradient id="node-brand" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#241713"/><stop offset="100%" stop-color="#1a120f"/>
+    </radialGradient>
+    <radialGradient id="node-sun" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#34260c"/><stop offset="100%" stop-color="#241a08"/>
+    </radialGradient>
+    <radialGradient id="node-mint" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#22320f"/><stop offset="100%" stop-color="#18220a"/>
+    </radialGradient>
+    <radialGradient id="node-coral" cx="35%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#351122"/><stop offset="100%" stop-color="#250c18"/>
+    </radialGradient>
+  </defs>
 
-  <!-- Arrows between cards -->
+  <rect width="1200" height="470" fill="#1e1a17"/>
+  <text x="40" y="34" font-family="'Courier New', monospace" font-size="12" letter-spacing="2"
+        fill="#9c8b80">THE STUDY LOOP — NOT FIVE TOOLS, ONE CYCLE</text>
+
+  <!-- Track — center pushed down so top node clears the header -->
+  <circle cx="300" cy="265" r="150" fill="none" stroke="#3b3028" stroke-width="2" stroke-dasharray="3 7"/>
+
+  <!-- Direction arrows along the track (clockwise) -->
   <g fill="#4a3c32">
-    <polygon points="228,100 252,110 228,120"/>
-    <polygon points="468,100 492,110 468,120"/>
-    <polygon points="708,100 732,110 708,120"/>
-    <polygon points="948,100 972,110 948,120"/>
+    <polygon points="6,0 -4,-4 -4,4" transform="translate(388.17,143.65) rotate(36)"/>
+    <polygon points="6,0 -4,-4 -4,4" transform="translate(442.67,311.35) rotate(108)"/>
+    <polygon points="6,0 -4,-4 -4,4" transform="translate(300,415) rotate(180)"/>
+    <polygon points="6,0 -4,-4 -4,4" transform="translate(157.33,311.35) rotate(252)"/>
+    <polygon points="6,0 -4,-4 -4,4" transform="translate(211.83,143.65) rotate(324)"/>
   </g>
 
-  <!-- Card 1 — INGEST -->
+  <!-- Nodes -->
   <g>
-    <rect x="20" y="20" width="200" height="170" rx="10" fill="#0e2f34" stroke="#35d6e8" stroke-width="2"/>
-    <rect x="36" y="36" width="14" height="14" fill="#35d6e8"/>
-    <text x="36" y="76" font-family="'Courier New', monospace" font-weight="700" font-size="18" fill="#92eaf4">INGEST</text>
-    <text x="36" y="102" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">Upload a PDF or</text>
-    <text x="36" y="118" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">text doc — chunked</text>
-    <text x="36" y="134" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">and embedded for</text>
-    <text x="36" y="150" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">retrieval.</text>
+    <circle cx="300" cy="115" r="34" fill="url(#node-sky)" stroke="#35d6e8" stroke-width="2.5"/>
+    <rect x="292" y="107" width="16" height="16" fill="#92eaf4"/>
+    <text x="300" y="68" text-anchor="middle" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#92eaf4">INGEST</text>
+  </g>
+  <g>
+    <circle cx="442.67" cy="218.65" r="34" fill="url(#node-brand)" stroke="#ff5a3c" stroke-width="2.5"/>
+    <rect x="434.67" y="210.65" width="16" height="16" fill="#ffb3a0"/>
+    <text x="487" y="224" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ffb3a0">INTERROGATE</text>
+  </g>
+  <g>
+    <circle cx="388.17" cy="386.35" r="34" fill="url(#node-sun)" stroke="#ffc53d" stroke-width="2.5"/>
+    <rect x="380.17" y="378.35" width="16" height="16" fill="#ffdd8f"/>
+    <text x="432" y="391" text-anchor="start" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ffdd8f">CONSOLIDATE</text>
+  </g>
+  <g>
+    <circle cx="211.83" cy="386.35" r="34" fill="url(#node-mint)" stroke="#b8ff3c" stroke-width="2.5"/>
+    <rect x="203.83" y="378.35" width="16" height="16" fill="#d8ff92"/>
+    <text x="168" y="391" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#d8ff92">REHEARSE</text>
+  </g>
+  <g>
+    <circle cx="157.33" cy="218.65" r="34" fill="url(#node-coral)" stroke="#ff3d8b" stroke-width="2.5"/>
+    <rect x="149.33" y="210.65" width="16" height="16" fill="#ff9ac1"/>
+    <text x="113" y="224" text-anchor="end" font-family="'Courier New', monospace" font-weight="700" font-size="15" fill="#ff9ac1">PROVE</text>
   </g>
 
-  <!-- Card 2 — INTERROGATE -->
-  <g>
-    <rect x="260" y="20" width="200" height="170" rx="10" fill="#241713" stroke="#ff5a3c" stroke-width="2"/>
-    <rect x="276" y="36" width="14" height="14" fill="#ff5a3c"/>
-    <text x="276" y="76" font-family="'Courier New', monospace" font-weight="700" font-size="18" fill="#ffb3a0">INTERROGATE</text>
-    <text x="276" y="102" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">Chat, grounded in</text>
-    <text x="276" y="118" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">the source — cited</text>
-    <text x="276" y="134" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">before the first</text>
-    <text x="276" y="150" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">token streams in.</text>
-  </g>
+  <!-- Legend -->
+  <g font-family="'Courier New', monospace">
+    <rect x="640" y="90" width="14" height="14" fill="#35d6e8"/>
+    <text x="664" y="102" font-size="13" font-weight="700" fill="#92eaf4">INGEST</text>
+    <text x="640" y="122" font-size="11" fill="#d3c5b9">Upload a PDF or text doc — chunked and embedded for retrieval.</text>
 
-  <!-- Card 3 — CONSOLIDATE -->
-  <g>
-    <rect x="500" y="20" width="200" height="170" rx="10" fill="#34260c" stroke="#ffc53d" stroke-width="2"/>
-    <rect x="516" y="36" width="14" height="14" fill="#ffc53d"/>
-    <text x="516" y="76" font-family="'Courier New', monospace" font-weight="700" font-size="18" fill="#ffdd8f">CONSOLIDATE</text>
-    <text x="516" y="102" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">The answer becomes</text>
-    <text x="516" y="118" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">a note — LaTeX math</text>
-    <text x="516" y="134" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">renders live, AI</text>
-    <text x="516" y="150" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">edits stay marked.</text>
-  </g>
+    <rect x="640" y="156" width="14" height="14" fill="#ff5a3c"/>
+    <text x="664" y="168" font-size="13" font-weight="700" fill="#ffb3a0">INTERROGATE</text>
+    <text x="640" y="188" font-size="11" fill="#d3c5b9">Chat, grounded in the source — cited before the first token streams in.</text>
 
-  <!-- Card 4 — REHEARSE -->
-  <g>
-    <rect x="740" y="20" width="200" height="170" rx="10" fill="#22320f" stroke="#b8ff3c" stroke-width="2"/>
-    <rect x="756" y="36" width="14" height="14" fill="#b8ff3c"/>
-    <text x="756" y="76" font-family="'Courier New', monospace" font-weight="700" font-size="18" fill="#d8ff92">REHEARSE</text>
-    <text x="756" y="102" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">Flashcards, real</text>
-    <text x="756" y="118" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">SM-2 spacing —</text>
-    <text x="756" y="134" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">ease, interval and</text>
-    <text x="756" y="150" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">reps, done right.</text>
-  </g>
+    <rect x="640" y="222" width="14" height="14" fill="#ffc53d"/>
+    <text x="664" y="234" font-size="13" font-weight="700" fill="#ffdd8f">CONSOLIDATE</text>
+    <text x="640" y="254" font-size="11" fill="#d3c5b9">The answer becomes a note — LaTeX renders live, AI edits stay marked.</text>
 
-  <!-- Card 5 — PROVE -->
-  <g>
-    <rect x="980" y="20" width="200" height="170" rx="10" fill="#351122" stroke="#ff3d8b" stroke-width="2"/>
-    <rect x="996" y="36" width="14" height="14" fill="#ff3d8b"/>
-    <text x="996" y="76" font-family="'Courier New', monospace" font-weight="700" font-size="18" fill="#ff9ac1">PROVE</text>
-    <text x="996" y="102" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">Auto-generated,</text>
-    <text x="996" y="118" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">auto-graded quiz —</text>
-    <text x="996" y="134" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">scored, with what</text>
-    <text x="996" y="150" font-family="'Courier New', monospace" font-size="11" fill="#d3c5b9">to review next.</text>
+    <rect x="640" y="288" width="14" height="14" fill="#b8ff3c"/>
+    <text x="664" y="300" font-size="13" font-weight="700" fill="#d8ff92">REHEARSE</text>
+    <text x="640" y="320" font-size="11" fill="#d3c5b9">Flashcards, real SM-2 spacing — ease, interval and reps, done right.</text>
+
+    <rect x="640" y="354" width="14" height="14" fill="#ff3d8b"/>
+    <text x="664" y="366" font-size="13" font-weight="700" fill="#ff9ac1">PROVE</text>
+    <text x="640" y="386" font-size="11" fill="#d3c5b9">Auto-generated, auto-graded quiz — scored, with what to review next.</text>
+
+    <text x="640" y="428" font-size="11" fill="#4a3c32">→ then PROVE feeds back into what INGEST prioritizes next.</text>
   </g>
 </svg>

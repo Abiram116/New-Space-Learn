@@ -1,6 +1,25 @@
 <svg width="1200" height="260" viewBox="0 0 1200 260" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bar-brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5c3325"/>
+      <stop offset="100%" stop-color="#ff5a3c"/>
+    </linearGradient>
+    <linearGradient id="bar-sky" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0e2f34"/>
+      <stop offset="100%" stop-color="#35d6e8"/>
+    </linearGradient>
+    <linearGradient id="bar-sun" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#34260c"/>
+      <stop offset="100%" stop-color="#ffc53d"/>
+    </linearGradient>
+    <linearGradient id="bar-jade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0f2c25"/>
+      <stop offset="100%" stop-color="#22d3a0"/>
+    </linearGradient>
+  </defs>
+
   <rect width="1200" height="260" fill="#1e1a17"/>
-  <text x="40" y="34" font-family="'Courier New', monospace" font-size="14" letter-spacing="3"
+  <text x="40" y="34" font-family="'Courier New', monospace" font-size="14" letter-spacing="1.5"
         fill="#d3c5b9">TRUST WEIGHTS — WHAT THE PERSONALIZATION LAYER BELIEVES, AND HOW MUCH</text>
 
   <!-- Track lines -->
@@ -8,23 +27,31 @@
     <line x1="280" y1="60" x2="280" y2="230"/>
   </g>
 
+  <!-- Full-width faint tracks, so every bar's ceiling (1.0) is visible at a glance -->
+  <g fill="#262119">
+    <rect x="280" y="66" width="900" height="26"/>
+    <rect x="280" y="116" width="900" height="26"/>
+    <rect x="280" y="166" width="900" height="26"/>
+    <rect x="280" y="216" width="900" height="26"/>
+  </g>
+
   <!-- explicit — 0.60 -->
   <text x="40" y="80" font-family="'Courier New', monospace" font-size="15" fill="#ffb3a0">explicit</text>
-  <rect x="280" y="66" width="700" height="26" fill="#ff5a3c"/>
-  <text x="990" y="85" font-family="'Courier New', monospace" font-size="15" fill="#ff5a3c">0.60</text>
+  <rect x="280" y="66" width="700" height="26" fill="url(#bar-brand)"/>
+  <text x="990" y="85" font-family="'Courier New', monospace" font-size="15" fill="#ff8b76">0.60</text>
 
   <!-- experiment — 0.35 -->
   <text x="40" y="130" font-family="'Courier New', monospace" font-size="15" fill="#92eaf4">experiment</text>
-  <rect x="280" y="116" width="408" height="26" fill="#35d6e8"/>
-  <text x="698" y="135" font-family="'Courier New', monospace" font-size="15" fill="#35d6e8">0.35</text>
+  <rect x="280" y="116" width="408" height="26" fill="url(#bar-sky)"/>
+  <text x="698" y="135" font-family="'Courier New', monospace" font-size="15" fill="#92eaf4">0.35</text>
 
   <!-- feedback — 0.25 -->
   <text x="40" y="180" font-family="'Courier New', monospace" font-size="15" fill="#ffdd8f">feedback</text>
-  <rect x="280" y="166" width="292" height="26" fill="#ffc53d"/>
-  <text x="582" y="185" font-family="'Courier New', monospace" font-size="15" fill="#ffc53d">0.25</text>
+  <rect x="280" y="166" width="292" height="26" fill="url(#bar-sun)"/>
+  <text x="582" y="185" font-family="'Courier New', monospace" font-size="15" fill="#ffdd8f">0.25</text>
 
   <!-- observed — 0.10, ceiling 0.75 -->
   <text x="40" y="230" font-family="'Courier New', monospace" font-size="15" fill="#86e9c9">observed</text>
-  <rect x="280" y="216" width="117" height="26" fill="#22d3a0"/>
-  <text x="407" y="235" font-family="'Courier New', monospace" font-size="15" fill="#22d3a0">0.10 (ceiling 0.75)</text>
+  <rect x="280" y="216" width="117" height="26" fill="url(#bar-jade)"/>
+  <text x="407" y="235" font-family="'Courier New', monospace" font-size="15" fill="#86e9c9">0.10 (ceiling 0.75)</text>
 </svg>
