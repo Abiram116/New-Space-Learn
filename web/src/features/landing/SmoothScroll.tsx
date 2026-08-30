@@ -45,9 +45,17 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     const lenis = new Lenis({
-      // Long enough to glide, short enough that the page still feels like
-      // it obeys you. Past ~1.4s smooth scrolling starts to read as lag.
-      duration: 1.1,
+      // 1.1s → 0.8s → 0.5s → 0.35s. Still not the whole story on its own —
+      // `easing` below is an expo-out curve, which decelerates hardest
+      // right at the END of its own duration. That's the right shape for
+      // scroll in general (real momentum scrolling decelerates into a
+      // stop), but it means the very last sliver of distance — exactly the
+      // sliver between "close to the bottom" and "actually at the
+      // bottom" — is where the curve is slowest, however short `duration`
+      // itself is. Cutting `duration` further is still worth doing (less
+      // time overall spent in that slow tail), paired below with loosening
+      // how much of the curve `landed` has to wait through.
+      duration: 0.35,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       // Touch devices already have momentum scrolling; adding ours on top
       // fights the platform and feels broken.
@@ -67,9 +75,28 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     // makes the scrub feel mushy.
     gsap.ticker.lagSmoothing(0)
 
+    // THE OTHER DIRECTION. `lenis.on('scroll', ScrollTrigger.update)` above
+    // is Lenis telling ScrollTrigger about scroll changes; nothing was
+    // telling LENIS about DOCUMENT changes. `HeroReveal`'s pinned
+    // ScrollTrigger inserts a pin-spacer that makes the real page taller
+    // than it was at mount — Lenis measures scrollable height once when it
+    // initializes (before that pin has necessarily finished setting up)
+    // and has no way to know on its own that the page grew afterward. Its
+    // internal notion of "how far can this page scroll" stays anchored to
+    // the shorter, pre-pin height, so once real scroll passes that stale
+    // limit, Lenis's own math has nowhere further to smooth toward and it
+    // stops doing anything — reported as "smooth exactly until the hero,
+    // then default" past that point. `ScrollTrigger`'s own `refresh` event
+    // fires whenever it recalculates layout (including right after a pin
+    // sets up), so re-measuring Lenis there keeps the two in agreement
+    // about how tall the page actually is.
+    const onRefresh = () => lenis.resize()
+    ScrollTrigger.addEventListener('refresh', onRefresh)
+
     return () => {
       lenisRef.current = null
       gsap.ticker.remove(raf)
+      ScrollTrigger.removeEventListener('refresh', onRefresh)
       lenis.destroy()
       gsap.ticker.lagSmoothing(500, 33)
     }

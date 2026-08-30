@@ -212,8 +212,20 @@ export function HeroReveal({
     <div ref={sectionRef} className="relative h-[100svh] overflow-hidden">
       {/* Sits above the frame in z-order so that during the hand-off the
           type stays readable rather than being clipped by it. */}
+      {/* WIDTH IS PROPORTIONAL, NOT CAPPED — and this is why the hero read
+          as "too big" on a laptop but "too small" on a 27" monitor from
+          the same code. The video frame below is `max-w-[92vw]`: it grows
+          with the display. This copy block was `max-w-6xl` — a fixed
+          1152px — so on a 1450px laptop it filled ~79% of the width while
+          on a 2560px monitor it filled ~45%, sitting as a small island
+          above a frame spanning nearly the whole screen. The type was
+          never the problem; the mismatch between a capped text column and
+          a proportional frame was, and it widens the bigger the display
+          gets. Matching the frame's own 92vw (with a ceiling only so
+          ultrawides don't run to absurd measures) keeps the two in the
+          same relationship at every size. */}
       <div ref={copyRef} className="absolute inset-x-0 top-0 z-10 px-5 pt-[8svh]">
-        <div className="mx-auto w-full max-w-6xl">
+        <div className="mx-auto w-full max-w-[min(92vw,1600px)]">
           <HeroCopy />
         </div>
       </div>
@@ -267,7 +279,24 @@ function HeroCopy() {
           lines in this face and pushed the button down onto the frame.
 
           `leading-[0.86]`: tight leading is what makes the lines read as one
-          mass rather than three separate sentences. */}
+          mass rather than three separate sentences.
+
+          SIZE AND CONTAINER SCALE TOGETHER. Two earlier attempts each
+          moved one of these in isolation and each broke the other screen:
+          dropping the ceiling (100px → 84px) fixed a laptop over-wrap and
+          made a 27" monitor look small; restoring the ceiling against a
+          capped `max-w-6xl` container put it back to a small island on
+          the big display.
+
+          What actually holds at every size is keeping the RATIO between
+          type size and container width constant, so the line count can't
+          change with the viewport. The container is now `92vw` (see the
+          wrapper above), and the type is `7vw` against a ceiling high
+          enough not to bind before the container's own does. On a 1450px
+          laptop that's ~101px type in a ~1334px column; on a 2560px
+          monitor ~124px in ~1600px. Different absolute sizes, same
+          proportions, same three lines — which is the property this
+          component's layout actually depends on. */}
       {/* SplitText re-splits this into lines and words at runtime, so the
           markup stays plain prose. `.sl-line { overflow: hidden }` is what
           lets each word rise out of its own line box rather than sliding over
@@ -277,7 +306,7 @@ function HeroCopy() {
           SplitText walks all of it: the heading split into 38 "words" and read
           "IT CITES THE PAGE THE PAGE EVERY TIME". The foil belongs on static
           type; animated type gets its emphasis from colour and motion. */}
-      <h1 className="nameplate max-w-4xl text-[clamp(38px,7.6vw,100px)] leading-[0.86] text-ink [&_.sl-line]:overflow-hidden">
+      <h1 className="nameplate max-w-full text-[clamp(36px,7vw,124px)] leading-[0.86] text-ink [&_.sl-line]:overflow-hidden">
         One page in. <span className="text-brand">Notes, cards, and a test</span> out.
       </h1>
       <p data-hero-tail className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-3">

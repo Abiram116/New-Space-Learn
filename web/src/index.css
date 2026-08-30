@@ -99,6 +99,20 @@
   :root {
     --ease-sl: cubic-bezier(0.22, 1, 0.36, 1);
     --dur-sl: 700ms;
+    /* A genuinely different SHAPE from the other two, not another point on
+       the same curve — `--ease-sl` and `--ease-out-expo` are both ease-OUT,
+       front-loading nearly all of their travel into roughly the first third
+       of whatever duration they're given. That's the right feel for
+       something arriving into a space that's already visible. It's the
+       wrong feel for something crossing an `overflow: hidden` boundary
+       (the Close panel's figure, rising from below its own clip line): an
+       ease-out curve had already covered most of the distance — invisibly,
+       behind the clip — by the time it crossed into view, so it appeared to
+       "pop" in already moving fast, then crawl to a stop. Symmetric
+       ease-in-out is slow at BOTH ends, so it's still moving slowly the
+       moment it first becomes visible, the way something genuinely
+       emerging from below would read. */
+    --ease-in-out-sl: cubic-bezier(0.65, 0, 0.35, 1);
   }
 
 }

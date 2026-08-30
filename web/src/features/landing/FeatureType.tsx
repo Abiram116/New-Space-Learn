@@ -203,11 +203,19 @@ export function FeatureType({
   // notches, not a continuous gesture — a scroll can settle a few dozen
   // pixels short of the frame's own edge, and the visitor is left looking
   // at a sliver of Hero with the pinned frame not quite engaged. This pulls
-  // the rest of the way in: once wheel input has been idle for 160ms (the
+  // the rest of the way in: once wheel input has been idle for 90ms (the
   // scroll has genuinely settled, not mid-gesture), if the frame's top edge
   // is within a quarter-viewport of the current scroll position, animate
   // the remaining distance through Lenis — never a raw `window.scrollTo`,
   // which would fight Lenis's own virtual position rather than move it.
+  //
+  // Both numbers here (and the debounce below) were tuned down from an
+  // earlier pass — 160ms before reacting and a 0.85s pull-in read as the
+  // section hesitating and then drifting into place rather than responding.
+  // 90ms is close to the shortest gap that still reliably separates
+  // "settled" from "mid-scroll" on a real trackpad; 0.45s is fast enough to
+  // read as a snap while keeping enough curve at the end not to feel like a
+  // hard cut.
   //
   // Directional and one-way on purpose. Only engages while scrolling DOWN
   // (`deltaY > 0`) toward a frame that hasn't been reached yet (`rect.top >
@@ -231,9 +239,9 @@ export function FeatureType({
         if (!lenis || !goingDown) return
         const rect = el.getBoundingClientRect()
         if (rect.top > 0 && rect.top < SNAP_ZONE) {
-          lenis.scrollTo(el, { duration: 0.85, easing: (t: number) => 1 - Math.pow(1 - t, 3) })
+          lenis.scrollTo(el, { duration: 0.45, easing: (t: number) => 1 - Math.pow(1 - t, 3) })
         }
-      }, 160)
+      }, 90)
     }
 
     window.addEventListener('wheel', onWheel, { passive: true })

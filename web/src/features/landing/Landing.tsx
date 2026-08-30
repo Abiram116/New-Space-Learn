@@ -290,7 +290,11 @@ function Dust() {
 function TopBar() {
   return (
     <header className="fixed inset-x-0 top-0 z-40 bg-gradient-to-b from-canvas via-canvas/85 to-transparent">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-5">
+      {/* Same proportional width as the hero copy and the close panel —
+          a fixed cap here while those scale with the viewport would leave
+          the logo and nav visibly inset from the content they sit above
+          on a large display. */}
+      <div className="mx-auto flex h-14 w-full max-w-[min(92vw,1600px)] items-center gap-3 px-5">
         <Link to="/" aria-label="Space Learn">
           <Logo size={26} textClassName="text-[18px]" />
         </Link>
@@ -345,10 +349,31 @@ function Close({ progress }: { progress: number }) {
   // settled rather than still arriving. Drives the things that should
   // happen ONCE, after the scrub finishes, not continuously across it: the
   // ambient tint, the foil sweep, and whether the panel is interactive.
-  // 0.97 rather than a strict 1 because scroll rarely lands on an exact
-  // integer and "almost entirely revealed" should count as landed.
-  const landed = progress >= 0.97
+  // 0.97 → 0.92: `progress` is driven by Lenis's own smoothed scroll
+  // position (see `SmoothScroll.tsx`), whose easing curve decelerates
+  // hardest in its own last stretch — the closer `landed` requires
+  // `progress` to get to a strict 1, the more of that slow tail it has to
+  // sit through before triggering. 0.92 is still "almost entirely
+  // revealed" (the panel itself keeps sliding the last few percent into
+  // place after the flourish starts, not a visible jump), but it's out of
+  // the steepest part of the curve's deceleration.
+  const landed = progress >= 0.92
   const hidden = progress <= 0.001
+
+  // Sticky, once `landed` first fires — never reset by scrolling back up,
+  // only by a fresh page load (this is plain `useState`, so a real reload
+  // is the only thing that clears it). Asked for directly: the figure's
+  // rise and the wordmark's foil sweep are a one-time flourish, not
+  // something that should replay — or worse, visibly REVERSE, the figure
+  // sinking back out of view — every time the panel scrolls out of and
+  // back into frame. `everLanded` is what the figure and the sweep key off
+  // instead of the live `landed`, below; `landed` itself stays live for
+  // `--tint` and `inert`, which are about what's on screen RIGHT NOW, not
+  // about a flourish that already happened once.
+  const [everLanded, setEverLanded] = useState(false)
+  useEffect(() => {
+    if (landed) setEverLanded(true)
+  }, [landed])
 
   useEffect(() => {
     if (!landed) {
@@ -417,12 +442,31 @@ function Close({ progress }: { progress: number }) {
           a face. A two-column grid guarantees they cannot collide: copy
           left, figure right. Below `lg` the grid stacks to two rows, copy
           above, figure below — still no overlap. */}
-      <div className="relative z-30 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1fr_1.3fr] lg:grid-rows-1 lg:items-center lg:gap-8">
+      {/* Two changes, same reasoning as the hero (see `HeroReveal.tsx`):
+          the container is proportional (`92vw`) rather than a fixed
+          `max-w-6xl`, so this panel fills the same share of a 27" monitor
+          as it does a laptop instead of shrinking to an island; and the
+          column ratio is flipped from `1fr_1.3fr` (figure-favouring) to
+          `1.1fr_1fr`, because the heading is the element with a hard
+          line-break requirement and `1fr` of `2.3fr` didn't leave
+          "you're behind on." room to hold one line at display size. The
+          figure gives up that width without cost — `object-contain` with
+          `max-h-full` scales it down to fit rather than cropping. */}
+      <div className="relative z-30 mx-auto grid h-full w-full max-w-[min(92vw,1600px)] grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1.1fr_1fr] lg:grid-rows-1 lg:items-center lg:gap-8">
         {/* Content is no longer independently animated — see the note
             below the panel's own transform. It's simply part of the
             panel now, present the instant the slide lands. */}
         <div className="flex flex-col items-center gap-5 pt-[11svh] text-center lg:items-start lg:pt-0 lg:text-left">
-          <h2 className="nameplate max-w-lg text-[clamp(30px,5vw,66px)] leading-[0.9]">
+          {/* `max-w-full`, not a fixed measure: the line breaks here are
+              manual (`<br/>`), so the usual reason to cap a heading's
+              width — keeping an automatic wrap to a readable measure —
+              doesn't apply, and a fixed cap would just strand the extra
+              room the wider column above now provides. The column governs
+              instead, and the `vw`-based size scales with it, so the
+              ratio holds: ~61px in a ~682px column on a laptop, ~76px in
+              a ~821px column on a 27" monitor. "you're behind on." holds
+              its one line at both. */}
+          <h2 className="nameplate max-w-full text-[clamp(28px,4.2vw,76px)] leading-[0.9]">
             Bring one subject
             <br />
             <span className="text-brand">you're behind on.</span>
@@ -442,11 +486,13 @@ function Close({ progress }: { progress: number }) {
             in the same spirit as the foil sweep rather than riding the
             panel's rise in lockstep with everything else.
 
-            Sized up on two axes: the grid column itself is wider than
-            copy's (`1.3fr` vs `1fr`, was an even split), and the image is
-            scaled 1.14× on top of that, anchored to `bottom` so it grows
-            upward off the floor it's already standing on rather than
-            growing from its own centre and floating up.
+            Anchored to `bottom` (both `items-end` on the wrapper and
+            `object-bottom` on the image itself) so the figure stands on
+            the panel's floor and any size change grows it upward from
+            there, rather than scaling about its own centre and appearing
+            to float. Its size is governed by an explicit viewport-relative
+            height cap on the image — see the note on that line for why a
+            cap, and not the earlier `1.14×` scale against `max-h-full`.
 
             No pointer parallax on this element — tried, and asked to drop
             it: constant motion on the one thing the eye rests on longest
@@ -458,31 +504,87 @@ function Close({ progress }: { progress: number }) {
             panel, which is what still sells depth without any motion
             attached to it.
 
-            No opacity fade either — asked for a plain, complete rise from
-            below the frame, not a cross-fade with a slide riding along.
-            `65svh` (not a small px offset) is what makes that literal:
-            large enough that the resting position starts entirely below
-            this panel's own `overflow-hidden` bounds, so before `landed`
-            the figure isn't invisible because it's transparent, it's
-            invisible because it is genuinely off-screen — the rise is
-            the only thing that ever makes it appear. */}
+            No opacity FADE — `opacity` here has no `transition`, so the
+            rise itself is still the only thing that visibly animates; the
+            switch just isn't gradual. It's there because `65svh` alone
+            turned out not to be enough: the panel's own reveal is a
+            continuous `translateY` tied to scroll, and this image is tall
+            (scaled 1.14×, its top well above the figure's floor-anchored
+            feet) — at a high-but-not-landed scroll position the panel has
+            only partially shifted into place, and the TOP of a tall image
+            crosses into view long before its feet would. Reported with a
+            screenshot: the character's hair visible at the bottom edge
+            while the panel was still clearly mid-reveal. A hard `opacity`
+            gate makes "invisible until landed" true regardless of exactly
+            how much the position math is compounding at any given scroll
+            position, rather than depending on `65svh` being large enough
+            for every case. */}
         <div className="relative flex min-h-0 items-end justify-center lg:h-full lg:justify-end">
           <img
             src="/student-reading.webp"
             alt=""
             aria-hidden
-            className="max-h-full max-w-full select-none object-contain object-bottom"
+            // `max-h-[72svh]`, not `max-h-full`. This panel is
+            // `fixed inset-0`, so "full" here meant a full VIEWPORT height
+            // — the figure was allowed to be as tall as the entire screen,
+            // and `object-contain` then made it as wide as that height
+            // demanded. On a short laptop viewport that reads as the
+            // artwork taking over the composition rather than standing in
+            // it, and the `scale(1.05)` on top pushed the head past the
+            // top edge, cropping it. Capping to a fraction of the viewport
+            // makes the figure a sized element in the layout at every
+            // screen height instead of one that grows to fill whatever
+            // it's given; the scale is gone for the same reason — with a
+            // real height cap there's nothing left for it to do except
+            // reintroduce the overflow.
+            className="max-h-[72svh] max-w-full select-none object-contain object-bottom"
             style={{
-              transform: `translateY(${landed ? 0 : 65}svh) scale(1.14)`,
+              // `everLanded`, not `landed` — see the header note by that
+              // state: once this has played, scrolling back up must not
+              // sink the figure back out of view.
+              opacity: everLanded ? 1 : 0,
+              transform: `translateY(${everLanded ? 0 : 110}svh)`,
               transformOrigin: 'bottom',
               filter:
                 'drop-shadow(0 10px 14px rgba(0,0,0,0.35)) drop-shadow(0 30px 46px rgba(0,0,0,0.45))',
-              // 1300ms still read as quick for a 65svh climb — same
-              // front-loaded-curve issue as the wordmark sweep above.
-              // 2100ms is where the rise itself becomes something to
-              // watch rather than something that's already resolved by
-              // the time it's noticed.
-              transition: 'transform 2100ms var(--ease-out-expo) 150ms',
+              // A short history on this element, because the same visible
+              // symptom ("the head pops in, then rises") survived three
+              // different attempted fixes before the actual cause was
+              // pinned down:
+              //
+              // 1. Slowed the transition down (1300ms → 2100ms) — didn't
+              //    touch it, because the problem was never speed.
+              // 2. Swapped `--ease-out-expo` for `--ease-in-out-sl` (slow
+              //    at both ends instead of front-loaded) — reduced how
+              //    ABRUPT the pop looked, but a pop was still there.
+              // 3. Only then the real cause: `65svh` was simply too SHORT
+              //    a distance. This image is tall (scaled up, its top well
+              //    above its floor-anchored feet), and `65svh` placed that
+              //    top edge right at — sometimes just past — the panel's
+              //    own `overflow-hidden` clip line at local 100vh. Not
+              //    "usually enough with an occasional glitch"; structurally
+              //    marginal, so it read as a coin-flip between "hidden"
+              //    and "a sliver visible" depending on exact image
+              //    proportions. `110svh` puts real, unambiguous distance
+              //    between the figure's highest point and that clip line,
+              //    so there's no case where the starting position is
+              //    anywhere close to the boundary.
+              //
+              // The `opacity` gate above stays as a second, independent
+              // safety net — belt and suspenders, not a substitute for
+              // getting the position genuinely off-screen.
+              //
+              // Duration matches the wordmark's own foil sweep below
+              // exactly — asked for directly: the two read as one beat
+              // landing together, the figure rising as the shine rakes
+              // across "Space Learn", not two separately-timed flourishes
+              // that merely happen to be near each other. The 150ms
+              // transition-delay both used to carry is gone — asked for
+              // the animation to trigger the MOMENT the user reaches the
+              // end of the page, and a fixed delay on top of Lenis's own
+              // scroll-settle time was one more stacked wait working
+              // against that (see `SmoothScroll.tsx` for the other one).
+              transition: 'transform 1800ms var(--ease-in-out-sl)',
             }}
           />
         </div>
@@ -515,14 +617,27 @@ function Close({ progress }: { progress: number }) {
           opacity is raised (0.10→0.16 gold, 0.20→0.34 the central flare,
           0.07→0.12 the brand-orange tail), so the light reads as
           genuinely catching the metal instead of a faint pass over it.
-          The sweep is also slower still (900ms→1150ms→2200ms→3400ms).
-          `--ease-out-expo` front-loads nearly all of its travel into the
-          first third of whatever duration it's given, so each of these
-          increases bought less perceived slowness than the raw number
-          suggests — 3400ms is what it actually took for the front-loaded
-          burst itself, not just the trailing settle, to stop reading as
-          a snap. Deliberately long: this is a one-time flourish, not a
-          UI affordance anyone is waiting on.
+          The sweep kept reading as fast even at 3400ms
+          (900ms→1150ms→2200ms→3400ms across four passes), which is what
+          finally pointed at the CURVE rather than the duration: every one
+          of those passes stayed on `--ease-out-expo`, which front-loads
+          nearly all of its travel into roughly the first third of
+          whatever time it's given — a bigger number bought a longer idle
+          tail at the end, not a slower-FEELING sweep at the start, where
+          it actually mattered. `--ease-in-out-sl` (index.css; same fix
+          just applied to the figure's rise below, for the same
+          front-loaded-curve reason) is slow at both ends, so the sweep
+          now reads as gliding the whole way rather than flashing through
+          and coasting.
+
+          Duration and delay now match the figure's own rise exactly —
+          asked for the two to read as one synchronized beat, shine and
+          figure landing together, not two flourishes merely near each
+          other in time. 3400ms (this line's own four-pass tuning history
+          above) was the number the CURVE fix was proven against, but
+          paired with a moving figure rather than judged on its own it
+          read as too slow — 1800ms, the number both settled on together,
+          keeps the curve's slow-in/slow-out shape without the long coast.
 
           Added on top: a layered `text-shadow`, which still renders
           against `background-clip: text` — the clip only affects the
@@ -559,8 +674,13 @@ function Close({ progress }: { progress: number }) {
               'rgba(255,90,60,0.12) 68%,' +
               'rgba(245,237,228,0.02) 84%)',
             backgroundSize: '260% 100%',
-            backgroundPosition: landed ? '-30% 0' : '120% 0',
-            transition: 'background-position 3400ms var(--ease-out-expo) 220ms',
+            // `everLanded`, matching the figure — the sweep is a one-time
+            // flourish too, not something that reverses when scrolled away.
+            backgroundPosition: everLanded ? '-30% 0' : '120% 0',
+            // Delay dropped, matching the figure — see its own comment for
+            // why: the trigger-the-moment-you-arrive ask meant a fixed
+            // wait on top of Lenis's settle time had to go.
+            transition: 'background-position 1800ms var(--ease-in-out-sl)',
             WebkitBackgroundClip: 'text',
             backgroundClip: 'text',
             color: 'transparent',
@@ -572,11 +692,10 @@ function Close({ progress }: { progress: number }) {
         </span>
       </div>
 
-      {/* One mark, bottom right. The page used to end with the wordmark
-          three times over — stamped behind the figure, again as a corner
-          label, and a third time in a footer under it. Repetition at the
-          close reads as filler; the stamped one is the statement, so the
-          others go. */}
+      {/* The page used to end with the wordmark three times over — stamped
+          behind the figure, again as a corner label, and a third time in a
+          footer under it. Repetition at the close reads as filler; the
+          stamped one is the statement, so the others go. */}
       {/* No independent fade here either — same reasoning as the copy and
           figure above; this rides with the panel's own transform instead
           of arriving on its own delayed clock. */}
@@ -585,8 +704,16 @@ function Close({ progress }: { progress: number }) {
           left is sized up from `.setcode`'s 11.5px (a system-wide
           small-print size, so bumped locally rather than in the shared
           class) since standing alone at the old size read as too faint to
-          register as this panel's one closing credit. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-5 pb-5 sm:px-8">
+          register as this panel's one closing credit.
+
+          Moved from bottom-left to top-left: at the bottom it sat directly
+          in front of the foil-stamped "Space Learn" wordmark's own letters
+          (that mark is centred and runs the width of the panel, tall
+          enough that its glyphs reached into this corner), reading as the
+          two colliding rather than as one panel with two pieces of credit
+          in it. `top-16` clears the fixed `TopBar` (`h-14`, stacked above
+          this panel at `z-40`) rather than sitting flush against it. */}
+      <div className="pointer-events-none absolute left-0 top-16 z-30 px-5 sm:px-8">
         <a
           href="https://github.com/Abiram116/New-Space-Learn"
           target="_blank"
