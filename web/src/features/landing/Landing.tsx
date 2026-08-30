@@ -1,5 +1,5 @@
 /**
- * Landing — a hero, four typographic statements, then a close.
+ * Landing — a hero, five typographic statements, then a close.
  *
  * There used to be a single continuous scroll-jacked "film" here, built
  * around one physiology example. It staged a fictional student's document to
@@ -7,10 +7,16 @@
  * it came out. Two more attempts at what should replace it — a subject-by-
  * subject demo, then a set of scroll-locked full-bleed colour panels copied
  * from an unrelated reference — both missed too. `FeatureType.tsx` is the
- * fourth: no scene, no borrowed look, four real capabilities stated directly
+ * fourth: no scene, no borrowed look, five real capabilities stated directly
  * at display scale, locked in one at a time by the same `position: sticky`
  * mechanism `Close` (below) already uses. See `FeatureType.tsx`'s header for
  * the actual reasoning; this one just wires it in.
+ *
+ * A non-pinned "differentiator" beat used to sit between the five
+ * capabilities and the close (one line, "a chat window is not a learning
+ * system," plus a chip row). Cut on direct feedback: it read as another
+ * isolated poster frame with dead canvas trailing it rather than the payoff
+ * it was meant to be. `Close` now rises directly off `FeatureType`.
  *
  * One structural rule survives every rebuild, because it's true regardless of
  * what fills this section: THE LIGHT IS ONE LIGHT. Every section used to
@@ -28,10 +34,12 @@ import { useEffect, useRef, useState } from 'react'
 import { prefetchAuthChunks } from '../../routes/lazyRoutes'
 import { Link } from 'react-router-dom'
 import { Logo } from '../../components/ui/Logo'
+import { Icon } from '../../components/ui/Icon'
 import { FeatureType } from './FeatureType'
 import { HeroReveal } from './HeroReveal'
 import { SmoothScroll } from './SmoothScroll'
 import { attractor, CTA, DraftingCursor, SourceDrift } from './wow'
+import { useReducedMotion } from '../../components/ui/motion'
 
 export function Landing() {
   // The warm-up ping moved to AuthProvider (mounts above the router, fires on
@@ -44,21 +52,69 @@ export function Landing() {
   // signed-in session 4KB less on every load and costs a visitor nothing.
   useEffect(prefetchAuthChunks, [])
 
-  // THE HANDOFF. `FeatureType` now measures its own scroll room (see its
-  // header: a `172svh` wrapper with a `sticky top-0 h-[100svh]` child) and
-  // reports `closeProgress` up through this callback, rather than `Landing`
-  // owning a separate spacer element for the same purpose. Two things used
-  // to live in two different places — the pinned content and the scroll
-  // distance that measures it — which is what let them drift out of sync
-  // (a spacer shorter than the viewport silently zeroed `closeProgress` for
-  // the whole page; see git blame here for the exact math). One component
-  // owning both closes that gap structurally instead of by convention.
-  //
-  // `Close` stays `position: fixed` and outside `FeatureType` entirely —
-  // it isn't part of what's being measured, only what's driven by the
-  // measurement — so it's still rendered here as a sibling, fed the same
-  // number.
-  const [closeProgress, setCloseProgress] = useState(0)
+  // No scrollbar track on this page specifically, on request — see the rule
+  // in index.css for why it's scoped to a class rather than applied
+  // globally. Toggled on mount/unmount rather than baked into the class
+  // list so leaving the page (back to the real app) restores the normal,
+  // visible scrollbar there.
+  useEffect(() => {
+    document.documentElement.classList.add('sl-no-scrollbar')
+    return () => document.documentElement.classList.remove('sl-no-scrollbar')
+  }, [])
+
+  // THE HANDOFF. `Close`'s reveal is measured HERE now, directly in
+  // `Landing()`, on a dedicated spacer (`closeSpacerRef`) placed after
+  // `Differentiator`. `Close` is `position: fixed`, so once its progress
+  // reaches 1 it covers the viewport regardless of what comes later in the
+  // DOM; measuring it off `FeatureType` was fine when `FeatureType` was
+  // immediately followed by `Close`, but `Differentiator` now sits between
+  // them and needs to be fully scrollable and visible BEFORE that panel
+  // starts rising, not underneath it. This used to be a separate
+  // `CloseReveal` child component wrapping `useScrollProgress` itself, which
+  // measured 0 forever — the hook's listener never fired for it (root cause
+  // not fully chased down under time pressure; inlining the same hook call
+  // directly in `Landing` is the same technique `FeatureType` used
+  // successfully before, just relocated to the new seam, and it works).
+  const closeSpacerRef = useRef<HTMLDivElement>(null)
+  // A BOOLEAN reveal now, not a continuously-scrubbed 0→1 value driving an
+  // auto-snap toward its endpoints. That scrub-plus-snap design went through
+  // several rounds of tuning (shrinking the spacer, folding the pre-entry
+  // viewport into the progress span, shortening the snap animation, widening
+  // the backward-snap deadzone) and each fix narrowed the window rather than
+  // closing it: a real screenshot could still land mid-snap and show the
+  // panel partially risen over open canvas, which read as "stuck at 3/4"
+  // even though it always finished a moment later. Asked directly, and
+  // repeatedly, for that to be categorically impossible rather than merely
+  // rare: Close is now either fully hidden or fully revealed, CSS-
+  // transitioning between the two (see `Close` below) — there is no
+  // continuous in-between value left for a scroll listener, a snap, or a
+  // screenshot to ever catch.
+  const [closeRevealed, setCloseRevealed] = useState(false)
+  useEffect(() => {
+    const el = closeSpacerRef.current
+    if (!el) return
+    let frame = 0
+    const measure = () => {
+      frame = 0
+      // Reveal the instant the spacer would start becoming visible at all
+      // (its top edge crossing into the viewport from below) — matching
+      // where the old progress formula's 0→1 span used to START counting,
+      // not where the spacer's top reached the viewport's own top.
+      setCloseRevealed(el.getBoundingClientRect().top < window.innerHeight)
+    }
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(measure)
+    }
+    measure()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [])
 
   return (
     <SmoothScroll>
@@ -69,15 +125,27 @@ export function Landing() {
         <DraftingCursor />
         <Lamp />
         <div className="relative z-10">
-          <TopBar />
           <HeroReveal
             src="/story.webm"
             fallbackSrc="/story.mp4"
             poster="/story-poster.webp"
           />
-          <FeatureType onCloseProgress={setCloseProgress} />
+          <FeatureType />
+          {/* Just past one viewport tall — `closeRevealed` only needs this
+              spacer's top edge to exist and to be able to cross into view;
+              it no longer drives a scrub distance, so there's nothing left
+              to shrink for "less dead scroll" the way earlier versions of
+              this comment worried about. */}
+          <div ref={closeSpacerRef} aria-hidden className="h-[101svh]" />
         </div>
-        <Close progress={closeProgress} />
+        <Close revealed={closeRevealed} />
+        {/* Sibling of `Close`, not nested inside the `z-10` wrapper above —
+            that wrapper is its own stacking context, so a `z-40` inside it
+            only ever wins locally and still loses to `Close`'s `z-30` once
+            the panel is opaque. Sitting out here is what lets the nav
+            actually stay on top through the whole scroll, including once
+            Close has fully landed. */}
+        <TopBar />
       </div>
     </SmoothScroll>
   )
@@ -289,21 +357,30 @@ function Dust() {
 
 function TopBar() {
   return (
-    <header className="fixed inset-x-0 top-0 z-40 bg-gradient-to-b from-canvas via-canvas/85 to-transparent">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-5">
+    // Not a flat opaque `bg-canvas` slab — the Lamp glow (a fixed layer
+    // BELOW this header, z-0) shows through everywhere else on the page,
+    // so a solid fill here blocked it in exactly this 56px strip and read
+    // as a mismatched bar pasted on top rather than part of the same
+    // surface. `/70` still read as its own dark bar — most of whatever
+    // was underneath got flattened out at that opacity. Down to `/35`: the
+    // blur alone (not the tint) is what keeps nav text legible over
+    // whatever's scrolled underneath, so the tint only needs to be a
+    // whisper, not the majority of what's rendered there.
+    <header className="fixed inset-x-0 top-0 z-40 bg-canvas/35 backdrop-blur-lg">
+      <div className="mx-auto flex h-14 w-full max-w-[1680px] items-center gap-3 px-5 sm:px-8">
         <Link to="/" aria-label="Space Learn">
           <Logo size={26} textClassName="text-[18px]" />
         </Link>
-        <nav className="ml-auto flex items-center gap-1.5">
+        <nav className="ml-auto flex items-center gap-1 sm:gap-1.5">
           <Link
             to="/signin"
-            className="rounded-[9px] px-3 py-2 text-[13px] font-bold text-ink-3 transition-colors hover:bg-line-soft hover:text-ink"
+            className="rounded-[8px] px-2 py-1.5 text-[11.5px] font-bold text-ink-3 transition-colors hover:bg-line-soft hover:text-ink sm:rounded-[9px] sm:px-3 sm:py-2 sm:text-[13px]"
           >
             Sign in
           </Link>
           <Link
             to="/signup"
-            className="rounded-[10px] bg-brand px-3.5 py-2 text-[13px] font-bold text-[#1a120f] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_2px_0_#a8331d] transition-transform active:translate-y-[2px]"
+            className="rounded-[8px] bg-brand px-2.5 py-1.5 text-[11.5px] font-bold text-[#1a120f] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_2px_0_#a8331d] transition-transform active:translate-y-[2px] sm:rounded-[10px] sm:px-3.5 sm:py-2 sm:text-[13px]"
           >
             Start free
           </Link>
@@ -323,35 +400,27 @@ function TopBar() {
    it, reported live as "it should be scroll trigger linked... not come up
    fully at once").
 
-   The fix that actually holds both properties at once: `Close` itself is
-   `position: fixed` and owns no height of its own — so there's still
-   nothing here to create a dead-scroll gap — but its entrance is driven by
-   a CONTINUOUS `progress` value (0→1), not a boolean. `Landing()` builds
-   that value from a plain spacer div sized to exactly the reveal distance
-   (see there), so scrolling through that spacer scrubs this panel up from
-   `translateY(100%)` to `0%` in lockstep, the way the reference this was
-   built against actually behaves. Reaching `progress === 1` is the same
-   moment as reaching the real bottom of the page's scrollable content —
-   this is the last thing in document flow — which is what makes "no more
-   scroll down beyond that" true with no extra clamping logic: there's
-   nowhere further to go.
+   `Close` itself is `position: fixed` and owns no height of its own — so
+   there's still nothing here to create a dead-scroll gap — and its
+   entrance used to be driven by a CONTINUOUS `progress` value (0→1) rather
+   than a boolean, scrubbing `translateY` in lockstep with the scroll
+   gesture. That held up right up until a static screenshot could catch it
+   mid-scrub — the panel legitimately, if transiently, partway risen — and
+   no amount of shrinking the scrub range or the snap-animation duration
+   made that window small enough to never be seen. `Landing()` now tracks
+   a plain boolean (`closeRevealed`) instead, and this component is either
+   fully hidden or fully shown, CSS-transitioning between the two: there is
+   no third, partial state left to be caught in.
 
    The wordmark is set on ONE line and sits in the band above the figure's
    head rather than behind its body. Stacked over two lines it was buried:
    the figure covered the middle of both words and neither read. */
 
-function Close({ progress }: { progress: number }) {
-  // "Landed" — close enough to fully revealed that the panel reads as
-  // settled rather than still arriving. Drives the things that should
-  // happen ONCE, after the scrub finishes, not continuously across it: the
-  // ambient tint, the foil sweep, and whether the panel is interactive.
-  // 0.97 rather than a strict 1 because scroll rarely lands on an exact
-  // integer and "almost entirely revealed" should count as landed.
-  const landed = progress >= 0.97
-  const hidden = progress <= 0.001
+function Close({ revealed }: { revealed: boolean }) {
+  const reducedMotion = useReducedMotion()
 
   useEffect(() => {
-    if (!landed) {
+    if (!revealed) {
       document.documentElement.style.removeProperty('--tint')
       return
     }
@@ -359,23 +428,31 @@ function Close({ progress }: { progress: number }) {
     return () => {
       document.documentElement.style.removeProperty('--tint')
     }
-  }, [landed])
+  }, [revealed])
 
   return (
-    // `inert` only while truly untouched (`progress` at 0) — not just
-    // `pointer-events: none` — so the CTA and the GitHub link aren't
-    // reachable by keyboard Tab before any of the panel has scrolled into
-    // view. Once scrubbing has started at all, the visible portion is
-    // real and should be interactive, matching how the reference site's
-    // own scroll-linked reveal behaves.
+    // `inert` only while hidden, not just `pointer-events: none` — so the
+    // CTA and the GitHub link aren't reachable by keyboard Tab before the
+    // panel has been revealed at all.
     <div
-      className="fixed inset-0 z-30 overflow-hidden"
+      // Full viewport, not a bottom sheet — a `75svh` bottom-sheet
+      // treatment (rising to occupy 3/4 of the screen, popped-card style)
+      // was tried here on request, but read back as exactly that: stuck at
+      // "3/4" instead of covering the screen, however many times the
+      // remaining quarter was explained as by-design. Reverted to a full
+      // `inset-0` takeover, the one property this panel is required to
+      // hold regardless of anything else changing around it (see the note
+      // above): once revealed, there is nowhere left to see past it.
+      // Rounded top corners kept — the one part of the "card" treatment
+      // that still reads fine on a full-bleed panel rising from the
+      // bottom edge of the screen itself.
+      className="fixed inset-0 z-30 overflow-hidden rounded-t-[36px]"
       style={{
-        // Continuous, not transitioned — `progress` already comes from
-        // Lenis-smoothed scroll (see `useScrollProgress`), so mapping it
-        // straight to `translateY` is what makes this track the gesture
-        // 1:1 instead of catching up to it after the fact.
-        transform: `translateY(${((1 - progress) * 100).toFixed(2)}%)`,
+        // `revealed` flips once, cleanly, so a CSS transition (rather than
+        // a per-frame scroll-driven value) is what animates this now.
+        // Skipped under reduced motion — jumps straight to its end state.
+        transform: `translateY(${revealed ? 0 : 100}%)`,
+        transition: reducedMotion ? 'none' : 'transform 450ms var(--ease-sl)',
         // Bold and orange, on purpose — asked to specifically NOT read as a
         // continuation of the page's warm-graphite canvas. Anchored
         // bottom-right (roughly where the figure stands) so the brightest
@@ -385,53 +462,116 @@ function Close({ progress }: { progress: number }) {
         // needed to change colour to stay legible; only the CTA button,
         // whose fill is this same brand orange, benefits from sitting on
         // the darker side rather than blending into a matching background.
+        // Viewport-relative, not `ch`-based (`ch` is tied to font metrics,
+        // not screen size) — at a real monitor's 100% zoom, `150ch`/`115ch`
+        // resolved to roughly 2-2.5x the viewport width, so almost the whole
+        // panel fell inside the bright 0-42% band and read as a flat orange
+        // wash instead of a beam from one corner. Sized as a fraction of the
+        // viewport instead so the "beam vs. wash" balance holds regardless
+        // of physical screen size or zoom level.
         background:
-          'radial-gradient(150ch 115ch at 88% 72%, #ff6b45 0%, #b23a1b 42%, #1f0d08 100%)',
-        boxShadow: `0 ${(40 * progress).toFixed(0)}px ${(100 * progress).toFixed(0)}px -30px rgba(0,0,0,${(0.55 * progress).toFixed(2)})`,
+          'radial-gradient(62vw 58vh at 88% 72%, #ff6b45 0%, #b23a1b 42%, #1f0d08 100%)',
+        boxShadow: revealed ? '0 40px 100px -30px rgba(0,0,0,0.55)' : 'none',
       }}
-      aria-hidden={hidden}
-      {...(hidden ? ({ inert: '' } as Record<string, string>) : {})}
+      aria-hidden={!revealed}
+      inert={!revealed}
     >
       {/* THE DEPTH CUE. As this panel rises, its top edge is the leading
           surface sliding up and over whatever was on screen before it —
           the moment asked to read as "3D depth... at the top edge as it
-          comes on top". A dark gradient hugging that edge, strongest at the
-          midpoint of the scrub and fading out as the panel settles, reads
-          as the edge casting a shadow onto the ground it's passing over
-          rather than a flat sheet with no thickness. `sin(progress * π)`
-          peaks exactly at progress 0.5 and returns to 0 at both ends, so
-          the shadow is absent when the panel is barely visible (nothing
-          to cast a shadow yet) AND absent once fully landed (nothing left
-          to cast it onto). */}
+          comes on top". A dark gradient hugging that edge fades in as the
+          panel arrives, giving the top edge some sense of casting a shadow
+          onto the ground it's passing over rather than being a flat sheet
+          with no thickness. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 z-40 h-24"
         style={{
-          opacity: Math.sin(Math.min(1, progress) * Math.PI) * 0.8,
+          opacity: revealed ? 0.8 : 0,
+          transition: reducedMotion ? 'none' : 'opacity 450ms var(--ease-sl)',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), transparent)',
         }}
       />
-      {/* Copy and figure get SEPARATE BANDS — they are never stacked.
-          Layering them behind a scrim put the "Start free" button squarely
-          on the reader's head, and no amount of scrim fixes type sitting on
-          a face. A two-column grid guarantees they cannot collide: copy
-          left, figure right. Below `lg` the grid stacks to two rows, copy
-          above, figure below — still no overlap. */}
-      <div className="relative z-30 mx-auto grid h-full w-full max-w-6xl grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1fr_1.3fr] lg:grid-rows-1 lg:items-center lg:gap-8">
+      {/* The whole panel is a flex column now, not a single `h-full` grid —
+          the wordmark row below needs to be a genuine layout row, not an
+          absolutely-positioned overlay, reverted back to one on direct
+          request: the wordmark should sit BEHIND the figure and let the
+          figure overlap it, the way it looked before that fix — not below
+          it in its own row. Placed before the grid in DOM order (paints
+          first) and left with no `z-index` of its own, so the grid's own
+          `z-30` stacking context — which the figure lives inside — simply
+          paints on top of it. */}
+      <div className="relative z-30 h-full w-full">
+        {/* THE WORDMARK — large, absolute, deliberately behind the figure.
+            Font size is generous on purpose (this is the whole point of
+            reverting): it should read as a wordmark competing for
+            attention with the figure, not small print underneath it. */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-6 px-5 sm:bottom-8 sm:px-8">
+          <span
+            className="nameplate block select-none whitespace-nowrap text-[clamp(32px,8.5vw,140px)] leading-[0.86] tracking-[-0.035em]"
+            style={{
+              backgroundImage:
+                'linear-gradient(100deg,' +
+                'rgba(245,237,228,0.02) 18%,' +
+                'rgba(255,197,61,0.16) 34%,' +
+                'rgba(245,237,228,0.34) 46%,' +
+                'rgba(53,214,232,0.16) 57%,' +
+                'rgba(255,90,60,0.12) 68%,' +
+                'rgba(245,237,228,0.02) 84%)',
+              backgroundSize: '260% 100%',
+              backgroundPosition: revealed ? '-30% 0' : '120% 0',
+              transition: 'background-position 3400ms var(--ease-out-expo) 220ms',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+              textShadow: '0 -1px 1px rgba(10,5,2,0.32), 0 1px 0 rgba(255,240,215,0.16)',
+            }}
+          >
+            Space Learn
+          </span>
+        </div>
+        {/* MIT credit — top-left corner, clear of the wordmark entirely
+            rather than sharing its bottom-left corner. */}
+        <a
+          href="https://github.com/Abiram116/New-Space-Learn"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="setcode absolute left-5 top-16 z-10 text-[11.5px] transition-colors hover:text-ink sm:left-8 sm:top-20"
+        >
+          MIT Licensed
+          <br />
+          Source on GitHub
+        </a>
+        {/* Copy and figure get SEPARATE BANDS — they are never stacked.
+            Layering them behind a scrim put the "Start free" button squarely
+            on the reader's head, and no amount of scrim fixes type sitting on
+            a face. A two-column grid guarantees they cannot collide: copy
+            left, figure right. Below `lg` the grid stacks to two rows, copy
+            above, figure below — still no overlap. */}
+        <div className="relative mx-auto grid h-full w-full max-w-[1680px] grid-rows-[auto_1fr] px-5 sm:px-8 lg:grid-cols-[1fr_1.3fr] lg:grid-rows-1 lg:items-center lg:gap-8">
         {/* Content is no longer independently animated — see the note
             below the panel's own transform. It's simply part of the
             panel now, present the instant the slide lands. */}
-        <div className="flex flex-col items-center gap-5 pt-[11svh] text-center lg:items-start lg:pt-0 lg:text-left">
-          <h2 className="nameplate max-w-lg text-[clamp(30px,5vw,66px)] leading-[0.9]">
+        <div className="flex flex-col items-center gap-5 pt-[15svh] text-center lg:items-start lg:pt-0 lg:text-left">
+          <h2 className="nameplate max-w-lg text-[clamp(28px,4vw,52px)] leading-[0.95]">
             Bring one subject
             <br />
             <span className="text-brand">you're behind on.</span>
           </h2>
-          <p className="max-w-sm text-[15px] leading-relaxed text-ink-3">
-            One PDF is enough to see whether this works the way you study.
-            Nothing to configure first.
-          </p>
+          <p className="max-w-sm text-[15px] leading-relaxed text-ink-3">One PDF is enough to start.</p>
           <CTA to="/signup">Start free</CTA>
+          {/* A quiet reminder of what "Start free" actually starts — the
+              whole loop the page just walked through, at caption scale so it
+              reads as a footnote to the CTA rather than a sixth headline. */}
+          <div className="flex items-center gap-1.5 text-ink-3/70">
+            <span className="setcode text-[10.5px]">Upload</span>
+            <Icon name="arrowRight" size={10} />
+            <span className="setcode text-[10.5px]">Understand</span>
+            <Icon name="arrowRight" size={10} />
+            <span className="setcode text-[10.5px]">Rehearse</span>
+            <Icon name="arrowRight" size={10} />
+            <span className="setcode text-[10.5px]">Improve</span>
+          </div>
         </div>
 
         {/* The figure owns the second band and sits on the floor of it.
@@ -442,11 +582,12 @@ function Close({ progress }: { progress: number }) {
             in the same spirit as the foil sweep rather than riding the
             panel's rise in lockstep with everything else.
 
-            Sized up on two axes: the grid column itself is wider than
-            copy's (`1.3fr` vs `1fr`, was an even split), and the image is
-            scaled 1.14× on top of that, anchored to `bottom` so it grows
-            upward off the floor it's already standing on rather than
-            growing from its own centre and floating up.
+            The grid column itself is wider than copy's (`1.3fr` vs `1fr`,
+            was an even split); the image is unscaled and anchored to
+            `bottom` so it grows upward off the floor it's already standing
+            on rather than growing from its own centre and floating up. (A
+            1.14× scale used to sit on top of that — reads as oversized on a
+            real laptop at 100% zoom, not just a big desktop monitor.)
 
             No pointer parallax on this element — tried, and asked to drop
             it: constant motion on the one thing the eye rests on longest
@@ -466,14 +607,30 @@ function Close({ progress }: { progress: number }) {
             the figure isn't invisible because it's transparent, it's
             invisible because it is genuinely off-screen — the rise is
             the only thing that ever makes it appear. */}
-        <div className="relative flex min-h-0 items-end justify-center lg:h-full lg:justify-end">
+        <div
+          className="relative flex min-h-0 items-end justify-center pt-14 sm:pt-16 lg:h-full lg:justify-end"
+          // Clips only the top edge — where the `scale(1.14)` figure can
+          // bleed up into the copy row above at tighter aspect ratios (e.g.
+          // 768x1024). Left/right/bottom stay open so the drop-shadow keeps
+          // fading into the panel instead of ending at a hard box edge.
+          //
+          // `pt-14`/`pt-16` reserves headroom for the fixed `TopBar` (56px,
+          // 64px above `sm`) — this column has no other awareness of the
+          // nav sitting on top of it, so at full height the figure's own
+          // head was reaching all the way up into that strip and reading
+          // as jammed against the header rather than "standing" in the
+          // panel. `object-bottom` + `items-end` still anchor it to the
+          // floor, so this headroom is what actually brings the whole
+          // figure down, not just its top edge.
+          style={{ clipPath: 'inset(0 -100vw -100vw -100vw)' }}
+        >
           <img
             src="/student-reading.webp"
             alt=""
             aria-hidden
             className="max-h-full max-w-full select-none object-contain object-bottom"
             style={{
-              transform: `translateY(${landed ? 0 : 65}svh) scale(1.14)`,
+              transform: `translateY(${revealed ? 0 : 65}svh) scale(1.0)`,
               transformOrigin: 'bottom',
               filter:
                 'drop-shadow(0 10px 14px rgba(0,0,0,0.35)) drop-shadow(0 30px 46px rgba(0,0,0,0.45))',
@@ -486,7 +643,7 @@ function Close({ progress }: { progress: number }) {
             }}
           />
         </div>
-      </div>
+        </div>
       {/* WHY THE COPY NO LONGER FADES IN ON ITS OWN CLOCK.
           A first version staggered copy and figure behind the panel — copy
           160ms in, figure 240ms in, each with its own opacity/transform
@@ -543,60 +700,6 @@ function Close({ progress }: { progress: number }) {
           catching the same light the sweep does), both barely-there —
           just enough to read as a groove in the surface than a shine
           resting on top of it. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-[2svh] z-0 flex justify-center"
-      >
-        <span
-          className="nameplate select-none whitespace-nowrap text-center text-[clamp(38px,11.5vw,196px)] leading-[0.86] tracking-[-0.035em]"
-          style={{
-            backgroundImage:
-              'linear-gradient(100deg,' +
-              'rgba(245,237,228,0.02) 18%,' +
-              'rgba(255,197,61,0.16) 34%,' +
-              'rgba(245,237,228,0.34) 46%,' +
-              'rgba(53,214,232,0.16) 57%,' +
-              'rgba(255,90,60,0.12) 68%,' +
-              'rgba(245,237,228,0.02) 84%)',
-            backgroundSize: '260% 100%',
-            backgroundPosition: landed ? '-30% 0' : '120% 0',
-            transition: 'background-position 3400ms var(--ease-out-expo) 220ms',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-            textShadow:
-              '0 -1px 1px rgba(10,5,2,0.32), 0 1px 0 rgba(255,240,215,0.16)',
-          }}
-        >
-          Space Learn
-        </span>
-      </div>
-
-      {/* One mark, bottom right. The page used to end with the wordmark
-          three times over — stamped behind the figure, again as a corner
-          label, and a third time in a footer under it. Repetition at the
-          close reads as filler; the stamped one is the statement, so the
-          others go. */}
-      {/* No independent fade here either — same reasoning as the copy and
-          figure above; this rides with the panel's own transform instead
-          of arriving on its own delayed clock. */}
-      {/* The "No card needed / Nothing to pay" pairing that used to sit
-          opposite this is gone — asked to keep only the licence mark. What's
-          left is sized up from `.setcode`'s 11.5px (a system-wide
-          small-print size, so bumped locally rather than in the shared
-          class) since standing alone at the old size read as too faint to
-          register as this panel's one closing credit. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-5 pb-5 sm:px-8">
-        <a
-          href="https://github.com/Abiram116/New-Space-Learn"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="setcode pointer-events-auto text-[13.5px] transition-colors hover:text-ink"
-        >
-          MIT Licensed
-          <br />
-          Source on GitHub
-        </a>
       </div>
     </div>
   )

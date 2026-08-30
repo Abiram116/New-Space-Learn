@@ -14,6 +14,12 @@ export default defineConfig({
   // Without this Vite only looks in web/, and every VITE_* var comes back
   // undefined even though the file is sitting right there.
   envDir: ENV_DIR,
+  server: {
+    // Defaults to Vite's usual 5173 for a plain `npm run dev`, but defers to
+    // an assigned `PORT` (e.g. from a tool that auto-picks a free port when
+    // 5173 is already occupied by another running instance) when one is set.
+    port: process.env.PORT ? Number(process.env.PORT) : 5173,
+  },
   test: {
     // Node by default, jsdom opted into per file with a
     // `// @vitest-environment jsdom` docblock.

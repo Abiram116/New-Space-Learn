@@ -186,6 +186,20 @@
     background: var(--color-line-dash);
     background-clip: content-box;
   }
+
+  /* Landing-page-only: no scrollbar affordance at all, on request. Scoped to
+     an `<html>` class the page toggles itself (Landing.tsx) rather than
+     applied globally — a real screen you work in (the app proper) still
+     needs the visible track, especially for long documents/notes where it's
+     the only indicator of how much is left. Scroll itself is untouched;
+     this only hides the rendered track/thumb. */
+  html.sl-no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  html.sl-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer components {

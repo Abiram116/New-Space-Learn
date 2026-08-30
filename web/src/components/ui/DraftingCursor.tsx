@@ -88,7 +88,7 @@ export function DraftingCursor() {
         // Pressing contracts it, which reads as the instrument being set down.
         // Without this a click has no cursor-side feedback at all, and the
         // ring feels painted on rather than held.
-        const scale = down ? 0.82 : hot ? 1.85 : 1
+        const scale = down ? 0.82 : hot ? 1.35 : 1
         ring.current.style.transform = `translate3d(${rx - 17}px,${ry - 17}px,0) scale(${scale})`
         // Solid, full opacity — see the header note on why `difference`
         // needs that to invert cleanly.

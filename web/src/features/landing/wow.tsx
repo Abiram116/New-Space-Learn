@@ -403,23 +403,33 @@ export function MaskedLines({
 
 
 /**
- * Out-of-focus fragments of the student's own material, drifting deep in the
- * background.
+ * Out-of-focus fragments of the product's own vocabulary, drifting deep in
+ * the background.
  *
- * These are meant to read as *memory* rather than decoration — blurred
- * citations, a highlighted line, an equation, a page number — so they are
- * heavily blurred, very low contrast, and move slowly enough that you notice
- * them only if you stop and look. If they ever compete with the UI they are
+ * These used to be invented document fragments — a fake filename, a fake
+ * page number, a fake legal citation, a fake equation — which is exactly
+ * the thing `FeatureType.tsx`'s own header rules out for its diagrams ("no
+ * invented course, page number or quoted passage, because a fabricated
+ * document reads as a mock-up rather than as proof"). One page holding two
+ * different standards for fabricated content was the bug. These are real
+ * product vocabulary instead — the same words that appear on an actual
+ * citation chip or card status elsewhere on this page — generic enough to
+ * name no document that doesn't exist, specific enough to still read as
+ * "memory" rather than random type.
+ *
+ * Meant to read as *memory* rather than decoration, so they are heavily
+ * blurred, very low contrast, and move slowly enough that you notice them
+ * only if you stop and look. If they ever compete with the UI they are
  * wrong; contrast here should stay under the text it sits behind.
  */
 const FRAGMENTS = [
-  { t: 'micro-ch7.pdf · p.88', x: 8, y: 18, s: 1.0, d: 0, dur: 64 },
-  { t: '∂L/∂w = 0', x: 74, y: 12, s: 1.25, d: 9, dur: 78 },
+  { t: 'cited · page 14', x: 8, y: 18, s: 1.0, d: 0, dur: 64 },
+  { t: 'AI-marked', x: 74, y: 12, s: 1.25, d: 9, dur: 78 },
   { t: 'retrieved · 1 of 3', x: 58, y: 62, s: 0.9, d: 4, dur: 70 },
-  { t: 'physiology-wk6.pdf · p.31', x: 20, y: 74, s: 1.1, d: 14, dur: 86 },
+  { t: 'SM-2 spaced', x: 20, y: 74, s: 1.1, d: 14, dur: 86 },
   { t: 'due today', x: 87, y: 44, s: 0.95, d: 6, dur: 58 },
-  { t: 'Marbury v. Madison', x: 40, y: 34, s: 1.05, d: 19, dur: 92 },
-  { t: '3 NADH · 1 FADH2', x: 66, y: 86, s: 0.85, d: 11, dur: 74 },
+  { t: 'weak · improving', x: 40, y: 34, s: 1.05, d: 19, dur: 92 },
+  { t: 'auto-graded', x: 66, y: 86, s: 0.85, d: 11, dur: 74 },
 ]
 
 export function SourceDrift() {
