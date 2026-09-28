@@ -128,8 +128,8 @@ class ConceptView:
 
     @property
     def crosses_subjects(self) -> bool:
-        """The same concept tagged in more than one topic. The cheap half of
-        cross-subject transfer, available without the Gap Map."""
+        """The same concept tagged in more than one topic — the cheap half
+        of cross-subject transfer."""
         return len(self.subspace_ids) > 1
 
 
@@ -808,9 +808,8 @@ def _parse_dt(value: str | None) -> datetime | None:
 def normalize_concept(tag: str) -> str:
     """`trim(t).lowercase()` — the concept normalization rule from
     `decisions.md`, applied to the `subtopic` tags quiz generation already
-    writes. Kept as a named function so the Gap Map and confusion pairs use
-    literally this one when they land, rather than a second copy that
-    almost agrees."""
+    writes. Kept as a named function so any future consumer of these tags
+    uses literally this one, rather than a second copy that almost agrees."""
     return " ".join(str(tag or "").split()).lower()
 
 

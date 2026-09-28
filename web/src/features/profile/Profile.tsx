@@ -6,8 +6,9 @@
  * full width: identity across the top, standing beneath it, then the activity
  * ledger and the badge case side by side.
  *
- * Every number comes from `/me/stats`. Delete-account stays absent because no
- * endpoint exists — omitting it is honest, showing a dead button is not.
+ * Every number comes from `/me/stats`. Delete-account lives in Settings, next
+ * to the rest of the account controls, not here — this page is the record,
+ * not where you act on it.
  */
 
 import { useEffect, useState } from 'react'
@@ -235,13 +236,16 @@ export function Profile() {
                 tone="brand"
               />
               <Measure
-                icon="clock"
-                label="Studied this week"
-                value={d.study_minutes_this_week}
-                /* The weekly form of the goal the student actually set in
-                   Settings — a real target, not a number invented here. */
+                icon="deck"
+                label="Reviewed this week"
+                value={d.composition?.cards_reviewed ?? 0}
+                /* `daily_goal` is cards per day (see Settings), so the only
+                   honest weekly reference is cards reviewed against it —
+                   comparing it to study *minutes* was mixing two different
+                   units into one bar. Minutes still show plainly, with no
+                   invented goal, in the Activity panel below. */
                 against={Math.max(d.daily_goal * 7, 1)}
-                unit="min"
+                unit="cards"
                 reference={`goal ${d.daily_goal * 7}`}
                 tone="sun"
               />

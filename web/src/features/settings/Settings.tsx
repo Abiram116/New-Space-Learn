@@ -1,11 +1,11 @@
 /**
  * Settings — real preferences persisted via `/me/settings`.
  *
- * Sections match the plan's cut list:
+ * Sections:
  *   - Account (identity from Supabase, read-only in v1)
- *   - Study (daily goal, streak-freeze, SM-2 pace)
+ *   - Study (daily goal, streak-freeze)
+ *   - How you learn (explicit + observed personalization signals)
  *   - AI & sources (RAG toggles)
- *   - Skills → link to /skills (no duplication)
  *   - Privacy → sign out
  *
  * Space Learn Plus is intentionally removed (per user's answer).
@@ -16,11 +16,16 @@
  * app is not keeping, and a caption admitting it does not fix that, it just
  * documents it. Firing a reminder needs a scheduled worker the free tier will
  * not run, so the control is gone rather than decorative. The column survives
- * in the database, so nothing is lost if a notifier ever ships.
+ * in the database, so nothing is lost if a notifier ever ships. The
+ * spaced-repetition pace selector went for the identical reason: it
+ * persisted a value grading never read, since cards always ran the same
+ * fixed schedule regardless of what it said. Skills moved out of here too —
+ * they're reachable from the sidebar and from chat, so a link to them here
+ * was a second path to the same place, not a setting.
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   deleteAccount,
   getSettings,
@@ -31,7 +36,7 @@ import {
 import { signOutLocally } from '../../api/auth'
 import { listPreferences, resetFeedback, type Preference } from '../../api/feedback'
 import { getSupabase } from '../../api/supabase'
-import type { Settings as Prefs, StudentModel, TopicSignal } from '../../api/types'
+import type { Settings as Prefs, StudentModel } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
@@ -43,31 +48,22 @@ import { SectionLabel } from '../../components/ui/Bits'
 // file. Nothing in them knows what a preference is — they are the generic
 // "row in a grouped list" pattern — so they live in `components/ui/` now and
 // this file is ~150 lines shorter for it.
-import {
-  RowWithNumber,
-  RowWithSelect,
-  RowWithText,
-  RowWithToggle,
-  SavingDot,
-} from '../../components/ui/Row'
+import { RowWithNumber, RowWithText, RowWithToggle, SavingDot } from '../../components/ui/Row'
 import { useToast } from '../../components/ui/Toast'
-import { useFallbackSubspace } from '../../lib/nav'
 import { cn } from '../../lib/cn'
 
-const SECTIONS = ['Account', 'Study', 'Student model', 'AI & sources', 'Skills', 'Privacy'] as const
+const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy'] as const
 type Section = (typeof SECTIONS)[number]
 
-const PACE_LABEL: Record<Prefs['spaced_pace'], string> = {
-  relaxed: 'Relaxed',
-  balanced: 'Balanced',
-  aggressive: 'Aggressive',
-}
+/** Free-text fields debounce their PATCH instead of firing one per
+ *  keystroke — typing "Amazon OA next week" used to be six or seven network
+ *  requests, one per pause, none of which the student was waiting on. */
+const TEXT_PATCH_DEBOUNCE_MS = 600
 
 export function Settings() {
   const { user, signOut } = useAuth()
   const { show, showError } = useToast()
   const navigate = useNavigate()
-  const { base, hasAny } = useFallbackSubspace()
 
   const [active, setActive] = useState<Section>('Account')
   const [prefs, setPrefs] = useState<Prefs | null>(null)
@@ -144,6 +140,38 @@ export function Settings() {
       } finally {
         setSavingKey(null)
       }
+    },
+    [student, showError],
+  )
+
+  // One timer per field, keyed the same way `savingKey` is, so typing in
+  // "studying for" doesn't reset a pending "learning style" save.
+  const textTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  const patchStudentText = useCallback(
+    (fieldKey: string, updates: Partial<StudentModel>) => {
+      if (!student) return
+      // The field itself updates instantly — only the request that makes it
+      // durable waits. Without this, every keystroke fired its own PATCH.
+      setStudent((prev) => (prev ? { ...prev, ...updates } : prev))
+      const timers = textTimers.current
+      if (timers[fieldKey]) clearTimeout(timers[fieldKey])
+      timers[fieldKey] = setTimeout(async () => {
+        setSavingKey(fieldKey)
+        try {
+          const updated = await updateStudentModel(updates)
+          setStudent(updated)
+        } catch (err) {
+          // Unlike `patchStudent`, this doesn't roll back to the
+          // pre-edit value on failure — by the time a debounced request
+          // fails, the student has likely kept typing, and snapping the
+          // field back to what it read half a second ago would eat that.
+          // The error toast is enough; the next successful save still wins.
+          showError(err)
+        } finally {
+          setSavingKey(null)
+        }
+      }, TEXT_PATCH_DEBOUNCE_MS)
     },
     [student, showError],
   )
@@ -295,16 +323,6 @@ export function Settings() {
                   onChange={(v) =>
                     patch('streak_freeze_enabled', { streak_freeze_enabled: v })
                   }
-                />
-                <RowWithSelect
-                  label="Spaced-repetition pace"
-                  value={prefs.spaced_pace}
-                  options={(['relaxed', 'balanced', 'aggressive'] as const).map((v) => ({
-                    value: v,
-                    label: PACE_LABEL[v],
-                  }))}
-                  onChange={(v) => patch('spaced_pace', { spaced_pace: v })}
-                  saving={savingKey === 'spaced_pace'}
                   last
                 />
               </div>
@@ -316,21 +334,21 @@ export function Settings() {
             </>
           )}
 
-          {student && active === 'Student model' && (
+          {student && active === 'How you learn' && (
             <>
-              <SectionLabel>STUDENT MODEL</SectionLabel>
+              <SectionLabel>HOW YOU LEARN</SectionLabel>
               <p className="text-xs text-faint">
                 What the AI knows about how you study — the fields below feed
-                every chat reply and generated card, quiz, and note. Weak and
-                strong areas are computed from your real quiz scores, not
-                something you set.
+                every chat reply and generated card, quiz, and note. Profile
+                shows how your quiz scores are actually trending; this page is
+                only what you've set and what's been learned from feedback.
               </p>
               <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
                 <RowWithText
                   label="Learning style"
                   placeholder="e.g. visual, worked examples, analogies"
                   value={student.learning_style}
-                  onChange={(v) => patchStudent('learning_style', { learning_style: v })}
+                  onChange={(v) => patchStudentText('learning_style', { learning_style: v })}
                   saving={savingKey === 'learning_style'}
                 />
                 <RowWithNumber
@@ -348,7 +366,7 @@ export function Settings() {
                   label="Studying for"
                   placeholder="e.g. Amazon OA next week"
                   value={student.exam_context}
-                  onChange={(v) => patchStudent('exam_context', { exam_context: v })}
+                  onChange={(v) => patchStudentText('exam_context', { exam_context: v })}
                   saving={savingKey === 'exam_context'}
                   last
                 />
@@ -358,7 +376,9 @@ export function Settings() {
                 <textarea
                   value={student.teaching_preference ?? ''}
                   onChange={(e) =>
-                    patchStudent('teaching_preference', { teaching_preference: e.target.value || null })
+                    patchStudentText('teaching_preference', {
+                      teaching_preference: e.target.value || null,
+                    })
                   }
                   placeholder="Optional — free text the AI reads before every reply."
                   rows={3}
@@ -370,41 +390,6 @@ export function Settings() {
                   </div>
                 )}
               </div>
-
-              {(student.weak_areas.length > 0 || student.strong_areas.length > 0) && (
-                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
-                  <div className="mb-2 text-ink-3">From your quiz history</div>
-                  <div className="flex flex-col gap-1.5">
-                    {student.weak_areas.map((a) => (
-                      <TopicRow key={a.subspace_id} signal={a} tone="coral" />
-                    ))}
-                    {student.strong_areas.map((a) => (
-                      <TopicRow key={a.subspace_id} signal={a} tone="mint" />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Deliberately its own panel, below the averages rather than
-                  mixed into them. A falling score is a different KIND of fact
-                  from a low one — a topic sliding from 85% to 70% never
-                  appears in "weak areas" at all, which is exactly why it used
-                  to go unnoticed. */}
-              {student.falling_areas.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
-                  <div className="mb-2 text-ink-3">Going the wrong way</div>
-                  <div className="flex flex-col gap-1.5">
-                    {student.falling_areas.map((a) => (
-                      <div key={a.subspace_id} className="flex items-center justify-between gap-3">
-                        <span className="min-w-0 truncate text-ink">{a.topic}</span>
-                        <span className="shrink-0 text-coral-deep">
-                          down {Math.abs(a.trend ?? 0)} pts
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* What the personalization layer currently believes, with its
                   source and how sure it is.
@@ -496,32 +481,6 @@ export function Settings() {
             </>
           )}
 
-          {prefs && active === 'Skills' && (
-            <>
-              <SectionLabel>SKILLS</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4">
-                <p className="text-sm text-muted">
-                  Manage custom AI personas from any space's Skills tab. The
-                  ones you turn on there are what the chat here will use.
-                </p>
-                {hasAny ? (
-                  // `text-white` on the brand background used to be
-                  // hand-rolled here (~3.1:1 contrast, fails WCAG AA)
-                  // instead of going through `Button`'s `primary` variant,
-                  // which every other brand-colored control uses.
-                  <Link to={`${base}/skills`} className="mt-1 self-start">
-                    <Button size="sm">Open Skills →</Button>
-                  </Link>
-                ) : (
-                  <p className="text-xs text-faint">
-                    Create a space and a topic first — Skills lives inside a
-                    subspace.
-                  </p>
-                )}
-              </div>
-            </>
-          )}
-
           {prefs && active === 'Privacy' && (
             <>
               <SectionLabel>PRIVACY</SectionLabel>
@@ -592,28 +551,6 @@ export function Settings() {
           </div>
         </div>
       </Modal>
-    </div>
-  )
-}
-
-/**
- * One topic and its quiz average.
- *
- * Carries the subject name when the API sends one: now that the student model
- * reads across every subject rather than one, "Attention" alone stops being
- * unique the moment two subjects both have a topic by that name — and this
- * list is precisely where they'd sit next to each other.
- */
-function TopicRow({ signal, tone }: { signal: TopicSignal; tone: 'coral' | 'mint' }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="min-w-0 truncate text-ink">
-        {signal.topic}
-        {signal.subject && <span className="text-faint"> · {signal.subject}</span>}
-      </span>
-      <span className={cn('shrink-0', tone === 'coral' ? 'text-coral-deep' : 'text-mint-deep')}>
-        {signal.average}% avg
-      </span>
     </div>
   )
 }

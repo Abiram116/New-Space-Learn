@@ -309,7 +309,7 @@ function TopBar() {
             to="/signup"
             className="rounded-[10px] bg-brand px-3.5 py-2 text-[13px] font-bold text-[#1a120f] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_2px_0_#a8331d] transition-transform active:translate-y-[2px]"
           >
-            Start free
+            Get started
           </Link>
         </nav>
       </div>
@@ -437,7 +437,7 @@ function Close({ progress }: { progress: number }) {
         }}
       />
       {/* Copy and figure get SEPARATE BANDS — they are never stacked.
-          Layering them behind a scrim put the "Start free" button squarely
+          Layering them behind a scrim put the "Get started" button squarely
           on the reader's head, and no amount of scrim fixes type sitting on
           a face. A two-column grid guarantees they cannot collide: copy
           left, figure right. Below `lg` the grid stacks to two rows, copy
@@ -475,7 +475,7 @@ function Close({ progress }: { progress: number }) {
             One PDF is enough to see whether this works the way you study.
             Nothing to configure first.
           </p>
-          <CTA to="/signup">Start free</CTA>
+          <CTA to="/signup">Get started</CTA>
         </div>
 
         {/* The figure owns the second band and sits on the floor of it.

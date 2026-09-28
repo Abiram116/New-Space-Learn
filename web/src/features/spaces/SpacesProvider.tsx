@@ -38,7 +38,6 @@ type Ctx = {
   createSpace: (input: { name: string; tone: Tone }) => Promise<Space>
   renameSpace: (id: string, name: string) => Promise<void>
   setPinned: (id: string, pinned: boolean) => Promise<void>
-  changeTone: (id: string, tone: Tone) => Promise<void>
   deleteSpace: (id: string) => Promise<void>
   addSubspace: (spaceId: string, name: string) => Promise<Subspace>
   renameSubspace: (id: string, name: string) => Promise<void>
@@ -128,10 +127,6 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
       renameSpace: async (id, name) => {
         await updateSpace(id, { name })
         setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, name } : s)))
-      },
-      changeTone: async (id, tone) => {
-        await updateSpace(id, { tone })
-        setSpaces((prev) => prev.map((s) => (s.id === id ? { ...s, tone } : s)))
       },
       deleteSpace: async (id) => {
         await deleteSpaceApi(id)

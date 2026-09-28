@@ -67,6 +67,9 @@ export const SignUp = lazy(() =>
 export const AuthCallback = lazy(() =>
   import('../features/auth/AuthCallback').then((m) => ({ default: m.AuthCallback })),
 )
+export const ResetPassword = lazy(() =>
+  import('../features/auth/ResetPassword').then((m) => ({ default: m.ResetPassword })),
+)
 export const SkillsView = lazy(() =>
   import('../features/skills/SkillsView').then((m) => ({ default: m.SkillsView })),
 )
@@ -107,6 +110,7 @@ export function prefetchAuthChunks(): void {
   const warm = () => {
     void import('../features/auth/SignIn')
     void import('../features/auth/SignUp')
+    void import('../features/auth/ResetPassword')
   }
   const idle = (window as IdleWindow).requestIdleCallback
   if (idle) idle(warm, { timeout: 3000 })

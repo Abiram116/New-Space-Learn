@@ -16,7 +16,6 @@ import { Link } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../../api/documents'
 import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
-import { RelatedTopics } from '../spaces/RelatedTopics'
 import { DockPanelBody, type DockPanel } from './DockPanels'
 import { useDockPanelMotion } from './useDockPanelMotion'
 import { useDockWidth } from './useDockWidth'
@@ -257,7 +256,12 @@ export function ContextDock({
               view.bodyAnimation,
             )}
           >
-            <DockPanelBody panel={view.panel} subspaceId={subspaceId} base={base} />
+            <DockPanelBody
+              panel={view.panel}
+              subspaceId={subspaceId}
+              base={base}
+              onRunAgent={onRunAgent}
+            />
           </div>
         </div>
       )}
@@ -369,18 +373,27 @@ export function ContextDock({
         )}
       </section>
 
-      {/* ── Related topics ──
-          Here rather than only on the Docs page, because deciding that this
-          question also needs your linear-algebra notes happens *while* you
-          are asking it. Behind a page navigation, it was a setup-time
-          decision that in practice nobody revisited. */}
-      <section className="flex flex-col gap-2">
-        <SectionLabel>Related topics</SectionLabel>
-        <RelatedTopics subspaceId={subspaceId} layout="stack" />
-      </section>
-
       {/* ── Sources ── */}
-      <section className="flex min-h-0 flex-col gap-2">
+      {/* The drop target is the whole section, not just the empty state —
+          it used to only be the empty-state DashedCard, so dropping a file
+          worked exactly once per topic: the moment a first document existed,
+          the card was gone and dropping anywhere just did nothing. */}
+      <section
+        className={cn(
+          'flex min-h-0 flex-col gap-2 rounded-[10px] transition-colors',
+          dragging && docList.length > 0 && 'bg-brand-soft/40 ring-1 ring-brand/40',
+        )}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setDragging(true)
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setDragging(false)
+          if (e.dataTransfer.files.length > 0) void upload(e.dataTransfer.files)
+        }}
+      >
         {/* One input for the whole section. It used to live inside the empty
             state, which is why "+ Add" could not reach it the moment a first
             document existed. */}
@@ -427,16 +440,6 @@ export function ContextDock({
               dragging && 'border-brand/60 bg-brand-soft',
             )}
             onClick={() => fileRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragging(true)
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setDragging(false)
-              if (e.dataTransfer.files.length > 0) void upload(e.dataTransfer.files)
-            }}
           >
             <p className="text-[11.5px] leading-snug text-muted">
               {uploading ? 'Uploading…' : 'Drop a PDF here, or click to choose one.'}

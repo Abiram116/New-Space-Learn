@@ -10,71 +10,17 @@ import logging
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
-from ..config import settings
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, UpstreamUnavailable, ValidationFailed
-from ..guards import assert_space, assert_subspace
-from ..schemas import DocumentOut, OkOut, SuggestSubspaceOut
+from ..guards import assert_subspace
+from ..schemas import DocumentOut, OkOut
 from ..services import ingest, supabase
-from ..services.extract import extract_text
-from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.docs")
 router = APIRouter()
 
 MAX_BYTES = 20 * 1024 * 1024  # 20 MB — free-tier friendly
-# A name needs a sample, not the book: parsing all of an 80-page PDF to keep
-# its first 4000 characters was ~5s of wasted CPU on Render.
-SUGGEST_MAX_PAGES = 4
-
-
-@router.post("/spaces/{space_id}/suggest-subspace", response_model=SuggestSubspaceOut)
-async def suggest_subspace(
-    space_id: str,
-    file: UploadFile = File(...),
-    user: CurrentUser = Depends(get_current_user),
-) -> SuggestSubspaceOut:
-    """One cheap model call over an uploaded file, for when a student drops
-    material into a subject before creating a topic to hold it — a
-    pre-filled, editable suggestion beats asking them to name it blind."""
-
-    await assert_space(user.id, space_id)
-    # This reaches the model, so it burns the same quota as any other AI call.
-    # Without this it was the one unmetered LLM endpoint in the API.
-    await consume_llm_quota(user.id)
-
-    data = await file.read()
-    if not data:
-        raise ValidationFailed("The file is empty.")
-    mime = file.content_type or ""
-    if "image" in mime.lower():
-        return SuggestSubspaceOut(name=None)  # a vision call just to name a topic isn't worth it
-    text = (await extract_text(data, mime, max_pages=SUGGEST_MAX_PAGES))[:4000]
-    if not text.strip() or not settings.llm_configured:
-        return SuggestSubspaceOut(name=None)
-
-    prompt = (
-        "Suggest a short topic name (2-5 words, Title Case, no trailing "
-        "punctuation) for a study space that will hold this material. "
-        "Return ONLY the name, nothing else.\n\nMaterial:\n" + text
-    )
-    try:
-        parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {"role": "system", "content": "You name study topics concisely."},
-                {"role": "user", "content": prompt},
-            ],
-            model=settings.groq_model_fast,
-            temperature=0.4,
-        ):
-            parts.append(delta)
-        name = "".join(parts).strip().strip('"').strip("*")[:80] or None
-    except Exception:
-        log.warning("subspace name suggestion failed", exc_info=True)
-        name = None
-    return SuggestSubspaceOut(name=name)
 
 
 @router.get("/subspaces/{subspace_id}/documents", response_model=list[DocumentOut])

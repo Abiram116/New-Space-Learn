@@ -82,4 +82,13 @@ describe('once auth resolves', () => {
       expect(navigate).toHaveBeenCalledWith('/spaces/s1', { replace: true }),
     )
   })
+
+  it('routes a password-reset link to /auth/reset-password instead of /home', async () => {
+    mockAuth = { loading: false, session: { user: { id: 'u1' } } }
+    renderCallback(['/auth/callback?reset=1'])
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('/auth/reset-password', { replace: true }),
+    )
+  })
 })

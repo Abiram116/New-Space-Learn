@@ -21,16 +21,15 @@ from .llm import get_llm
 log = logging.getLogger("space_learn.extract")
 
 
-async def extract_text(data: bytes, mime_type: str, *, max_pages: int | None = None) -> str:
-    """`max_pages` bounds PDF parsing for callers that only need a sample."""
+async def extract_text(data: bytes, mime_type: str) -> str:
     if "image" in mime_type.lower():
         return await _extract_image_text(data, mime_type)
-    return await asyncio.to_thread(_extract_sync, data, mime_type, max_pages)
+    return await asyncio.to_thread(_extract_sync, data, mime_type)
 
 
-def _extract_sync(data: bytes, mime_type: str, max_pages: int | None) -> str:
+def _extract_sync(data: bytes, mime_type: str) -> str:
     if "pdf" in mime_type.lower():
-        return extract_pdf_text(data, max_pages=max_pages)
+        return extract_pdf_text(data)
     if "csv" in mime_type.lower():
         return _extract_csv_text(data)
     # Everything else: assume UTF-8 text (markdown, plain, source).

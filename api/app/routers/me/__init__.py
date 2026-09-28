@@ -1,8 +1,7 @@
 """`/me` — everything scoped to the signed-in user.
 
-Split out of a single 679-line module on 2026-08-10, before the Gap Map and
-confusion-pair endpoints add to it. The split follows what the endpoints are
-*for*, not their size:
+Split out of a single 679-line module on 2026-08-10. The split follows what
+the endpoints are *for*, not their size:
 
 - `account.py`  — who you are and how you want to be taught
 - `stats.py`    — what you have done

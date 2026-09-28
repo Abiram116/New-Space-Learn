@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
-
-
-class Me(BaseModel):
-    id: str
-    email: str | None
 
 
 # ── Spaces ─────────────────────────────────────────────────────────────
@@ -55,13 +50,6 @@ class SubspaceUpdate(BaseModel):
 
 class SubspaceLinkCreate(BaseModel):
     linked_subspace_id: str
-
-
-class SuggestSubspaceOut(BaseModel):
-    """None when the model isn't configured or couldn't read the file —
-    the frontend falls back to an empty, student-typed name either way."""
-
-    name: str | None
 
 
 # ── Chat ───────────────────────────────────────────────────────────────
@@ -534,9 +522,7 @@ class StatsOut(BaseModel):
 
 class SettingsOut(BaseModel):
     daily_goal: int
-    reminder_time: time | None
     streak_freeze_enabled: bool
-    spaced_pace: Literal["relaxed", "balanced", "aggressive"]
     answer_only_from_docs: bool
     always_show_citations: bool
 
@@ -544,9 +530,7 @@ class SettingsOut(BaseModel):
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="ignore")
     daily_goal: int | None = Field(default=None, ge=1, le=500)
-    reminder_time: time | None = None
     streak_freeze_enabled: bool | None = None
-    spaced_pace: Literal["relaxed", "balanced", "aggressive"] | None = None
     answer_only_from_docs: bool | None = None
     always_show_citations: bool | None = None
 

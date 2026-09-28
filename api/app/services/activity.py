@@ -39,8 +39,27 @@ log = logging.getLogger("space_learn.activity")
 SECONDS_PER_CHAT_MESSAGE = 60
 #: Recall, self-grade, move on. Short by design — cards are meant to be fast.
 SECONDS_PER_CARD_REVIEW = 20
-#: A multi-question quiz plus reviewing what came back wrong.
+#: A multi-question quiz plus reviewing what came back wrong. Only the
+#: fallback when the client didn't report a real duration — see `quiz_seconds`.
 SECONDS_PER_QUIZ = 180
+#: Bounds on a *measured* duration. Below this it's almost certainly a client
+#: clock glitch, not a real attempt; above it, a tab left open overnight
+#: shouldn't inflate a week's study-time total.
+_MIN_MEASURED_QUIZ_SECONDS = 30
+_MAX_MEASURED_QUIZ_SECONDS = 3600
+
+
+def quiz_seconds(measured: int | None) -> int:
+    """How long a submitted quiz counts for, in study time.
+
+    `duration_seconds` is timed client-side and sent with the submission —
+    use it when it's there, clamped to a sane range, rather than the flat
+    estimate every quiz used to be credited regardless of how long it
+    actually took.
+    """
+    if measured is None:
+        return SECONDS_PER_QUIZ
+    return max(_MIN_MEASURED_QUIZ_SECONDS, min(_MAX_MEASURED_QUIZ_SECONDS, measured))
 
 
 async def bump(

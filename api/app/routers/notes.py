@@ -164,10 +164,14 @@ async def generate_note(
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
+    # Linked subspaces are fetched first, not gathered alongside the rest,
+    # because retrieval needs the ids before it can run — see the identical
+    # shape in subspace_chat.send_chat.
+    linked_ids = await rag.linked_subspace_ids(user.id, subspace_id)
     # Gathered for the same reason as quizzes: independent reads should not
     # queue behind each other in front of a model call.
     retrieved, history, student_context = await asyncio.gather(
-        rag.retrieve(subspace_id, topic, k=6),
+        rag.retrieve_with_links(subspace_id, topic, linked_ids, k=6),
         recent_history(user.id, subspace_id),
         personalization.build(user.id, "notes", subspace_id=subspace_id),
     )

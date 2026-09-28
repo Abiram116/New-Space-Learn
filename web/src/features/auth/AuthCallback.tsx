@@ -35,7 +35,10 @@ export function AuthCallback() {
       navigate('/signin', { replace: true })
       return
     }
-    const dest = params.get('next') || '/home'
+    // Password-reset emails point here with `?reset=1` — Supabase has just
+    // turned the recovery link into a session, and the only sane next stop
+    // is the screen that lets them actually set a new password.
+    const dest = params.get('reset') === '1' ? '/auth/reset-password' : params.get('next') || '/home'
     void play('threshold', () => {
       navigate(dest, { replace: true })
     })

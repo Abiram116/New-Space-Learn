@@ -289,7 +289,7 @@ async def generate_cards(
     history, student_context, retrieved = await asyncio.gather(
         recent_history(user.id, subspace_id),
         personalization.build(user.id, "cards", subspace_id=subspace_id),
-        rag.retrieve(subspace_id, topic, k=6) if not context else _nothing(),
+        _retrieve_with_links(user.id, subspace_id, topic) if not context else _nothing(),
     )
     if not context:
         # Chat counts as material — see the note in quizzes.generate_quiz.
@@ -423,6 +423,14 @@ async def _nothing() -> list:
     whether or not retrieval is needed. Cheaper to read than branching the
     gather into two arms."""
     return []
+
+
+async def _retrieve_with_links(user_id: str, subspace_id: str, topic: str) -> list[rag.Retrieved]:
+    """Same linked-subspace-aware retrieval chat uses (`rag.retrieve_with_links`)
+    — a linked topic should feed a generated deck exactly as it feeds an
+    answer, not just chat."""
+    linked_ids = await rag.linked_subspace_ids(user_id, subspace_id)
+    return await rag.retrieve_with_links(subspace_id, topic, linked_ids, k=6)
 
 
 async def _generate_pairs(

@@ -49,6 +49,15 @@ export function Home() {
   const entries = activeSubspaces(spaces)
   const anySubspaces = entries.length > 0
   const first = entries[0]
+  // /flashcards and /quizzes are account-wide libraries regardless of which
+  // topic's URL gets you there (see FlashcardsView/QuizzesView), but the
+  // topic in the link still becomes the app's active context — and `first`
+  // is picked by recency alone, so it can easily be a topic with nothing due.
+  // This is the one signal Home actually has on hand (a topic's own card/quiz
+  // count, not per-topic due counts), so prefer a topic that holds something
+  // over one that's merely recent; fall back to `first` when nothing does.
+  const cardsEntry = entries.find((e) => (e.subspace.counts?.cards ?? 0) > 0) ?? first
+  const quizzesEntry = entries.find((e) => (e.subspace.counts?.quizzes ?? 0) > 0) ?? first
   // Subjects that exist but hold nothing yet — shown as empty binder slots.
   const emptySubjects = spaces.filter((sp) => sp.subspaces.length === 0).slice(0, 3)
 
@@ -134,7 +143,7 @@ export function Home() {
                   </Button>
                 </Link>
               ) : (
-                <Link to={due > 0 ? `${first.link}/flashcards` : first.link}>
+                <Link to={due > 0 ? `${cardsEntry?.link ?? first.link}/flashcards` : first.link}>
                   <Button size="lg">
                     {due > 0 ? `Review ${due} card${due === 1 ? '' : 's'}` : 'Pick up where you left off'}
                     <Icon name="arrowRight" size={15} />
@@ -179,7 +188,7 @@ export function Home() {
                 tone="sun"
                 lit={due > 0}
                 detail={due > 0 ? 'Ready to review now.' : 'Nothing waiting. Nice.'}
-                to={first && due > 0 ? `${first.link}/flashcards` : undefined}
+                to={cardsEntry && due > 0 ? `${cardsEntry.link}/flashcards` : undefined}
               />
               <Figure
                 icon="target"
@@ -199,7 +208,7 @@ export function Home() {
                     ? 'Across your last five.'
                     : 'Take one to find out.'
                 }
-                to={first ? `${first.link}/quizzes` : undefined}
+                to={quizzesEntry ? `${quizzesEntry.link}/quizzes` : undefined}
               />
               <Figure
                 icon="clock"

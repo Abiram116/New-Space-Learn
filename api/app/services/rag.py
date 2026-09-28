@@ -66,6 +66,19 @@ async def retrieve(subspace_id: str, question: str, *, k: int = 4) -> list[Retri
     ]
 
 
+async def linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
+    """The other subspaces this one is explicitly linked to (see Linked
+    Subspaces in docs/v2-review.md) — the input `retrieve_with_links` needs.
+    Shared so chat and every generation endpoint (notes, quizzes, cards) draw
+    on the same linked material rather than chat alone seeing it."""
+    links = await supabase.db_select(
+        "subspace_links",
+        filters={"user_id": f"eq.{user_id}", "subspace_id": f"eq.{subspace_id}"},
+        select="linked_subspace_id",
+    )
+    return [row["linked_subspace_id"] for row in links]
+
+
 async def retrieve_with_links(
     subspace_id: str,
     question: str,

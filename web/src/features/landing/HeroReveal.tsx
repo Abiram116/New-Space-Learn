@@ -318,7 +318,7 @@ function HeroCopy() {
           bevelled Button while the close used a glowing hand-rolled link —
           one page, two button languages. */}
       <div data-hero-tail className="mt-6 flex flex-wrap items-center gap-4">
-        <CTA to="/signup">Start free</CTA>
+        <CTA to="/signup">Get started</CTA>
         <span className="setcode">No card needed</span>
       </div>
     </>

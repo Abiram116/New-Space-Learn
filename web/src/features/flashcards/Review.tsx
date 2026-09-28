@@ -41,17 +41,18 @@ export function Review({
   // Keep the handler in a ref so the key listener never goes stale.
   const stateRef = useRef({ mode, card })
   stateRef.current = { mode, card }
-  // Blocks a second `grade()` for the *same* card — a fast double-click, or
-  // a mouse click landing right after the same hotkey fires, reads the same
-  // `stateRef.current.card` before the advance-to-the-next-card render has
-  // committed (grading is deliberately optimistic/synchronous, so nothing
-  // else was gating this). Two calls meant two `gradeCard` PATCHes for one
-  // card — a plain read-modify-write on the server, so whichever lands last
-  // silently wins and the other grade is discarded from the SM-2 state,
-  // while `activity.bump` still counts both as a card reviewed. Keyed by
-  // card id, not a plain boolean, so it never needs a manual reset: the
-  // next card has a different id and is ungated from its first render.
-  const gradedRef = useRef<string | null>(null)
+  // Blocks a second `grade()` for the *same* queue slot — a fast
+  // double-click, or a mouse click landing right after the same hotkey
+  // fires, reads the same `stateRef.current.card` before the
+  // advance-to-the-next-card render has committed (grading is deliberately
+  // optimistic/synchronous, so nothing else was gating this). Two calls
+  // meant two `gradeCard` PATCHes for one card — a plain read-modify-write
+  // on the server, so whichever lands last silently wins and the other
+  // grade is discarded from the SM-2 state, while `activity.bump` still
+  // counts both as a card reviewed. Keyed by queue index, not card id: an
+  // "Again" card is re-queued later in this same session and gets the same
+  // id back, so id alone would wrongly gate its second pass too.
+  const gradedRef = useRef<number>(-1)
 
   /* What each grade costs, computed from this card's own ease/interval/reps
      with the same arithmetic the server runs. Shown on the button so the
@@ -70,18 +71,24 @@ export function Review({
   const grade = useCallback(
     (g: Grade) => {
       const { mode: m, card: c } = stateRef.current
-      if (!c || gradedRef.current === c.id) return
-      gradedRef.current = c.id
+      if (!c || gradedRef.current === m.index) return
+      gradedRef.current = m.index
       void gradeCard(c.id, g).catch(showError)
       // Due counts and the streak just moved; don't let Home serve the
       // pre-review numbers from cache.
       clearStatsCache()
       const grades = [...m.grades, g]
-      if (m.index + 1 >= m.cards.length) {
+      // Standard SRS behaviour: "Again" doesn't finish this card's part in
+      // the session, it re-queues it at the tail so it comes back before the
+      // session ends. The session is only done once every card's *last*
+      // grade cleared Again — growing `cards` here is what makes that fall
+      // out of the existing index/length check below for free.
+      const cards = g === 'again' ? [...m.cards, c] : m.cards
+      if (m.index + 1 >= cards.length) {
         onFinish()
         setMode({ kind: 'summary', deckId: m.deckId, grades })
       } else {
-        setMode({ ...m, index: m.index + 1, flipped: false, grades })
+        setMode({ ...m, cards, index: m.index + 1, flipped: false, grades })
       }
     },
     [onFinish, setMode, showError],

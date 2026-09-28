@@ -21,7 +21,7 @@
  * would drift and the second one would be the neglected one.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { submitQuiz } from '../../api/quizzes'
 import type { Quiz, QuizResult } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
@@ -81,7 +81,6 @@ export function QuizRunner({
   const [revealed, setRevealed] = useState<boolean[]>(() => Array(total).fill(false))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const startedAt = useRef(Date.now())
   const seconds = useElapsed()
 
   const q = quiz.questions[index]
@@ -122,17 +121,20 @@ export function QuizRunner({
   const finish = useCallback(async () => {
     setBusy(true)
     try {
-      const elapsed = Math.round((Date.now() - startedAt.current) / 1000)
-      const result = await submitQuiz(quiz.id, answers, elapsed)
+      // `seconds` is the same clock shown in the header, which pauses while
+      // the tab is hidden (see useElapsed) — reusing it here instead of a
+      // separate Date.now() diff keeps duration_seconds from counting time
+      // the student spent on another tab.
+      const result = await submitQuiz(quiz.id, answers, seconds)
       // The quiz average and streak just changed — see clearStatsCache.
       clearStatsCache()
-      onFinished(result, answers, elapsed)
+      onFinished(result, answers, seconds)
     } catch (err) {
       setError(friendlyMessage(err))
     } finally {
       setBusy(false)
     }
-  }, [quiz.id, answers, onFinished])
+  }, [quiz.id, answers, seconds, onFinished])
 
   return (
     <div
@@ -472,12 +474,35 @@ function Verdict({
 
 /* ── Time ────────────────────────────────────────────────────────────── */
 
-/** Seconds since mount, ticking once a second. */
+/**
+ * Seconds since mount, ticking once a second — paused while the tab isn't
+ * visible. A quiz left open in a background tab was still racking up
+ * duration_seconds for time nobody spent taking it; the interval now stops
+ * on `visibilitychange` and picks back up when the tab is foregrounded
+ * again, so the count only ever reflects time actually on screen.
+ */
 function useElapsed(): number {
   const [seconds, setSeconds] = useState(0)
   useEffect(() => {
-    const id = window.setInterval(() => setSeconds((s) => s + 1), 1000)
-    return () => window.clearInterval(id)
+    let id: number | null = null
+    const start = () => {
+      if (id === null && !document.hidden) {
+        id = window.setInterval(() => setSeconds((s) => s + 1), 1000)
+      }
+    }
+    const stop = () => {
+      if (id !== null) {
+        window.clearInterval(id)
+        id = null
+      }
+    }
+    const onVisibility = () => (document.hidden ? stop() : start())
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
   return seconds
 }

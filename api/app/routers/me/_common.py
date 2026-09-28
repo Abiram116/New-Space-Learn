@@ -17,9 +17,7 @@ from ...services import supabase
 
 _DEFAULT_SETTINGS = SettingsOut(
     daily_goal=20,
-    reminder_time=None,
     streak_freeze_enabled=True,
-    spaced_pace="balanced",
     answer_only_from_docs=True,
     always_show_citations=True,
 )

@@ -23,6 +23,7 @@
 import { Link } from 'react-router-dom'
 import { Icon } from '../../components/ui/Icon'
 import { RelatedTopics } from '../spaces/RelatedTopics'
+import type { AgentKey } from './agents'
 import { CardsPanel } from './panels/CardsPanel'
 import { NotesPanel } from './panels/NotesPanel'
 import { QuizzesPanel } from './panels/QuizzesPanel'
@@ -33,13 +34,16 @@ export function DockPanelBody({
   panel,
   subspaceId,
   base,
+  onRunAgent,
 }: {
   panel: NonNullable<DockPanel>
   subspaceId: string
   base: string
+  onRunAgent: (agent: AgentKey, argument?: string) => void
 }) {
   if (panel === 'docs') return <DocsPanel subspaceId={subspaceId} base={base} />
-  if (panel === 'notes') return <NotesPanel subspaceId={subspaceId} base={base} />
+  if (panel === 'notes')
+    return <NotesPanel subspaceId={subspaceId} base={base} onRunAgent={onRunAgent} />
   if (panel === 'quizzes') return <QuizzesPanel subspaceId={subspaceId} base={base} />
   return <CardsPanel subspaceId={subspaceId} base={base} />
 }

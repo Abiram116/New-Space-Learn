@@ -11,6 +11,7 @@ import hashlib
 import logging
 import re
 import time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 
@@ -365,48 +366,90 @@ async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
     3. A topic with a **low** average — worth a retake, but it is not news.
 
     Every branch is gated (a meaningful decline, a non-trivial overdue count,
-    enough attempts to trust an average) so this never fires on noise, and
-    every one resolves to a route that exists.
+    enough attempts to trust an average) so this never fires on noise. Each
+    one also resolves to a route that names the actual row the student would
+    land on — `?deck=`/`?q=`, which `FlashcardsView`/`QuizzesView` read to
+    open it directly — and falls through to the next branch rather than
+    returning a link to something that turns out not to exist (a due-less
+    deck, a topic with no quiz on record).
     """
     if snap.falling:
         worst = snap.falling[0]
-        if worst.subject_id:
+        if worst.subject_id and (quiz_id := await _latest_quiz_id(worst.subspace_id)):
             return BriefSuggestion(
                 label=f"Retake {_short(worst.topic)}",
-                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes",
+                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes?q={quiz_id}",
             )
 
-    # Deck names aren't on the snapshot — it aggregates decks to per-topic card
-    # counts, which is all any other consumer needs. One targeted read here,
-    # only when there is genuinely a backlog to name.
+    # Deck names and per-deck due counts aren't on the snapshot — it
+    # aggregates decks to per-topic totals, which is all any other consumer
+    # needs. One targeted read here, only when there is genuinely a backlog
+    # to name, for the specific deck actually carrying it (the topic-level
+    # total can span several decks, only some of which have anything due).
     backlog = [t for t in snap.topics if t.cards_due >= 3 and t.subject_id]
     if backlog:
         top = max(backlog, key=lambda t: t.cards_due)
-        decks = await supabase.db_select(
-            "decks",
-            filters={"subspace_id": f"eq.{top.subspace_id}"},
-            select="id,name",
-            limit=1,
-        )
-        if decks:
+        deck_id, deck_name = await _due_deck(top.subspace_id)
+        if deck_id:
             return BriefSuggestion(
-                label=f"Review {_short(decks[0]['name'])}",
+                label=f"Review {_short(deck_name)}",
                 # MUST carry the `/s/` prefix — it is the live route
                 # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
                 # comment here used to justify dropping it, which meant
                 # every suggested-review link silently 404'd.
-                route=f"/s/{top.subject_id}/{top.subspace_id}/flashcards",
+                route=f"/s/{top.subject_id}/{top.subspace_id}/flashcards?deck={deck_id}",
             )
 
     weak = [t for t in snap.rated if (t.quiz_average or 0) < 75 and t.subject_id]
     if weak:
         worst = min(weak, key=lambda t: t.quiz_average or 0)
-        return BriefSuggestion(
-            label=f"Retake the {_short(worst.topic)} quiz",
-            route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes",
-        )
+        if worst.subject_id and (quiz_id := await _latest_quiz_id(worst.subspace_id)):
+            return BriefSuggestion(
+                label=f"Retake the {_short(worst.topic)} quiz",
+                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes?q={quiz_id}",
+            )
 
     return None
+
+
+async def _latest_quiz_id(subspace_id: str) -> str | None:
+    """The most recent quiz in this subspace, to link `?q=` at — a "Retake"
+    suggestion is meaningless without a real quiz on the other end of it."""
+    rows = await supabase.db_select(
+        "quizzes",
+        filters={"subspace_id": f"eq.{subspace_id}"},
+        select="id",
+        order="created_at.desc",
+        limit=1,
+    )
+    return rows[0]["id"] if rows else None
+
+
+async def _due_deck(subspace_id: str) -> tuple[str | None, str | None]:
+    """The deck in this subspace with the most cards due right now, or
+    `(None, None)` if none actually has any. Returns `(id, name)`."""
+    decks = await supabase.db_select(
+        "decks", filters={"subspace_id": f"eq.{subspace_id}"}, select="id,name"
+    )
+    if not decks:
+        return None, None
+    ids = ",".join(d["id"] for d in decks)
+    cards = await supabase.db_select(
+        "flashcards",
+        filters={
+            "deck_id": f"in.({ids})",
+            "due_at": f"lte.{datetime.now(UTC).isoformat()}",
+        },
+        select="deck_id",
+    )
+    due_counts: dict[str, int] = {}
+    for c in cards:
+        due_counts[c["deck_id"]] = due_counts.get(c["deck_id"], 0) + 1
+    if not due_counts:
+        return None, None
+    deck_id = max(due_counts, key=due_counts.get)
+    name = next((d["name"] for d in decks if d["id"] == deck_id), None)
+    return deck_id, name
 
 
 def _strip_markup(text: str) -> str:

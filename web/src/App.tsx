@@ -6,6 +6,7 @@ import { OnboardingGate } from './features/onboarding/OnboardingGate'
 import {
   AuthCallback,
   Onboarding,
+  ResetPassword,
   SignIn,
   SignUp,
   ChatView,
@@ -62,6 +63,17 @@ export default function App() {
         element={
           <Lazy>
             <AuthCallback />
+          </Lazy>
+        }
+      />
+      {/* Landed on from a password-reset email, via AuthCallback's `?reset=1`
+          branch. Guards its own session (see ResetPassword) rather than
+          using RequireAuth — it must not bounce through OnboardingGate. */}
+      <Route
+        path="/auth/reset-password"
+        element={
+          <Lazy>
+            <ResetPassword />
           </Lazy>
         }
       />

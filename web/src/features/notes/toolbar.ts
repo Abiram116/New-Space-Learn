@@ -104,8 +104,13 @@ export const BLOCK_ICON: Record<string, IconName> = {
  * that happens to be nearby.
  *
  * `replaces: true` means the selection is consumed (rewrite, simplify);
- * `false` means the result is added after it (example, quiz), because
+ * `false` means the result is added after it (example, expand), because
  * destroying the passage you asked a question about is never what you meant.
+ *
+ * No "Quiz me" here on purpose — it inserted question text into the note
+ * itself, which read as a second, half-built version of the real Quizzes
+ * feature, and duplicated the `/` menu's "Practice questions" (slashMenu.ts),
+ * which does the same thing without the naming collision.
  */
 export type SelectionAction = {
   id: string
@@ -154,14 +159,5 @@ export const SELECTION_ACTIONS: SelectionAction[] = [
       `Add the detail this passage leaves out — the conditions, the ` +
       `mechanism, the exception — grounded in the indexed material. Return ` +
       `only the additional prose, not a restatement:\n\n${s}`,
-  },
-  {
-    id: 'quiz',
-    label: 'Quiz me',
-    replaces: false,
-    prompt: (s) =>
-      `Write two questions that test whether someone understands this, with ` +
-      `the answer under each as a nested bullet. Return only the ` +
-      `questions:\n\n${s}`,
   },
 ]

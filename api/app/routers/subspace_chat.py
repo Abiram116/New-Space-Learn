@@ -92,7 +92,7 @@ async def send_chat(
     settings_row, active_skills, linked_ids, snap = await asyncio.gather(
         _fetch_settings(user.id),
         _active_skills(user.id, subspace_id),
-        _linked_subspace_ids(user.id, subspace_id),
+        rag.linked_subspace_ids(user.id, subspace_id),
         student_model.snapshot(user.id),
     )
 
@@ -292,15 +292,6 @@ def _history_limit(active_skills: list[dict]) -> int:
         (_SCOPE_LIMIT.get(s.get("memory_scope", "session"), 8) for s in active_skills),
         default=8,
     )
-
-
-async def _linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
-    links = await supabase.db_select(
-        "subspace_links",
-        filters={"user_id": f"eq.{user_id}", "subspace_id": f"eq.{subspace_id}"},
-        select="linked_subspace_id",
-    )
-    return [row["linked_subspace_id"] for row in links]
 
 
 async def _fetch_settings(user_id: str) -> dict:

@@ -292,7 +292,7 @@ async def close_client() -> None:
     keeping it a stable no-op rather than deleting it."""
 
 
-def extract_pdf_text(data: bytes, *, max_pages: int | None = None) -> str:
+def extract_pdf_text(data: bytes) -> str:
     """Pull text out of a PDF's pages, keeping page numbers in the stream."""
 
     try:
@@ -304,8 +304,6 @@ def extract_pdf_text(data: bytes, *, max_pages: int | None = None) -> str:
     reader = PdfReader(BytesIO(data))
     parts: list[str] = []
     for page_num, page in enumerate(reader.pages, start=1):
-        if max_pages is not None and page_num > max_pages:
-            break
         try:
             txt = page.extract_text() or ""
         except Exception:

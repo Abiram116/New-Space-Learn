@@ -21,8 +21,7 @@
  */
 
 import { lazy, Suspense, useCallback, useState } from 'react'
-import { LIMITS } from '../../../lib/limits'
-import { deleteNote, generateNote, listAllNotes, listNotes } from '../../../api/notes'
+import { deleteNote, listAllNotes, listNotes } from '../../../api/notes'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
@@ -30,6 +29,7 @@ import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
 import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
+import type { AgentKey } from '../agents'
 
 /* Lazy, deliberately.
    The editor is the largest chunk in the app (~270KB gzipped — Tiptap,
@@ -44,7 +44,18 @@ const NoteEditor = lazy(() =>
 
 type Scope = 'topic' | 'all'
 
-export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
+export function NotesPanel({
+  subspaceId,
+  base,
+  onRunAgent,
+}: {
+  subspaceId: string
+  base: string
+  /** Same notes-agent flow as the dock's "Do something with this" Notes
+   *  button and the composer's `/notes` — see the note on `WriteFromChat`
+   *  below for why this panel no longer runs its own. */
+  onRunAgent: (agent: AgentKey, argument?: string) => void
+}) {
   const [scope, setScope] = useState<Scope>('topic')
   const [openId, setOpenId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -127,7 +138,14 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <WriteFromChat subspaceId={subspaceId} onWritten={notes.refresh} />
+      <button
+        type="button"
+        onClick={() => onRunAgent('notes')}
+        className="flex items-center justify-center gap-1.5 rounded-[10px] border border-line bg-raised px-3 py-2 text-[12.5px] font-semibold text-ink-2 transition-colors cursor-pointer hover:border-brand/40"
+      >
+        <Icon name="sparkle" size={12} className="text-brand-deep" />
+        Write one from this chat
+      </button>
 
       <div className="flex items-center gap-1">
         {(['topic', 'all'] as Scope[]).map((s) => (
@@ -197,63 +215,5 @@ export function NotesPanel({ subspaceId, base }: { subspaceId: string; base: str
         )}
       </div>
     </div>
-  )
-}
-
-
-/* ── Write one from the conversation ──────────────────────────────────── */
-
-function WriteFromChat({
-  subspaceId,
-  onWritten,
-}: {
-  subspaceId: string
-  onWritten: () => void
-}) {
-  const [instructions, setInstructions] = useState('')
-  const [writing, setWriting] = useState(false)
-  const { show, showError } = useToast()
-
-  const write = useCallback(async () => {
-    setWriting(true)
-    try {
-      await generateNote(subspaceId, { instructions: instructions.trim() || undefined })
-      setInstructions('')
-      onWritten()
-      show('Note written.', 'success')
-    } catch (err) {
-      showError(err)
-    } finally {
-      setWriting(false)
-    }
-  }, [subspaceId, instructions, onWritten, show, showError])
-
-  return (
-    <section className="flex flex-col gap-2">
-      <span className="setcode">Write one from this chat</span>
-      <textarea
-        rows={2}
-        value={instructions}
-        onChange={(e) => setInstructions(e.target.value)}
-        maxLength={LIMITS.noteInstructions}
-        placeholder="How should it be written? e.g. just a checklist, or go deep — I have an exam"
-        className="w-full resize-none rounded-[10px] border border-line bg-canvas px-2.5 py-2 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/50"
-      />
-      <button
-        type="button"
-        onClick={write}
-        disabled={writing}
-        className={cn(
-          'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
-          'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
-          writing
-            ? 'cursor-default bg-line-soft text-muted'
-            : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',
-        )}
-      >
-        <Icon name="sparkle" size={12} />
-        {writing ? 'Writing…' : 'Write a note'}
-      </button>
-    </section>
   )
 }

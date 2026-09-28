@@ -2,8 +2,6 @@
 
 export type Tone = 'brand' | 'sky' | 'mint' | 'sun' | 'coral' | 'azure' | 'jade'
 
-export type Me = { id: string; email: string | null }
-
 export type Space = {
   id: string
   name: string
@@ -252,9 +250,7 @@ export type Stats = {
 
 export type Settings = {
   daily_goal: number
-  reminder_time: string | null
   streak_freeze_enabled: boolean
-  spaced_pace: 'relaxed' | 'balanced' | 'aggressive'
   answer_only_from_docs: boolean
   always_show_citations: boolean
 }

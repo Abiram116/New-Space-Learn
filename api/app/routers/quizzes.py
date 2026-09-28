@@ -108,17 +108,20 @@ async def generate_quiz(
     body: QuizGenerate,
     user: CurrentUser = Depends(get_current_user),
 ) -> QuizOut:
-    # Must come first: rag.retrieve() runs under the service-role key, so an
+    # Must come first: retrieval runs under the service-role key, so an
     # unvalidated subspace_id would read another user's document chunks.
     subspace = await assert_subspace(user.id, subspace_id)
     await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
 
+    # Linked subspaces first — retrieval needs the ids before it can run, the
+    # same shape as subspace_chat.send_chat.
+    linked_ids = await rag.linked_subspace_ids(user.id, subspace_id)
     # Three independent reads, gathered. Retrieval, history and the student
     # model share no inputs, so running them in sequence spent three round
     # trips to a remote Postgres before the (much slower) model call even
     # started — pure latency the student waits through.
     retrieved, history, student_context = await asyncio.gather(
-        rag.retrieve(subspace_id, body.topic or "core concepts", k=6),
+        rag.retrieve_with_links(subspace_id, body.topic or "core concepts", linked_ids, k=6),
         recent_history(user.id, subspace_id),
         personalization.build(user.id, "quiz", subspace_id=subspace_id),
     )
@@ -257,7 +260,11 @@ async def submit_quiz(
             "duration_seconds": body.duration_seconds,
         },
     )
-    await activity.bump(user.id, quizzes_taken=1, study_seconds=activity.SECONDS_PER_QUIZ)
+    await activity.bump(
+        user.id,
+        quizzes_taken=1,
+        study_seconds=activity.quiz_seconds(body.duration_seconds),
+    )
     return QuizResultOut(
         score=score, correct=correct, duration_seconds=body.duration_seconds
     )

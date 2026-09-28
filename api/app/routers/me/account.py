@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends
 from ...deps import CurrentUser, get_current_user
 from ...errors import NotFound
 from ...schemas import (
-    Me,
     SettingsOut,
     SettingsUpdate,
     StudentModelIn,
@@ -24,11 +23,6 @@ from ...services import supabase
 from ._common import _ensure_settings_row
 
 router = APIRouter()
-
-
-@router.get("/me", response_model=Me)
-async def me(user: CurrentUser = Depends(get_current_user)) -> Me:
-    return Me(id=user.id, email=user.email)
 
 
 @router.delete("/me")
