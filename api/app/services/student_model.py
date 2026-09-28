@@ -65,9 +65,6 @@ QUIZ_WINDOW = 60
 # extra steps. Two questions can only ever read 0%, 50% or 100%.
 MIN_QUESTIONS_FOR_CONCEPT = 3
 
-# What counts as a concept the student is struggling with.
-WEAK_CONCEPT_ACCURACY = 60
-
 # How many feedback events to replay. Preferences are folded by replaying
 # events in order, so this bounds the work; 300 taps is far more than a real
 # student produces, and the oldest are the most decayed anyway.
@@ -78,14 +75,75 @@ FEEDBACK_WINDOW = 300
 # and the phrasing habits it looks for repeat rather than needing full history.
 MESSAGE_WINDOW = 80
 
+# ── Bayesian mastery ─────────────────────────────────────────────────────
+#
+# Replaces plain means for weak/strong classification (trend keeps its own
+# halves-average logic below — a direction of travel and a level are
+# different questions). Every quiz question and flashcard review is one
+# piece of right/wrong evidence, folded into a Beta(1,1) posterior with a
+# recency weight so a topic that was weak in March and has been solid since
+# isn't still called weak in September, and so mastery is defined (at the
+# uninformative 50%) even before the first attempt rather than needing a
+# minimum count to exist at all.
+#
+#   w = 0.5 ** (age_days / MASTERY_HALF_LIFE_DAYS)
+#   alpha = 1 + sum(w * outcome), beta = 1 + sum(w * (1 - outcome))
+#   mastery = alpha / (alpha + beta)          # 0..1, exposed as 0..100
+#   n = sum(w)                                 # how much of that to trust
+#
+# `n` travels everywhere `mastery` does: a mastery score without its
+# evidence weight cannot be told apart from a coin flip.
 
-class _ConceptEvent(NamedTuple):
-    """One question the student was asked about one concept, and whether they
-    got it right. The atom concept mastery is folded from."""
+#: Half-life, in days, for mastery evidence. Deliberately shorter than
+#: preference confidence's 90-day half-life (`preferences.HALF_LIFE_DAYS`):
+#: what a student knows changes faster than what teaching style they want.
+MASTERY_HALF_LIFE_DAYS = 30.0
+
+#: mastery% below this, with enough evidence to trust it, is weak.
+WEAK_MASTERY = 60
+#: Minimum recency-weighted evidence before "weak" is asserted at all.
+#: 2.5 rather than a round number because two adjacent, still-fresh data
+#: points are real evidence; a whole number would either reject that or
+#: accept one lone stale one.
+WEAK_MASTERY_MIN_N = 2.5
+#: mastery% at or above this, with enough evidence, is strong.
+STRONG_MASTERY = 80
+STRONG_MASTERY_MIN_N = 3.0
+
+#: `card_reviews.grade` outcome, mapped to the same [0,1] scale quiz
+#: questions use. The grading endpoint (`routers/flashcards.py`, owned by a
+#: different pass on this codebase) writes the standard FSRS/Anki 1-4 scale —
+#: Again, Hard, Good, Easy — so this map is the one place to fix if that
+#: convention ever changes.
+CARD_REVIEW_OUTCOME: dict[int, float] = {1: 0.0, 2: 0.6, 3: 1.0, 4: 1.0}
+
+#: How many recent card reviews to pull for topic-level mastery. Same
+#: reasoning as `QUIZ_WINDOW`: bounded, and the oldest are the most decayed
+#: anyway.
+CARD_REVIEW_WINDOW = 500
+
+#: Feedback chips that speak to whether a CONCEPT is understood, not just how
+#: it should be explained. `too_complex` means "I don't get this" (outcome
+#: 0); `too_simple` means "I already know this" (outcome 1). Every other
+#: chip (length, examples, directness) is a style request, not a knowledge
+#: signal, and folding those in would conflate the two — so this is
+#: deliberately a subset of `preferences.FEEDBACK_KINDS`, not all of it.
+CONCEPT_FEEDBACK_OUTCOME: dict[str, float] = {"too_complex": 0.0, "too_simple": 1.0}
+
+
+class _QuestionEvent(NamedTuple):
+    """One question the student was asked, and whether they got it right —
+    the atom both topic and concept mastery are folded from.
+
+    `concept` is `None` for questions asked before `subtopic` tagging
+    existed: they still count as topic-level evidence (the student did
+    answer a real question), they just cannot be attributed to a concept.
+    """
 
     at: str
     correct: bool
     subspace_id: str
+    concept: str | None
 
 
 @dataclass(frozen=True)
@@ -112,7 +170,16 @@ class ConceptView:
     label: str
     asked: int
     correct: int
+    #: Plain accuracy — kept for display text ("73% correct across 12
+    #: questions" reads better than a Bayesian mastery score). Weak/strong
+    #: classification uses `mastery`, not this; see the two properties below.
     accuracy: int
+    #: Recency-weighted Beta-posterior mean, 0-100. Folds in quiz answers AND
+    #: (task 4) `too_complex`/`too_simple` feedback tagged with this concept.
+    mastery: int
+    #: Evidence weight behind `mastery` — `sum(w)` over its evidence, not a
+    #: raw count. See module docstring.
+    evidence_n: float
     #: Later-half minus earlier-half accuracy. None below the trend threshold.
     trend: int | None
     days_since_seen: int | None
@@ -120,7 +187,14 @@ class ConceptView:
 
     @property
     def is_weak(self) -> bool:
-        return self.accuracy < WEAK_CONCEPT_ACCURACY
+        return self.mastery < WEAK_MASTERY and self.evidence_n >= WEAK_MASTERY_MIN_N
+
+    @property
+    def is_strong(self) -> bool:
+        """Disjoint from `is_weak` by construction — 60 and 80 don't
+        overlap — so, unlike the old top-3/bottom-3 lists, a concept can
+        never be reported as both."""
+        return self.mastery >= STRONG_MASTERY and self.evidence_n >= STRONG_MASTERY_MIN_N
 
     @property
     def is_falling(self) -> bool:
@@ -141,6 +215,9 @@ class TopicView:
     subject_id: str
     subject: str
     topic: str
+    #: Plain mean of quiz scores. Kept for display and for the brief's own
+    #: `< 75` suggestion threshold — `weak_areas`/`strong_areas` below use
+    #: `mastery`, not this.
     quiz_average: int | None
     quiz_attempts: int
     #: Later-half average minus earlier-half average, or None below
@@ -152,6 +229,24 @@ class TopicView:
     cards_total: int
     notes: int
     docs: int
+    #: Recency-weighted Beta-posterior mean over quiz questions AND card
+    #: reviews in this topic, 0-100. Defaults to the uninformative 50 (no
+    #: evidence) so every `TopicView` — including ones built by hand in
+    #: tests — has a defined value without needing to state one.
+    mastery: int = 50
+    #: Evidence weight behind `mastery`. Defaults to 0 evidence, which keeps
+    #: `is_weak`/`is_strong` both false until real evidence exists.
+    evidence_n: float = 0.0
+
+    @property
+    def is_weak(self) -> bool:
+        return self.mastery < WEAK_MASTERY and self.evidence_n >= WEAK_MASTERY_MIN_N
+
+    @property
+    def is_strong(self) -> bool:
+        """Disjoint from `is_weak` by construction, so a topic can never
+        land in both `weak_areas` and `strong_areas` at once."""
+        return self.mastery >= STRONG_MASTERY and self.evidence_n >= STRONG_MASTERY_MIN_N
 
     @property
     def has_history(self) -> bool:
@@ -204,12 +299,17 @@ class Snapshot:
         concept is small enough to actually revise in one sitting, which a
         topic average is not."""
         return sorted(
-            (c for c in self.concepts if c.is_weak), key=lambda c: c.accuracy
+            (c for c in self.concepts if c.is_weak), key=lambda c: c.mastery
         )
 
     @property
     def strong_concepts(self) -> list[ConceptView]:
-        return sorted(self.concepts, key=lambda c: -c.accuracy)[:3]
+        """Thresholded, not just top-3 — `is_weak`/`is_strong` are disjoint,
+        so (unlike the plain-accuracy version this replaced) a concept can no
+        longer show up in both lists at once."""
+        return sorted(
+            (c for c in self.concepts if c.is_strong), key=lambda c: -c.mastery
+        )[:3]
 
     @property
     def falling_concepts(self) -> list[ConceptView]:
@@ -234,11 +334,18 @@ class Snapshot:
 
     @property
     def weak_areas(self) -> list[TopicView]:
-        return sorted(self.rated, key=lambda t: t.quiz_average or 0)[:3]
+        """Ranked on `mastery`, not `self.rated` (which is quiz-attempts
+        only) — a topic drilled hard with flashcards but never quizzed has
+        real evidence behind it too."""
+        return sorted(
+            (t for t in self.topics if t.is_weak), key=lambda t: t.mastery
+        )[:3]
 
     @property
     def strong_areas(self) -> list[TopicView]:
-        return sorted(self.rated, key=lambda t: -(t.quiz_average or 0))[:3]
+        return sorted(
+            (t for t in self.topics if t.is_strong), key=lambda t: -t.mastery
+        )[:3]
 
     @property
     def falling(self) -> list[TopicView]:
@@ -381,10 +488,15 @@ class Snapshot:
 
 
 def _signal(t: TopicView) -> TopicSignal:
+    # `average` is the field name every consumer (API schema, web) already
+    # has — kept rather than renamed. What it carries changed: Bayesian
+    # mastery, not the plain quiz mean, because `weak_areas`/`strong_areas`
+    # are now ranked on mastery and showing a different number than the one
+    # that produced the ranking would be its own small lie.
     return TopicSignal(
         subspace_id=t.subspace_id,
         topic=t.topic,
-        average=t.quiz_average or 0,
+        average=t.mastery,
         subject=t.subject,
         trend=t.trend,
         days_since_activity=t.days_since_activity,
@@ -400,7 +512,7 @@ _warned_no_rpc = False
 _SNAPSHOT_KEYS = (
     "settings", "subjects", "subspaces", "quiz_results", "quizzes",
     "daily_activity", "decks", "flashcards", "notes", "documents",
-    "response_feedback", "chat_messages",
+    "response_feedback", "chat_messages", "card_reviews",
 )
 
 
@@ -436,13 +548,20 @@ async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
     (
         settings_rows, subjects, subspaces, quiz_results, quizzes, daily_activity,
         decks, flashcards, notes, documents, response_feedback, chat_messages,
+        card_reviews,
     ) = await asyncio.gather(
         supabase.db_select("user_settings", filters={"user_id": f"eq.{user_id}"}, limit=1),
-        supabase.db_select("subjects", filters={"user_id": f"eq.{user_id}"}, select="id,name"),
+        supabase.db_select(
+            "subjects",
+            filters={"user_id": f"eq.{user_id}"},
+            select="id,name",
+            order="id.asc",
+        ),
         supabase.db_select(
             "subspaces",
             filters={"user_id": f"eq.{user_id}"},
             select="id,subject_id,name,last_activity_at",
+            order="id.asc",
         ),
         supabase.db_select(
             "quiz_results",
@@ -465,13 +584,29 @@ async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
             order="day.desc",
             limit=200,
         ),
-        supabase.db_select("decks", filters={"user_id": f"eq.{user_id}"}, select="id,subspace_id"),
         supabase.db_select(
-            "flashcards", filters={"user_id": f"eq.{user_id}"}, select="deck_id,due_at"
+            "decks",
+            filters={"user_id": f"eq.{user_id}"},
+            select="id,subspace_id",
+            order="id.asc",
         ),
-        supabase.db_select("notes", filters={"user_id": f"eq.{user_id}"}, select="subspace_id"),
         supabase.db_select(
-            "documents", filters={"user_id": f"eq.{user_id}"}, select="subspace_id,status"
+            "flashcards",
+            filters={"user_id": f"eq.{user_id}"},
+            select="deck_id,due_at",
+            order="id.asc",
+        ),
+        supabase.db_select(
+            "notes",
+            filters={"user_id": f"eq.{user_id}"},
+            select="subspace_id",
+            order="id.asc",
+        ),
+        supabase.db_select(
+            "documents",
+            filters={"user_id": f"eq.{user_id}"},
+            select="subspace_id,status",
+            order="id.asc",
         ),
         supabase.db_select(
             "response_feedback",
@@ -487,6 +622,17 @@ async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
             order="created_at.desc",
             limit=MESSAGE_WINDOW,
         ),
+        # `subspace_id, grade, reviewed_at` is all mastery needs — see
+        # `CARD_REVIEW_OUTCOME`. Owned by the FSRS pass on this codebase;
+        # read here rather than joined because this module cannot assume
+        # anything about that table beyond the columns the task spec gives.
+        supabase.db_select(
+            "card_reviews",
+            filters={"user_id": f"eq.{user_id}"},
+            select="subspace_id,grade,reviewed_at",
+            order="reviewed_at.desc",
+            limit=CARD_REVIEW_WINDOW,
+        ),
     )
     return {
         "settings": settings_rows[0] if settings_rows else {},
@@ -501,6 +647,7 @@ async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
         "documents": documents,
         "response_feedback": response_feedback,
         "chat_messages": chat_messages,
+        "card_reviews": card_reviews,
     }
 
 
@@ -519,22 +666,23 @@ async def snapshot(user_id: str) -> Snapshot:
     this module — and a nested `quizzes(questions)` select repeats that whole
     blob once per *result*, so a quiz taken four times ships its questions four
     times. Read flat and joined in Python, each quiz's questions cross the wire
-    exactly once. That is why this is ten selects and not nine, and it is
-    smaller on the wire than the nine-select version would have been.
+    exactly once. That is why this is eleven selects and not ten (`card_reviews`
+    makes twelve), and it is smaller on the wire than joining would have been.
     """
-    # ONE round trip, not twelve.
+    # ONE round trip, not thirteen.
     #
-    # These were twelve concurrent `db_select`s. Concurrency was not the
-    # problem and `gather` was not the fix: against a remote Supabase every
-    # extra connection pays its own TLS handshake, which costs more than the
-    # overlap saves — measured in `_bulk_counts`'s note in routers/spaces.py.
-    # Twelve round trips is ~500ms of network however it is scheduled, and this
-    # function is the read behind the brief, chat personalisation, note and
-    # quiz generation and the feedback policy. So it asks once.
+    # These were thirteen concurrent `db_select`s (twelve before mastery needed
+    # `card_reviews` too). Concurrency was not the problem and `gather` was not
+    # the fix: against a remote Supabase every extra connection pays its own
+    # TLS handshake, which costs more than the overlap saves — measured in
+    # `_bulk_counts`'s note in routers/spaces.py. Thirteen round trips is
+    # several hundred ms of network however it is scheduled, and this function
+    # is the read behind the brief, chat personalisation, note and quiz
+    # generation and the feedback policy. So it asks once.
     #
     # `student_snapshot` mirrors every window, ordering and projection below.
-    # Falls back to the twelve reads if the function is missing, so a database
-    # that has not taken the migration still serves rather than 500s.
+    # Falls back to the thirteen reads if the function is missing, so a
+    # database that has not taken the migration still serves rather than 500s.
     snap_rows = await _snapshot_rows(user_id)
     settings_rows = [snap_rows["settings"]] if snap_rows.get("settings") else []
     subject_rows = snap_rows["subjects"]
@@ -548,6 +696,7 @@ async def snapshot(user_id: str) -> Snapshot:
     documents = snap_rows["documents"]
     feedback = snap_rows["response_feedback"]
     user_message_rows = snap_rows["chat_messages"]
+    card_reviews = snap_rows["card_reviews"]
 
     settings_row = settings_rows[0] if settings_rows else {}
     subject_names = {s["id"]: s.get("name") or "Untitled" for s in subject_rows}
@@ -559,10 +708,11 @@ async def snapshot(user_id: str) -> Snapshot:
     # ── Fold every list down to per-subspace counts ────────────────────
     #
     # One pass, oldest-first, doing double duty: the per-topic score series
-    # AND the per-concept correctness series. Both need the same rows in the
-    # same order, so walking `results` twice would buy nothing.
+    # AND the flat per-question evidence list mastery is folded from. Both
+    # need the same rows in the same order, so walking `results` twice would
+    # buy nothing.
     scores: dict[str, list[int]] = {}
-    concept_events: dict[str, list[_ConceptEvent]] = {}
+    question_events: list[_QuestionEvent] = []
     for r in sorted(results, key=lambda r: str(r.get("submitted_at") or "")):
         quiz = quiz_by_id.get(r.get("quiz_id"))
         if not quiz:
@@ -572,7 +722,43 @@ async def snapshot(user_id: str) -> Snapshot:
         subspace_id = quiz.get("subspace_id")
         if subspace_id:
             scores.setdefault(subspace_id, []).append(int(r["score"]))
-        _fold_concepts(r, quiz, concept_events)
+        _fold_questions(r, quiz, question_events)
+
+    # Two views of the same flat list: every question is topic evidence
+    # (mastery doesn't require a concept tag), only tagged ones are concept
+    # evidence. Grouping once here, rather than inside `_fold_questions`,
+    # keeps that function a pure "one result → events" step.
+    topic_question_events: dict[str, list[_QuestionEvent]] = {}
+    concept_events: dict[str, list[_QuestionEvent]] = {}
+    for ev in question_events:
+        if ev.subspace_id:
+            topic_question_events.setdefault(ev.subspace_id, []).append(ev)
+        if ev.concept:
+            concept_events.setdefault(ev.concept, []).append(ev)
+
+    # Card reviews: topic-level mastery evidence only — `card_reviews` has no
+    # concept column, and grading a card is not scoped to a question the way
+    # a quiz answer is.
+    topic_review_events: dict[str, list[tuple[float, str]]] = {}
+    for cr in card_reviews:
+        subspace_id = cr.get("subspace_id")
+        outcome = CARD_REVIEW_OUTCOME.get(int(cr.get("grade") or 0))
+        if subspace_id and outcome is not None:
+            topic_review_events.setdefault(subspace_id, []).append(
+                (outcome, str(cr.get("reviewed_at") or ""))
+            )
+
+    # Feedback that speaks to a CONCEPT rather than a style ("too complex" /
+    # "too simple", tagged with what it was about) — task 4: the `concept`
+    # column has been recorded since feedback shipped and never read.
+    concept_feedback_events: dict[str, list[tuple[float, str]]] = {}
+    for f in feedback:
+        concept = f.get("concept")
+        outcome = CONCEPT_FEEDBACK_OUTCOME.get(str(f.get("kind") or ""))
+        if concept and outcome is not None:
+            concept_feedback_events.setdefault(concept, []).append(
+                (outcome, str(f.get("created_at") or ""))
+            )
 
     cards_due: dict[str, int] = {}
     cards_total: dict[str, int] = {}
@@ -605,6 +791,11 @@ async def snapshot(user_id: str) -> Snapshot:
             if len(attempts) >= MIN_ATTEMPTS_FOR_AVERAGE
             else None
         )
+        raw_evidence = [
+            (1.0 if e.correct else 0.0, e.at)
+            for e in topic_question_events.get(subspace_id, [])
+        ] + topic_review_events.get(subspace_id, [])
+        mastery, evidence_n = _mastery_from_evidence(_weighted(raw_evidence, today))
         topics.append(
             TopicView(
                 subspace_id=subspace_id,
@@ -619,6 +810,8 @@ async def snapshot(user_id: str) -> Snapshot:
                 cards_total=cards_total.get(subspace_id, 0),
                 notes=note_counts.get(subspace_id, 0),
                 docs=doc_counts.get(subspace_id, 0),
+                mastery=mastery,
+                evidence_n=round(evidence_n, 2),
             )
         )
 
@@ -641,7 +834,9 @@ async def snapshot(user_id: str) -> Snapshot:
     return Snapshot(
         settings=settings_row,
         topics=topics,
-        concepts=_build_concepts(concept_events, concept_labels, today),
+        concepts=_build_concepts(
+            concept_events, concept_labels, today, concept_feedback_events
+        ),
         activity_days=activity_days,
         streak_days=streak_days,
         feedback=feedback,
@@ -652,7 +847,8 @@ async def snapshot(user_id: str) -> Snapshot:
 async def preference_context(user_id: str) -> Snapshot:
     """The three tables `preferences.resolve()` actually reads, and no more.
 
-    `snapshot()` is ten selects because the concept and topic models need them.
+    `snapshot()` is thirteen selects because the concept and topic models need
+    them.
     Preference resolution touches only `settings`, `activity_days` and
     `feedback` — so serving `/me/preferences` from a full snapshot was doing
     seven reads whose results were then discarded. That endpoint is called on
@@ -813,16 +1009,18 @@ def normalize_concept(tag: str) -> str:
     return " ".join(str(tag or "").split()).lower()
 
 
-def _fold_concepts(
-    result: dict, quiz: dict, into: dict[str, list[_ConceptEvent]]
-) -> None:
-    """Turn one quiz result into per-concept right/wrong events.
+def _fold_questions(result: dict, quiz: dict, into: list[_QuestionEvent]) -> None:
+    """Turn one quiz result into per-question right/wrong events.
 
     `answers` is the list of chosen indices, positionally aligned with
     `questions`. A result whose length disagrees with the quiz's is not
     discarded wholesale — the overlapping prefix is still sound, and quizzes
     are regenerated often enough that a stale-length row is a real case rather
     than a hypothetical one.
+
+    Every question becomes an event, tagged or not: an untagged one is still
+    real topic-level evidence (`concept=None`), it just can't be attributed to
+    a concept. The caller groups this flat list both ways — see `snapshot()`.
     """
     questions = quiz.get("questions") or []
     answers = result.get("answers") or []
@@ -836,30 +1034,36 @@ def _fold_concepts(
     for question, chosen in zip(questions, answers, strict=False):
         if not isinstance(question, dict):
             continue
-        concept = normalize_concept(question.get("subtopic") or "")
-        if not concept:
-            # Untagged question. Older quizzes predate `subtopic`, and a
-            # question with no concept contributes to the topic average but
-            # cannot contribute here.
-            continue
-        into.setdefault(concept, []).append(
-            _ConceptEvent(
+        into.append(
+            _QuestionEvent(
                 at=at,
                 correct=chosen == question.get("answer_index"),
                 subspace_id=subspace_id,
+                concept=normalize_concept(question.get("subtopic") or "") or None,
             )
         )
 
 
 def _build_concepts(
-    events: dict[str, list[_ConceptEvent]], labels: dict[str, str], today: date
+    events: dict[str, list[_QuestionEvent]],
+    labels: dict[str, str],
+    today: date,
+    feedback_events: dict[str, list[tuple[float, str]]] | None = None,
 ) -> list[ConceptView]:
+    feedback_events = feedback_events or {}
     out: list[ConceptView] = []
     for concept, evs in events.items():
+        # The existence gate stays a raw count, not a weighted one: two
+        # questions can only ever read 0%, 50% or 100% regardless of how
+        # recent they are, so this is a floor on the sample size, not on
+        # mastery's own evidence weight (`WEAK_MASTERY_MIN_N` etc. below).
         if len(evs) < MIN_QUESTIONS_FOR_CONCEPT:
             continue
         evs = sorted(evs, key=lambda e: e.at)
         correct = sum(1 for e in evs if e.correct)
+        raw_evidence = [(1.0 if e.correct else 0.0, e.at) for e in evs]
+        raw_evidence += feedback_events.get(concept, [])
+        mastery, evidence_n = _mastery_from_evidence(_weighted(raw_evidence, today))
         out.append(
             ConceptView(
                 concept=concept,
@@ -867,6 +1071,8 @@ def _build_concepts(
                 asked=len(evs),
                 correct=correct,
                 accuracy=round(100 * correct / len(evs)),
+                mastery=mastery,
+                evidence_n=round(evidence_n, 2),
                 trend=_trend([100 if e.correct else 0 for e in evs]),
                 days_since_seen=_days_since(evs[-1].at, today),
                 # Sorted so the tuple is comparable and stable across runs —
@@ -875,6 +1081,43 @@ def _build_concepts(
             )
         )
     return out
+
+
+def _evidence_weight(at: str | None, today: date) -> float:
+    """Recency weight for one piece of mastery evidence: halves every
+    `MASTERY_HALF_LIFE_DAYS`. An unparsable timestamp contributes nothing
+    rather than being treated as infinitely old or infinitely fresh."""
+    days = _days_since(at, today)
+    if days is None:
+        return 0.0
+    return 0.5 ** (max(0, days) / MASTERY_HALF_LIFE_DAYS)
+
+
+def _weighted(
+    evidence: list[tuple[float, str]], today: date
+) -> list[tuple[float, float]]:
+    """`(outcome, timestamp)` pairs → `(outcome, weight)` pairs, ready for
+    `_mastery_from_evidence`."""
+    return [(outcome, _evidence_weight(at, today)) for outcome, at in evidence]
+
+
+def _mastery_from_evidence(evidence: list[tuple[float, float]]) -> tuple[int, float]:
+    """Beta(1,1)-Bernoulli posterior mean over recency-weighted evidence.
+
+    `evidence` is `(outcome in [0,1], weight)` pairs, weight already decayed.
+    `alpha = 1 + sum(w*o)`, `beta = 1 + sum(w*(1-o))`, mastery = alpha /
+    (alpha+beta). Returns `(mastery as 0-100, n = sum(w))` — `n` is the
+    evidence weight the caller needs to decide whether to trust the score at
+    all (see `WEAK_MASTERY_MIN_N` / `STRONG_MASTERY_MIN_N`).
+
+    With no evidence this is Beta(1,1)'s own mean: 50%, `n=0` — the
+    uninformative prior, not a claim about the student.
+    """
+    w_sum = sum(w for _, w in evidence)
+    wo_sum = sum(o * w for o, w in evidence)
+    alpha = 1.0 + wo_sum
+    beta = 1.0 + (w_sum - wo_sum)
+    return round(100 * alpha / (alpha + beta)), w_sum
 
 
 def _trend(attempts: list[int]) -> int | None:

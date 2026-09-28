@@ -141,6 +141,67 @@ async def test_results_without_their_quiz_are_skipped(db):
 
 
 @pytest.mark.asyncio
+async def test_weak_and_strong_concepts_cannot_overlap(db):
+    """The old top-3/bottom-3-by-accuracy lists could both include the same
+    concept when there were only a handful of them. Mastery thresholds
+    (weak < 60, strong >= 80, both gated on evidence) are disjoint by
+    construction."""
+    _seed_quiz(
+        db,
+        questions=[_q("Cross-Attention"), _q("Positional Encoding")],
+        results=[[1, 0], [1, 0], [1, 0]],
+    )
+    snap = await sm.snapshot(OWNER)
+    weak_ids = {c.concept for c in snap.weak_concepts}
+    strong_ids = {c.concept for c in snap.strong_concepts}
+    assert not (weak_ids & strong_ids)
+
+
+@pytest.mark.asyncio
+async def test_too_complex_feedback_folds_into_concept_mastery(db):
+    """Task 4: `response_feedback.concept` was recorded and never read.
+    `too_complex` tagged with a concept the student has already been quizzed
+    on should count as one more piece of "doesn't get this" evidence."""
+    _seed_quiz(
+        # All correct so far — mastery should read high before the feedback.
+        db,
+        questions=[_q("Softmax")],
+        results=[[0], [0], [0]],
+    )
+    baseline_snap = await sm.snapshot(OWNER)
+    baseline = next(c for c in baseline_snap.concepts if c.concept == "softmax")
+
+    db.seed("response_feedback", [
+        {"user_id": OWNER, "kind": "too_complex", "concept": "softmax",
+         "created_at": _days_ago(0), "subspace_id": "t1"},
+    ])
+    with_feedback = await sm.snapshot(OWNER)
+    scored = next(c for c in with_feedback.concepts if c.concept == "softmax")
+
+    assert scored.mastery < baseline.mastery  # feedback pulls it down
+    assert scored.evidence_n > baseline.evidence_n  # and adds evidence weight
+    assert scored.accuracy == baseline.accuracy  # display accuracy is quiz-only
+
+
+@pytest.mark.asyncio
+async def test_style_feedback_does_not_leak_into_concept_mastery(db):
+    """`too_long`/`want_detail`/etc. are about HOW to explain, not WHAT the
+    student knows — even with a concept tag, they must not move mastery."""
+    _seed_quiz(db, questions=[_q("Softmax")], results=[[0], [0], [0]])
+    plain = await sm.snapshot(OWNER)
+    plain_mastery = next(c for c in plain.concepts if c.concept == "softmax").mastery
+
+    db.seed("response_feedback", [
+        {"user_id": OWNER, "kind": "too_long", "concept": "softmax",
+         "created_at": _days_ago(0), "subspace_id": "t1"},
+    ])
+    after = await sm.snapshot(OWNER)
+    after_mastery = next(c for c in after.concepts if c.concept == "softmax").mastery
+
+    assert after_mastery == plain_mastery
+
+
+@pytest.mark.asyncio
 async def test_concept_trend_tracks_direction(db):
     """Same distinction as topics: a concept climbing and one sliding need
     opposite advice."""

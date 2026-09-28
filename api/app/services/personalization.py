@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from . import preferences, student_model
+from . import preferences, student_model, style_bandit
 from .preferences import Preference
 from .student_model import Snapshot
 
@@ -46,6 +46,47 @@ def render(snap: Snapshot, task: Task, *, subspace_id: str | None = None) -> str
     if not lines:
         return ""
     return "What you know about this student:\n" + "\n".join(f"- {ln}" for ln in lines)
+
+
+async def render_chat(
+    snap: Snapshot, subspace_id: str | None, user_id: str
+) -> tuple[str, list[str], dict[str, str]]:
+    """`render(snap, "chat", ...)`, plus `style_bandit`'s Thompson-sampled
+    experiments filling in any of the three style dimensions with nothing
+    actionable yet.
+
+    Chat is the only task this runs for, and the only place `style_bandit`
+    is invoked at all: quiz/cards/notes/brief render once and leave nothing
+    a later feedback tap can point back at, while a chat message has an
+    `id`, so `response_feedback.target_id` can close the loop. See
+    `style_bandit`'s module docstring for the full mechanism.
+
+    Returns `(block, applied_keys, style_values)`:
+    - `block` — the rendered prompt fragment, identical in shape to
+      `render(snap, "chat", ...)`.
+    - `applied_keys` — every actionable key (any source, not just style),
+      for `meta.prefs_applied` exactly as before this existed.
+    - `style_values` — `{key: value}` for the three style dimensions
+      actually in force (real preference or sampled experiment). Small and
+      new: persisted as `meta.style`, it's the ledger `style_bandit` reads
+      back on a later call to score whether that value earned its keep.
+    """
+    prefs = dict(preferences.resolve(snap))
+    prefs.update(await style_bandit.sample(user_id, prefs))
+
+    lines = _chat(snap, prefs, subspace_id)
+    block = (
+        ""
+        if not lines
+        else "What you know about this student:\n" + "\n".join(f"- {ln}" for ln in lines)
+    )
+    applied = sorted(k for k, p in prefs.items() if p.actionable)
+    style_values = {
+        key: prefs[key].value
+        for key in style_bandit.ARMS
+        if key in prefs and prefs[key].actionable
+    }
+    return block, applied, style_values
 
 
 # ── Per-task selections ────────────────────────────────────────────────

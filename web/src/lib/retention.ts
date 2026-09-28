@@ -1,22 +1,17 @@
 import type { Flashcard } from '../api/types'
+import { retrievability } from './schedule'
 
 /**
- * A forgetting-curve estimate (R = e^(-t/S)), not an invented number — t is
- * real days elapsed since the card was last reviewed, S is a stability
- * proxy from the card's own SM-2 state (interval × ease, both already
- * stored). Returns null when there's no review history yet to base an
- * estimate on, rather than showing a number that would just be a guess.
- *
- * This is explicitly an estimate, never presented as measured fact — see
- * the fullness()-metric mistake in docs/retrospective.md for why that
- * distinction matters.
+ * R(t, S) — the actual FSRS retrievability, the same quantity the scheduler
+ * itself grades from, not a guessed proxy. `stability` and `last_review_at`
+ * come from the server's FSRS state, so once a card has been graded at
+ * least once this is a real read of the model, not an estimate standing in
+ * for one. Returns null before that first grade, when there's no FSRS state
+ * yet to read.
  */
 export function estimateRetention(card: Flashcard): number | null {
-  if (card.reps < 1) return null
-  const dueAt = new Date(card.due_at).getTime()
-  const lastReviewedAt = dueAt - card.interval_days * 86_400_000
-  const daysElapsed = (Date.now() - lastReviewedAt) / 86_400_000
-  const stability = Math.max(card.interval_days, 1) * Math.max(card.ease, 1)
-  const retention = Math.exp(-daysElapsed / stability) * 100
+  if (card.stability == null || !card.last_review_at) return null
+  const daysElapsed = (Date.now() - new Date(card.last_review_at).getTime()) / 86_400_000
+  const retention = retrievability(Math.max(0, daysElapsed), card.stability) * 100
   return Math.round(Math.min(100, Math.max(0, retention)))
 }

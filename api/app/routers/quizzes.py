@@ -265,6 +265,10 @@ async def submit_quiz(
         quizzes_taken=1,
         study_seconds=activity.quiz_seconds(body.duration_seconds),
     )
+    # A student who only quizzes was otherwise never marking their own topic
+    # active — flashcards and notes both do this, quizzes just hadn't caught up.
+    if quiz.get("subspace_id"):
+        await activity.touch_subspace(quiz["subspace_id"])
     return QuizResultOut(
         score=score, correct=correct, duration_seconds=body.duration_seconds
     )

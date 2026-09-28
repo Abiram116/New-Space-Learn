@@ -132,6 +132,94 @@ def test_confidence_decays_when_nothing_confirms_it():
 # ── Precedence ─────────────────────────────────────────────────────────
 
 
+def test_low_confidence_higher_rank_does_not_bury_a_confident_lower_rank():
+    """The bug this fixes: `_put` used to keep a value by SOURCE RANK alone,
+    so a single `too_long` tap (feedback, rank 0.25, starts at confidence
+    0.3 — see `FEEDBACK_START`) could permanently hide an observed pattern
+    (rank 0.1) that six weeks of behaviour had pushed to 0.7. Rank should
+    only win once it's actually earned enough confidence to act on."""
+    out: dict = {}
+
+    def put(pref):
+        # A standalone re-implementation of `resolve()`'s inner `_put`,
+        # exercised directly so this test doesn't depend on the shape of
+        # `_resolve_feedback`/`_resolve_observed`'s own confidence math —
+        # only on the precedence rule itself.
+        existing = out.get(pref.key)
+        if existing is None:
+            out[pref.key] = pref
+            return
+        if pf.SOURCE_WEIGHT[existing.source] == pf.SOURCE_WEIGHT[pref.source]:
+            return
+        higher, lower = (
+            (existing, pref)
+            if pf.SOURCE_WEIGHT[existing.source] > pf.SOURCE_WEIGHT[pref.source]
+            else (pref, existing)
+        )
+        out[pref.key] = (
+            higher if higher.actionable else max(higher, lower, key=lambda p: p.confidence)
+        )
+
+    put(pf.Preference("explanation.length", "concise", "feedback", 0.05, 1, "one weak tap"))
+    put(pf.Preference("explanation.length", "detailed", "observed", 0.7, 10, "six weeks of behaviour"))
+
+    assert out["explanation.length"].value == "detailed"
+    assert out["explanation.length"].source == "observed"
+
+
+def test_actionable_higher_rank_still_wins_outright():
+    """Once the higher-ranked source clears the acting threshold, rank keeps
+    mattering — this isn't "highest confidence always wins", only a
+    tiebreaker for when the higher rank hasn't earned it yet."""
+    out: dict = {}
+
+    def put(pref):
+        existing = out.get(pref.key)
+        if existing is None:
+            out[pref.key] = pref
+            return
+        if pf.SOURCE_WEIGHT[existing.source] == pf.SOURCE_WEIGHT[pref.source]:
+            return
+        higher, lower = (
+            (existing, pref)
+            if pf.SOURCE_WEIGHT[existing.source] > pf.SOURCE_WEIGHT[pref.source]
+            else (pref, existing)
+        )
+        out[pref.key] = (
+            higher if higher.actionable else max(higher, lower, key=lambda p: p.confidence)
+        )
+
+    put(pf.Preference("explanation.length", "concise", "feedback", 0.6, 5, "well-earned"))
+    put(pf.Preference("explanation.length", "detailed", "observed", 0.75, 20, "a lot of behaviour"))
+
+    assert out["explanation.length"].value == "concise"
+    assert out["explanation.length"].source == "feedback"
+
+
+def test_resolve_lets_a_confident_implicit_signal_through_one_weak_feedback_tap():
+    """The end-to-end version of the bug, through the real resolvers:
+    `explanation.depth` gets evidence from both `_resolve_feedback` (a chip
+    tap, source `feedback`, rank 0.25) and `_resolve_implicit` (repeated
+    "simplify that" in chat, source `observed`, rank 0.1). One stale-fresh
+    `too_simple` tap starts at `FEEDBACK_START` (0.3), below
+    `ACT_THRESHOLD` — not actionable. Five repeated chat requests push the
+    implicit signal to 0.75 — well past it. The higher-ranked-but-unearned
+    feedback value must not bury the lower-ranked-but-confident one.
+    """
+    snap = sm.Snapshot(
+        settings={},
+        topics=[],
+        concepts=[],
+        activity_days=[],
+        streak_days=0,
+        feedback=[_fb("too_simple", 1)],  # argues "deeper", weak (0.3)
+        user_messages=["can you simplify that"] * 5,  # argues "simpler", strong
+    )
+    prefs = pf.resolve(snap)
+    assert prefs["explanation.depth"].value == "simpler"
+    assert prefs["explanation.depth"].source == "observed"
+
+
 def test_explicit_still_outranks_learned_feedback():
     """The student's own words beat anything inferred from taps, however much
     of it has piled up."""

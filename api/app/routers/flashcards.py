@@ -1,7 +1,8 @@
-"""Flashcards: decks, cards, and SM-2-lite grading.
+"""Flashcards: decks, cards, and FSRS-5 grading.
 
-Grading rules are kept in one place because they double as the client-side
-optimistic update. Keep the two in sync.
+Grading rules live in `services/fsrs.py` because they double as the
+client-side optimistic update (mirrored in `web/src/lib/schedule.ts`). Keep
+the two in sync.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import activity, personalization, rag, supabase
+from ..services import activity, fsrs, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
@@ -368,40 +369,61 @@ async def grade_card(
     if not rows:
         raise NotFound("Card not found.")
     card = rows[0]
-    ease = float(card.get("ease", 2.5))
-    interval = int(card.get("interval_days", 0))
-    reps = int(card.get("reps", 0))
 
-    if body.grade == "again":
-        ease = max(1.3, ease - 0.2)
-        interval = 1
-        reps = 0
-    elif body.grade == "hard":
-        ease = max(1.3, ease - 0.15)
-        interval = max(1, int(round(interval * 1.2)))
-        reps += 1
-    elif body.grade == "good":
-        interval = max(1, int(round(interval * ease))) if reps > 0 else 1
-        reps += 1
-    else:  # easy
-        ease = ease + 0.15
-        interval = max(2, int(round((interval or 1) * ease * 1.3)))
-        reps += 1
+    # The deck read genuinely depends on the card's deck_id, so it stays
+    # sequential — same reasoning as list_decks above.
+    deck_rows = await supabase.db_select(
+        "decks", filters={"id": f"eq.{card['deck_id']}"}, limit=1
+    )
+    subspace_id = deck_rows[0]["subspace_id"] if deck_rows else None
 
-    due_at = datetime.now(UTC) + timedelta(days=interval)
+    now = datetime.now(UTC)
+    last_review_at = card.get("last_review_at")
+    elapsed_days = max(0, (now - _to_dt(last_review_at)).days) if last_review_at else None
+    stability = card.get("stability")
+    difficulty = card.get("difficulty")
+
+    result = fsrs.review(
+        stability=float(stability) if stability is not None else None,
+        difficulty=float(difficulty) if difficulty is not None else None,
+        elapsed_days=elapsed_days,
+        grade=body.grade,
+    )
+
+    lapses = int(card.get("lapses", 0)) + (1 if body.grade == "again" else 0)
+    reps = 0 if body.grade == "again" else int(card.get("reps", 0)) + 1
+    due_at = now + timedelta(days=result.interval_days)
+
     updated = await supabase.db_update(
         "flashcards",
         filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
         patch={
-            "ease": ease,
-            "interval_days": interval,
+            "stability": result.stability,
+            "difficulty": result.difficulty,
+            "last_review_at": now.isoformat(),
+            "lapses": lapses,
             "reps": reps,
+            "interval_days": result.interval_days,
             "due_at": due_at.isoformat(),
+        },
+    )
+    await supabase.db_insert(
+        "card_reviews",
+        {
+            "user_id": user.id,
+            "card_id": card_id,
+            "subspace_id": subspace_id,
+            "grade": fsrs.GRADE_NUMBER[body.grade],
+            "elapsed_days": elapsed_days,
+            "retrievability": result.retrievability,
+            "stability_after": result.stability,
         },
     )
     await activity.bump(
         user.id, cards_reviewed=1, study_seconds=activity.SECONDS_PER_CARD_REVIEW
     )
+    if subspace_id:
+        await activity.touch_subspace(subspace_id)
     r = updated[0]
     return FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
 

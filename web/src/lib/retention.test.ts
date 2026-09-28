@@ -1,16 +1,11 @@
 /**
- * `estimateRetention` is a forgetting-curve *estimate*, shown to students as a
- * plain percentage (~87%) with nothing in the UI marking it as computed. If
- * the maths were wrong, the product would be making a confident numeric claim
- * that is false — the worst kind of bug in a study tool, because nobody can
- * tell by looking. This was the cheapest high-value test in the audit and it
- * had none.
- *
- * The formula is R(t) = e^(-t/S) · 100, t = days since last review, S = a
- * stability proxy from the card's own stored SM-2 state. Every expected value
- * below is computed independently with `Math.exp` against that formula, not
- * copied from the implementation — this is verifying the documented maths,
- * not mirroring whatever the code happens to do.
+ * `estimateRetention` reads FSRS's own R(t, S) — the probability of recall
+ * the scheduler itself grades from — not an invented proxy. It's shown to
+ * students as a plain percentage (~87%) with nothing else in the UI marking
+ * it as computed, so if the maths were wrong the product would be making a
+ * confident numeric claim that is false. Every expected value below is
+ * computed independently against the documented formula
+ * `R(t,S) = (1 + FACTOR*t/S)^DECAY`, not copied from the implementation.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -18,6 +13,8 @@ import { estimateRetention } from './retention'
 import type { Flashcard } from '../api/types'
 
 const DAY_MS = 86_400_000
+const DECAY = -0.5
+const FACTOR = 19 / 81
 
 function card(overrides: Partial<Flashcard> = {}): Flashcard {
   return {
@@ -30,14 +27,20 @@ function card(overrides: Partial<Flashcard> = {}): Flashcard {
     interval_days: 10,
     reps: 3,
     due_at: new Date().toISOString(),
+    stability: 10,
+    difficulty: 5,
+    last_review_at: new Date().toISOString(),
     ...overrides,
   }
 }
 
-/** `due_at` such that "last reviewed" lands exactly `daysAgo` days before now. */
-function dueAtForLastReviewed(intervalDays: number, daysAgo: number, now: number): string {
-  const lastReviewedAt = now - daysAgo * DAY_MS
-  return new Date(lastReviewedAt + intervalDays * DAY_MS).toISOString()
+function daysAgo(days: number, now: number): string {
+  return new Date(now - days * DAY_MS).toISOString()
+}
+
+function expectedRetention(elapsedDays: number, stability: number): number {
+  const r = (1 + (FACTOR * elapsedDays) / stability) ** DECAY
+  return Math.round(Math.min(100, Math.max(0, r * 100)))
 }
 
 beforeEach(() => {
@@ -49,80 +52,53 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('no history yet', () => {
-  it('returns null with zero reps, not a guess', () => {
-    expect(estimateRetention(card({ reps: 0 }))).toBeNull()
+describe('no FSRS state yet', () => {
+  it('returns null before the first review — no stability to read', () => {
+    expect(estimateRetention(card({ stability: null, last_review_at: null }))).toBeNull()
   })
 
-  it('returns a number once there has been at least one review', () => {
-    expect(estimateRetention(card({ reps: 1 }))).not.toBeNull()
+  it('returns a number once a real review has set stability and last_review_at', () => {
+    expect(estimateRetention(card({ stability: 5, last_review_at: new Date().toISOString() }))).not.toBeNull()
   })
 })
 
 describe('the moment of review', () => {
   it('reads 100% the instant a card is reviewed (t=0)', () => {
     const now = Date.now()
-    const c = card({ interval_days: 10, ease: 2.5, due_at: dueAtForLastReviewed(10, 0, now) })
+    const c = card({ stability: 10, last_review_at: daysAgo(0, now) })
     expect(estimateRetention(c)).toBe(100)
   })
 })
 
-describe('matches the forgetting-curve formula exactly', () => {
-  it('at exactly the due date (t = interval_days)', () => {
+describe('matches R(t, S) exactly', () => {
+  it('at t = S, R is 90% by construction', () => {
     const now = Date.now()
-    const interval = 10
-    const ease = 2.0
-    const c = card({
-      interval_days: interval,
-      ease,
-      due_at: dueAtForLastReviewed(interval, interval, now),
-    })
-    // Independently computed: t = interval, S = interval * ease.
-    const expected = Math.round(Math.exp(-interval / (interval * ease)) * 100)
-    expect(estimateRetention(c)).toBe(expected)
+    const stability = 12
+    const c = card({ stability, last_review_at: daysAgo(stability, now) })
+    expect(estimateRetention(c)).toBe(90)
   })
 
-  it('at an arbitrary elapsed time past due', () => {
+  it('at an arbitrary elapsed time', () => {
     const now = Date.now()
-    const interval = 6
-    const ease = 1.8
-    const daysAgoReviewed = 14 // 8 days past the 6-day due date
-    const c = card({
-      interval_days: interval,
-      ease,
-      due_at: dueAtForLastReviewed(interval, daysAgoReviewed, now),
-    })
-    const stability = interval * ease
-    const expected = Math.round(
-      Math.min(100, Math.max(0, Math.exp(-daysAgoReviewed / stability) * 100)),
-    )
-    expect(estimateRetention(c)).toBe(expected)
+    const stability = 6
+    const elapsed = 14
+    const c = card({ stability, last_review_at: daysAgo(elapsed, now) })
+    expect(estimateRetention(c)).toBe(expectedRetention(elapsed, stability))
   })
 })
 
 describe('clamped to a real percentage', () => {
   it('never exceeds 100 even when the elapsed time is negative', () => {
-    // due_at set implies "last reviewed" is in the future relative to now —
-    // e.g. clock skew, or a card just graded with a long new interval.
+    // last_review_at in the future relative to now — e.g. clock skew.
     const now = Date.now()
-    const c = card({ interval_days: 10, ease: 2.5, due_at: dueAtForLastReviewed(10, -5, now) })
+    const c = card({ stability: 10, last_review_at: daysAgo(-5, now) })
     const result = estimateRetention(c)
     expect(result).not.toBeNull()
     expect(result as number).toBeLessThanOrEqual(100)
   })
 
-  it('never drops below 0 no matter how long it has been', () => {
-    const now = Date.now()
-    const c = card({
-      interval_days: 1,
-      ease: 1.3,
-      due_at: dueAtForLastReviewed(1, 5000, now), // ~13.7 years overdue
-    })
-    expect(estimateRetention(c)).toBe(0)
-  })
-
   it('always returns an integer', () => {
-    const c = card({ interval_days: 3, ease: 2.1 })
+    const c = card({ stability: 6.4, last_review_at: daysAgo(3, Date.now()) })
     const result = estimateRetention(c)
     expect(Number.isInteger(result)).toBe(true)
   })
@@ -131,59 +107,30 @@ describe('clamped to a real percentage', () => {
 describe('behaves like a forgetting curve, not an arbitrary number', () => {
   it('decays monotonically — more elapsed time never means higher retention', () => {
     const now = Date.now()
-    const soon = card({ interval_days: 8, ease: 2.2, due_at: dueAtForLastReviewed(8, 2, now) })
-    const later = card({ interval_days: 8, ease: 2.2, due_at: dueAtForLastReviewed(8, 9, now) })
+    const soon = card({ stability: 8, last_review_at: daysAgo(2, now) })
+    const later = card({ stability: 8, last_review_at: daysAgo(9, now) })
     const rSoon = estimateRetention(soon) as number
     const rLater = estimateRetention(later) as number
     expect(rLater).toBeLessThan(rSoon)
   })
 
-  it('a more stable card (higher ease) retains more at the same elapsed time', () => {
+  it('a more stable card retains more at the same elapsed time', () => {
     const now = Date.now()
-    const fragile = card({
-      interval_days: 5,
-      ease: 1.3,
-      due_at: dueAtForLastReviewed(5, 12, now),
-    })
-    const durable = card({
-      interval_days: 5,
-      ease: 3.0,
-      due_at: dueAtForLastReviewed(5, 12, now),
-    })
+    const fragile = card({ stability: 3, last_review_at: daysAgo(12, now) })
+    const durable = card({ stability: 30, last_review_at: daysAgo(12, now) })
     const rFragile = estimateRetention(fragile) as number
     const rDurable = estimateRetention(durable) as number
     expect(rDurable).toBeGreaterThan(rFragile)
   })
-
-  it('a longer interval (more repetitions banked) retains more at the same elapsed time', () => {
-    const now = Date.now()
-    const young = card({ interval_days: 1, ease: 2.5, due_at: dueAtForLastReviewed(1, 20, now) })
-    const mature = card({
-      interval_days: 60,
-      ease: 2.5,
-      due_at: dueAtForLastReviewed(60, 20, now),
-    })
-    const rYoung = estimateRetention(young) as number
-    const rMature = estimateRetention(mature) as number
-    expect(rMature).toBeGreaterThan(rYoung)
-  })
 })
 
 describe('defensive floors on malformed stored state', () => {
-  it('does not throw or produce NaN for an ease below the SM-2 floor', () => {
-    // `ease` is floored at 1.3 by the scheduler (decisions.md), but this
-    // function reads whatever is actually in the row — it must not trust that.
-    const c = card({ interval_days: 4, ease: 0.4, reps: 2 })
+  it('does not throw or produce NaN for a very small stability', () => {
+    const c = card({ stability: 0.1, last_review_at: daysAgo(4, Date.now()) })
     const result = estimateRetention(c)
     expect(result).not.toBeNull()
     expect(Number.isNaN(result)).toBe(false)
     expect(result as number).toBeGreaterThanOrEqual(0)
     expect(result as number).toBeLessThanOrEqual(100)
-  })
-
-  it('does not throw for a zero interval', () => {
-    const c = card({ interval_days: 0, ease: 2.5, reps: 1 })
-    const result = estimateRetention(c)
-    expect(Number.isNaN(result)).toBe(false)
   })
 })

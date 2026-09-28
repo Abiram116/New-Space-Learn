@@ -180,7 +180,20 @@ describe('generating cards lands you on the deck they went into', () => {
   it('opens the newly generated deck instead of staying on the grid', async () => {
     listAllDecks.mockResolvedValue([])
     generateCards.mockResolvedValue([
-      { id: 'c1', deck_id: 'deck-new', front: 'Q', back: 'A', source: null, ease: 2.5, interval_days: 1, reps: 0, due_at: new Date().toISOString() },
+      {
+        id: 'c1',
+        deck_id: 'deck-new',
+        front: 'Q',
+        back: 'A',
+        source: null,
+        ease: 2.5,
+        interval_days: 1,
+        reps: 0,
+        due_at: new Date().toISOString(),
+        stability: null,
+        difficulty: null,
+        last_review_at: null,
+      },
     ])
     listCards.mockResolvedValue([])
     const user = userEvent.setup()

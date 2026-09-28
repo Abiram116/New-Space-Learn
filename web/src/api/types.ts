@@ -93,6 +93,10 @@ export type Flashcard = {
   interval_days: number
   reps: number
   due_at: string
+  // FSRS state — `null` until the card's first grade sets it.
+  stability: number | null
+  difficulty: number | null
+  last_review_at: string | null
 }
 
 export type Grade = 'again' | 'hard' | 'good' | 'easy'

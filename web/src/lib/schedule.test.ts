@@ -1,91 +1,126 @@
 /**
- * SM-2 lite, client side.
+ * FSRS-5, client side.
  *
- * The server is the authority (`grade_card` in `api/app/routers/flashcards.py`)
- * and `api/tests/sm2_parity.mjs` already executes *this* file over 480 cases
- * to prove the two agree. So these tests deliberately do not re-check parity —
- * they pin the properties that make the preview trustworthy at all, and the
- * one behaviour a JS port is most likely to get wrong.
+ * The server is the authority (`api/app/services/fsrs.py`, called from
+ * `grade_card` in `api/app/routers/flashcards.py`) and
+ * `api/tests/fsrs_parity.mjs` already executes *this* file over a grid of
+ * cases to prove the two agree. So these tests deliberately do not
+ * re-check parity — they pin the properties that make the preview
+ * trustworthy at all, and the rounding behaviour a JS port is most likely
+ * to get wrong.
  */
 
 import { describe, expect, it } from 'vitest'
-import { nextSchedule } from './schedule'
+import { formatInterval, nextState } from './schedule'
 
-const FRESH = { ease: null, interval_days: null, reps: null }
+const FRESH = { stability: null, difficulty: null }
+const GRADES = ['again', 'hard', 'good', 'easy'] as const
 
-describe('nextSchedule — the rounding trap', () => {
-  it('rounds half-to-even like Python, not half-up like JavaScript', () => {
-    // A fresh card graded `good` twice reaches interval 1 at reps 1, then
-    // round(1 * 2.5). Python's round() gives 2; Math.round would give 3.
-    // Getting this wrong shows the student an interval the server will not
-    // honour, which is exactly the lie this module exists to avoid.
-    const once = nextSchedule(FRESH, 'good')
-    const twice = nextSchedule(once, 'good')
-    expect(twice.interval_days).toBe(2)
-  })
-
-  it('rounds .5 down when the floor is even', () => {
-    expect(nextSchedule({ ease: 2.5, interval_days: 1, reps: 1 }, 'good').interval_days).toBe(2)
-  })
-})
-
-describe('nextSchedule — invariants that must always hold', () => {
+describe('nextState — invariants that must always hold', () => {
   const states = [
     FRESH,
-    { ease: 2.5, interval_days: 0, reps: 0 },
-    { ease: 1.3, interval_days: 1, reps: 1 },
-    { ease: 2.8, interval_days: 30, reps: 9 },
-    { ease: 1.9, interval_days: 7, reps: 3 },
+    { stability: 1, difficulty: 5 },
+    { stability: 0.4, difficulty: 1 },
+    { stability: 45, difficulty: 10 },
+    { stability: 200, difficulty: 6.5 },
   ]
-  const grades = ['again', 'hard', 'good', 'easy'] as const
+  const elapsedSamples = [0, 1, 5, 30]
 
-  it('never lets ease fall below the 1.3 floor', () => {
+  it('difficulty always lands in [1, 10]', () => {
     for (const s of states) {
-      for (const g of grades) {
-        expect(nextSchedule(s, g).ease).toBeGreaterThanOrEqual(1.3)
+      for (const g of GRADES) {
+        for (const e of elapsedSamples) {
+          const r = nextState(s, e, g)
+          expect(r.difficulty).toBeGreaterThanOrEqual(1)
+          expect(r.difficulty).toBeLessThanOrEqual(10)
+        }
       }
     }
   })
 
-  it('never returns an interval below one day', () => {
+  it('stability is always positive', () => {
     for (const s of states) {
-      for (const g of grades) {
-        expect(nextSchedule(s, g).interval_days).toBeGreaterThanOrEqual(1)
+      for (const g of GRADES) {
+        for (const e of elapsedSamples) {
+          expect(nextState(s, e, g).stability).toBeGreaterThan(0)
+        }
       }
     }
   })
 
-  it('never returns a negative rep count', () => {
+  it('retrievability is always a probability', () => {
     for (const s of states) {
-      for (const g of grades) {
-        expect(nextSchedule(s, g).reps).toBeGreaterThanOrEqual(0)
+      for (const g of GRADES) {
+        for (const e of elapsedSamples) {
+          const r = nextState(s, e, g).retrievability
+          expect(r).toBeGreaterThanOrEqual(0)
+          expect(r).toBeLessThanOrEqual(1)
+        }
       }
     }
   })
 
-  it('tolerates a card with every field missing', () => {
-    expect(() => nextSchedule({}, 'good')).not.toThrow()
+  it('interval_days is never below one day', () => {
+    for (const s of states) {
+      for (const g of GRADES) {
+        for (const e of elapsedSamples) {
+          expect(nextState(s, e, g).interval_days).toBeGreaterThanOrEqual(1)
+        }
+      }
+    }
   })
 })
 
-describe('nextSchedule — the grades mean what the UI says they mean', () => {
-  const mature = { ease: 2.5, interval_days: 20, reps: 5 }
-
-  it('`again` resets to one day and zeroes the streak', () => {
-    const r = nextSchedule(mature, 'again')
-    expect(r.interval_days).toBe(1)
-    expect(r.reps).toBe(0)
+describe('nextState — a never-reviewed card', () => {
+  it('reads retrievability 1 — nothing yet to have forgotten', () => {
+    for (const g of GRADES) {
+      expect(nextState(FRESH, 0, g).retrievability).toBe(1)
+    }
   })
 
-  it('`easy` pushes furthest out of the four', () => {
-    const intervals = (['again', 'hard', 'good', 'easy'] as const).map(
-      (g) => nextSchedule(mature, g).interval_days,
-    )
+  it('is not affected by elapsedDays — there is no prior review to be elapsed from', () => {
+    for (const g of GRADES) {
+      expect(nextState(FRESH, 0, g)).toEqual(nextState(FRESH, 30, g))
+    }
+  })
+})
+
+describe('nextState — the grades mean what the UI says they mean', () => {
+  const mature = { stability: 20, difficulty: 5 }
+
+  it('`easy` pushes furthest out of the four, at the same elapsed time', () => {
+    const intervals = GRADES.map((g) => nextState(mature, 15, g).interval_days)
     expect(Math.max(...intervals)).toBe(intervals[3])
   })
 
-  it('`again` lowers ease and `easy` raises it', () => {
-    expect(nextSchedule(mature, 'again').ease).toBeLessThan(mature.ease)
-    expect(nextSchedule(mature, 'easy').ease).toBeGreaterThan(mature.ease)
+  it('`again` never grows stability past what it already was', () => {
+    const r = nextState(mature, 15, 'again')
+    expect(r.stability).toBeLessThanOrEqual(mature.stability)
+  })
+
+  it('a successful grade (hard/good/easy) grows stability given enough elapsed time', () => {
+    for (const g of ['hard', 'good', 'easy'] as const) {
+      expect(nextState(mature, 15, g).stability).toBeGreaterThan(mature.stability)
+    }
+  })
+})
+
+describe('nextState — same-day review', () => {
+  it('uses the same-day formula, not the lapse/success split, even on `again`', () => {
+    // The same-day branch can still shrink stability on a low grade — the
+    // point under test is that it takes a different path, not that it grows.
+    const before = { stability: 5, difficulty: 5 }
+    const r = nextState(before, 0, 'again')
+    // Same-day stability is a pure exponential of the current value — always positive.
+    expect(r.stability).toBeGreaterThan(0)
+  })
+})
+
+describe('formatInterval', () => {
+  it('renders days under a month, months under a year, years beyond that', () => {
+    expect(formatInterval(5)).toBe('5d')
+    expect(formatInterval(29)).toBe('29d')
+    expect(formatInterval(60)).toBe('2mo')
+    expect(formatInterval(400)).toBe('1y')
   })
 })

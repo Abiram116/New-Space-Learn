@@ -27,7 +27,15 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError
 from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
-from ..services import activity, guardrails, personalization, rag, student_model, supabase
+from ..services import (
+    activity,
+    chat_memory,
+    guardrails,
+    personalization,
+    rag,
+    student_model,
+    supabase,
+)
 from ..services.chat_context import recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
@@ -102,6 +110,13 @@ async def send_chat(
         rag.retrieve_with_links(subspace_id, body.text, linked_ids),
     )
 
+    # `render_chat`, not `render` — the snapshot is already in hand above,
+    # and chat (unlike quiz/cards/notes/brief) also runs the style bandit:
+    # see `personalization.render_chat` / `style_bandit` for why chat is the
+    # one task with a Thompson-sampled experiment layer.
+    student_context, prefs_applied, style_applied = await personalization.render_chat(
+        snap, subspace_id, user.id
+    )
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],
         # The skill's mode composed WITH this student's weak concepts, rather
@@ -116,12 +131,9 @@ async def send_chat(
         images=images,
         answer_only_from_docs=bool(settings_row.get("answer_only_from_docs", True)),
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
-        # `render`, not `build` — the snapshot is already in hand above.
-        student_context=personalization.render(snap, "chat", subspace_id=subspace_id),
+        student_context=student_context,
+        memory_summary=subspace.get("memory_summary") or "",
     )
-    # Recorded on the assistant row below, so a later "this helped" can be
-    # attributed to the preferences that were actually in force.
-    prefs_applied = personalization.applied_keys(snap)
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
     # Skipped on a regenerate: the question is already on the record from the
@@ -217,6 +229,11 @@ async def send_chat(
                         "had_sources": bool(citations_meta),
                         "skill_ids": [s["id"] for s in active_skills],
                         "prefs_applied": prefs_applied,
+                        # {key: value} for the three style dimensions in
+                        # force on this message (real preference or sampled
+                        # experiment) — `style_bandit` reads this back to
+                        # score a later feedback tap against it.
+                        "style": style_applied,
                     },
                 },
             )
@@ -227,6 +244,11 @@ async def send_chat(
                 chat_messages=1,
                 study_seconds=activity.SECONDS_PER_CHAT_MESSAGE,
             )
+            # Fire-and-forget: folds older turns into the topic's rolling
+            # summary once enough have scrolled out of the live history
+            # window. Scheduled, not awaited — must never delay this
+            # response, and never fails it (see chat_memory.update_memory).
+            chat_memory.schedule_update(user.id, subspace_id, subspace, history_limit)
             yield _sse(
                 "done",
                 {

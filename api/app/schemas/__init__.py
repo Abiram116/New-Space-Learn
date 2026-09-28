@@ -226,6 +226,11 @@ class FlashcardOut(BaseModel):
     interval_days: int
     reps: int
     due_at: datetime
+    # FSRS state. `None` for a card that has never been graded — the SM-2-lite
+    # columns above still carry it until its first FSRS review sets these.
+    stability: float | None = None
+    difficulty: float | None = None
+    last_review_at: datetime | None = None
 
 
 class FlashcardCreate(BaseModel):

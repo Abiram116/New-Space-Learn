@@ -41,6 +41,10 @@ def _topic(**kwargs) -> TopicView:
         cards_total=0,
         notes=0,
         docs=0,
+        # Neutral means no evidence, not "average" — `mastery=50, n=0` fails
+        # both `is_weak` and `is_strong`, same as a topic nobody has touched.
+        mastery=50,
+        evidence_n=0.0,
     )
     base.update(kwargs)
     return TopicView(**base)
@@ -71,10 +75,16 @@ def test_trend_is_negative_when_declining():
 
 def test_falling_and_weak_are_different_topics():
     """A topic climbing from 40 to 55 and one sliding from 85 to 70 need
-    opposite advice. An average alone cannot tell them apart — which is why
+    opposite advice. A level alone cannot tell them apart — which is why
     the old model, which had only averages, could not say anything useful."""
-    climbing = _topic(subspace_id="climb", quiz_average=55, quiz_attempts=4, trend=15)
-    sliding = _topic(subspace_id="slide", quiz_average=78, quiz_attempts=4, trend=-15)
+    climbing = _topic(
+        subspace_id="climb", quiz_average=55, quiz_attempts=4, trend=15,
+        mastery=55, evidence_n=4.0,
+    )
+    sliding = _topic(
+        subspace_id="slide", quiz_average=78, quiz_attempts=4, trend=-15,
+        mastery=78, evidence_n=4.0,
+    )
     snap = sm.Snapshot(settings={}, concepts=[], topics=[climbing, sliding], activity_days=[], streak_days=0)
 
     assert [t.subspace_id for t in snap.weak_areas][0] == "climb"
@@ -212,6 +222,121 @@ def test_prompt_block_is_empty_when_nothing_is_known():
     tells the model to invent a student."""
     snap = sm.Snapshot(settings={}, concepts=[], topics=[], activity_days=[], streak_days=0)
     assert sm.format_for_prompt(snap.to_model()) == ""
+
+
+# ── Bayesian mastery ─────────────────────────────────────────────────────
+
+
+def test_mastery_with_no_evidence_is_the_uninformative_prior():
+    """Beta(1,1)'s own mean, not a made-up zero — a topic nobody has
+    touched is unknown, not failing."""
+    mastery, n = sm._mastery_from_evidence([])
+    assert mastery == 50
+    assert n == 0
+
+
+def test_mastery_moves_toward_the_evidence_but_not_all_the_way():
+    """Five right answers should read as clearly above average, but the
+    Beta(1,1) prior keeps a handful of evidence short of certainty."""
+    mastery, n = sm._mastery_from_evidence([(1.0, 1.0)] * 5)
+    assert 50 < mastery < 100
+    assert n == 5
+
+
+def test_mastery_all_wrong_reads_low():
+    mastery, _ = sm._mastery_from_evidence([(0.0, 1.0)] * 5)
+    assert mastery < 50
+
+
+def test_weak_and_strong_mastery_thresholds_cannot_overlap():
+    """The whole point of the rewrite: unlike top-3/bottom-3 by a plain
+    number, these two bands cannot both claim the same score."""
+    assert sm.WEAK_MASTERY < sm.STRONG_MASTERY
+
+
+def test_evidence_weight_is_full_for_fresh_evidence():
+    at = datetime.now(UTC).isoformat()
+    assert sm._evidence_weight(at, date.today()) == pytest.approx(1.0, abs=0.02)
+
+
+def test_evidence_weight_halves_at_the_half_life():
+    at = (datetime.now(UTC) - timedelta(days=sm.MASTERY_HALF_LIFE_DAYS)).isoformat()
+    assert sm._evidence_weight(at, date.today()) == pytest.approx(0.5, abs=0.02)
+
+
+def test_evidence_weight_is_zero_for_unparsable_timestamps():
+    assert sm._evidence_weight("not-a-date", date.today()) == 0.0
+
+
+def test_topic_needs_enough_evidence_to_be_called_weak_or_strong():
+    """A low score off one stale data point must not be asserted as weak —
+    `n` is the gate, not just the mastery number."""
+    thin = _topic(subspace_id="thin", mastery=10, evidence_n=1.0)
+    confident = _topic(subspace_id="sure", mastery=95, evidence_n=1.0)
+    snap = sm.Snapshot(
+        settings={}, concepts=[], topics=[thin, confident], activity_days=[], streak_days=0
+    )
+    assert snap.weak_areas == []
+    assert snap.strong_areas == []
+
+
+def test_weak_and_strong_areas_never_overlap():
+    borderline = _topic(subspace_id="mid", mastery=70, evidence_n=10.0)
+    snap = sm.Snapshot(
+        settings={}, concepts=[], topics=[borderline], activity_days=[], streak_days=0
+    )
+    weak_ids = {t.subspace_id for t in snap.weak_areas}
+    strong_ids = {t.subspace_id for t in snap.strong_areas}
+    assert not (weak_ids & strong_ids)
+    # 70 is neither < 60 nor >= 80, so it lands in neither list.
+    assert borderline.subspace_id not in weak_ids
+    assert borderline.subspace_id not in strong_ids
+
+
+def test_signal_exposes_mastery_as_average():
+    """`TopicSignal.average` keeps its name but now carries mastery, not the
+    plain quiz mean — the field consumers (API schema, web Profile) already
+    read, now with the number that actually produced the ranking."""
+    t = _topic(subspace_id="t1", quiz_average=40, mastery=71, evidence_n=5.0)
+    assert sm._signal(t).average == 71
+
+
+@pytest.mark.asyncio
+async def test_topic_mastery_folds_in_card_reviews(db):
+    """A topic drilled hard with flashcards but never quizzed still gets real
+    evidence behind its score — mastery isn't quiz-only anymore."""
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "Attention",
+         "last_activity_at": _days_ago(1)},
+    ])
+    db.seed("card_reviews", [
+        {"user_id": OWNER, "subspace_id": "t1", "grade": 4, "reviewed_at": _days_ago(i)}
+        for i in range(1, 5)
+    ])
+    snap = await sm.snapshot(OWNER)
+    topic = snap.topics[0]
+    assert topic.quiz_attempts == 0
+    assert topic.evidence_n > 0
+    assert topic.mastery > 50
+    assert topic in snap.strong_areas
+
+
+@pytest.mark.asyncio
+async def test_topic_can_be_weak_from_card_grades_alone(db):
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "Attention",
+         "last_activity_at": _days_ago(1)},
+    ])
+    db.seed("card_reviews", [
+        {"user_id": OWNER, "subspace_id": "t1", "grade": 1, "reviewed_at": _days_ago(i)}
+        for i in range(1, 5)
+    ])
+    snap = await sm.snapshot(OWNER)
+    assert snap.topics[0] in snap.weak_areas
 
 
 # ── The read pass ──────────────────────────────────────────────────────

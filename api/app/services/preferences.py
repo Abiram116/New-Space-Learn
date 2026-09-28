@@ -173,9 +173,27 @@ def resolve(snapshot) -> dict[str, Preference]:
         if pref.key not in KEYS:
             return  # The whitelist is enforced here, not at the call sites.
         existing = out.get(pref.key)
-        if existing and SOURCE_WEIGHT[existing.source] >= SOURCE_WEIGHT[pref.source]:
+        if existing is None:
+            out[pref.key] = pref
             return
-        out[pref.key] = pref
+        if SOURCE_WEIGHT[existing.source] == SOURCE_WEIGHT[pref.source]:
+            return  # Tie: whichever was resolved first stays.
+
+        higher, lower = (
+            (existing, pref)
+            if SOURCE_WEIGHT[existing.source] > SOURCE_WEIGHT[pref.source]
+            else (pref, existing)
+        )
+        # Rank wins outright ONLY once it has earned enough confidence to be
+        # acted on. Below that, rank stops mattering and the more confident
+        # value wins — a `feedback` pref stuck at 0.05 confidence must not
+        # bury an `observed` pref that has climbed to 0.7 simply because
+        # feedback outranks observed. This is the fix for the bug where a
+        # single low-confidence tap could permanently hide a well-evidenced
+        # behavioural signal.
+        out[pref.key] = (
+            higher if higher.actionable else max(higher, lower, key=lambda p: p.confidence)
+        )
 
     _resolve_explicit(snapshot, _put)
     _resolve_feedback(snapshot, _put)

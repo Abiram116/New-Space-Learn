@@ -544,7 +544,7 @@ function DeckDetail({
                       return (
                         <span
                           className="setcode mt-0.5 shrink-0 tabular-nums text-faint"
-                          title="Estimated from time since last review and this card's ease/interval — not measured."
+                          title="FSRS's own probability you'd recall this card right now."
                         >
                           ~{retention}%
                         </span>
