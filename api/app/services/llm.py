@@ -10,7 +10,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
+import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 import httpx
@@ -40,11 +43,112 @@ class LLM(Protocol):
     ) -> AsyncIterator[str]: ...
 
 
+#: Worth retrying on the SAME model — the request was fine, the moment wasn't.
+#: 498 is Groq's own "flex tier over capacity".
+_RETRYABLE_STATUS = frozenset({408, 429, 498, 500, 502, 503, 504})
+
+#: Groq's error codes for "this model id is gone or was never here". The
+#: 2026-08-16 and 2026-09-21 decommissions both surfaced as exactly this, and
+#: each one took the whole feature down because nothing fell back.
+_MODEL_GONE_CODES = frozenset({"model_decommissioned", "model_not_found"})
+
+
+class _Retryable(Exception):
+    """A transient failure. `error` is what the student sees if every attempt
+    and every fallback fails the same way."""
+
+    def __init__(self, error: ApiError, retry_after: float | None = None) -> None:
+        super().__init__(error.message)
+        self.error = error
+        self.retry_after = retry_after
+
+
+class _ModelGone(Exception):
+    """This model id is unusable. Retrying it is pointless; the next model in
+    the chain is the only move."""
+
+
+@dataclass(slots=True)
+class _Breaker:
+    """A per-model circuit breaker.
+
+    Closed: calls go through. After `threshold` consecutive failures it OPENS:
+    for `cooldown` seconds the model is skipped outright, straight to the
+    fallback, rather than every request separately waiting out a timeout
+    against an upstream already known to be down. After the cooldown one
+    request is let through as a probe — success closes it, failure re-opens it.
+    """
+
+    failures: int = 0
+    opened_at: float | None = None
+
+    def allows(self, now: float, cooldown: float) -> bool:
+        return self.opened_at is None or now - self.opened_at >= cooldown
+
+    def succeed(self) -> None:
+        self.failures = 0
+        self.opened_at = None
+
+    def fail(self, now: float, threshold: int) -> None:
+        self.failures += 1
+        if self.failures >= threshold:
+            self.opened_at = now
+
+    def trip(self, now: float) -> None:
+        """Open immediately — for a model that's gone, not merely flaky."""
+        self.failures = max(self.failures, 1)
+        self.opened_at = now
+
+
+def _has_images(messages: list[ChatMessage]) -> bool:
+    return any(isinstance(m.get("content"), list) for m in messages)
+
+
+def _backoff(attempt: int, retry_after: float | None) -> float:
+    """Full-jitter exponential backoff, or the server's own Retry-After.
+
+    Jitter matters even on one worker: without it, every request that failed
+    in the same blip retries in the same instant and trips the same limit.
+    """
+    if retry_after is not None:
+        return retry_after + random.uniform(0, 0.25)
+    return random.uniform(0, min(4.0, 0.4 * (2**attempt)))
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
+
+
+def _error_code(body: bytes) -> str | None:
+    try:
+        return json.loads(body).get("error", {}).get("code")
+    except (ValueError, AttributeError):
+        return None
+
+
 class GroqLLM:
-    """OpenAI-compatible client pointed at Groq."""
+    """OpenAI-compatible client pointed at Groq, with retry, fallback, and a
+    circuit breaker.
+
+    **The one rule everything below follows: never retry after the first
+    token.** Once text has reached the student, a retry would restart the
+    answer and duplicate what they already read. So every retry and every
+    fallback happens in the window before the first `yield`; a failure after
+    it is surfaced as a clean "stopped mid-answer" error instead.
+
+    Fallback order: the requested model, then the other text model. Vision
+    requests never fall back — the text models can't see the image, and a
+    confident answer that ignored the attachment is worse than an honest error.
+    """
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
+        self._breakers: dict[str, _Breaker] = {}
 
     async def _get(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -58,6 +162,16 @@ class GroqLLM:
             )
         return self._client
 
+    def _chain(self, model: str | None, messages: list[ChatMessage]) -> list[str]:
+        primary = model or settings.groq_model
+        if _has_images(messages):
+            return [primary]
+        text_models = [settings.groq_model, settings.groq_model_fast]
+        return [primary, *[m for m in text_models if m != primary]]
+
+    def _breaker(self, model: str) -> _Breaker:
+        return self._breakers.setdefault(model, _Breaker())
+
     async def stream_chat(
         self,
         messages: list[ChatMessage],
@@ -65,9 +179,62 @@ class GroqLLM:
         model: str | None = None,
         temperature: float = 0.4,
     ) -> AsyncIterator[str]:
+        chain = self._chain(model, messages)
+        last_error: ApiError = UpstreamUnavailable("The AI service is unavailable.")
+
+        for position, candidate in enumerate(chain):
+            breaker = self._breaker(candidate)
+            is_last = position == len(chain) - 1
+            # The last model is always tried, open circuit or not: failing a
+            # request without making a single attempt helps nobody.
+            if not is_last and not breaker.allows(
+                time.monotonic(), settings.groq_breaker_cooldown_s
+            ):
+                log.info("groq circuit open for %s; skipping to fallback", candidate)
+                continue
+
+            for attempt in range(settings.groq_max_retries + 1):
+                started = False
+                try:
+                    async for delta in self._stream_once(candidate, messages, temperature):
+                        started = True
+                        yield delta
+                    breaker.succeed()
+                    if position:
+                        log.info("groq answered via fallback %s", candidate)
+                    return
+                except _ModelGone:
+                    breaker.trip(time.monotonic())
+                    log.warning("groq model %s is gone; falling back", candidate)
+                    break
+                except _Retryable as e:
+                    if started:
+                        raise UpstreamUnavailable(
+                            "The AI stopped partway through. Try again."
+                        ) from e
+                    breaker.fail(time.monotonic(), settings.groq_breaker_threshold)
+                    last_error = e.error
+                    waits_too_long = (
+                        e.retry_after is not None
+                        and e.retry_after > settings.groq_max_retry_after_s
+                    )
+                    if attempt >= settings.groq_max_retries or waits_too_long:
+                        break
+                    delay = _backoff(attempt, e.retry_after)
+                    log.info(
+                        "groq %s transient failure (%s); retry %d in %.2fs",
+                        candidate, e.error.code, attempt + 1, delay,
+                    )
+                    await asyncio.sleep(delay)
+
+        raise last_error
+
+    async def _stream_once(
+        self, model: str, messages: list[ChatMessage], temperature: float
+    ) -> AsyncIterator[str]:
         client = await self._get()
         payload: dict[str, Any] = {
-            "model": model or settings.groq_model,
+            "model": model,
             "messages": messages,
             "temperature": temperature,
             "stream": True,
@@ -78,8 +245,8 @@ class GroqLLM:
                     body = await r.aread()
                     # Log the provider's text; never surface it — it can carry
                     # account and quota details the user shouldn't see.
-                    log.warning("groq %s: %s", r.status_code, body[:300])
-                    raise _upstream_error(r.status_code)
+                    log.warning("groq %s on %s: %s", r.status_code, model, body[:300])
+                    raise _classify(r.status_code, body, r.headers.get("retry-after"))
                 async for line in r.aiter_lines():
                     if not line or not line.startswith("data:"):
                         continue
@@ -98,25 +265,34 @@ class GroqLLM:
                     if delta:
                         yield delta
         except httpx.TimeoutException as e:
-            raise UpstreamUnavailable("The AI took too long to respond. Try again.") from e
+            raise _Retryable(
+                UpstreamUnavailable("The AI took too long to respond. Try again.")
+            ) from e
         except httpx.HTTPError as e:
-            raise UpstreamUnavailable("The AI service didn't respond.") from e
+            raise _Retryable(UpstreamUnavailable("The AI service didn't respond.")) from e
 
 
-def _upstream_error(status: int) -> ApiError:
-    """Translate a provider status into our own typed error.
+def _classify(status: int, body: bytes, retry_after: str | None) -> Exception:
+    """Sort a provider failure into: retry this model, try the next model, or
+    stop — and pick the message the student sees if it comes to that.
 
-    429 matters most: 'you're rate limited, wait' is a different instruction to
-    the user than 'the service is down', and the UI toasts them differently.
+    429 matters most for the message: 'at capacity, wait' is a different
+    instruction than 'the service is down', and the UI toasts them differently.
     """
+    code = _error_code(body)
+    if status == 404 or code in _MODEL_GONE_CODES:
+        return _ModelGone()
     if status == 429:
-        return RateLimited("The AI is at capacity right now. Try again in a moment.")
+        return _Retryable(
+            RateLimited("The AI is at capacity right now. Try again in a moment."),
+            _parse_retry_after(retry_after),
+        )
+    if status in _RETRYABLE_STATUS:
+        return _Retryable(UpstreamUnavailable("The AI service is unavailable."))
     if status in (401, 403):
         # Our key is bad — the user can't fix this, so don't imply they can.
         return NotConfigured("The AI provider rejected our credentials.")
-    if status == 400:
-        return UpstreamUnavailable("The AI couldn't handle that request.")
-    return UpstreamUnavailable("The AI service is unavailable.")
+    return UpstreamUnavailable("The AI couldn't handle that request.")
 
 
 class StubLLM:

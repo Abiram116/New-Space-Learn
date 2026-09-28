@@ -29,7 +29,8 @@ type LocalUpload = {
 }
 
 const POLL_MS = 2500
-const POLL_TIMEOUT_MS = 60_000
+const POLL_MAX_MS = 10_000
+const POLL_TIMEOUT_MS = 15 * 60_000
 
 export function DocsView() {
   const { space, subspace } = useActiveSubspace()
@@ -86,23 +87,26 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
     void refresh()
   }, [refresh])
 
-  // Poll while any doc is still being processed. Stops itself when everything
-  // is ready/failed, and after a hard timeout to be nice to Render.
+  // Poll while any doc is still being processed, backing off from 2.5s to
+  // 10s. Ingestion runs in the background and a long PDF can take minutes on
+  // the free-tier backend, so the cap is generous. `pollStart` is a ref: this
+  // effect re-runs after every refresh (it depends on `docs`), and a start
+  // time kept inside it reset on every poll — the old 60s cap never fired.
+  const pollStart = useRef<number | null>(null)
   useEffect(() => {
     if (!docs) return
     const pending = docs.some((d) => d.status === 'processing' || d.status === 'uploading')
-    if (!pending) return
-    const started = Date.now()
-    pollRef.current = window.setInterval(() => {
-      if (Date.now() - started > POLL_TIMEOUT_MS) {
-        if (pollRef.current) window.clearInterval(pollRef.current)
-        pollRef.current = null
-        return
-      }
-      void refresh()
-    }, POLL_MS)
+    if (!pending) {
+      pollStart.current = null
+      return
+    }
+    pollStart.current ??= Date.now()
+    const elapsed = Date.now() - pollStart.current
+    if (elapsed > POLL_TIMEOUT_MS) return
+    const delay = Math.min(POLL_MAX_MS, POLL_MS * 2 ** Math.floor(elapsed / 30_000))
+    pollRef.current = window.setTimeout(() => void refresh(), delay)
     return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current)
+      if (pollRef.current) window.clearTimeout(pollRef.current)
       pollRef.current = null
     }
   }, [docs, refresh])

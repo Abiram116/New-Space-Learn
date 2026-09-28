@@ -8,6 +8,7 @@ Two responsibilities kept intentionally small so they're easy to test:
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -37,6 +38,7 @@ async def retrieve(subspace_id: str, question: str, *, k: int = 4) -> list[Retri
             "match_subspace": subspace_id,
             "match_count": k,
         },
+        read_only=True,
     )
     if not isinstance(rows, list) or not rows:
         return []
@@ -77,13 +79,17 @@ async def retrieve_with_links(
     Always additive — a link only adds sources, never replaces the primary
     subspace's own material."""
 
-    primary = await retrieve(subspace_id, question, k=k)
     if not linked_subspace_ids:
-        return primary
-    extra: list[Retrieved] = []
-    for linked_id in linked_subspace_ids:
-        extra.extend(await retrieve(linked_id, question, k=link_k))
-    return primary + extra
+        return await retrieve(subspace_id, question, k=k)
+    # Concurrent, not sequential: each retrieval is an independent round trip,
+    # so N linked subspaces used to cost N+1 back-to-back waits on the chat's
+    # critical path — before the first token could even be requested.
+    results = await asyncio.gather(
+        retrieve(subspace_id, question, k=k),
+        *(retrieve(linked_id, question, k=link_k) for linked_id in linked_subspace_ids),
+    )
+    primary, *extra = results
+    return primary + [r for batch in extra for r in batch]
 
 
 def build_prompt(

@@ -30,7 +30,7 @@ class FakeDb:
     def seed(self, table: str, rows: list[dict[str, Any]]) -> None:
         self.rows[table] = rows
 
-    async def db_rpc(self, fn: str, args: dict):
+    async def db_rpc(self, fn: str, args: dict, *, read_only: bool = False):
         """Refuse, loudly.
 
         The fake models tables, not Postgres functions, so it cannot answer an

@@ -34,7 +34,18 @@ export function SourceItem({
 }) {
   const meta = statusMeta[doc.status]
   const pending = doc.status === 'uploading' || doc.status === 'processing'
-  const value = typeof progress === 'number' ? progress : doc.status === 'ready' ? 100 : 40
+  // Real progress from the ingestion job when there is one; 40 is only the
+  // "somewhere in the middle" placeholder for a doc with no live job.
+  const live = doc.status === 'processing' && typeof doc.progress === 'number' ? doc.progress : null
+  const value =
+    typeof progress === 'number'
+      ? progress
+      : doc.status === 'ready'
+        ? 100
+        : live !== null
+          ? Math.max(4, Math.round(live * 100))
+          : 40
+  const note = live !== null ? `${meta.note} · ${Math.round(live * 100)}%` : meta.note
 
   return (
     <div
@@ -70,7 +81,7 @@ export function SourceItem({
       {(pending || detailed) && (
         <div className="flex flex-col gap-1.5">
           <div className={cn('setcode', doc.status === 'failed' && 'text-coral-deep')}>
-            {doc.error || meta.note}
+            {doc.error || note}
           </div>
           {pending && (
             <div className="h-1 overflow-hidden rounded-full bg-line-soft">

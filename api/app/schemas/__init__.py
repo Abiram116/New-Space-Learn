@@ -118,6 +118,8 @@ class DocumentOut(BaseModel):
     error: str | None = None
     created_at: datetime
     ready_at: datetime | None = None
+    # 0-1 while this process is embedding it; None otherwise.
+    progress: float | None = None
 
 
 # ── Notes ──────────────────────────────────────────────────────────────

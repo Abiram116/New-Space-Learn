@@ -200,15 +200,17 @@ def test_scanner_catches_a_synthetic_route_missing_a_guard():
 def test_every_authenticated_route_requires_a_user():
     """A route that forgets `Depends(get_current_user)` is open to the world.
 
-    `/health` is the only deliberate exception — it's what the offline banner
-    and the cold-start warm-up call before anyone has signed in.
+    `/health` and `/ready` are the only deliberate exceptions: the offline
+    banner and cold-start warm-up call them before anyone has signed in, and
+    the keep-alive cron calls `/ready` with no credentials at all. Both
+    return booleans only — no user data.
     """
     app = create_app()
     public = []
     for route in app.routes:
         if not isinstance(route, APIRoute):
             continue
-        if route.path.endswith("/health"):
+        if route.path.endswith(("/health", "/ready")):
             continue
         source = inspect.getsource(route.endpoint)
         if "get_current_user" not in source:

@@ -37,12 +37,13 @@ from .routers import (
     subspace_chat,
     subspaces,
 )
-from .services import embeddings, llm, supabase
+from .services import embeddings, ingest, llm, supabase
 
 logging.basicConfig(
     level=settings.log_level.upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+log = logging.getLogger("space_learn.main")
 
 
 @asynccontextmanager
@@ -52,10 +53,15 @@ async def lifespan(_: FastAPI):
     # times out waiting for a model download. See embeddings.warm_provider for
     # why the first upload can't be allowed to pay this cost itself.
     warm = asyncio.create_task(embeddings.warm_provider())
+    # Uploads a restart or deploy interrupted carry on from their last stored
+    # chunk.
+    resume = asyncio.create_task(ingest.resume_pending())
 
     yield
 
     warm.cancel()
+    resume.cancel()
+    await ingest.drain()
     await supabase.close_client()
     await llm.close_llm()
     await embeddings.close_client()
@@ -122,10 +128,41 @@ def create_app() -> FastAPI:
 
     @app.get(f"{prefix}/health", tags=["health"])
     async def health() -> dict[str, object]:
+        """LIVENESS — is the process up. Deliberately touches nothing: Render's
+        health check hits this, and a check that waits on the database would
+        mark a healthy process dead during a Supabase blip and restart it."""
         return {
             "ok": True,
             "supabase": settings.supabase_configured,
             "llm": settings.llm_configured,
+        }
+
+    @app.get(f"{prefix}/ready", tags=["health"])
+    async def ready() -> dict[str, object]:
+        """READINESS — can this process actually serve a student right now.
+
+        Distinct from `/health` on purpose. The frontend polls this while the
+        server is waking so it can say "almost ready" honestly rather than
+        guess; and the keep-alive pinger hits THIS, not `/health`, because a
+        real (cheap) database read is what stops a free Supabase project from
+        auto-pausing after a week idle — `/health` alone would keep Render warm
+        while the database quietly went to sleep behind it.
+        """
+        db_ok = False
+        if settings.supabase_configured:
+            try:
+                await asyncio.wait_for(
+                    supabase.db_select("user_settings", select="user_id", limit=1),
+                    timeout=5.0,
+                )
+                db_ok = True
+            except Exception:  # noqa: BLE001 — readiness reports, it never raises
+                log.warning("readiness: database check failed", exc_info=True)
+        embeddings_ready = settings.use_stub_embeddings or embeddings.is_warm()
+        return {
+            "ready": db_ok and embeddings_ready,
+            "database": db_ok,
+            "embeddings": embeddings_ready,
         }
 
     return app

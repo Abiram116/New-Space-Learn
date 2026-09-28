@@ -48,6 +48,8 @@ export type Document = {
   error: string | null
   created_at: string
   ready_at: string | null
+  /** 0-1 while the backend is embedding it; absent otherwise. */
+  progress?: number | null
 }
 
 export type Note = {

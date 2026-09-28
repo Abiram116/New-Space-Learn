@@ -11,7 +11,7 @@
  *            and finish. Deliberately not card-shaped.
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../../api/documents'
 import { listActiveSkills } from '../../api/skills'
@@ -157,6 +157,16 @@ export function ContextDock({
 
   const docList = docs.data ?? []
   const skillList = skills.data ?? []
+
+  // Uploads are ingested in the background now, so a new source arrives here
+  // as `processing`. Re-check until it's ready — re-armed by each new `data`.
+  const refreshDocs = docs.refresh
+  const docsPending = docList.some((d) => d.status === 'processing' || d.status === 'uploading')
+  useEffect(() => {
+    if (!docsPending) return
+    const t = window.setTimeout(refreshDocs, 4000)
+    return () => window.clearTimeout(t)
+  }, [docsPending, docs.data, refreshDocs])
 
   const upload = useCallback(
     async (files: FileList | File[]) => {

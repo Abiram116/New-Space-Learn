@@ -11,7 +11,9 @@ browser.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import random
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -208,6 +210,47 @@ async def _verify_via_network(token: str) -> dict[str, Any]:
 # ── PostgREST helpers ───────────────────────────────────────────────────
 
 
+#: Gateway-level blips — Supabase's proxy answered, the database behind it
+#: didn't. A plain 500 is NOT here: PostgREST uses it for real SQL errors,
+#: and retrying a genuinely broken query just repeats the failure three times.
+_RETRYABLE_STATUS = frozenset({502, 503, 504})
+_MAX_ATTEMPTS = 3
+
+
+async def _request(method: str, url: str, *, idempotent: bool, **kwargs: Any) -> httpx.Response:
+    """Send one PostgREST/Storage request, retrying only when repeating it
+    cannot change the outcome.
+
+    GET, HEAD, PATCH-with-filters and DELETE are idempotent: sending them twice
+    leaves the database exactly as sending once did. An INSERT is not — if the
+    first attempt landed and only the response was lost, a retry writes a
+    second row. So a write retries only when the caller vouches for it, and
+    never by default. Same rule the frontend's `client.ts` follows.
+
+    What this rides out: a dropped keep-alive connection (the most common
+    failure after this process wakes from a Render spin-down, when pooled
+    sockets have gone stale) and a transient 502/503/504 from Supabase's
+    gateway. What it deliberately does NOT: a real 4xx/500, which retrying
+    would only repeat.
+    """
+    client = await get_client()
+    attempts = _MAX_ATTEMPTS if idempotent else 1
+    for attempt in range(attempts):
+        last = attempt == attempts - 1
+        try:
+            r = await client.request(method, url, **kwargs)
+        except httpx.TransportError as e:
+            if last:
+                raise UpstreamUnavailable("Database is unavailable right now.") from e
+            log.info("supabase %s %s transport error; retry %d", method, url, attempt + 1)
+        else:
+            if r.status_code not in _RETRYABLE_STATUS or last:
+                return r
+            log.info("supabase %s %s → %d; retry %d", method, url, r.status_code, attempt + 1)
+        await asyncio.sleep(random.uniform(0, 0.25 * (2**attempt)))
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 async def db_select(
     table: str,
     *,
@@ -216,7 +259,6 @@ async def db_select(
     order: str | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    client = await get_client()
     params: dict[str, str] = {"select": select}
     if filters:
         params.update(filters)
@@ -224,7 +266,7 @@ async def db_select(
         params["order"] = order
     if limit:
         params["limit"] = str(limit)
-    r = await client.get(f"/rest/v1/{table}", params=params)
+    r = await _request("GET", f"/rest/v1/{table}", idempotent=True, params=params)
     _raise_if_bad(r)
     return r.json()
 
@@ -244,12 +286,13 @@ async def db_count(table: str, *, filters: dict[str, str] | None = None) -> int:
     handful of rows costs almost nothing either way, and shows up later as
     unexplained latency drift once real usage has actually grown a table.
     """
-    client = await get_client()
     params: dict[str, str] = {"select": "id"}
     if filters:
         params.update(filters)
-    r = await client.head(
+    r = await _request(
+        "HEAD",
         f"/rest/v1/{table}",
+        idempotent=True,
         params=params,
         headers={"Prefer": "count=exact"},
     )
@@ -261,9 +304,12 @@ async def db_count(table: str, *, filters: dict[str, str] | None = None) -> int:
 
 
 async def db_insert(table: str, rows: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
-    client = await get_client()
-    r = await client.post(
+    # Not idempotent — see `_request`. A duplicated note or quiz result is
+    # worse than an honest "try again".
+    r = await _request(
+        "POST",
         f"/rest/v1/{table}",
+        idempotent=False,
         json=rows,
         headers={"Prefer": "return=representation"},
     )
@@ -274,9 +320,12 @@ async def db_insert(table: str, rows: dict[str, Any] | list[dict[str, Any]]) -> 
 async def db_update(
     table: str, *, filters: dict[str, str], patch: dict[str, Any]
 ) -> list[dict[str, Any]]:
-    client = await get_client()
-    r = await client.patch(
+    # Setting fields to fixed values is idempotent: applying it twice lands
+    # the same row state as applying it once.
+    r = await _request(
+        "PATCH",
         f"/rest/v1/{table}",
+        idempotent=True,
         params=filters,
         json=patch,
         headers={"Prefer": "return=representation"},
@@ -286,14 +335,15 @@ async def db_update(
 
 
 async def db_delete(table: str, *, filters: dict[str, str]) -> None:
-    client = await get_client()
-    r = await client.delete(f"/rest/v1/{table}", params=filters)
+    r = await _request("DELETE", f"/rest/v1/{table}", idempotent=True, params=filters)
     _raise_if_bad(r)
 
 
-async def db_rpc(fn: str, args: dict[str, Any]) -> Any:
-    client = await get_client()
-    r = await client.post(f"/rest/v1/rpc/{fn}", json=args)
+async def db_rpc(fn: str, args: dict[str, Any], *, read_only: bool = False) -> Any:
+    """Call a Postgres function. Only retried when the caller declares it
+    `read_only` — a function can do anything, so this can't infer safety from
+    the HTTP verb (RPC is always POST) the way the table helpers can."""
+    r = await _request("POST", f"/rest/v1/rpc/{fn}", idempotent=read_only, json=args)
     _raise_if_bad(r)
     return r.json()
 

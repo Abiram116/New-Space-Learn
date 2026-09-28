@@ -8,7 +8,12 @@ services:
     env: python
     plan: free
     rootDir: api
-    buildCommand: pip install uv && uv sync --frozen
+    # The prefetch bakes the embedding model into the built image — measured
+    # 28.5s to fetch cold vs 0.4s to load from disk. Without it, every cold
+    # start re-downloads it (the container's disk does not survive a
+    # spin-down). It also runs one real inference, so a bad download fails the
+    # BUILD rather than the first student's upload.
+    buildCommand: pip install uv && uv sync --frozen && uv run python scripts/prefetch_model.py
     startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/v1/health
     autoDeploy: true
@@ -25,10 +30,14 @@ services:
         sync: false
       - key: GROQ_MODEL
         value: openai/gpt-oss-120b
+      # Both retired by Groq (confirmed 2026-09-21 against the live API, not
+      # docs); these override config.py's defaults, so leaving the old ids
+      # here would break the home brief and image chat on deploy even though
+      # the code itself was already fixed.
       - key: GROQ_MODEL_FAST
-        value: llama-3.1-8b-instant
+        value: openai/gpt-oss-20b
       - key: GROQ_MODEL_VISION
-        value: qwen/qwen3.6-27b
+        value: qwen/qwen3.8-27b
       - key: GROQ_BASE_URL
         value: https://api.groq.com/openai/v1
       # Embeddings — local (BGE-small-en-v1.5, quantized ONNX), no API key,
@@ -36,6 +45,14 @@ services:
       # docs/decisions.md.
       - key: EMBEDDING_MODEL
         value: BAAI/bge-small-en-v1.5
+      # Relative to rootDir (api/), which is the CWD for both build and start
+      # — so the path the build writes to is the path runtime reads from.
+      - key: EMBEDDING_CACHE_DIR
+        value: .cache/fastembed
+      # 0.1 vCPU. ONNX Runtime would otherwise size its pool to the HOST's
+      # visible cores and thrash them against a sliver of one.
+      - key: EMBEDDING_THREADS
+        value: "1"
       # "false" as of 2026-08-09. The vector(1536)->vector(384) migration
       # (supabase/migrations/20260810090000_embedding_dim_384.sql) is applied
       # on the live database, and the pipeline is verified end-to-end against

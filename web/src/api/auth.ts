@@ -4,7 +4,7 @@
  * bubble as `ApiError` so the shared error handler covers them.
  */
 
-import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session } from '@supabase/auth-js'
 import { ApiError } from './errors'
 import { getSupabase } from './supabase'
 

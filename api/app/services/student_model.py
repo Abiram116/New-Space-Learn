@@ -415,7 +415,9 @@ async def _snapshot_rows(user_id: str) -> dict[str, Any]:
     """
     global _warned_no_rpc
     try:
-        payload = await supabase.db_rpc("student_snapshot", {"p_user_id": user_id})
+        payload = await supabase.db_rpc(
+            "student_snapshot", {"p_user_id": user_id}, read_only=True
+        )
         if isinstance(payload, dict) and all(k in payload for k in _SNAPSHOT_KEYS):
             return payload
         reason = "returned an unexpected shape"

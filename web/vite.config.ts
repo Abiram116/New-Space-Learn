@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 /** Env files live at the repo root, shared with the API. */
-const ENV_DIR = path.resolve(__dirname, '..')
+const ENV_DIR = path.resolve(import.meta.dirname, '..')
 
 // https://vite.dev/config/
 export default defineConfig({

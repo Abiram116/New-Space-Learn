@@ -32,12 +32,40 @@ class Settings(BaseSettings):
     # model handles fine. `groq_model` was `llama-3.3-70b-versatile` until
     # Groq decommissioned it on 2026-08-16 (requests now 400); swapped to
     # their own recommended free replacement, GPT-OSS-120B.
+    #
+    # 2026-09-21: two more of Groq's own decommissions caught up with us,
+    # confirmed by hitting the live `/v1/models` list and a real completion
+    # call against each — not assumed from docs, which were themselves
+    # stale/contradictory when checked. `llama-3.1-8b-instant` (the fast
+    # tier — brief.py's home-screen line, plus documents.py) is gone
+    # outright: "does not exist or you do not have access to it." Swapped
+    # to GPT-OSS-20B, Groq's own current fastest model (1000 tok/s),
+    # which is if anything a better fit for "short, low-stakes prompts"
+    # than the model it replaces. `qwen/qwen3.6-27b` (the vision tier —
+    # only used when a chat message carries a pasted image) is also gone,
+    # replaced by its direct successor `qwen/qwen3.8-27b`. `groq_model`
+    # itself (GPT-OSS-120B, RAG chat + quiz generation) was NOT affected —
+    # verified live and still serving normally; a report of "chat is
+    # broken" traced to the vision tier specifically, not general chat.
     groq_api_key: str = ""
-    groq_model: str = "openai/gpt-oss-120b"         # RAG chat, quiz generation
-    groq_model_fast: str = "llama-3.1-8b-instant"   # short, low-stakes prompts
-    groq_model_vision: str = "qwen/qwen3.6-27b"     # only image-capable model here
+    groq_model: str = "openai/gpt-oss-120b"        # RAG chat, quiz generation
+    groq_model_fast: str = "openai/gpt-oss-20b"    # short, low-stakes prompts
+    groq_model_vision: str = "qwen/qwen3.8-27b"    # only image-capable model here
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_timeout_s: float = 60.0
+    # Resilience. Retries happen only BEFORE the first token reaches the
+    # client — once a stream has started, retrying would duplicate text the
+    # student has already read. See `services/llm.py`.
+    groq_max_retries: int = 2
+    # Past this, a 429's Retry-After is not worth waiting out: falling back to
+    # the other text model answers sooner than sleeping on this one.
+    groq_max_retry_after_s: float = 2.0
+    # Consecutive failures before a model's circuit opens, and how long it
+    # stays open. While open, requests skip straight to the fallback model
+    # instead of each paying a full timeout against an upstream already known
+    # to be down — on one worker, piled-up waits are what takes the app down.
+    groq_breaker_threshold: int = 3
+    groq_breaker_cooldown_s: float = 30.0
 
     # Embeddings.
     # Local, not hosted — see docs/decisions.md.
@@ -49,10 +77,22 @@ class Settings(BaseSettings):
     # No API key, no base URL, no network dependency: the model runs
     # in-process, loaded once per worker on first use.
     embedding_model: str = "BAAI/bge-small-en-v1.5"
-    # How many chunks per inference call. The model can take a bigger batch,
-    # but bounding it keeps peak memory predictable on a 512MB instance and
-    # limits how much work is lost if a batch fails mid-document.
+    # How many chunks `embed_texts` hands the provider per call.
     embedding_batch_size: int = 64
+    # Sequences per ONNX forward pass. 1 is measured fastest AND smallest on
+    # real chunks (no padding) — see LocalBgeEmbeddingProvider._embed_sync.
+    embedding_infer_batch_size: int = 1
+    # ONNX Runtime sizes its thread pool to the cores it can SEE. A
+    # CPU-throttled container (Render free: 0.1 vCPU) sees the host's cores,
+    # so the default spawns many threads that all contend for a sliver of one
+    # — more context switching, slower inference. One thread is the right
+    # number when there is barely one CPU to begin with. `None` = ORT default,
+    # for machines where cores are real.
+    embedding_threads: int | None = None
+    # Where model weights live. Set at build time on Render so the model is
+    # baked into the deployed image instead of re-downloaded on every cold
+    # start (the container's disk does not survive a spin-down).
+    embedding_cache_dir: str | None = None
 
     # Feature flags
     use_stub_embeddings: bool = True

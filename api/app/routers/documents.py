@@ -1,13 +1,12 @@
-"""Documents: upload → chunk → embed → cite. Inline (no worker) per free-tier reality."""
+"""Documents: upload → store → ingest in the background → cite.
+
+Ingestion itself lives in `services/ingest.py` — see its header for why it
+can no longer run inside the request."""
 
 from __future__ import annotations
 
 import asyncio
-import base64
-import csv
-import io
 import logging
-from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
@@ -16,8 +15,8 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, UpstreamUnavailable, ValidationFailed
 from ..guards import assert_space, assert_subspace
 from ..schemas import DocumentOut, OkOut, SuggestSubspaceOut
-from ..services import supabase
-from ..services.embeddings import chunk_text, embed_texts, extract_pdf_text
+from ..services import ingest, supabase
+from ..services.extract import extract_text
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
 
@@ -25,7 +24,9 @@ log = logging.getLogger("space_learn.docs")
 router = APIRouter()
 
 MAX_BYTES = 20 * 1024 * 1024  # 20 MB — free-tier friendly
-PROCESSING_BUDGET_S = 25       # cap the inline embed so requests don't hang forever
+# A name needs a sample, not the book: parsing all of an 80-page PDF to keep
+# its first 4000 characters was ~5s of wasted CPU on Render.
+SUGGEST_MAX_PAGES = 4
 
 
 @router.post("/spaces/{space_id}/suggest-subspace", response_model=SuggestSubspaceOut)
@@ -46,7 +47,10 @@ async def suggest_subspace(
     data = await file.read()
     if not data:
         raise ValidationFailed("The file is empty.")
-    text = _extract_text(data, file.content_type or "")[:4000]
+    mime = file.content_type or ""
+    if "image" in mime.lower():
+        return SuggestSubspaceOut(name=None)  # a vision call just to name a topic isn't worth it
+    text = (await extract_text(data, mime, max_pages=SUGGEST_MAX_PAGES))[:4000]
     if not text.strip() or not settings.llm_configured:
         return SuggestSubspaceOut(name=None)
 
@@ -128,17 +132,19 @@ async def upload_document(
         )
     )[0]
 
-    # Storage first, then chunk + embed.
+    # Storage first: it is what makes the job resumable after a restart.
     storage_path = f"{user.id}/{row['id']}/{file.filename}"
     try:
         await supabase.storage_upload(
             storage_path, data, content_type=file.content_type or "application/octet-stream"
         )
-        await supabase.db_update(
-            "documents",
-            filters={"id": f"eq.{row['id']}"},
-            patch={"status": "processing", "storage_path": storage_path},
-        )
+        row = (
+            await supabase.db_update(
+                "documents",
+                filters={"id": f"eq.{row['id']}"},
+                patch={"status": "processing", "storage_path": storage_path},
+            )
+        )[0]
     except Exception as e:
         log.exception("upload failed for %s", row["id"])
         await supabase.db_update(
@@ -150,8 +156,9 @@ async def upload_document(
         # a bare 500 carrying whatever the storage layer threw.
         raise UpstreamUnavailable("We couldn't store that file. Try again.") from e
 
-    processed = await _process_inline(row, data, file.content_type or "")
-    return _to_doc(processed)
+    # Answer now; the Docs view already polls while anything is processing.
+    ingest.schedule(row, data)
+    return _to_doc(row)
 
 
 @router.post("/documents/{document_id}/reprocess", response_model=DocumentOut)
@@ -169,12 +176,21 @@ async def reprocess(
     if not doc.get("storage_path"):
         raise ValidationFailed("Document has no stored file to reprocess.")
 
-    chunks_bytes = bytearray()
-    async for chunk in supabase.storage_download(doc["storage_path"]):
-        chunks_bytes.extend(chunk)
+    if ingest.is_running(doc["id"]):
+        return _to_doc(doc)  # a second tap mustn't start a second job
 
-    processed = await _process_inline(doc, bytes(chunks_bytes), doc.get("mime_type") or "")
-    return _to_doc(processed)
+    # A doc still at `processing` resumes where it stopped; a ready or failed
+    # one is re-ingested from scratch.
+    fresh = doc["status"] != "processing"
+    doc = (
+        await supabase.db_update(
+            "documents",
+            filters={"id": f"eq.{doc['id']}"},
+            patch={"status": "processing", "error": None},
+        )
+    )[0]
+    ingest.schedule(doc, fresh=fresh)
+    return _to_doc(doc)
 
 
 @router.delete("/documents/{document_id}", response_model=OkOut)
@@ -189,6 +205,8 @@ async def delete_document(
     if not rows:
         raise NotFound("Document not found.")
     doc = rows[0]
+    # Stop a live job first, or it keeps embedding into a row that's gone.
+    await ingest.cancel(doc["id"])
     if doc.get("storage_path"):
         # storage_path is the in-bucket key ("<user>/<doc>/<name>"); the storage
         # helper adds the bucket itself.
@@ -202,161 +220,6 @@ async def delete_document(
     return OkOut()
 
 
-# ── Processing ─────────────────────────────────────────────────────────
-
-
-async def _process_inline(doc: dict, data: bytes, mime_type: str) -> dict:
-    """Extract, chunk, embed, insert. Bounded so the request stays alive."""
-
-    try:
-        text = await _extract_text_async(data, mime_type)
-        if not text.strip():
-            return (
-                await supabase.db_update(
-                    "documents",
-                    filters={"id": f"eq.{doc['id']}"},
-                    patch={"status": "failed", "error": "No readable text found."},
-                )
-            )[0]
-
-        chunks = chunk_text(text)
-        if not chunks:
-            return (
-                await supabase.db_update(
-                    "documents",
-                    filters={"id": f"eq.{doc['id']}"},
-                    patch={"status": "ready", "ready_at": datetime.now(UTC).isoformat()},
-                )
-            )[0]
-
-        embeddings = await asyncio.wait_for(
-            embed_texts([c.content for c in chunks]),
-            timeout=PROCESSING_BUDGET_S,
-        )
-
-        rows = [
-            {
-                "document_id": doc["id"],
-                "subspace_id": doc["subspace_id"],
-                "user_id": doc["user_id"],
-                "chunk_index": c.index,
-                "content": c.content,
-                "locator": c.locator,
-                "embedding": emb,
-            }
-            for c, emb in zip(chunks, embeddings, strict=True)
-        ]
-        # Reprocess re-runs this path, so clear prior chunks first — otherwise
-        # the same passage is retrieved twice and cited twice.
-        await supabase.db_delete(
-            "document_chunks", filters={"document_id": f"eq.{doc['id']}"}
-        )
-        await supabase.db_insert("document_chunks", rows)
-
-        return (
-            await supabase.db_update(
-                "documents",
-                filters={"id": f"eq.{doc['id']}"},
-                patch={"status": "ready", "ready_at": datetime.now(UTC).isoformat()},
-            )
-        )[0]
-    except TimeoutError:
-        # Keep the doc row so the user can hit "reprocess" from the UI.
-        return (
-            await supabase.db_update(
-                "documents",
-                filters={"id": f"eq.{doc['id']}"},
-                patch={"status": "processing", "error": "Still processing — tap reprocess to continue."},
-            )
-        )[0]
-    except Exception:
-        # The real exception goes to the log; the row gets copy a user can act
-        # on. Never persist str(e) here — `documents.error` renders in the UI.
-        log.exception("processing failed for %s", doc["id"])
-        return await _fail(doc["id"], "We couldn't read this file. Try re-uploading it.")
-
-
-async def _fail(doc_id: str, message: str) -> dict:
-    updated = await supabase.db_update(
-        "documents",
-        filters={"id": f"eq.{doc_id}"},
-        patch={"status": "failed", "error": message[:200]},
-    )
-    return updated[0]
-
-
-async def _extract_text_async(data: bytes, mime_type: str) -> str:
-    """Images need a model call (vision), everything else is synchronous —
-    kept as one entry point so `_process_inline` doesn't need to branch."""
-    if "image" in mime_type.lower():
-        return await _extract_image_text(data, mime_type)
-    return _extract_text(data, mime_type)
-
-
-def _extract_text(data: bytes, mime_type: str) -> str:
-    if "pdf" in mime_type.lower():
-        return extract_pdf_text(data)
-    if "csv" in mime_type.lower():
-        return _extract_csv_text(data)
-    # Everything else: assume UTF-8 text (markdown, plain, source).
-    try:
-        return data.decode("utf-8", errors="ignore")
-    except Exception:  # pragma: no cover
-        return ""
-
-
-def _extract_csv_text(data: bytes) -> str:
-    """Pipe-joined rows read fine as chunked text and still cite a row
-    range — no need for a separate tabular chunking strategy."""
-    try:
-        text = data.decode("utf-8", errors="ignore")
-    except Exception:  # pragma: no cover
-        return ""
-    rows = list(csv.reader(io.StringIO(text)))
-    if not rows:
-        return ""
-    # Cap so one huge export doesn't blow the inline processing budget.
-    return "\n".join(" | ".join(cell.strip() for cell in row) for row in rows[:2000])
-
-
-async def _extract_image_text(data: bytes, mime_type: str) -> str:
-    if not settings.llm_configured:
-        return ""
-    b64 = base64.b64encode(data).decode()
-    prompt = (
-        "Extract any visible text verbatim, then describe diagrams, charts, "
-        "or photos in enough detail to be useful as study material. Plain "
-        "text only, no markdown."
-    )
-    try:
-        parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {
-                    "role": "system",
-                    "content": "You transcribe and describe images for a study document index.",
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime_type};base64,{b64}"},
-                        },
-                    ],
-                },
-            ],
-            model=settings.groq_model_vision,
-            temperature=0.2,
-        ):
-            parts.append(delta)
-        return "".join(parts).strip()
-    except Exception:
-        log.warning("image extraction failed", exc_info=True)
-        return ""
-
-
 def _to_doc(row: dict) -> DocumentOut:
     return DocumentOut(
         id=row["id"],
@@ -367,5 +230,6 @@ def _to_doc(row: dict) -> DocumentOut:
         error=row.get("error"),
         created_at=row["created_at"],
         ready_at=row.get("ready_at"),
+        progress=ingest.progress(row["id"]),
     )
 

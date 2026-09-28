@@ -7,8 +7,10 @@ the deterministic fallback, the fact-checking of quantities against
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
+import time
 
 from fastapi import APIRouter, Depends
 
@@ -110,6 +112,18 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         "<what to do next, naming the topic from the Facts above, and why>"
     )
 
+    # The prompt IS the brief's complete input: every fact, the student block,
+    # the instructions. Identical prompt → an equivalent answer, so its hash is
+    # an exact cache key — no staleness to reason about. The moment the student
+    # does anything (a quiz, a review, a day passing), the facts change, the
+    # hash changes, and the next render regenerates. Until then, Home loads
+    # without a model round trip at all, and no Groq quota is spent re-writing
+    # the same sentence.
+    fingerprint = hashlib.sha256(prompt.encode()).hexdigest()
+    if (cached := _brief_cache_get(user.id, fingerprint)) is not None:
+        headline, body = cached
+        return BriefOut(headline=headline, body=body, generated=True, suggestion=suggestion)
+
     try:
         parts: list[str] = []
         async for delta in get_llm().stream_chat(
@@ -149,7 +163,41 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         log.info("brief mentioned a quantity; using fallback")
         return _fallback_brief(facts, suggestion)
 
+    # Only a brief that passed every check is cached. A fallback caused by a
+    # transient failure must NOT stick — the next render should try again.
+    _brief_cache_put(user.id, fingerprint, headline, body)
     return BriefOut(headline=headline, body=body, generated=True, suggestion=suggestion)
+
+
+# ── Brief cache ────────────────────────────────────────────────────────
+#
+# In-process, not a database table: one worker, and a lost cache on restart
+# costs exactly one regeneration per student — cheaper than a round trip to
+# persist it. The TTL is a safety net, not the freshness mechanism (the
+# fingerprint is): it bounds how long a wording lives even if nothing changes.
+
+_BRIEF_TTL_S = 12 * 3600
+_BRIEF_CACHE_MAX = 2048
+_brief_cache: dict[str, tuple[str, float, str, str]] = {}
+
+
+def _brief_cache_get(user_id: str, fingerprint: str) -> tuple[str, str] | None:
+    entry = _brief_cache.get(user_id)
+    if entry is None:
+        return None
+    fp, stored_at, headline, body = entry
+    if fp != fingerprint or time.monotonic() - stored_at > _BRIEF_TTL_S:
+        return None
+    return headline, body
+
+
+def _brief_cache_put(user_id: str, fingerprint: str, headline: str, body: str) -> None:
+    if len(_brief_cache) >= _BRIEF_CACHE_MAX and user_id not in _brief_cache:
+        # Evict the oldest entry. Insertion order is preserved by dict, and a
+        # re-put moves the key to the end below, so the first key is the LRU.
+        _brief_cache.pop(next(iter(_brief_cache)))
+    _brief_cache.pop(user_id, None)
+    _brief_cache[user_id] = (fingerprint, time.monotonic(), headline, body)
 
 
 _NUMBER_WORDS = frozenset(

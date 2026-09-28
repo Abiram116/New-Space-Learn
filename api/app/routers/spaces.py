@@ -31,7 +31,9 @@ async def list_spaces(user: CurrentUser = Depends(get_current_user)) -> list[Spa
     would come from asking for FEWER queries" — so this asks once, and the
     counting happens where the rows already are.
     """
-    rows = await supabase.db_rpc("spaces_with_counts", {"p_user_id": user.id})
+    rows = await supabase.db_rpc(
+        "spaces_with_counts", {"p_user_id": user.id}, read_only=True
+    )
     return [SpaceOut.model_validate(row) for row in (rows or [])]
 
 

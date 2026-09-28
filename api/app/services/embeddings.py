@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -157,13 +158,27 @@ class LocalBgeEmbeddingProvider:
 
     def __init__(self) -> None:
         self._model = None  # type: ignore[var-annotated]
+        # Startup warm-up and a resumed ingestion job can both reach this
+        # first. Unguarded, both load the model: ~200MB twice on a 512MB box.
+        self._load_lock = threading.Lock()
 
     def _get_model(self):
-        if self._model is None:
+        if self._model is not None:
+            return self._model
+        with self._load_lock:
+            if self._model is not None:
+                return self._model
             from fastembed import TextEmbedding  # deferred: heavy import
 
             log.info("loading local embedding model %s (first use this process)", settings.embedding_model)
-            self._model = TextEmbedding(model_name=settings.embedding_model)
+            # `threads` and `cache_dir` are both production-critical on
+            # Render — see their notes in config.py. Unset locally, where
+            # cores are real and the default cache is fine.
+            self._model = TextEmbedding(
+                model_name=settings.embedding_model,
+                cache_dir=settings.embedding_cache_dir,
+                threads=settings.embedding_threads,
+            )
         return self._model
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
@@ -174,7 +189,15 @@ class LocalBgeEmbeddingProvider:
     def _embed_sync(self, texts: list[str]) -> list[list[float]]:
         try:
             model = self._get_model()
-            vectors = [v.tolist() for v in model.embed(texts)]
+            # One sequence per forward pass. fastembed's default batches pad
+            # every text to the longest, so attention memory grows with
+            # batch x len^2: a batch of 52 real chunks peaked at 827MB — an
+            # OOM kill on a 512MB instance. Measured on the same 52 chunks:
+            # batch 52 = 20.3s/827MB, 8 = 13.1s/371MB, 1 = 9.0s/287MB.
+            # Unbatched is not the memory-safe compromise; it is also fastest,
+            # because no compute is spent on padding.
+            batch = settings.embedding_infer_batch_size
+            vectors = [v.tolist() for v in model.embed(texts, batch_size=batch)]
         except Exception as e:
             # Model load or inference failed (corrupt cache, blocked network
             # on a first-ever download, OOM). Surface it — a silent fallback
@@ -226,31 +249,25 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     return out
 
 
+def is_warm() -> bool:
+    """True once the real model is loaded and an upload won't pay for it."""
+    provider = _provider
+    return isinstance(provider, LocalBgeEmbeddingProvider) and provider._model is not None  # noqa: SLF001
+
+
 async def warm_provider() -> None:
-    """Load the embedding model before the first upload needs it.
+    """Load the embedding model at startup, before anything needs it.
 
-    Why this exists: `documents.py` caps inline processing at
-    `PROCESSING_BUDGET_S` (25s) via `asyncio.wait_for`. On the first embed call
-    in a fresh process, `LocalBgeEmbeddingProvider._get_model()` pays ~15s of
-    `fastembed` import plus ~9s of model download on a cold cache (measured in
-    docs/decisions.md) *inside* that budget, before a single vector exists. It blows the
-    cap, `documents.py` catches `TimeoutError`, and the row is left at
-    `status: "processing"` — the "stuck at embedding chunks" symptom.
-
-    It's confusing to diagnose because `asyncio.wait_for` cannot cancel an OS
-    thread: the load finishes in the background anyway and populates
-    `self._model`, so a retry succeeds instantly and the failure looks
-    intermittent. On Render the container spins down and takes the disk cache
-    with it, so production pays the full cost on every cold start and fails far
-    more consistently than local does.
-
-    Raising the budget would only move where it hurts — the student would wait
-    40s on an upload instead of failing at 25. Loading here means the cost is
-    paid once, off the request path, while nobody is waiting.
+    The first embed in a fresh process otherwise pays the model load (~15s of
+    `fastembed` import on a cold cache, more on 0.1 vCPU) — on a student's
+    first chat query, or at the head of the first ingestion job. Loading here
+    pays it once, off the request path, while nobody is waiting. The model
+    files themselves are baked into the build (`scripts/prefetch_model.py`),
+    so this never downloads in production.
 
     Deliberately best-effort: this must never stop the API from starting. If
-    the model can't load, uploads fail loudly at `_embed_sync` with a real
-    cause, which is the behaviour that already exists.
+    the model can't load, embedding fails loudly at `_embed_sync` with a real
+    cause.
     """
 
     if settings.use_stub_embeddings:
@@ -275,7 +292,7 @@ async def close_client() -> None:
     keeping it a stable no-op rather than deleting it."""
 
 
-def extract_pdf_text(data: bytes) -> str:
+def extract_pdf_text(data: bytes, *, max_pages: int | None = None) -> str:
     """Pull text out of a PDF's pages, keeping page numbers in the stream."""
 
     try:
@@ -287,6 +304,8 @@ def extract_pdf_text(data: bytes) -> str:
     reader = PdfReader(BytesIO(data))
     parts: list[str] = []
     for page_num, page in enumerate(reader.pages, start=1):
+        if max_pages is not None and page_num > max_pages:
+            break
         try:
             txt = page.extract_text() or ""
         except Exception:

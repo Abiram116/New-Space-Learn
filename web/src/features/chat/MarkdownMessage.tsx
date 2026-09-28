@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
 import type { Citation } from '../../api/types'
 import { cn } from '../../lib/cn'
 
@@ -33,17 +32,55 @@ export function MarkdownMessage({
   const withCiteLinks = content.replace(/\[\[(\d+)\]\]/g, '[$1](#cite-$1)')
   const byMarker = useMemo(() => new Map(citations.map((c) => [String(c.marker), c])), [citations])
   const components = useMemo(() => buildComponents(byMarker, base), [byMarker, base])
+  const rehypePlugins = useHighlighter(HAS_CODE_FENCE.test(content))
   return (
     <div className="chat-md">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
+        rehypePlugins={rehypePlugins}
         components={components}
       >
         {withCiteLinks}
       </ReactMarkdown>
     </div>
   )
+}
+
+/**
+ * Syntax highlighting, fetched only once a reply actually contains a code
+ * block. `rehype-highlight` drags in lowlight + highlight.js's common
+ * grammars (~377K of source) — the heaviest thing in chat — yet most study
+ * answers are prose. Same pattern as `mathPreview.ts`'s katex: until it
+ * lands the block renders plain (still monospace, still copyable), then
+ * re-renders highlighted. One module-level promise, shared by every message.
+ */
+type PluggableList = NonNullable<Options['rehypePlugins']>
+
+const HAS_CODE_FENCE = /^\s*(```|~~~)/m
+const NO_PLUGINS: PluggableList = []
+let highlightPlugins: PluggableList | null = null
+let highlightLoading: Promise<PluggableList> | null = null
+
+function loadHighlighter(): Promise<PluggableList> {
+  highlightLoading ??= import('rehype-highlight').then((m) => {
+    highlightPlugins = [[m.default, { detect: true, ignoreMissing: true }]]
+    return highlightPlugins
+  })
+  return highlightLoading
+}
+
+function useHighlighter(needed: boolean): PluggableList {
+  const [plugins, setPlugins] = useState(highlightPlugins)
+  useEffect(() => {
+    if (!needed || plugins) return
+    let live = true
+    // A failed chunk load leaves code unhighlighted — never breaks the reply.
+    loadHighlighter().then((p) => live && setPlugins(p), () => {})
+    return () => {
+      live = false
+    }
+  }, [needed, plugins])
+  return (needed && plugins) || NO_PLUGINS
 }
 
 function buildComponents(byMarker: Map<string, Citation>, base?: string): Components {
