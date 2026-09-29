@@ -105,17 +105,19 @@ async def send_chat(
     )
 
     history_limit = _history_limit(active_skills)
-    prior, retrieved = await asyncio.gather(
-        recent_history(user.id, subspace_id, limit=history_limit),
-        rag.retrieve_with_links(subspace_id, body.text, linked_ids),
-    )
-
     # `render_chat`, not `render` — the snapshot is already in hand above,
     # and chat (unlike quiz/cards/notes/brief) also runs the style bandit:
     # see `personalization.render_chat` / `style_bandit` for why chat is the
-    # one task with a Thompson-sampled experiment layer.
-    student_context, prefs_applied, style_applied = await personalization.render_chat(
-        snap, subspace_id, user.id
+    # one task with a Thompson-sampled experiment layer. It depends on
+    # nothing `recent_history`/`retrieve_with_links` produce (and they don't
+    # depend on it either), so it runs alongside them rather than after —
+    # style_bandit's own reads are cached per user, but on a cold cache this
+    # is the difference between adding a full extra round trip to the
+    # request and adding none.
+    prior, retrieved, (student_context, prefs_applied, style_applied) = await asyncio.gather(
+        recent_history(user.id, subspace_id, limit=history_limit),
+        rag.retrieve_with_links(subspace_id, body.text, linked_ids),
+        personalization.render_chat(snap, subspace_id, user.id),
     )
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],

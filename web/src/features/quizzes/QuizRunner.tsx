@@ -175,7 +175,18 @@ export function QuizRunner({
           scroll container, not two, and the verdict now sits directly under
           the choices regardless of how much either one holds. */}
       <Leaf className={cn('pr-4', compact ? 'py-1' : 'py-2 pr-6')}>
-        {q.subtopic && <span className="setcode">{q.subtopic}</span>}
+        {/* Difficulty rides on the same small-caps line as the subtopic
+            tag rather than a badge of its own — one more visual element here
+            would compete with the choices below it for a line of real
+            estate this dense. Absent on quizzes generated before the field
+            existed. */}
+        {(q.subtopic || q.difficulty) && (
+          <span className="setcode">
+            {q.subtopic}
+            {q.subtopic && q.difficulty && ' · '}
+            {q.difficulty}
+          </span>
+        )}
         <div
           className={cn(
             'mt-1 font-medium leading-relaxed text-ink',

@@ -110,6 +110,17 @@ export type QuizQuestion = {
   /** Why the right answer is right. Shown the moment the student commits,
    *  not at the end. Absent on quizzes generated before the field existed. */
   explanation?: string | null
+  /** How hard this question was written to be. Absent on quizzes generated
+   *  before the field existed. */
+  difficulty?: 'easy' | 'medium' | 'hard' | null
+  /** "recall" (a fact/definition) vs "apply" (use it on something new). */
+  kind?: 'recall' | 'apply' | null
+  /** One entry per `choices`, same order: a short phrase naming the
+   *  misconception behind that WRONG choice, null for the correct one and
+   *  for every choice on quizzes generated before the field existed. */
+  misconceptions?: (string | null)[] | null
+  /** 0-2 short concept names this question depends on. */
+  prerequisites?: string[] | null
 }
 
 export type Quiz = {

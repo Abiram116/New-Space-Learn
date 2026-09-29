@@ -13,10 +13,11 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
 from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
-from ..services import activity, personalization, rag, supabase
+from ..services import activity, personalization, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
+from ..services.student_model import difficulty_mix
 from ..services.voice import QUIZ_AGENT_VOICE
 
 log = logging.getLogger("space_learn.quiz")
@@ -120,11 +121,23 @@ async def generate_quiz(
     # model share no inputs, so running them in sequence spent three round
     # trips to a remote Postgres before the (much slower) model call even
     # started — pure latency the student waits through.
-    retrieved, history, student_context = await asyncio.gather(
+    #
+    # `student_model.snapshot` rather than `personalization.build`: the
+    # difficulty mix below needs this topic's raw mastery number, which
+    # `build`'s rendered text doesn't expose — and reading the snapshot
+    # directly here costs no extra round trip (`build` would have done the
+    # exact same one-RPC read internally, just for a return value this
+    # function couldn't reuse).
+    retrieved, history, snap = await asyncio.gather(
         rag.retrieve_with_links(subspace_id, body.topic or "core concepts", linked_ids, k=6),
         recent_history(user.id, subspace_id),
-        personalization.build(user.id, "quiz", subspace_id=subspace_id),
+        student_model.snapshot(user.id),
     )
+    student_context = personalization.render(snap, "quiz", subspace_id=subspace_id)
+    topic_mastery = next(
+        (t.mastery for t in snap.topics if t.subspace_id == subspace_id), None
+    )
+    mix = difficulty_mix(topic_mastery, body.count)
     # A conversation IS the student's material. This used to require indexed
     # documents specifically, which blocked the most natural case in the
     # product: talk through a topic in chat, then ask to be tested on it.
@@ -150,15 +163,30 @@ async def generate_quiz(
         f"Recent conversation in this space:\n{recent}\n\n"
         "Return a JSON array; each item has fields: "
         '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, '
-        '"source": str, "subtopic": str, "explanation": str}. subtopic is the '
-        "specific concept this question tests, narrower than the overall topic "
-        "(e.g. 'Policy Iteration', not 'Reinforcement Learning'). "
+        '"source": str, "subtopic": str, "explanation": str, "difficulty": str, '
+        '"kind": str, "misconceptions": [str|null, ...], "prerequisites": [str, ...]}. '
+        "subtopic is the specific concept this question tests, narrower than "
+        "the overall topic (e.g. 'Policy Iteration', not 'Reinforcement "
+        "Learning'). "
         # Shown the instant the student answers, so it has to teach rather than
         # justify — naming why the tempting wrong choice is tempting is what
         # turns a wrong answer into the most useful moment in the quiz.
         "explanation is 1-2 sentences saying WHY the correct answer is correct "
         "and, where there is an obvious trap, why the most tempting wrong "
         "choice is wrong. Write it to the student, in second person. "
+        f'difficulty is "easy", "medium" or "hard". Write {mix["easy"]} easy, '
+        f'{mix["medium"]} medium and {mix["hard"]} hard questions — this mix '
+        "targets roughly a 75% success rate for this student on this topic "
+        "right now, so match it rather than making every question the same "
+        'difficulty. kind is "recall" (asks for a fact or definition) or '
+        '"apply" (asks the student to use it, e.g. on a new example). '
+        "misconceptions is one entry per choice, same order as choices: for "
+        "each WRONG choice, a short phrase (5 words or fewer) naming the "
+        "specific misconception it represents, e.g. 'confuses Q-learning with "
+        "SARSA' — null for the correct choice. prerequisites is 0-2 short "
+        "concept names (2-4 words each) this question depends on — a concept "
+        "a student would need to already know to answer it, e.g. "
+        "'Bellman equation' for a question on policy iteration. "
         "Before the array, on its own line, write a title for this quiz: "
         "'TITLE: ' followed by 3-6 words naming what it actually covers "
         "(e.g. 'TITLE: Policy Iteration Basics'), not a generic label like "

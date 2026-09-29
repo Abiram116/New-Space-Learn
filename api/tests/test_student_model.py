@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 
 from app.services import student_model as sm
-from app.services.student_model import TopicView
+from app.services.student_model import ConceptView, TopicView
 
 from .conftest import OWNER
 
@@ -464,3 +464,301 @@ async def test_the_fallback_returns_the_shape_the_rpc_promises(db) -> None:
     for key in sm._SNAPSHOT_KEYS:
         if key != "settings":
             assert isinstance(rows[key], list), f"{key} should be a list"
+
+
+# ── Difficulty mix (task 2) ──────────────────────────────────────────────
+
+
+def test_difficulty_mix_sums_to_the_requested_count():
+    """Largest-remainder rounding must never drop or invent a question —
+    whatever fractional split the mastery band implies, the three bands
+    still have to add up to exactly what was asked for."""
+    for mastery in (None, 0, 10, 49, 50, 62, 75, 76, 99, 100):
+        for count in (1, 3, 5, 7, 12, 20):
+            mix = sm.difficulty_mix(mastery, count)
+            assert sum(mix.values()) == count
+            assert set(mix) == {"easy", "medium", "hard"}
+
+
+def test_low_mastery_skews_easy():
+    mix = sm.difficulty_mix(20, 10)
+    assert mix["easy"] > mix["medium"] > mix["hard"]
+
+
+def test_mid_mastery_skews_medium():
+    mix = sm.difficulty_mix(60, 10)
+    assert mix["medium"] > mix["easy"]
+    assert mix["medium"] > mix["hard"]
+
+
+def test_high_mastery_skews_hard():
+    mix = sm.difficulty_mix(90, 10)
+    assert mix["hard"] > mix["medium"] > mix["easy"]
+
+
+def test_unmeasured_mastery_is_not_treated_as_confident_either_way():
+    """No evidence yet should read like the middle band, not like `mastery=0`
+    (all easy) or `mastery=100` (all hard) — a topic nobody has touched is
+    unknown, not failing or aced."""
+    assert sm.difficulty_mix(None, 10) == sm.difficulty_mix(62, 10)
+
+
+# ── Misconceptions (task 3) ──────────────────────────────────────────────
+
+
+def test_misconception_kept_once_it_recurs_even_if_each_hit_is_stale():
+    """Seen twice clears the bar on its own, regardless of how decayed each
+    individual occurrence is — a repeat is a repeat."""
+    old = [(0.0, "2020-01-01T00:00:00Z"), (0.0, "2020-01-02T00:00:00Z")]
+    out = sm._top_misconceptions({"mixes up A and B": [t for _, t in old]}, date.today())
+    assert out and out[0].seen == 2
+
+
+def test_a_single_fresh_occurrence_is_not_yet_a_pattern():
+    """One fresh hit has weight ~1.0 — below `MISCONCEPTION_MIN_WEIGHT`
+    (1.5) and below `MIN_SEEN` (2). Neither threshold is cleared by a single
+    occurrence no matter how fresh, which is the point: one wrong guess
+    isn't a recurring mix-up yet."""
+    out = sm._top_misconceptions(
+        {"mixes up A and B": [datetime.now(UTC).isoformat()]}, date.today()
+    )
+    assert out == []
+
+
+def test_misconception_below_both_thresholds_is_dropped():
+    out = sm._top_misconceptions(
+        {"a rare slip": [(datetime.now(UTC) - timedelta(days=90)).isoformat()]}, date.today()
+    )
+    assert out == []
+
+
+def test_misconceptions_are_ranked_by_weight_and_capped():
+    events = {
+        f"mix-up {i}": [datetime.now(UTC).isoformat()] * (i + 2) for i in range(5)
+    }
+    out = sm._top_misconceptions(events, date.today(), limit=3)
+    assert len(out) == 3
+    assert [m.seen for m in out] == sorted((m.seen for m in out), reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_topic_misconceptions_come_from_the_wrong_choice_actually_picked(db):
+    """The misconception surfaced must be the one behind the CHOICE THE
+    STUDENT PICKED, not just any tag on the question — picking the right
+    answer, or a different wrong answer, must not attribute someone else's
+    mix-up to this student."""
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    question = {
+        "q": "What updates first in Q-learning?", "choices": ["a", "b", "c", "d"],
+        "answer_index": 0, "subtopic": "Q-learning",
+        "misconceptions": [None, "confuses Q-learning with SARSA", "off-policy mixup", None],
+    }
+    db.seed("quizzes", [{"id": "q1", "user_id": OWNER, "subspace_id": "t1", "questions": [question]}])
+    db.seed("quiz_results", [
+        {"user_id": OWNER, "score": 0, "submitted_at": _days_ago(i), "quiz_id": "q1", "answers": [1]}
+        for i in range(1, 4)
+    ])
+    snap = await sm.snapshot(OWNER)
+    assert snap.topics[0].misconceptions
+    assert snap.topics[0].misconceptions[0].text == "confuses Q-learning with SARSA"
+    assert snap.top_misconceptions[0].text == "confuses Q-learning with SARSA"
+
+
+@pytest.mark.asyncio
+async def test_a_correct_answer_never_produces_a_misconception(db):
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    question = {
+        "q": "Q", "choices": ["a", "b"], "answer_index": 0, "subtopic": "Q-learning",
+        "misconceptions": [None, "some mix-up"],
+    }
+    db.seed("quizzes", [{"id": "q1", "user_id": OWNER, "subspace_id": "t1", "questions": [question]}])
+    db.seed("quiz_results", [
+        {"user_id": OWNER, "score": 100, "submitted_at": _days_ago(1), "quiz_id": "q1", "answers": [0]}
+    ])
+    snap = await sm.snapshot(OWNER)
+    assert snap.topics[0].misconceptions == ()
+    assert snap.top_misconceptions == ()
+
+
+# ── Prerequisite root causes (task 4) ────────────────────────────────────
+
+
+def _concept(**kwargs) -> ConceptView:
+    base = dict(
+        concept="x", label="X", asked=5, correct=1, accuracy=20, mastery=30,
+        evidence_n=5.0, trend=None, days_since_seen=1, subspace_ids=("t1",),
+    )
+    base.update(kwargs)
+    return ConceptView(**base)
+
+
+def test_root_cause_needs_no_edges_to_stay_empty():
+    weak = _concept(concept="a", label="A", mastery=30, evidence_n=5.0)
+    snap = sm.Snapshot(settings={}, topics=[], concepts=[weak], activity_days=[], streak_days=0)
+    assert snap.root_causes == []
+
+
+def test_a_weak_prerequisite_is_a_root_cause_from_one_dependant():
+    weak = _concept(concept="attention", label="Attention", mastery=30, evidence_n=5.0)
+    weak_prereq = _concept(
+        concept="matrix multiplication", label="Matrix multiplication",
+        mastery=25, evidence_n=5.0, subspace_ids=("t1",),
+    )
+    snap = sm.Snapshot(
+        settings={}, topics=[], concepts=[weak, weak_prereq], activity_days=[], streak_days=0,
+        prereq_edges={"attention": ("matrix multiplication",)},
+        concept_labels={"matrix multiplication": "Matrix multiplication"},
+    )
+    causes = snap.root_causes
+    assert len(causes) == 1
+    assert causes[0].concept == "Matrix multiplication"
+    assert causes[0].because_of == ("Attention",)
+
+
+def test_an_unmeasured_prerequisite_needs_two_weak_dependants():
+    a = _concept(concept="a", label="A", mastery=30, evidence_n=5.0)
+    b = _concept(concept="b", label="B", mastery=35, evidence_n=5.0)
+    edges = {"a": ("shared prereq",), "b": ("shared prereq",)}
+    labels = {"shared prereq": "Shared prereq"}
+
+    one_dependant = sm.Snapshot(
+        settings={}, topics=[], concepts=[a], activity_days=[], streak_days=0,
+        prereq_edges={"a": ("shared prereq",)}, concept_labels=labels,
+    )
+    assert one_dependant.root_causes == []
+
+    two_dependants = sm.Snapshot(
+        settings={}, topics=[], concepts=[a, b], activity_days=[], streak_days=0,
+        prereq_edges=edges, concept_labels=labels,
+    )
+    assert len(two_dependants.root_causes) == 1
+    assert set(two_dependants.root_causes[0].because_of) == {"A", "B"}
+
+
+def test_a_strong_prerequisite_is_never_reported_as_a_cause():
+    weak = _concept(concept="a", label="A", mastery=30, evidence_n=5.0)
+    strong_prereq = _concept(
+        concept="strong prereq", label="Strong prereq", mastery=95, evidence_n=5.0,
+    )
+    snap = sm.Snapshot(
+        settings={}, topics=[], concepts=[weak, strong_prereq], activity_days=[], streak_days=0,
+        prereq_edges={"a": ("strong prereq",)}, concept_labels={"strong prereq": "Strong prereq"},
+    )
+    assert snap.root_causes == []
+
+
+@pytest.mark.asyncio
+async def test_prereq_edges_are_built_from_quiz_questions(db):
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    question = {
+        "q": "Q", "choices": ["a", "b"], "answer_index": 0, "subtopic": "Policy iteration",
+        "prerequisites": ["Bellman equation"],
+    }
+    db.seed("quizzes", [{"id": "q1", "user_id": OWNER, "subspace_id": "t1", "questions": [question]}])
+    snap = await sm.snapshot(OWNER)
+    assert snap.prereq_edges.get("policy iteration") == ("bellman equation",)
+    assert snap.concept_labels.get("bellman equation") == "Bellman equation"
+
+
+# ── Slipping (task 5) ─────────────────────────────────────────────────────
+
+
+def test_topic_needs_old_strong_evidence_to_slip():
+    """No evidence older than the cutoff at all — nothing to call
+    'previously strong', so it can't be slipping."""
+    fresh_only = [(1.0, _days_ago(1))]
+    assert not sm._is_slipping(fresh_only, date.today(), mastery_now=90, days_since_last=1)
+
+
+def test_topic_slips_when_it_regresses_from_a_strong_past():
+    old_strong = [(1.0, _days_ago(25))] * 10
+    # Strong in the past (mastery_old high), weak now.
+    assert sm._is_slipping(old_strong, date.today(), mastery_now=40, days_since_last=1)
+
+
+def test_topic_does_not_slip_if_still_strong_and_recently_seen():
+    old_strong = [(1.0, _days_ago(25))] * 10
+    assert not sm._is_slipping(old_strong, date.today(), mastery_now=85, days_since_last=1)
+
+
+def test_topic_slips_from_staleness_even_without_a_measured_regression():
+    old_strong = [(1.0, _days_ago(35))] * 10
+    # Nothing since, so mastery_now == the old (still-strong) number — the
+    # regression branch alone would miss this; staleness must catch it.
+    assert sm._is_slipping(old_strong, date.today(), mastery_now=85, days_since_last=35)
+
+
+def test_topic_does_not_slip_from_recency_alone_without_ever_being_strong():
+    old_weak = [(0.0, _days_ago(25))] * 10
+    assert not sm._is_slipping(old_weak, date.today(), mastery_now=20, days_since_last=35)
+
+
+def test_slipping_lists_topics_before_concepts():
+    slipping_topic = _topic(subspace_id="t1", mastery=40, evidence_n=5.0, is_slipping=True)
+    slipping_concept = _concept(concept="c", label="C", is_slipping=True)
+    snap = sm.Snapshot(
+        settings={}, topics=[slipping_topic], concepts=[slipping_concept],
+        activity_days=[], streak_days=0,
+    )
+    assert [item.kind for item in snap.slipping] == ["topic", "concept"]
+
+
+# ── Recall vs application (task 6) ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_recall_and_application_split_needs_two_of_each(db):
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    recall_q = {"q": "define X", "choices": ["a", "b"], "answer_index": 0, "kind": "recall"}
+    apply_q = {"q": "use X here", "choices": ["a", "b"], "answer_index": 0, "kind": "apply"}
+    db.seed("quizzes", [
+        {"id": "q1", "user_id": OWNER, "subspace_id": "t1", "questions": [recall_q]},
+        {"id": "q2", "user_id": OWNER, "subspace_id": "t1", "questions": [apply_q]},
+    ])
+    # Only one attempt each — below RECALL_SPLIT_MIN_N (2), so both must
+    # read None rather than a coin-flip number.
+    db.seed("quiz_results", [
+        {"user_id": OWNER, "score": 100, "submitted_at": _days_ago(1), "quiz_id": "q1", "answers": [0]},
+        {"user_id": OWNER, "score": 100, "submitted_at": _days_ago(1), "quiz_id": "q2", "answers": [0]},
+    ])
+    snap = await sm.snapshot(OWNER)
+    assert snap.topics[0].recall_mastery is None
+    assert snap.topics[0].application_mastery is None
+
+
+@pytest.mark.asyncio
+async def test_card_reviews_count_toward_recall_not_application(db):
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj", "user_id": OWNER, "name": "ML"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    db.seed("card_reviews", [
+        {"user_id": OWNER, "subspace_id": "t1", "grade": 4, "reviewed_at": _days_ago(i)}
+        for i in range(1, 4)
+    ])
+    snap = await sm.snapshot(OWNER)
+    assert snap.topics[0].recall_mastery is not None
+    assert snap.topics[0].recall_mastery > 50
+    assert snap.topics[0].application_mastery is None

@@ -21,7 +21,7 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ValidationFailed
 from ..guards import assert_subspace
 from ..schemas import FeedbackIn, PreferenceOut
-from ..services import preferences, student_model, supabase
+from ..services import preferences, student_model, style_bandit, supabase
 
 log = logging.getLogger("space_learn.feedback")
 router = APIRouter()
@@ -69,6 +69,12 @@ async def record_feedback(
         # working, not a failure the student should see — the UI has already
         # shown their tap as recorded, and it is.
         log.info("duplicate or rejected feedback ignored", exc_info=True)
+    else:
+        # New evidence for `style_bandit`'s posteriors — drop its cached read
+        # so the very next chat turn folds this tap in, rather than serving a
+        # stale posterior for up to the cache's TTL. A no-op if nothing of
+        # this user's is cached yet.
+        style_bandit.invalidate(user.id)
     return {"ok": True}
 
 
@@ -113,4 +119,5 @@ async def reset_feedback(
     remove.
     """
     await supabase.db_delete("response_feedback", filters={"user_id": f"eq.{user.id}"})
+    style_bandit.invalidate(user.id)
     return {"ok": True}

@@ -66,13 +66,28 @@ async def render_chat(
       `render(snap, "chat", ...)`.
     - `applied_keys` — every actionable key (any source, not just style),
       for `meta.prefs_applied` exactly as before this existed.
-    - `style_values` — `{key: value}` for the three style dimensions
-      actually in force (real preference or sampled experiment). Small and
-      new: persisted as `meta.style`, it's the ledger `style_bandit` reads
-      back on a later call to score whether that value earned its keep.
+    - `style_values` — `{key: value}` for the three style dimensions plus
+      `teaching.strategy`, actually in force (real preference or sampled
+      experiment). Small and new: persisted as `meta.style`, it's the
+      ledger `style_bandit` reads back on a later call to score whether
+      that value earned its keep.
     """
     prefs = dict(preferences.resolve(snap))
-    prefs.update(await style_bandit.sample(user_id, prefs))
+    # `teaching.strategy`'s context is the SUBJECT, not the subspace — see
+    # `style_bandit`'s module docstring. `snap.topics` already carries
+    # `subspace_id -> subject_id` for every subspace this student has (it's
+    # part of the one read pass `build()` already did), so this is a free
+    # in-memory lookup, not a second query.
+    subject_by_subspace = {t.subspace_id: t.subject_id for t in snap.topics if t.subject_id}
+    subject_id = subject_by_subspace.get(subspace_id) if subspace_id else None
+    prefs.update(
+        await style_bandit.sample(
+            user_id,
+            prefs,
+            subject_id=subject_id,
+            subject_by_subspace=subject_by_subspace,
+        )
+    )
 
     lines = _chat(snap, prefs, subspace_id)
     block = (
@@ -83,7 +98,7 @@ async def render_chat(
     applied = sorted(k for k, p in prefs.items() if p.actionable)
     style_values = {
         key: prefs[key].value
-        for key in style_bandit.ARMS
+        for key in (*style_bandit.ARMS, style_bandit.STRATEGY_KEY)
         if key in prefs and prefs[key].actionable
     }
     return block, applied, style_values
@@ -112,6 +127,13 @@ def _chat(snap: Snapshot, prefs: dict[str, Preference], subspace_id: str | None)
                 f"'{concept.label}' is getting worse, not better (down "
                 f"{abs(concept.trend or 0)} points)."
             )
+    # --- Isolated addition, student-model/quiz pass (task 3) ---------------
+    # A minimal line surfacing recurring misconceptions (student_model.py's
+    # `MisconceptionView`). Deliberately its own block, not folded into
+    # `_style` — this belongs to a different owner's pass and stays easy to
+    # spot and revert on its own.
+    for m in _local_misconceptions(snap, subspace_id)[:1]:
+        lines.append(f"Keeps mixing this up: {m.text}. Address it directly if it comes up.")
     return lines
 
 
@@ -133,6 +155,15 @@ def _quiz(snap: Snapshot, prefs: dict[str, Preference], subspace_id: str | None)
         )
     if goal := prefs.get("study.goal"):
         lines.append(f"Studying for: {goal.value}")
+    # --- Isolated addition, student-model/quiz pass (task 3) ---------------
+    # Recurring misconceptions are worth testing against directly, on the
+    # theory that a quiz question aimed at a known mix-up is more useful than
+    # a generic one. Same isolation note as in `_chat` above.
+    miscs = _local_misconceptions(snap, subspace_id)[:2]
+    if miscs:
+        lines.append(
+            "Recurring mix-ups worth a question each: " + ", ".join(m.text for m in miscs)
+        )
     return lines
 
 
@@ -251,6 +282,18 @@ def for_skill(skill: dict, snap: Snapshot, *, subspace_id: str | None = None) ->
 
 # ── Shared fragments ───────────────────────────────────────────────────
 
+#: One instruction per `style_bandit.STRATEGY_ARMS` value — the whole
+#: "teaching strategy" arm rendered as a sentence a model can actually
+#: follow, rather than a label it has to interpret.
+_STRATEGY_INSTRUCTIONS: dict[str, str] = {
+    "example_first": "Open with a concrete example, then generalise to the underlying idea.",
+    "analogy_first": "Open with an analogy to something they already know, then map it onto this.",
+    "step_by_step": "Derive it step by step; one idea per step.",
+    "theory_first": "Start from the definition or principle, then illustrate it.",
+    "code_first": "Show working code first, then explain what it does and why.",
+    "socratic": "Ask a guiding question first and let them reason toward the answer before you give it.",
+}
+
 
 def _style(prefs: dict[str, Preference]) -> list[str]:
     """Explanation preferences, for the two tasks that produce prose.
@@ -284,6 +327,13 @@ def _style(prefs: dict[str, Preference]) -> list[str]:
             if opens.value == "example_first"
             else "Open with the definition or principle, then illustrate it."
         )
+    # `teaching.strategy` — currently only ever set by `style_bandit`'s
+    # experiment (see `render_chat`), never by `resolve()` itself. One clear
+    # instruction per arm; `_STRATEGY_INSTRUCTIONS`'s keys are
+    # `style_bandit.STRATEGY_ARMS` by construction (see
+    # `test_every_strategy_arm_has_a_rendered_instruction`).
+    if (strategy := prefs.get("teaching.strategy")) and strategy.actionable:
+        lines.append(_STRATEGY_INSTRUCTIONS[strategy.value])
     # Only the `direct` side produces an instruction: "hints first" is already
     # the default posture, so restating it would spend a line to change nothing.
     answer = prefs.get("interaction.answer_mode")
@@ -315,3 +365,19 @@ def _local_weak(snap: Snapshot, subspace_id: str | None):
         if local:
             return local
     return snap.weak_concepts
+
+
+# --- Isolated addition, student-model/quiz pass (task 3) -------------------
+def _local_misconceptions(snap: Snapshot, subspace_id: str | None):
+    """Recurring misconceptions (`student_model.MisconceptionView`), scoped
+    to the topic in play when it has any of its own — same fallback shape as
+    `_local_weak`. Reads only `snap.topics[i].misconceptions` /
+    `snap.top_misconceptions`, both computed in `student_model.snapshot()`;
+    nothing here touches `_style` or the style-bandit machinery above."""
+    if subspace_id:
+        local = next(
+            (t.misconceptions for t in snap.topics if t.subspace_id == subspace_id), ()
+        )
+        if local:
+            return local
+    return snap.top_misconceptions

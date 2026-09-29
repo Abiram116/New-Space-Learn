@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
@@ -259,6 +259,11 @@ class CardsGenerate(BaseModel):
     source_text: str | None = Field(default=None, max_length=8000)
 
 
+_VALID_DIFFICULTY = {"easy", "medium", "hard"}
+_VALID_KIND = {"recall", "apply"}
+_MISCONCEPTION_MAX_CHARS = 80
+
+
 # ── Quizzes ────────────────────────────────────────────────────────────
 class QuizQuestion(BaseModel):
     q: str
@@ -271,6 +276,72 @@ class QuizQuestion(BaseModel):
     # generated before this field existed has none, and a tolerant reader is
     # the documented alternative to a data migration.
     explanation: str | None = None
+    #: "easy" | "medium" | "hard" — how hard this question was written to be,
+    #: used to target the ~75%-expected-success mix (`student_model.difficulty_mix`).
+    #: None on every quiz generated before this field existed, or on anything
+    #: the model got wrong — normalized away below rather than failing the
+    #: question over it.
+    difficulty: Literal["easy", "medium", "hard"] | None = None
+    #: "recall" (asks for a fact/definition) vs "apply" (asks the student to
+    #: use it) — feeds the recall/application mastery split in
+    #: `student_model.py`.
+    kind: Literal["recall", "apply"] | None = None
+    #: One entry per `choices`, same order: a short phrase naming the
+    #: misconception behind that WRONG choice, `null` for the correct one.
+    #: `None` (not a per-choice list of `None`s) whenever the model didn't
+    #: supply one, or supplied one that doesn't line up with `choices` —
+    #: normalized below rather than trusted as-is.
+    misconceptions: list[str | None] | None = None
+    #: 0-2 short concept names this question depends on, for the
+    #: concept→prerequisite graph `student_model.py` builds from these.
+    prerequisites: list[str] | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_optional_fields(cls, data: Any) -> Any:
+        """Defensive normalization for the fields an LLM fills in: a bad
+        value drops just that field rather than failing the whole question
+        (the caller, `quizzes._safe_parse_questions`, already drops a
+        question outright on a genuinely broken `q`/`choices`/`answer_index`
+        — this is for the softer, additive fields only)."""
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        if data.get("difficulty") not in _VALID_DIFFICULTY:
+            data.pop("difficulty", None)
+        if data.get("kind") not in _VALID_KIND:
+            data.pop("kind", None)
+
+        choices = data.get("choices")
+        n_choices = len(choices) if isinstance(choices, list) else None
+        misconceptions = data.get("misconceptions")
+        if (
+            n_choices is None
+            or not isinstance(misconceptions, list)
+            or len(misconceptions) != n_choices
+            or not all(m is None or isinstance(m, str) for m in misconceptions)
+        ):
+            data.pop("misconceptions", None)
+        else:
+            answer_index = data.get("answer_index")
+            data["misconceptions"] = [
+                None
+                if i == answer_index or not isinstance(m, str) or not m.strip()
+                else m.strip()[:_MISCONCEPTION_MAX_CHARS]
+                for i, m in enumerate(misconceptions)
+            ]
+
+        prereqs = data.get("prerequisites")
+        if isinstance(prereqs, list):
+            cleaned = [p.strip() for p in prereqs if isinstance(p, str) and p.strip()][:2]
+            if cleaned:
+                data["prerequisites"] = cleaned
+            else:
+                data.pop("prerequisites", None)
+        else:
+            data.pop("prerequisites", None)
+        return data
 
 
 class QuizOut(BaseModel):

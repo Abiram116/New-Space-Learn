@@ -143,6 +143,13 @@ export function QuizResults({
                   answer={q.choices[q.answer_index]}
                   explanation={q.explanation}
                   subtopic={q.subtopic}
+                  // The misconception behind the CHOSEN wrong option, not the
+                  // correct one — that's what the student actually needs
+                  // named. Absent on an unanswered question or a quiz from
+                  // before the field existed.
+                  misconception={
+                    answers[i] >= 0 ? q.misconceptions?.[answers[i]] : null
+                  }
                   compact={compact}
                 />
               ))}
@@ -178,6 +185,7 @@ function MissedQuestion({
   answer,
   explanation,
   subtopic,
+  misconception,
   compact,
 }: {
   number: number
@@ -186,6 +194,7 @@ function MissedQuestion({
   answer: string
   explanation?: string | null
   subtopic?: string | null
+  misconception?: string | null
   compact: boolean
 }) {
   return (
@@ -215,6 +224,14 @@ function MissedQuestion({
       </div>
       {explanation && (
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">{explanation}</p>
+      )}
+      {/* The specific confusion behind the wrong pick — one line, only when
+          this question was tagged for it (task 3/8: quizzes generated before
+          misconception tagging have nothing here). */}
+      {misconception && (
+        <p className="mt-1 text-[12px] font-medium text-coral-deep">
+          Common mix-up: {misconception}
+        </p>
       )}
       {subtopic && <span className="setcode mt-1.5 block">{subtopic}</span>}
     </div>

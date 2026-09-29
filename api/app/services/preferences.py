@@ -53,6 +53,14 @@ KEYS = frozenset(
         "interaction.answer_mode",   # direct | hints_first
         "session.length_minutes",    # numeric, as text
         "study.goal",                # free text: what they're studying for
+        # example_first | analogy_first | step_by_step | theory_first |
+        # code_first | socratic. Unlike every key above, `resolve()` never
+        # produces this one — it exists in `KEYS` only so the bandit's
+        # `source="experiment"` values for it are subject to the same closed
+        # whitelist as everything else this system may model, per this
+        # module's own "privacy is a closed set" argument. See
+        # `style_bandit.py`.
+        "teaching.strategy",
     }
 )
 

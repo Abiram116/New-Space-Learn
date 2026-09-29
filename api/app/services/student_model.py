@@ -31,7 +31,8 @@ import logging
 import statistics
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, NamedTuple
+from functools import cached_property
+from typing import Any, Literal, NamedTuple
 
 from ..schemas import StudentModelOut, TopicSignal
 from . import supabase
@@ -130,6 +131,48 @@ CARD_REVIEW_WINDOW = 500
 #: deliberately a subset of `preferences.FEEDBACK_KINDS`, not all of it.
 CONCEPT_FEEDBACK_OUTCOME: dict[str, float] = {"too_complex": 0.0, "too_simple": 1.0}
 
+# ── Misconceptions ───────────────────────────────────────────────────────
+#
+# A wrong answer to a tagged question (`QuizQuestion.misconceptions`, task 1
+# in quizzes.py) names what the student actually got confused about, not just
+# that they missed it. Tracked the same way as mastery — recency-weighted,
+# same 30-day half-life — so a mix-up from three months ago that hasn't
+# recurred stops being reported as current.
+
+#: A misconception counts once seen, or is kept once it recurs. Either
+#: threshold alone would either bury a single fresh, glaring mix-up or keep a
+#: single stale one alive forever — the OR is deliberate.
+MISCONCEPTION_MIN_WEIGHT = 1.5
+MISCONCEPTION_MIN_SEEN = 2
+
+# ── Recall vs application ────────────────────────────────────────────────
+#: Same floor as concept mastery's own thresholds — below this a recall- or
+#: application-only score is a coin flip, not a number worth splitting out.
+RECALL_SPLIT_MIN_N = 2.0
+
+# ── Slipping ──────────────────────────────────────────────────────────────
+#
+# `is_falling` (trend) catches a score that is moving down *right now*, over
+# its last few attempts. It says nothing about a topic that was aced weeks
+# ago and simply hasn't been touched since — decay alone will eventually pull
+# that mastery number down, but only once it has already drifted, which is
+# too late to be useful advice. `slipping` catches it earlier, by comparing
+# what the evidence said three weeks ago against what it says today.
+
+#: Evidence more recent than this doesn't count toward "was strong" — it has
+#: to have been true for a while, not just on the most recent attempt.
+SLIPPING_OLD_CUTOFF_DAYS = 21
+#: Last evidence older than this, with nothing since, is "gone quiet" even if
+#: today's decayed number hasn't crossed SLIPPING_NOW_BELOW yet.
+SLIPPING_STALE_DAYS = 30
+#: "Previously strong", read off evidence older than SLIPPING_OLD_CUTOFF_DAYS.
+SLIPPING_WAS_STRONG = 80
+#: Today's decayed mastery has to have actually dropped below this to call it
+#: slipping on the regression branch (as opposed to the staleness branch).
+SLIPPING_NOW_BELOW = 70
+#: Below this much old evidence, "was strong" is a guess, not a measurement.
+SLIPPING_MIN_OLD_N = 2.0
+
 
 class _QuestionEvent(NamedTuple):
     """One question the student was asked, and whether they got it right —
@@ -138,12 +181,22 @@ class _QuestionEvent(NamedTuple):
     `concept` is `None` for questions asked before `subtopic` tagging
     existed: they still count as topic-level evidence (the student did
     answer a real question), they just cannot be attributed to a concept.
+    `kind` and `misconception` are `None` on the same pre-tagging quizzes,
+    and on any question the model didn't tag — see `QuizQuestion`'s own
+    normalization in `schemas` for why a bad tag drops rather than breaks.
     """
 
     at: str
     correct: bool
     subspace_id: str
     concept: str | None
+    #: "recall" | "apply" | None — which half of the recall/application
+    #: split (task 6) this question counts toward.
+    kind: str | None
+    #: The misconception phrase behind the choice actually picked, when the
+    #: question tagged it and the answer was wrong. `None` on a correct
+    #: answer regardless of tagging.
+    misconception: str | None
 
 
 @dataclass(frozen=True)
@@ -184,6 +237,11 @@ class ConceptView:
     trend: int | None
     days_since_seen: int | None
     subspace_ids: tuple[str, ...]
+    #: True when this concept was solid three-plus weeks ago and has since
+    #: dropped or gone quiet — see the module's "Slipping" section. Computed
+    #: at fold time (needs the age-split evidence, not just the final
+    #: mastery/n this dataclass otherwise carries) rather than as a property.
+    is_slipping: bool = False
 
     @property
     def is_weak(self) -> bool:
@@ -205,6 +263,22 @@ class ConceptView:
         """The same concept tagged in more than one topic — the cheap half
         of cross-subject transfer."""
         return len(self.subspace_ids) > 1
+
+
+@dataclass(frozen=True)
+class MisconceptionView:
+    """One recurring mix-up, folded from `QuizQuestion.misconceptions` ×
+    the choice the student actually picked — task 3. Recency-weighted the
+    same way mastery is, so a mix-up from months ago that hasn't recurred
+    stops being reported as current."""
+
+    text: str
+    #: Recency-weighted occurrence count — not a raw count, same `sum(w)`
+    #: shape as `evidence_n` elsewhere in this module.
+    weight: float
+    #: Raw occurrence count, for the `seen >= 2` half of the keep-threshold.
+    seen: int
+    last_seen: str | None
 
 
 @dataclass(frozen=True)
@@ -237,6 +311,17 @@ class TopicView:
     #: Evidence weight behind `mastery`. Defaults to 0 evidence, which keeps
     #: `is_weak`/`is_strong` both false until real evidence exists.
     evidence_n: float = 0.0
+    #: Top 3 recurring misconceptions in this topic, worst (highest weight)
+    #: first — task 3.
+    misconceptions: tuple[MisconceptionView, ...] = ()
+    #: Mastery split by question `kind` — task 6. `None` until each side has
+    #: at least `RECALL_SPLIT_MIN_N` evidence; a coin-flip split is worse
+    #: than no split.
+    recall_mastery: int | None = None
+    application_mastery: int | None = None
+    #: Was strong three-plus weeks ago and has since dropped or gone quiet —
+    #: task 5. Set at fold time; see `ConceptView.is_slipping`.
+    is_slipping: bool = False
 
     @property
     def is_weak(self) -> bool:
@@ -274,6 +359,31 @@ class TopicView:
 
 
 @dataclass(frozen=True)
+class RootCause:
+    """A weak concept that keeps showing up as a prerequisite of OTHER weak
+    concepts — task 4. `concept`/`because_of` are display labels; `subspace_id`
+    is where `next_action` (brief.py) can route to work on it."""
+
+    concept: str
+    because_of: tuple[str, ...]
+    subspace_id: str | None
+
+
+@dataclass(frozen=True)
+class SlippingItem:
+    """One entry in `Snapshot.slipping` — task 5. `kind` distinguishes a
+    whole topic from a single concept so a consumer can route to the right
+    thing (a topic has one quiz to retake; a concept doesn't on its own).
+    `subspace_id` is enough for a caller to look up `subject_id` too, off
+    the same `topics` list this snapshot already carries — see
+    `brief.next_action`."""
+
+    kind: Literal["topic", "concept"]
+    label: str
+    subspace_id: str | None
+
+
+@dataclass(frozen=True)
 class Snapshot:
     """One read pass over everything the student has. Every derived signal in
     this module is a pure function of this."""
@@ -290,6 +400,20 @@ class Snapshot:
     #: in passing ("explain that more simply") — evidence that costs them
     #: nothing because they already gave it. See `preferences._resolve_implicit`.
     user_messages: list[str] = field(default_factory=list)
+    #: concept → its tagged prerequisite concepts (task 4), both normalized.
+    #: Built once in `snapshot()` from every `QuizQuestion.prerequisites`
+    #: ever written, not just recent ones — a dependency a student stated
+    #: months ago is still a real dependency.
+    prereq_edges: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    #: normalized concept → first-seen display casing, covering BOTH
+    #: `subtopic` tags and `prerequisites` names — a prerequisite that has
+    #: never itself been asked as a question still needs a human label.
+    concept_labels: dict[str, str] = field(default_factory=dict)
+    #: Top 3 misconceptions across every topic — task 3. Computed once in
+    #: `snapshot()` alongside `concepts`, not as a property: it needs the
+    #: flat per-occurrence event list, which isn't reconstructable from
+    #: `topics`/`concepts` afterward (each topic only keeps ITS OWN top 3).
+    top_misconceptions: tuple[MisconceptionView, ...] = ()
 
     # ── Concept views ─────────────────────────────────────────────────
 
@@ -324,6 +448,80 @@ class Snapshot:
             (c for c in self.concepts if subspace_id in c.subspace_ids),
             key=lambda c: c.accuracy,
         )
+
+    @cached_property
+    def root_causes(self) -> list[RootCause]:
+        """Weak concepts that keep showing up as a PREREQUISITE of other weak
+        concepts — task 4. A weak concept is worth revising; a weak
+        prerequisite of three other weak concepts is worth revising first.
+
+        `cached_property`, not `property`: `next_action` (brief.py) and
+        `personalization` can both read this off the same snapshot, and this
+        walks every weak concept's edges to compute it — cheap either way at
+        this scale, but there's no reason to redo it per reader.
+
+        A prerequisite counts once it is ITSELF weak (one weak dependant is
+        enough — a known weak spot underlying another is already actionable),
+        or, when it has never been measured as weak or strong on its own,
+        once at least two different weak concepts depend on it (one shared
+        guess isn't a pattern; two are).
+        """
+        weak_by_concept = {c.concept: c for c in self.concepts if c.is_weak}
+        if not weak_by_concept or not self.prereq_edges:
+            return []
+        by_prereq_tag: dict[str, ConceptView] = {c.concept: c for c in self.concepts}
+
+        # prereq tag → tags of the weak concepts that depend on it.
+        because_of_tags: dict[str, list[str]] = {}
+        for weak_tag, weak_view in weak_by_concept.items():
+            for prereq_tag in self.prereq_edges.get(weak_tag, ()):
+                because_of_tags.setdefault(prereq_tag, []).append(weak_view.concept)
+
+        out: list[RootCause] = []
+        for prereq_tag, dependants in because_of_tags.items():
+            prereq_view = by_prereq_tag.get(prereq_tag)
+            counts_as_cause = (prereq_view is not None and prereq_view.is_weak) or len(
+                dependants
+            ) >= 2
+            if not counts_as_cause:
+                continue
+            if prereq_view is not None and prereq_view.subspace_ids:
+                subspace_id = prereq_view.subspace_ids[0]
+            else:
+                # Never measured on its own — route to wherever the first
+                # weak concept it underlies actually lives.
+                dep_view = weak_by_concept.get(dependants[0])
+                subspace_id = (
+                    dep_view.subspace_ids[0] if dep_view and dep_view.subspace_ids else None
+                )
+            out.append(
+                RootCause(
+                    concept=self.concept_labels.get(prereq_tag, prereq_tag),
+                    because_of=tuple(
+                        weak_by_concept[tag].label for tag in dependants
+                    ),
+                    subspace_id=subspace_id,
+                )
+            )
+        return sorted(out, key=lambda r: -len(r.because_of))[:3]
+
+    @cached_property
+    def slipping(self) -> list[SlippingItem]:
+        """Topics and concepts that were strong three-plus weeks ago and have
+        since dropped or gone quiet — task 5. Topics first: a topic has one
+        quiz `next_action` can point straight at, which a bare concept
+        doesn't. `cached_property` for the same reason as `root_causes`."""
+        items = [
+            SlippingItem("topic", t.topic, t.subspace_id)
+            for t in self.topics
+            if t.is_slipping
+        ]
+        items += [
+            SlippingItem("concept", c.label, c.subspace_ids[0] if c.subspace_ids else None)
+            for c in self.concepts
+            if c.is_slipping
+        ]
+        return items[:3]
 
     # ── Derived views ─────────────────────────────────────────────────
 
@@ -730,11 +928,21 @@ async def snapshot(user_id: str) -> Snapshot:
     # keeps that function a pure "one result → events" step.
     topic_question_events: dict[str, list[_QuestionEvent]] = {}
     concept_events: dict[str, list[_QuestionEvent]] = {}
+    # Misconceptions: which wrong choice the student actually picked, per
+    # topic and overall — task 3. Same one pass over `question_events`.
+    topic_misconception_events: dict[str, dict[str, list[str]]] = {}
+    overall_misconception_events: dict[str, list[str]] = {}
     for ev in question_events:
         if ev.subspace_id:
             topic_question_events.setdefault(ev.subspace_id, []).append(ev)
         if ev.concept:
             concept_events.setdefault(ev.concept, []).append(ev)
+        if ev.misconception:
+            overall_misconception_events.setdefault(ev.misconception, []).append(ev.at)
+            if ev.subspace_id:
+                topic_misconception_events.setdefault(ev.subspace_id, {}).setdefault(
+                    ev.misconception, []
+                ).append(ev.at)
 
     # Card reviews: topic-level mastery evidence only — `card_reviews` has no
     # concept column, and grading a card is not scoped to a question the way
@@ -791,11 +999,30 @@ async def snapshot(user_id: str) -> Snapshot:
             if len(attempts) >= MIN_ATTEMPTS_FOR_AVERAGE
             else None
         )
+        topic_events = topic_question_events.get(subspace_id, [])
+        review_evidence = topic_review_events.get(subspace_id, [])
         raw_evidence = [
-            (1.0 if e.correct else 0.0, e.at)
-            for e in topic_question_events.get(subspace_id, [])
-        ] + topic_review_events.get(subspace_id, [])
+            (1.0 if e.correct else 0.0, e.at) for e in topic_events
+        ] + review_evidence
         mastery, evidence_n = _mastery_from_evidence(_weighted(raw_evidence, today))
+        days_since_activity = _days_since(s.get("last_activity_at"), today)
+
+        # Recall vs application (task 6): card reviews count toward recall —
+        # a flashcard drill IS recall practice — quiz questions split by
+        # their own `kind` tag. Untagged questions (no `kind`, e.g. every
+        # quiz predating the field) count toward neither side rather than
+        # being guessed at.
+        recall_evidence = review_evidence + [
+            (1.0 if e.correct else 0.0, e.at) for e in topic_events if e.kind == "recall"
+        ]
+        apply_evidence = [
+            (1.0 if e.correct else 0.0, e.at) for e in topic_events if e.kind == "apply"
+        ]
+        recall_mastery, recall_n = _mastery_from_evidence(_weighted(recall_evidence, today))
+        application_mastery, application_n = _mastery_from_evidence(
+            _weighted(apply_evidence, today)
+        )
+
         topics.append(
             TopicView(
                 subspace_id=subspace_id,
@@ -805,19 +1032,33 @@ async def snapshot(user_id: str) -> Snapshot:
                 quiz_average=average,
                 quiz_attempts=len(attempts),
                 trend=_trend(attempts),
-                days_since_activity=_days_since(s.get("last_activity_at"), today),
+                days_since_activity=days_since_activity,
                 cards_due=cards_due.get(subspace_id, 0),
                 cards_total=cards_total.get(subspace_id, 0),
                 notes=note_counts.get(subspace_id, 0),
                 docs=doc_counts.get(subspace_id, 0),
                 mastery=mastery,
                 evidence_n=round(evidence_n, 2),
+                misconceptions=tuple(
+                    _top_misconceptions(
+                        topic_misconception_events.get(subspace_id, {}), today
+                    )
+                ),
+                recall_mastery=recall_mastery if recall_n >= RECALL_SPLIT_MIN_N else None,
+                application_mastery=(
+                    application_mastery if application_n >= RECALL_SPLIT_MIN_N else None
+                ),
+                is_slipping=_is_slipping(raw_evidence, today, mastery, days_since_activity),
             )
         )
 
     # Display casing for each normalized tag, taken from however it was first
     # written. The model normalizes to compare and de-normalizes to speak.
+    # Covers both `subtopic` (a concept actually asked about) and (task 4)
+    # `prerequisites` (a concept named as a dependency, which may never have
+    # been asked about directly — it still needs a label to show a human).
     concept_labels: dict[str, str] = {}
+    prereq_edges: dict[str, set[str]] = {}
     for quiz in quizzes:
         for question in quiz.get("questions") or []:
             if not isinstance(question, dict):
@@ -825,6 +1066,18 @@ async def snapshot(user_id: str) -> Snapshot:
             raw = str(question.get("subtopic") or "").strip()
             if raw:
                 concept_labels.setdefault(normalize_concept(raw), raw)
+            concept = normalize_concept(raw) if raw else ""
+            prereqs = question.get("prerequisites")
+            if not concept or not isinstance(prereqs, list):
+                continue
+            for p in prereqs:
+                if not isinstance(p, str) or not p.strip():
+                    continue
+                prereq_tag = normalize_concept(p)
+                if not prereq_tag or prereq_tag == concept:
+                    continue
+                concept_labels.setdefault(prereq_tag, p.strip())
+                prereq_edges.setdefault(concept, set()).add(prereq_tag)
 
     freeze = bool(settings_row.get("streak_freeze_enabled", True))
     streak_days = compute_streak(
@@ -841,6 +1094,9 @@ async def snapshot(user_id: str) -> Snapshot:
         streak_days=streak_days,
         feedback=feedback,
         user_messages=[r.get("content") or "" for r in user_message_rows],
+        prereq_edges={c: tuple(sorted(ps)) for c, ps in prereq_edges.items()},
+        concept_labels=concept_labels,
+        top_misconceptions=tuple(_top_misconceptions(overall_misconception_events, today)),
     )
 
 
@@ -1034,14 +1290,36 @@ def _fold_questions(result: dict, quiz: dict, into: list[_QuestionEvent]) -> Non
     for question, chosen in zip(questions, answers, strict=False):
         if not isinstance(question, dict):
             continue
+        correct = chosen == question.get("answer_index")
+        kind = question.get("kind")
         into.append(
             _QuestionEvent(
                 at=at,
-                correct=chosen == question.get("answer_index"),
+                correct=correct,
                 subspace_id=subspace_id,
                 concept=normalize_concept(question.get("subtopic") or "") or None,
+                kind=kind if kind in ("recall", "apply") else None,
+                misconception=_chosen_misconception(question, chosen, correct),
             )
         )
+
+
+def _chosen_misconception(question: dict, chosen: Any, correct: bool) -> str | None:
+    """The misconception phrase behind the wrong choice actually picked, or
+    `None` when the answer was right, unanswered, out of range, or the
+    question wasn't tagged. `QuizQuestion`'s validator already guarantees a
+    present `misconceptions` list lines up 1:1 with `choices` and reads
+    `None` at the correct index — this just indexes into it defensively for
+    quizzes that predate the field or that failed that normalization."""
+    if correct:
+        return None
+    misconceptions = question.get("misconceptions")
+    if not isinstance(misconceptions, list) or not isinstance(chosen, int):
+        return None
+    if chosen < 0 or chosen >= len(misconceptions):
+        return None
+    text = misconceptions[chosen]
+    return text if isinstance(text, str) and text.strip() else None
 
 
 def _build_concepts(
@@ -1064,6 +1342,7 @@ def _build_concepts(
         raw_evidence = [(1.0 if e.correct else 0.0, e.at) for e in evs]
         raw_evidence += feedback_events.get(concept, [])
         mastery, evidence_n = _mastery_from_evidence(_weighted(raw_evidence, today))
+        days_since_seen = _days_since(evs[-1].at, today)
         out.append(
             ConceptView(
                 concept=concept,
@@ -1074,13 +1353,105 @@ def _build_concepts(
                 mastery=mastery,
                 evidence_n=round(evidence_n, 2),
                 trend=_trend([100 if e.correct else 0 for e in evs]),
-                days_since_seen=_days_since(evs[-1].at, today),
+                days_since_seen=days_since_seen,
                 # Sorted so the tuple is comparable and stable across runs —
                 # set iteration order is not.
                 subspace_ids=tuple(sorted({e.subspace_id for e in evs if e.subspace_id})),
+                is_slipping=_is_slipping(raw_evidence, today, mastery, days_since_seen),
             )
         )
     return out
+
+
+def _top_misconceptions(
+    events: dict[str, list[str]], today: date, limit: int = 3
+) -> list[MisconceptionView]:
+    """`{text: [timestamps]}` → the top `limit` by recency-weighted count —
+    task 3. Kept ones clear `MISCONCEPTION_MIN_WEIGHT` (still relevant) OR
+    `MISCONCEPTION_MIN_SEEN` (a genuine repeat, even if the repeats are old):
+    either alone would either bury a fresh, glaring mix-up seen once, or keep
+    a single stale one alive forever."""
+    out: list[MisconceptionView] = []
+    for text, timestamps in events.items():
+        weight = sum(_evidence_weight(t, today) for t in timestamps)
+        seen = len(timestamps)
+        if weight < MISCONCEPTION_MIN_WEIGHT and seen < MISCONCEPTION_MIN_SEEN:
+            continue
+        out.append(
+            MisconceptionView(
+                text=text,
+                weight=round(weight, 2),
+                seen=seen,
+                last_seen=max(timestamps) if timestamps else None,
+            )
+        )
+    return sorted(out, key=lambda m: -m.weight)[:limit]
+
+
+def _is_slipping(
+    raw_evidence: list[tuple[float, str]],
+    today: date,
+    mastery_now: int,
+    days_since_last: int | None,
+) -> bool:
+    """True when this topic/concept read strong (`SLIPPING_WAS_STRONG`+) on
+    evidence older than `SLIPPING_OLD_CUTOFF_DAYS`, and has since either
+    actually dropped (today's decayed `mastery_now` below
+    `SLIPPING_NOW_BELOW`) or gone quiet (`days_since_last` past
+    `SLIPPING_STALE_DAYS`) — task 5.
+
+    Distinct from `is_falling`: a trend needs several recent attempts moving
+    the wrong way, which is silent for a topic that was simply never
+    retested. This looks at what the OLD evidence alone said and compares it
+    to now, so it can flag decay before a fresh attempt ever reveals it.
+    """
+    old_evidence = [
+        (o, t)
+        for o, t in raw_evidence
+        if (d := _days_since(t, today)) is not None and d > SLIPPING_OLD_CUTOFF_DAYS
+    ]
+    if not old_evidence:
+        return False
+    mastery_old, n_old = _mastery_from_evidence(_weighted(old_evidence, today))
+    if n_old < SLIPPING_MIN_OLD_N or mastery_old < SLIPPING_WAS_STRONG:
+        return False
+    if mastery_now < SLIPPING_NOW_BELOW:
+        return True
+    return days_since_last is not None and days_since_last > SLIPPING_STALE_DAYS
+
+
+def difficulty_mix(mastery: int | None, count: int) -> dict[str, int]:
+    """Easy/medium/hard counts for a `count`-question quiz, aimed at roughly
+    a 75% expected success rate given this topic's current mastery — task 2.
+    Pure so quiz generation (`routers/quizzes.py`) can call it directly off
+    the snapshot it already has, no extra read.
+
+    `None` mastery (a topic with no evidence yet) gets the middle band's
+    mix — an unmeasured topic is treated as "don't know", not "assume they
+    know it" or "assume they don't".
+    """
+    m = 62 if mastery is None else mastery
+    if m < 50:
+        weights = (0.6, 0.3, 0.1)
+    elif m <= 75:
+        weights = (0.25, 0.55, 0.2)
+    else:
+        weights = (0.1, 0.4, 0.5)
+    return _apportion(weights, count)
+
+
+def _apportion(weights: tuple[float, float, float], count: int) -> dict[str, int]:
+    """Largest-remainder rounding of `weights` (easy, medium, hard) over
+    `count` items — the three integers always sum to exactly `count`, which
+    plain per-band rounding doesn't guarantee."""
+    labels = ("easy", "medium", "hard")
+    raw = [w * count for w in weights]
+    base = [int(x) for x in raw]
+    remainder = count - sum(base)
+    order = sorted(range(len(labels)), key=lambda i: raw[i] - base[i], reverse=True)
+    for i in order[:remainder]:
+        base[i] += 1
+    return dict(zip(labels, base, strict=True))
 
 
 def _evidence_weight(at: str | None, today: date) -> float:

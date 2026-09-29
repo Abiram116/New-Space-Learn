@@ -11,7 +11,9 @@ import hashlib
 import logging
 import re
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 
@@ -21,7 +23,7 @@ from ...schemas import BriefOut, BriefSuggestion
 from ...services import personalization, supabase
 from ...services import student_model as student_model_service
 from ...services.llm import get_llm
-from ...services.student_model import Snapshot
+from ...services.student_model import MisconceptionView, Snapshot, TopicView
 from ...services.voice import COMPANION_VOICE
 
 log = logging.getLogger("space_learn.me.brief")
@@ -353,61 +355,213 @@ def _fallback_brief(f: dict, suggestion: BriefSuggestion | None) -> BriefOut:
     )
 
 
-async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
-    """One concrete next action, derived from real stored data only.
+@dataclass(frozen=True)
+class NextAction:
+    """One ranked next-step candidate off the student model — task 7's
+    `next_action(snapshot) -> {action, target, reason, route}`.
 
-    Ranked by what the student is least likely to already be planning:
-
-    1. A topic whose scores are **falling** — retake it while the slide is
-       still small. This is new, and it is the one a student almost never
-       spots unaided, because each individual quiz felt fine.
-    2. A deck with a real overdue backlog — reviewing something already
-       learned is lower friction than a fresh retake.
-    3. A topic with a **low** average — worth a retake, but it is not news.
-
-    Every branch is gated (a meaningful decline, a non-trivial overdue count,
-    enough attempts to trust an average) so this never fires on noise. Each
-    one also resolves to a route that names the actual row the student would
-    land on — `?deck=`/`?q=`, which `FlashcardsView`/`QuizzesView` read to
-    open it directly — and falls through to the next branch rather than
-    returning a link to something that turns out not to exist (a due-less
-    deck, a topic with no quiz on record).
+    `route` is the base `/s/{subject}/{subspace}` path — already enough for
+    `resolve="none"` (a chat destination has no query param to resolve).
+    `resolve="quiz"`/`"deck"` still owe `_compute_suggestion` an async
+    lookup for the specific quiz/deck id before the route is real; that
+    split is what keeps this function pure and synchronous.
     """
-    if snap.falling:
-        worst = snap.falling[0]
-        if worst.subject_id and (quiz_id := await _latest_quiz_id(worst.subspace_id)):
-            return BriefSuggestion(
-                label=f"Retake {_short(worst.topic)}",
-                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes?q={quiz_id}",
+
+    action: Literal[
+        "fix_misconception", "root_cause", "slipping", "due_cards", "weak_topic", "continue"
+    ]
+    target: str
+    reason: str
+    route: str
+    resolve: Literal["quiz", "deck", "none"]
+    #: Kept alongside `route` (rather than parsed back out of it) purely so
+    #: `_compute_suggestion` can call `_latest_quiz_id`/`_due_deck` without
+    #: string-splitting a URL to recover it.
+    subspace_id: str
+
+
+def next_action(snap: Snapshot) -> list[NextAction]:
+    """Ranked next-step candidates, derived from real stored data only —
+    task 7. Pure and synchronous, so it's unit-testable without the database
+    and without an event loop; `_compute_suggestion` below resolves each
+    candidate against the database in rank order and returns the first that
+    resolves to something real, falling through exactly as the old
+    single-branch version did (a due-less deck or a topic with no quiz on
+    record is skipped, not linked to).
+
+    Ranked by how actionable and how unlikely the student is to have
+    already noticed it themselves:
+
+    1. A **misconception** they keep repeating — names the actual confusion,
+       not just that a topic is weak, so it's the most concrete thing to fix.
+    2. A **weak prerequisite** underlying other weak concepts — fixing the
+       root tends to fix the symptoms; fixing a symptom doesn't.
+    3. A **slipping** concept or topic — was solid, has quietly decayed. The
+       student is least likely to have noticed this one unaided, same
+       reasoning `_brief_facts` uses for `falling`.
+    4. A real **overdue review backlog** — reviewing is lower friction than
+       a fresh retake.
+    5. A plain **low average** — worth a retake, but it isn't news.
+    6. Otherwise, **continue** the most recently touched topic.
+    """
+    subject_by_subspace = {t.subspace_id: t.subject_id for t in snap.topics if t.subject_id}
+    candidates: list[NextAction] = []
+
+    if best := _best_topic_misconception(snap):
+        topic, m = best
+        candidates.append(
+            NextAction(
+                action="fix_misconception",
+                target=topic.topic,
+                reason=f"A recurring mix-up in {topic.topic}: {m.text} (seen {m.seen}x).",
+                route=f"/s/{topic.subject_id}/{topic.subspace_id}",
+                resolve="none",
+                subspace_id=topic.subspace_id,
+            )
+        )
+
+    for rc in snap.root_causes[:1]:
+        subject_id = subject_by_subspace.get(rc.subspace_id or "")
+        if rc.subspace_id and subject_id:
+            candidates.append(
+                NextAction(
+                    action="root_cause",
+                    target=rc.concept,
+                    reason=(
+                        f"{', '.join(rc.because_of)} keep coming up weak — likely "
+                        f"because {rc.concept} isn't solid yet."
+                    ),
+                    route=f"/s/{subject_id}/{rc.subspace_id}",
+                    resolve="none",
+                    subspace_id=rc.subspace_id,
+                )
+            )
+
+    for item in snap.slipping[:1]:
+        subject_id = subject_by_subspace.get(item.subspace_id or "")
+        if item.subspace_id and subject_id:
+            candidates.append(
+                NextAction(
+                    action="slipping",
+                    target=item.label,
+                    reason=f"{item.label} looked solid a few weeks ago and has slipped since.",
+                    route=f"/s/{subject_id}/{item.subspace_id}",
+                    resolve="quiz",
+                    subspace_id=item.subspace_id,
+                )
             )
 
     # Deck names and per-deck due counts aren't on the snapshot — it
     # aggregates decks to per-topic totals, which is all any other consumer
-    # needs. One targeted read here, only when there is genuinely a backlog
-    # to name, for the specific deck actually carrying it (the topic-level
-    # total can span several decks, only some of which have anything due).
+    # needs. `_compute_suggestion` does one targeted read below, only when
+    # there is genuinely a backlog to name, for the specific deck actually
+    # carrying it (the topic-level total can span several decks, only some
+    # of which have anything due).
     backlog = [t for t in snap.topics if t.cards_due >= 3 and t.subject_id]
     if backlog:
         top = max(backlog, key=lambda t: t.cards_due)
-        deck_id, deck_name = await _due_deck(top.subspace_id)
-        if deck_id:
-            return BriefSuggestion(
-                label=f"Review {_short(deck_name)}",
-                # MUST carry the `/s/` prefix — it is the live route
-                # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
-                # comment here used to justify dropping it, which meant
-                # every suggested-review link silently 404'd.
-                route=f"/s/{top.subject_id}/{top.subspace_id}/flashcards?deck={deck_id}",
+        candidates.append(
+            NextAction(
+                action="due_cards",
+                target=top.topic,
+                reason=f"{top.cards_due} cards are waiting for review in {top.topic}.",
+                route=f"/s/{top.subject_id}/{top.subspace_id}",
+                resolve="deck",
+                subspace_id=top.subspace_id,
             )
+        )
 
     weak = [t for t in snap.rated if (t.quiz_average or 0) < 75 and t.subject_id]
     if weak:
         worst = min(weak, key=lambda t: t.quiz_average or 0)
-        if worst.subject_id and (quiz_id := await _latest_quiz_id(worst.subspace_id)):
-            return BriefSuggestion(
-                label=f"Retake the {_short(worst.topic)} quiz",
-                route=f"/s/{worst.subject_id}/{worst.subspace_id}/quizzes?q={quiz_id}",
+        candidates.append(
+            NextAction(
+                action="weak_topic",
+                target=worst.topic,
+                reason=f"Your quiz average in {worst.topic} is {worst.quiz_average}%.",
+                route=f"/s/{worst.subject_id}/{worst.subspace_id}",
+                resolve="quiz",
+                subspace_id=worst.subspace_id,
             )
+        )
+
+    if (recent := snap.most_recent) and recent.subject_id:
+        candidates.append(
+            NextAction(
+                action="continue",
+                target=recent.topic,
+                reason=f"Picking up where you left off in {recent.topic}.",
+                route=f"/s/{recent.subject_id}/{recent.subspace_id}",
+                resolve="none",
+                subspace_id=recent.subspace_id,
+            )
+        )
+
+    return candidates
+
+
+def _best_topic_misconception(
+    snap: Snapshot,
+) -> tuple[TopicView, MisconceptionView] | None:
+    """The single highest-weighted misconception across every topic, paired
+    with the topic it belongs to — `TopicView.misconceptions` is already
+    sorted worst-first per topic, so this only has to compare each topic's
+    own top entry, not every entry."""
+    best: tuple[TopicView, MisconceptionView] | None = None
+    for t in snap.topics:
+        if not t.misconceptions:
+            continue
+        candidate = t.misconceptions[0]
+        if best is None or candidate.weight > best[1].weight:
+            best = (t, candidate)
+    return best
+
+
+# Button copy per action — kept apart from `next_action` so that function's
+# candidates stay data, not presentation; `_short` (button-length trimming)
+# has no place in a pure decision function.
+_ACTION_LABEL: dict[str, str] = {
+    "fix_misconception": "Clear up {target}",
+    "root_cause": "Shore up {target}",
+    "slipping": "Retake {target}",
+    "weak_topic": "Retake the {target} quiz",
+    "continue": "Continue {target}",
+}
+
+
+async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
+    """Resolves `next_action`'s ranked candidates against the database, in
+    order, and returns the first one that names something real — a quiz or
+    deck that actually exists. Falls through rather than linking to a
+    due-less deck or a topic with no quiz on record, same as before this was
+    generalized past three hand-written branches.
+    """
+    for candidate in next_action(snap):
+        if candidate.resolve == "quiz":
+            quiz_id = await _latest_quiz_id(candidate.subspace_id)
+            if not quiz_id:
+                continue
+            label = _ACTION_LABEL[candidate.action].format(target=_short(candidate.target))
+            return BriefSuggestion(label=label, route=f"{candidate.route}/quizzes?q={quiz_id}")
+        if candidate.resolve == "deck":
+            deck_id, deck_name = await _due_deck(candidate.subspace_id)
+            if not deck_id:
+                continue
+            return BriefSuggestion(
+                label=f"Review {_short(deck_name)}",
+                # MUST carry the `/s/` prefix — it is the live route
+                # (`App.tsx`: `/s/:spaceId/:subspaceId`). A stale slug-era
+                # comment here used to justify dropping it, which meant every
+                # suggested-review link silently 404'd.
+                route=f"{candidate.route}/flashcards?deck={deck_id}",
+            )
+        # resolve == "none": the base `/s/{subject}/{subspace}` route is
+        # already the real chat destination — nothing to look up. `ChatView`
+        # has no `?q=`-style prefill param (checked before this was written),
+        # so the reason lives in `candidate.reason` for a future UI, not in
+        # the URL.
+        label = _ACTION_LABEL[candidate.action].format(target=_short(candidate.target))
+        return BriefSuggestion(label=label, route=candidate.route)
 
     return None
 
