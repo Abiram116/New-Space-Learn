@@ -135,6 +135,40 @@ describe('runHandoffSequence', () => {
     expect(r.events).toEqual(['in', 'out', 'clear'])
   })
 
+  it('waits for the destination to finish loading before uncovering', async () => {
+    const r = recorder()
+    await drive({
+      inMs: 20,
+      outMs: 10,
+      work: () => {
+        r.events.push('work')
+      },
+      ready: () =>
+        new Promise<void>((res) =>
+          setTimeout(() => {
+            r.events.push('ready')
+            res()
+          }, 300),
+        ),
+      onPhase: r.onPhase,
+    })
+    // Uncovering onto a skeleton is the half-built frame the cover hides.
+    expect(r.events).toEqual(['in', 'work', 'ready', 'out', 'clear'])
+  })
+
+  it('stops waiting for a destination that never settles', async () => {
+    const r = recorder()
+    await drive({
+      inMs: 20,
+      outMs: 10,
+      readyCeilingMs: 50,
+      work: () => {},
+      ready: () => new Promise<void>(() => {}),
+      onPhase: r.onPhase,
+    })
+    expect(r.events).toEqual(['in', 'out', 'clear'])
+  })
+
   it('always clears the overlay, even if a phase callback throws', async () => {
     const onPhase = vi.fn((p: Phase) => {
       if (p === 'out') throw new Error('render blew up')

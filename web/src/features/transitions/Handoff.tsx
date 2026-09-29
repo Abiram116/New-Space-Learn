@@ -28,22 +28,34 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
+import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { lampGradient, MOTES, TABLE_IMAGE, TABLE_MASK, TABLE_SIZE, VIGNETTE } from '../../lib/room'
 
 /**
- * `desk` — finishing onboarding. The payoff moment, so it is the long one:
- * the lamp comes up, the table rules itself in, and three sheets are laid
- * out. `threshold` — signing up. A doorway, deliberately brief, because
- * nothing has been earned yet and a fanfare here would be the product
+ * `iris` — finishing onboarding. The intake's organism has just flown into the
+ * logo and lit it; the light spreads out from the logo to cover the screen,
+ * and the app is then revealed by an iris opening from the same point — so
+ * the whole move has one origin, and it is where the app's own mark sits on
+ * the other side. `threshold` — signing up. A doorway, deliberately brief,
+ * because nothing has been earned yet and a fanfare here would be the product
  * congratulating itself for a form submit.
  */
-export type HandoffVariant = 'desk' | 'threshold'
+export type HandoffVariant = 'iris' | 'threshold'
+
+/** Where an `iris` opens from, in viewport pixels, and the lockup to hold lit
+ *  while the page is swapped underneath. */
+export type HandoffOptions = {
+  origin?: { x: number; y: number }
+  lockup?: { left: number; top: number; height: number }
+}
 
 type Phase = 'in' | 'out'
 
@@ -57,14 +69,16 @@ type Phase = 'in' | 'out'
  * registered as having happened. Both are unhurried now — the time is the
  * experience, and it is covering real work either way.
  */
-// Both are sized so the choreography *finishes* before the uncover. `desk`:
-// the frame lands at ~1250ms, opens out by ~2750ms, and the closing line
-// settles at ~3080ms. `threshold`: the last pulse clears at ~2000ms. Cutting
-// either short was the specific complaint that the transition did not complete
-// before the page arrived.
-const IN_MS: Record<HandoffVariant, number> = { desk: 3250, threshold: 2100 }
+// Both are sized so the choreography *finishes* before the uncover. `iris`:
+// the light has covered the screen at ~720ms and the lit logo holds for a
+// beat while home mounts under it. `threshold`: the last pulse clears at
+// ~2000ms. Cutting either short was the specific complaint that the transition
+// did not complete before the page arrived.
+// `iris` holds only briefly past its cover: the reveal waits on the page
+// being ready (`pageSettled`), not on a fixed clock.
+const IN_MS: Record<HandoffVariant, number> = { iris: 380, threshold: 2100 }
 /** The uncover. Slower than the cover — leaving should feel like a reveal. */
-const OUT_MS: Record<HandoffVariant, number> = { desk: 620, threshold: 560 }
+const OUT_MS: Record<HandoffVariant, number> = { iris: 1250, threshold: 560 }
 
 /**
  * How long the curtain takes to become fully opaque, and how long to wait
@@ -83,6 +97,9 @@ const OUT_MS: Record<HandoffVariant, number> = { desk: 620, threshold: 560 }
  * and the margin is stated rather than assumed.
  */
 const COVER_MS = 420
+/** The iris cover is a wave crossing the screen, so it takes longer to be
+ *  opaque everywhere — and the sequencer must wait for exactly that. */
+const COVER_BY: Record<HandoffVariant, number> = { iris: 780, threshold: COVER_MS }
 const COVER_SETTLE_MS = 110
 /** Reduced motion: enough to hide the swap, not enough to be a sequence. */
 const REDUCED_IN_MS = 220
@@ -98,6 +115,34 @@ const REDUCED_OUT_MS = 200
  */
 const WORK_CEILING_MS = 6000
 
+/**
+ * How long to wait, after the work, for the destination to stop loading.
+ *
+ * The route change mounts the destination, but mounting is not arriving:
+ * Home shows a skeleton until `/spaces` answers, and uncovering onto that is
+ * exactly the half-built frame the cover exists to hide. So the reveal waits
+ * for the page to stop declaring itself busy — capped, because a slow API
+ * must still end in a usable app, not a curtain.
+ */
+const READY_CEILING_MS = 1800
+
+/**
+ * Resolve once nothing on the page is `aria-busy` for a few frames running —
+ * the convention every loading skeleton here already follows, so no screen
+ * has to know it is being waited on.
+ */
+export function pageSettled(): Promise<void> {
+  return new Promise((resolve) => {
+    let calm = 0
+    const tick = () => {
+      calm = document.querySelector('[aria-busy="true"]') ? 0 : calm + 1
+      if (calm >= 3) resolve()
+      else requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+}
+
 type HandoffApi = {
   /**
    * Cover the screen, run `work` underneath, then uncover.
@@ -105,7 +150,7 @@ type HandoffApi = {
    * Resolves once the overlay is fully gone, so a caller can await it and
    * know the handoff is finished rather than guessing with a timer.
    */
-  play: (variant: HandoffVariant, work: () => void | Promise<void>) => Promise<void>
+  play: (variant: HandoffVariant, work: () => void | Promise<void>, options?: HandoffOptions) => Promise<void>
   /** True from the first frame of the cover to the last frame of the uncover. */
   playing: boolean
   /**
@@ -190,7 +235,9 @@ export async function runHandoffSequence({
   outMs,
   coverMs = COVER_MS,
   ceilingMs = WORK_CEILING_MS,
+  readyCeilingMs = READY_CEILING_MS,
   work,
+  ready,
   onPhase,
 }: {
   inMs: number
@@ -198,7 +245,10 @@ export async function runHandoffSequence({
   /** Must match the curtain's fade-in, or the swap shows through it. */
   coverMs?: number
   ceilingMs?: number
+  readyCeilingMs?: number
   work: () => void | Promise<void>
+  /** Resolves when the destination has finished loading. Capped. */
+  ready?: () => Promise<void>
   onPhase: (phase: Phase | null) => void
 }): Promise<void> {
   try {
@@ -219,6 +269,13 @@ export async function runHandoffSequence({
     // Hold out the rest of the choreography, then wait for a real paint so the
     // reveal lands on a finished screen rather than a half-built one.
     await wait(Math.max(0, inMs - (Date.now() - started)))
+    if (ready) {
+      try {
+        await Promise.race([ready(), wait(readyCeilingMs)])
+      } catch {
+        /* a readiness probe failing is not a reason to hold the cover */
+      }
+    }
     await painted()
 
     onPhase('out')
@@ -230,7 +287,7 @@ export async function runHandoffSequence({
 
 export function HandoffProvider({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion()
-  const [state, setState] = useState<{ variant: HandoffVariant; phase: Phase } | null>(
+  const [state, setState] = useState<{ variant: HandoffVariant; phase: Phase; options?: HandoffOptions } | null>(
     null,
   )
   // Guards against a second `play` landing mid-sequence — a double-submit on
@@ -239,15 +296,17 @@ export function HandoffProvider({ children }: { children: ReactNode }) {
   const busy = useRef(false)
 
   const play = useCallback(
-    async (variant: HandoffVariant, work: () => void | Promise<void>) => {
+    async (variant: HandoffVariant, work: () => void | Promise<void>, options?: HandoffOptions) => {
       if (busy.current) return
       busy.current = true
       try {
         await runHandoffSequence({
           inMs: reduced ? REDUCED_IN_MS : IN_MS[variant],
           outMs: reduced ? REDUCED_OUT_MS : OUT_MS[variant],
+          coverMs: reduced ? REDUCED_IN_MS : COVER_BY[variant],
           work,
-          onPhase: (phase) => setState(phase ? { variant, phase } : null),
+          ready: pageSettled,
+          onPhase: (phase) => setState(phase ? { variant, phase, options } : null),
         })
       } finally {
         busy.current = false
@@ -268,7 +327,12 @@ export function HandoffProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={api}>
       {children}
-      {state && <Curtain variant={state.variant} phase={state.phase} reduced={reduced} />}
+      {state &&
+        (state.variant === 'iris' && !reduced ? (
+          <IrisCurtain phase={state.phase} options={state.options} />
+        ) : (
+          <Curtain variant={state.variant} phase={state.phase} reduced={reduced} />
+        ))}
     </Ctx.Provider>
   )
 }
@@ -292,7 +356,7 @@ function Curtain({
       // the polite register this deserves.
       role="status"
       aria-live="polite"
-      aria-label={variant === 'desk' ? 'Setting up your desk' : 'Opening Space Learn'}
+      aria-label={variant === 'iris' ? 'Setting up your desk' : 'Opening Space Learn'}
       className="fixed inset-0 z-[100] overflow-hidden bg-canvas"
       style={{
         // The cover duration is COVER_MS, the same constant the sequencer waits
@@ -309,11 +373,8 @@ function Curtain({
         }ms var(--ease-sl) both`,
       }}
     >
-      {variant === 'desk' ? (
-        <DeskScene reduced={reduced} />
-      ) : (
-        <ThresholdScene reduced={reduced} />
-      )}
+      {/* Under reduced motion the iris is only this plain fade. */}
+      {variant === 'threshold' && <ThresholdScene reduced={reduced} />}
     </div>
   )
 }
@@ -420,108 +481,126 @@ function ThresholdScene({ reduced }: { reduced: boolean }) {
   )
 }
 
-/* ── Desk: four answers, one workspace ───────────────────────────────── */
+/* ── Iris: out of the logo, into the app ─────────────────────────────── */
 
-/** The four sides of the frame, and the edge each one flies in from. */
-const SIDES = [
-  { key: 't', cls: 'left-0 top-0 h-px w-full origin-left', from: 'translate3d(0,-42vh,0)' },
-  { key: 'b', cls: 'bottom-0 left-0 h-px w-full origin-right', from: 'translate3d(0,42vh,0)' },
-  { key: 'l', cls: 'left-0 top-0 h-full w-px origin-top', from: 'translate3d(-42vw,0,0)' },
-  { key: 'r', cls: 'right-0 top-0 h-full w-px origin-bottom', from: 'translate3d(42vw,0,0)' },
-]
+const FEATHER = 110
+/** The disc and rim are drawn small and scaled up: a transform, so the cover
+ *  wave runs on the compositor. Their soft edges only get softer with scale,
+ *  which is what an expanding wave of light should look like anyway. */
+const DISC = 240
+const quartInOut = (p: number) => (p < 0.5 ? 8 * p ** 4 : 1 - (-2 * p + 2) ** 4 / 2)
+const expoOut = (p: number) => (p >= 1 ? 1 : 1 - 2 ** (-10 * p))
+const sineInOut = (p: number) => -(Math.cos(Math.PI * p) - 1) / 2
 
 /**
- * Finishing the intake. Four answers close into one workspace.
+ * Finishing the intake. The logo has just been lit by the student's own
+ * galaxy flying into it; now its light spreads outward and covers the room
+ * (`in`), the lit lockup holds while home mounts — and finishes loading —
+ * underneath, and then an iris opens from that same point (`out`), revealing
+ * the app from its own mark outward. A rim of light rides the edge both ways,
+ * so the cover reads as a wave and the reveal as an aperture, never a fade.
  *
- * Two attempts preceded this and both were wrong in instructive ways. Card
- * outlines falling onto a table were generic — floating rectangles that could
- * have come from any template. Drafting the dashboard's plan was closer in
- * spirit but read as a *chart*: a row of gold bars and some rules, which says
- * "here is a graph" rather than "here is your desk".
- *
- * So it is built from what actually just happened. The student answered four
- * questions; four strokes converge from the four edges, close into a frame,
- * and that frame opens out to become the workspace. It is the shape of things
- * being *settled* — and it uses the opposite motion to the threshold scene by
- * design: that one travels outward from a point to find a room, this one
- * travels inward to four edges to build one.
+ * `in` is a small disc scaled up by transform — composited, no repaint. `out`
+ * needs a hole, which no transform can make, so it is a feathered radial mask
+ * written once per frame on a single flat layer; the rim that rides it is
+ * again a scaled element. One rAF loop per phase writes styles directly: no
+ * React state per frame, nothing that touches layout.
  */
-function DeskScene({ reduced }: { reduced: boolean }) {
+function IrisCurtain({ phase, options }: { phase: Phase; options?: HandoffOptions }) {
+  const disc = useRef<HTMLDivElement>(null)
+  const cover = useRef<HTMLDivElement>(null)
+  const rim = useRef<HTMLDivElement>(null)
+  const lockup = useRef<HTMLDivElement>(null)
+  const o = options?.origin ?? { x: 44, y: 36 }
+
+  useLayoutEffect(() => {
+    const W = window.innerWidth
+    const H = window.innerHeight
+    const far = Math.hypot(Math.max(o.x, W - o.x), Math.max(o.y, H - o.y)) + 24
+    const dur = phase === 'in' ? COVER_BY.iris : OUT_MS.iris
+    const t0 = performance.now()
+    let raf = 0
+    const ringAt = (r: number, a: number) => {
+      const el = rim.current
+      if (!el) return
+      el.style.transform = `translate(-50%, -50%) scale(${((r * 2) / DISC).toFixed(4)})`
+      el.style.opacity = String(Math.max(0, a))
+    }
+    if (phase === 'out' && cover.current && disc.current) {
+      disc.current.style.visibility = 'hidden'
+      cover.current.style.visibility = 'visible'
+    }
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / dur)
+      if (phase === 'in') {
+        const r = far * 1.08 * quartInOut(p)
+        if (disc.current) disc.current.style.transform = `translate(-50%, -50%) scale(${((r * 2) / DISC).toFixed(4)})`
+        ringAt(r * 0.96, p < 0.75 ? 0.9 : ((1 - p) / 0.25) * 0.9)
+      } else {
+        const r = (far + FEATHER) * (0.55 * expoOut(p) + 0.45 * sineInOut(p))
+        const m = `radial-gradient(circle at ${o.x}px ${o.y}px, transparent ${Math.max(0, r - FEATHER).toFixed(1)}px, #000 ${r.toFixed(1)}px)`
+        const el = cover.current
+        if (el) {
+          el.style.maskImage = m
+          el.style.setProperty('-webkit-mask-image', m)
+        }
+        ringAt(r - FEATHER * 0.5, (1 - p) * 0.8)
+        if (lockup.current) lockup.current.style.opacity = String(Math.max(0, 1 - p * 2.4))
+      }
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    tick(t0)
+    return () => cancelAnimationFrame(raf)
+  }, [phase, o.x, o.y])
+
+  const lk = options?.lockup
+  const circle = (extra: CSSProperties): CSSProperties => ({
+    position: 'absolute',
+    left: o.x,
+    top: o.y,
+    width: DISC,
+    height: DISC,
+    borderRadius: '50%',
+    transform: 'translate(-50%, -50%) scale(0)',
+    willChange: 'transform',
+    ...extra,
+  })
   return (
-    <>
+    <div role="status" aria-live="polite" aria-label="Setting up your desk" className="pointer-events-auto fixed inset-0 z-[100] overflow-hidden">
+      {/* In: the light the galaxy brought, spreading from the logo. */}
       <div
-        className="absolute inset-0"
-        style={{
+        ref={disc}
+        style={circle({
           background:
-            'radial-gradient(80rem 52rem at 50% -16%, rgba(255,176,116,0.20), transparent 66%),' +
-            'radial-gradient(40rem 30rem at 50% 6%, rgba(255,214,170,0.10), transparent 62%)',
-          animation: reduced ? undefined : 'lampUp 1100ms var(--ease-sl) both',
-        }}
+            'radial-gradient(closest-side, rgba(92,70,54,1) 0%, var(--color-canvas) 34%, var(--color-canvas) 90%, transparent 100%)',
+        })}
       />
-
+      {/* Out: the same room, with an aperture opening in it. */}
+      <div ref={cover} className="absolute inset-0 bg-canvas" style={{ visibility: 'hidden' }} />
       <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage: TABLE_IMAGE,
-          backgroundSize: TABLE_SIZE,
-          maskImage: 'radial-gradient(70% 58% at 50% 46%, #000 20%, transparent 92%)',
-          WebkitMaskImage: 'radial-gradient(70% 58% at 50% 46%, #000 20%, transparent 92%)',
-          animation: reduced ? undefined : 'tableIn 1400ms 200ms var(--ease-sl) both',
-        }}
+        ref={rim}
+        aria-hidden
+        style={circle({
+          background:
+            'radial-gradient(closest-side, transparent 88%, rgba(255,214,176,0.22) 94%, rgba(255,236,216,0.55) 97.5%, transparent 100%)',
+          opacity: 0,
+        })}
       />
-
-      {!reduced && (
-        <div className="absolute inset-0 grid place-items-center">
-          {/* The frame. Each side arrives from its own edge and lands; then the
-              whole thing opens outward past the viewport, which is what turns
-              "four lines met" into "the space is yours". */}
-          <div
-            className="relative h-[42vmin] w-[62vmin]"
-            style={{ animation: 'frameOpen 1500ms 1250ms var(--ease-out-expo) both' }}
-          >
-            {SIDES.map((s, i) => (
-              <span
-                key={s.key}
-                className={`absolute bg-[rgba(255,237,220,0.55)] ${s.cls}`}
-                style={{
-                  ['--from' as string]: s.from,
-                  animation: `sideIn 900ms ${240 + i * 110}ms var(--ease-out-expo) both`,
-                }}
-              />
-            ))}
-            {/* The surface inside it, warming as the frame closes. */}
-            <span
-              className="absolute inset-0"
-              style={{
-                background:
-                  'linear-gradient(150deg, rgba(255,237,220,0.07), rgba(255,237,220,0.015) 60%)',
-                animation: 'surfaceIn 900ms 900ms var(--ease-sl) both',
-              }}
-            />
-          </div>
+      {lk && (
+        <div ref={lockup} aria-hidden className="absolute flex items-center" style={{ left: lk.left, top: lk.top, height: lk.height }}>
+          <span
+            className="absolute rounded-full"
+            style={{
+              left: o.x - lk.left - 70,
+              top: o.y - lk.top - 70,
+              width: 140,
+              height: 140,
+              background: 'radial-gradient(closest-side, rgba(255,196,150,0.32), transparent)',
+            }}
+          />
+          <Logo />
         </div>
       )}
-
-      {/* The rule, then the line. The sweeping hairline is the product's
-          signature beat — it is on the boot splash too, so finishing the intake
-          rhymes with every launch after it. */}
-      <div className="absolute inset-x-0 bottom-[16%] flex flex-col items-center gap-3.5 px-6">
-        <div
-          className="h-px w-full max-w-xs bg-[rgba(255,237,220,0.22)]"
-          style={{
-            transformOrigin: 'center',
-            animation: reduced ? undefined : 'ruleSweep 820ms 2180ms var(--ease-sl) both',
-          }}
-        />
-        <p
-          className="text-center text-[13px] tracking-[0.02em] text-ink-3"
-          style={{
-            animation: reduced ? undefined : 'lineUp 680ms 2400ms var(--ease-sl) both',
-          }}
-        >
-          Your desk is set.
-        </p>
-      </div>
-    </>
+    </div>
   )
 }

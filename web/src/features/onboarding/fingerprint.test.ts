@@ -1,22 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CORE_R,
+  DEPTH_BY_VALUE,
   FORM_BY_VALUE,
-  ORBIT_BY_VALUE,
-  PLATE_R,
-  RINGS_BY_VALUE,
-  SAMPLES,
-  STAR_R,
-  contourPath,
-  fingerprint,
+  SESSION_BY_VALUE,
+  SLOTS,
+  approachParams,
+  armAngle,
+  band,
+  home,
+  lerpAngle,
+  lerpParams,
   legend,
+  paramsFor,
+  spinRate,
+  type Home,
+  type Mote,
+  type Params,
 } from './fingerprint'
 import { EMPTY_ANSWERS, STEPS, type Answers, type ChoiceStep } from './steps'
 
 /**
- * The drawing makes one promise: it is a function of the answers. Same
- * answers, same picture — on any device, on any day — and every mark on it can
- * be traced to something the student said.
+ * The organism makes two promises. It is a function of the answers — same
+ * answers, same organism, on any device, on any day, with every structure
+ * traceable to something the student said. And it *changes* by interpolation:
+ * moving between two sets of answers is a continuous, deterministic path, so
+ * nothing on screen can ever pop.
  */
 
 const opts = (id: string) => (STEPS.find((s) => s.id === id) as ChoiceStep).options
@@ -30,100 +38,175 @@ const FULL: Answers = {
   goal: 'GATE 2027',
 }
 
-describe('fingerprint is deterministic', () => {
-  it('draws the same picture for the same answers', () => {
-    expect(fingerprint(FULL)).toEqual(fingerprint({ ...FULL, styles: [...FULL.styles] }))
+/** Every number in a params object, flattened, for "is it finite" and
+ *  "how far apart" checks. */
+const flat = (p: Params) => Object.values(p).flatMap((v) => (Array.isArray(v) ? v : [v]))
+const colourOf = (p: Params, c: number) => p.colour.slice(c * SLOTS.length, (c + 1) * SLOTS.length)
+
+describe('parameters are a pure function of the answers', () => {
+  it('grows the same organism for the same answers', () => {
+    expect(paramsFor(FULL)).toEqual(paramsFor({ ...FULL, styles: [...FULL.styles] }))
   })
 
   it('does not care about the order styles were tapped in', () => {
-    expect(fingerprint({ ...FULL, styles: [...FULL.styles].reverse() })).toEqual(fingerprint(FULL))
+    expect(paramsFor({ ...FULL, styles: [...FULL.styles].reverse() })).toEqual(paramsFor(FULL))
   })
 
   it('treats case and stray spacing as the same name', () => {
-    expect(fingerprint({ ...FULL, name: '  abiram ' }).core).toEqual(fingerprint(FULL).core)
+    expect(paramsFor({ ...FULL, name: '  abiram ' })).toEqual(paramsFor(FULL))
   })
 
   it('is seeded by the name — two people with the same answers still differ', () => {
-    expect(fingerprint({ ...FULL, name: 'Maya' }).core).not.toEqual(fingerprint(FULL).core)
+    const a = paramsFor(FULL)
+    const b = paramsFor({ ...FULL, name: 'Maya' })
+    expect([a.tilt, a.spin, a.starAngle]).not.toEqual([b.tilt, b.spin, b.starAngle])
   })
 
-  it('reshapes the core when the learning style changes', () => {
-    const a = fingerprint({ ...FULL, styles: [values('style')[0]] }).core
-    const b = fingerprint({ ...FULL, styles: [values('style')[1]] }).core
-    expect(a).not.toEqual(b)
+  it('is colourless until there is a name, and takes a signature from it', () => {
+    const ink = SLOTS.indexOf('ink')
+    const none = paramsFor(EMPTY_ANSWERS)
+    for (let c = 0; c < 3; c++) expect(colourOf(none, c)[ink]).toBe(1)
+    const named = paramsFor({ ...EMPTY_ANSWERS, name: 'Abiram' })
+    expect(colourOf(named, 0)[ink]).toBe(0)
+  })
+
+  it('changes the flow when the learning style changes', () => {
+    const a = paramsFor({ ...FULL, styles: [values('style')[0]] })
+    const b = paramsFor({ ...FULL, styles: [values('style')[1]] })
+    expect(a.form).not.toEqual(b.form)
+    expect(a.form.reduce((x, y) => x + y)).toBeCloseTo(1)
+  })
+
+  it('never produces a non-finite number', () => {
+    for (const a of [EMPTY_ANSWERS, FULL, { ...FULL, styles: values('style') }]) {
+      expect(flat(paramsFor(a)).every(Number.isFinite)).toBe(true)
+    }
   })
 })
 
-describe('every answer the intake can give draws something', () => {
-  // A reworded option would otherwise draw nothing for an answer the student
+describe('every answer the intake can give moves something', () => {
+  // A reworded option would otherwise do nothing for an answer the student
   // gave — the failure these maps exist to prevent, and a silent one.
-  it('maps every style option to a shape family', () => {
+  it('maps every style option to a flow family', () => {
     for (const v of values('style')) expect(FORM_BY_VALUE[v]).toBeDefined()
   })
-  it('maps every depth option to rings', () => {
-    for (const v of values('depth')) expect(RINGS_BY_VALUE[v]?.length).toBeGreaterThan(0)
+  it('maps every depth option to layers', () => {
+    for (const v of values('depth')) expect(DEPTH_BY_VALUE[v]?.layers).toBeGreaterThan(0)
   })
-  it('maps every session option to an orbit', () => {
-    for (const v of values('session')) expect(ORBIT_BY_VALUE[v]).toBeDefined()
+  it('maps every session option to a tempo and an orbit', () => {
+    for (const v of values('session')) expect(SESSION_BY_VALUE[v]).toBeDefined()
   })
-})
-
-describe('one layer per answer', () => {
-  it('draws only a bare seed before anything is answered', () => {
-    const fp = fingerprint(EMPTY_ANSWERS)
-    expect(fp.named).toBe(false)
-    expect(fp.rings).toEqual([])
-    expect(fp.orbit).toBeNull()
-    expect(fp.star).toBeNull()
-    expect(Object.values(fp.weights).every((w) => w === 0)).toBe(true)
+  it('turns a structure on only once its answer exists', () => {
+    const none = paramsFor(EMPTY_ANSWERS)
+    expect(none.layers).toBe(0)
+    expect(none.orbit).toBe(0)
+    expect(none.star).toBe(0)
+    expect(none.form.every((w) => w === 0)).toBe(true)
+    const full = paramsFor(FULL)
+    expect(full.layers).toBe(4)
+    expect(full.orbit).toBe(1)
+    expect(full.sweep).toBe(0.5)
+    expect(full.star).toBe(1)
   })
-
-  it('adds each layer as its answer arrives', () => {
-    const fp = fingerprint(FULL)
-    expect(fp.named).toBe(true)
-    expect(fp.weights.examples).toBe(0.5)
-    expect(fp.weights.comparison).toBe(0.5)
-    expect(fp.rings.length).toBe(4)
-    expect(fp.orbit?.sweep).toBe(0.5)
-    expect(fp.star?.text).toBe('GATE 2027')
-  })
-
-  it('shortens a long goal on the dial only', () => {
-    const star = fingerprint({ ...FULL, goal: 'x'.repeat(140) }).star!
-    expect(star.text.length).toBeLessThanOrEqual(52)
-    expect(star.text.endsWith('…')).toBe(true)
+  it('turns longer sessions more slowly', () => {
+    const tempos = ['15', '30', '60', '120'].map((s) => paramsFor({ ...FULL, session: s }).tempo)
+    for (let i = 1; i < tempos.length; i++) expect(tempos[i]).toBeLessThan(tempos[i - 1])
   })
 })
 
-describe('the layers never collide', () => {
-  it('keeps the outermost ring inside the smallest orbit, and the orbit inside the star', () => {
-    for (const style of [[], ...values('style').map((v) => [v]), values('style')]) {
-      const core = fingerprint({ ...FULL, styles: style }).core
-      const widest = Math.max(...core) * Math.max(...Object.values(RINGS_BY_VALUE).flat())
-      const smallest = Math.min(...Object.values(ORBIT_BY_VALUE).map((o) => o.r))
-      expect(widest).toBeLessThan(smallest)
+describe('interpolation', () => {
+  const A = paramsFor(EMPTY_ANSWERS)
+  const B = paramsFor(FULL)
+
+  it('starts at the start and ends at the end', () => {
+    expect(lerpParams(A, B, 0)).toEqual(A)
+    const end = lerpParams(A, B, 1)
+    for (const [i, v] of flat(end).entries()) expect(v).toBeCloseTo(flat(B)[i], 9)
+  })
+
+  it('is deterministic and leaves its inputs alone', () => {
+    const before = JSON.stringify([A, B])
+    expect(lerpParams(A, B, 0.37)).toEqual(lerpParams(A, B, 0.37))
+    expect(JSON.stringify([A, B])).toBe(before)
+  })
+
+  it('turns angles the short way round', () => {
+    expect(lerpAngle(0.1, Math.PI * 2 - 0.1, 0.5)).toBeCloseTo(0, 9)
+    // 3 → −3 rad is a short hop across π, not a trip back through zero.
+    expect(lerpAngle(3, -3, 0.5)).toBeCloseTo(Math.PI, 9)
+  })
+
+  it('is frame-rate independent: two half-steps land where one whole step does', () => {
+    const whole = approachParams(A, B, 1 / 30, 1.4)
+    const halves = approachParams(approachParams(A, B, 1 / 60, 1.4), B, 1 / 60, 1.4)
+    for (const [i, v] of flat(whole).entries()) expect(flat(halves)[i]).toBeCloseTo(v, 9)
+  })
+
+  it('converges on the target and never overshoots it', () => {
+    let p = A
+    let prevGap = Infinity
+    for (let i = 0; i < 600; i++) {
+      p = approachParams(p, B, 1 / 60, 1.4)
+      const gap = Math.abs(p.energy - B.energy)
+      expect(gap).toBeLessThanOrEqual(prevGap)
+      prevGap = gap
     }
-    const largest = Math.max(...Object.values(ORBIT_BY_VALUE).map((o) => o.r))
-    expect(largest).toBeLessThan(STAR_R)
-    expect(STAR_R).toBeLessThan(PLATE_R)
-  })
-
-  it('keeps the core near its nominal size whatever the style', () => {
-    for (const v of values('style')) {
-      const core = fingerprint({ ...FULL, styles: [v] }).core
-      const mean = core.reduce((a, b) => a + b, 0) / core.length
-      expect(Math.abs(mean - CORE_R) / CORE_R).toBeLessThan(0.08)
-    }
+    expect(p.energy).toBeCloseTo(B.energy, 3)
+    expect(p.layers).toBeCloseTo(B.layers, 3)
   })
 })
 
-describe('contourPath', () => {
-  it('is a closed path with one segment per sample and no NaNs', () => {
-    const d = contourPath(fingerprint(FULL).core)
-    expect(d.startsWith('M')).toBe(true)
-    expect(d.endsWith('Z')).toBe(true)
-    expect(d.match(/Q/g)?.length).toBe(SAMPLES)
-    expect(d).not.toMatch(/NaN|Infinity/)
+describe('the field', () => {
+  const mote: Mote = { a: 1.2, l: 0.63, j: 0.4, k: 0.3, o: 0.5, ph: 0.2, s: 0.5 }
+  const out = (): Home => ({ x: 0, y: 0, alpha: 1, tone: 0, stream: -1, size: 1 })
+
+  it('puts a particle in the same place for the same inputs', () => {
+    const P = paramsFor(FULL)
+    expect(home(P, mote, 3.2, out())).toEqual(home(P, mote, 3.2, out()))
+  })
+
+  it('never jumps while parameters interpolate', () => {
+    // Sweep from nothing answered to everything answered in small steps:
+    // each step may only move a particle a little. A swap would show as one
+    // large step.
+    const A = paramsFor(EMPTY_ANSWERS)
+    const B = paramsFor(FULL)
+    for (const m of [mote, { ...mote, o: 0.05 }, { ...mote, o: 0.97 }, { ...mote, k: 0.8, l: 0.1 }, { ...mote, ph: 0.9, k: 0.6 }]) {
+      let prev = home(A, m, 2, out())
+      for (let i = 1; i <= 200; i++) {
+        const h = home(lerpParams(A, B, i / 200), m, 2, out())
+        expect(Math.hypot(h.x - prev.x, h.y - prev.y)).toBeLessThan(0.08)
+        prev = h
+      }
+    }
+  })
+
+  it('stays within the organism’s reach', () => {
+    const P = paramsFor({ ...FULL, session: '120' })
+    for (let i = 0; i < 400; i++) {
+      const m: Mote = { a: i * 0.37, l: (i * 0.618) % 1, j: (i * 0.31) % 1, k: (i * 0.77) % 1, o: (i * 0.13) % 1, ph: (i * 0.41) % 1, s: 0.5 }
+      const h = home(P, m, i * 0.1, out())
+      expect(Math.hypot(h.x, h.y)).toBeLessThan(1.35)
+    }
+  })
+
+  it('divides arms rather than jumping stars between them', () => {
+    for (const k of [0.1, 0.3, 0.49, 0.51, 0.7, 0.95]) {
+      expect(Math.abs(armAngle(k, 2.999) - armAngle(k, 3))).toBeLessThan(0.02)
+      expect(Math.abs(armAngle(k, 3.001) - armAngle(k, 3))).toBeLessThan(0.02)
+    }
+  })
+
+  it('turns the core faster than the rim — differential rotation', () => {
+    const P = paramsFor(FULL)
+    expect(spinRate(P, { ...mote, l: 0.05 })).toBeGreaterThan(spinRate(P, { ...mote, l: 0.95 }) * 3)
+  })
+
+  it('slides between layer counts instead of snapping', () => {
+    for (const l of [0.1, 0.33, 0.5, 0.77, 0.95]) {
+      expect(Math.abs(band(l, 2.999, 0.8) - band(l, 3, 0.8))).toBeLessThan(0.01)
+      expect(band(l, 0, 0.8)).toBe(l)
+    }
   })
 })
 
