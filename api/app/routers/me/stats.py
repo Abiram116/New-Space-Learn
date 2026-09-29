@@ -168,6 +168,9 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
         daily_goal=int(settings_row.get("daily_goal") or 20),
         composition=composition,
         due_forecast=due_forecast,
+        cards_reviewed_today=sum(
+            int(r.get("cards_reviewed") or 0) for r in week_rows if to_date(r["day"]) == today
+        ),
     )
 
 

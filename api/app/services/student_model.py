@@ -34,8 +34,15 @@ from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
 from typing import Any, Literal, NamedTuple
 
-from ..schemas import StudentModelOut, TopicSignal
-from . import supabase
+from ..schemas import (
+    MisconceptionOut,
+    RootCauseOut,
+    SlippingOut,
+    StudentModelOut,
+    StyleSummaryOut,
+    TopicSignal,
+)
+from . import style_bandit, supabase
 from .streaks import compute_streak
 
 log = logging.getLogger("space_learn.student_model")
@@ -381,6 +388,12 @@ class SlippingItem:
     kind: Literal["topic", "concept"]
     label: str
     subspace_id: str | None
+    #: How long since this topic/concept was last touched — `None` when the
+    #: slip is a score drop rather than neglect. Carried here (rather than
+    #: re-derived at the API boundary) because a concept's own days-since is
+    #: `ConceptView.days_since_seen`, not `TopicView.days_since_activity`, and
+    #: only this property has both views in scope at once.
+    days_since_activity: int | None = None
 
 
 @dataclass(frozen=True)
@@ -512,12 +525,17 @@ class Snapshot:
         quiz `next_action` can point straight at, which a bare concept
         doesn't. `cached_property` for the same reason as `root_causes`."""
         items = [
-            SlippingItem("topic", t.topic, t.subspace_id)
+            SlippingItem("topic", t.topic, t.subspace_id, t.days_since_activity)
             for t in self.topics
             if t.is_slipping
         ]
         items += [
-            SlippingItem("concept", c.label, c.subspace_ids[0] if c.subspace_ids else None)
+            SlippingItem(
+                "concept",
+                c.label,
+                c.subspace_ids[0] if c.subspace_ids else None,
+                c.days_since_seen,
+            )
             for c in self.concepts
             if c.is_slipping
         ]
@@ -682,6 +700,20 @@ class Snapshot:
             falling_areas=[_signal(t) for t in self.falling[:3]],
             cold_areas=[_signal(t) for t in self.cold[:3]],
             observed_habits=self.observed_habits,
+            top_misconceptions=[
+                MisconceptionOut(text=m.text, last_seen=m.last_seen)
+                for m in self.top_misconceptions
+            ],
+            root_causes=[
+                RootCauseOut(concept=r.concept, because_of=list(r.because_of))
+                for r in self.root_causes
+            ],
+            slipping=[
+                SlippingOut(
+                    kind=s.kind, label=s.label, days_since_activity=s.days_since_activity
+                )
+                for s in self.slipping
+            ],
         )
 
 
@@ -698,6 +730,8 @@ def _signal(t: TopicView) -> TopicSignal:
         subject=t.subject,
         trend=t.trend,
         days_since_activity=t.days_since_activity,
+        recall_mastery=t.recall_mastery,
+        application_mastery=t.application_mastery,
     )
 
 
@@ -1153,7 +1187,27 @@ async def preference_context(user_id: str) -> Snapshot:
 
 
 async def get(user_id: str) -> StudentModelOut:
-    return (await snapshot(user_id)).to_model()
+    """The full `StudentModelOut`, including `style_summaries` — the one
+    field `Snapshot.to_model()` can't fill in by itself, since the
+    teaching-strategy bandit's evidence lives in `style_bandit`, not in this
+    snapshot. Reads the bandit's own read-through cache
+    (`style_bandit._cached_reads`), so this costs no additional query on a
+    warm cache — see that module's read-cache section."""
+    snap = await snapshot(user_id)
+    model = snap.to_model()
+
+    subject_by_subspace = {t.subspace_id: t.subject_id for t in snap.topics if t.subject_id}
+    subject_names = {t.subject_id: t.subject for t in snap.topics if t.subject_id}
+    summaries = await style_bandit.strategy_summary(user_id, subject_by_subspace)
+    style_summaries = [
+        StyleSummaryOut(
+            subject=subject_names[s.subject_id],
+            strategy_summary=style_bandit.ARM_DISPLAY.get(s.arm, s.arm),
+        )
+        for s in summaries
+        if s.subject_id in subject_names
+    ]
+    return model.model_copy(update={"style_summaries": style_summaries})
 
 
 async def set_explicit(user_id: str, patch: dict) -> StudentModelOut:

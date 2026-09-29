@@ -536,6 +536,47 @@ class TopicSignal(BaseModel):
     #: getting worse. None when there aren't enough attempts to say.
     trend: int | None = None
     days_since_activity: int | None = None
+    #: Mastery split by question `kind` (task 6) — `None` until each side has
+    #: enough evidence on its own; a coin-flip split is worse than none. Lets
+    #: a UI show "good at recall, shaky on application" instead of one blended
+    #: number that hides the split.
+    recall_mastery: int | None = None
+    application_mastery: int | None = None
+
+
+class MisconceptionOut(BaseModel):
+    """One recurring mix-up, for a read-only UI surface. `last_seen` is the
+    timestamp of the most recent occurrence, not the first — a mix-up that
+    hasn't recurred in months is the least useful one to lead with."""
+
+    text: str
+    last_seen: str | None = None
+
+
+class RootCauseOut(BaseModel):
+    """A weak concept that keeps showing up as a prerequisite of other weak
+    concepts — the "likely because of" behind a cluster of symptoms."""
+
+    concept: str
+    because_of: list[str]
+
+
+class SlippingOut(BaseModel):
+    """A topic or concept that was solid a few weeks ago and has since
+    dropped or gone quiet."""
+
+    kind: Literal["topic", "concept"]
+    label: str
+    days_since_activity: int | None = None
+
+
+class StyleSummaryOut(BaseModel):
+    """How this student learns best in one subject, per the teaching-strategy
+    bandit — only present once there's enough evidence to say it honestly
+    (see `style_bandit.strategy_summary`)."""
+
+    subject: str
+    strategy_summary: str
 
 
 class StudentModelOut(BaseModel):
@@ -557,6 +598,19 @@ class StudentModelOut(BaseModel):
     #: an inference into `learning_style` would make Settings show the
     #: student a sentence they never wrote as if they had.
     observed_habits: list[str] = []
+    #: Top 3 recurring mix-ups across every topic — task 3. Bounded the same
+    #: way at the source (`Snapshot.top_misconceptions`).
+    top_misconceptions: list[MisconceptionOut] = []
+    #: Weak concepts that keep showing up as a prerequisite of other weak
+    #: concepts — task 4. Bounded at the source (`Snapshot.root_causes`).
+    root_causes: list[RootCauseOut] = []
+    #: Topics/concepts that were solid a few weeks ago and have since slipped
+    #: — task 5. Bounded at the source (`Snapshot.slipping`).
+    slipping: list[SlippingOut] = []
+    #: "Learns best through examples" per subject, from the teaching-strategy
+    #: bandit — only for subjects with enough evidence to say so honestly.
+    #: Empty, not padded with guesses, when nothing qualifies yet.
+    style_summaries: list[StyleSummaryOut] = []
 
 
 class BriefSuggestion(BaseModel):
@@ -565,6 +619,14 @@ class BriefSuggestion(BaseModel):
 
     label: str
     route: str
+    #: Why this was picked, in the same plain terms `next_action` (brief.py)
+    #: reasons with — e.g. "You keep confusing Q-learning with SARSA." `None`
+    #: only for a caller that predates this field; every suggestion computed
+    #: today sets it.
+    reason: str | None = None
+    #: The `NextAction.action` kind this suggestion resolved from, so a UI can
+    #: style a misconception fix differently from a plain "continue".
+    action: str | None = None
 
 
 class BriefOut(BaseModel):
@@ -594,6 +656,9 @@ class StatsOut(BaseModel):
     daily_goal: int
     composition: StudyComposition
     due_forecast: list[ForecastDay]
+    # Today's graded cards, so the daily-goal moment counts reviews from every
+    # device, not just the one in your hand.
+    cards_reviewed_today: int = 0
 
 
 class SettingsOut(BaseModel):

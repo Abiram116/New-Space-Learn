@@ -7,14 +7,18 @@
  * measurement.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import type { Deck, Grade } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Ledger } from '../../components/ui/Surface'
+import { AmbienceField, celebrate, useAmbienceField } from '../../components/celebrate'
 import { cn } from '../../lib/cn'
 import { GRADES } from './model'
+
+/** Sessions already celebrated, by identity — a remount mustn't replay it. */
+const celebrated = new WeakSet<Grade[]>()
 
 export function Summary({
   grades,
@@ -39,17 +43,32 @@ export function Summary({
   const solid = tally.good + tally.easy
   const pct = grades.length ? Math.round((solid / grades.length) * 100) : 0
 
+  // The deck is clear — that's the moment, whatever the percentage. Every
+  // card's LAST grade cleared Again, so the cards themselves are the grades
+  // that weren't an Again.
+  const pctRef = useRef<HTMLDivElement>(null)
+  const ambience = useAmbienceField()
+  useEffect(() => {
+    if (celebrated.has(grades)) return // StrictMode's second mount
+    celebrated.add(grades)
+    ambience.api.progress(1)
+    ambience.api.pulse('bright')
+    const cards = grades.length - tally.again
+    if (cards > 0) celebrate('deck', { anchor: pctRef, facts: { count: cards, deck: deckName } })
+  }, [grades, tally.again, deckName, ambience.api])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader title="Session complete" />
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
+      <div className="relative isolate flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
+        <AmbienceField field={ambience} />
         {/* LEDGER — the session verdict, not a trophy. `foil` in particular
             had to go: foil is this system's cue for a collectible, and putting
             it on a score turned "you got 60%" into something that looked like
             a reward for getting 60%. The card faces you just reviewed stay
             Cards, because those genuinely are objects you own. */}
         <Ledger className="flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center">
-          <div>
+          <div ref={pctRef}>
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
             <p className="setcode mt-1">solid on {deckName}</p>
           </div>

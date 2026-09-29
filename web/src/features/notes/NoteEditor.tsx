@@ -900,7 +900,10 @@ export function NoteEditor({
             {editor?.isActive('codeBlock') && codeLangPos && (
               <div
                 style={codeLangPos}
-                className="absolute z-20 flex max-w-[calc(100%-0.5rem)] items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-1.5 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.8)]"
+                // Same brief pop every other floating panel in the app uses
+                // (Select's own dropdown below, the Ask AI/table panels
+                // further down) rather than a hard, motionless appear.
+                className="absolute z-20 flex max-w-[calc(100%-0.5rem)] items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-1.5 shadow-[0_10px_28px_-14px_rgba(0,0,0,0.8)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
               >
                 <span className="setcode shrink-0">Language</span>
                 <Select
@@ -926,7 +929,7 @@ export function NoteEditor({
             {askAi && (
               <div
                 style={menuPos ?? undefined}
-                className="absolute z-30 w-[min(22rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+                className="absolute z-30 w-[min(22rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
               >
                 <div className="mb-2 flex items-center gap-1.5">
                   <Icon name="sparkle" size={12} className="text-sky-deep" />
@@ -991,7 +994,7 @@ export function NoteEditor({
             {tablePicker && (
               <div
                 style={menuPos ?? undefined}
-                className="absolute z-30 w-[min(16rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+                className="absolute z-30 w-[min(16rem,calc(100%-1rem))] rounded-xl border border-line bg-raised p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     setTablePicker(null)
@@ -1058,7 +1061,7 @@ export function NoteEditor({
             {slash && (
               <div
                 style={menuPos ?? undefined}
-                className="absolute z-30 max-h-[340px] w-[min(18rem,calc(100%-1rem))] overflow-y-auto rounded-xl border border-line bg-raised p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)]"
+                className="absolute z-30 max-h-[340px] w-[min(18rem,calc(100%-1rem))] overflow-y-auto rounded-xl border border-line bg-raised p-1.5 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
               >
                 {/* No standalone "Commands" label — it stacked a second,
                     less specific header directly above the "Ask the

@@ -194,6 +194,19 @@ FEEDBACK_WINDOW = 200
 #: yet." (`teaching.strategy` uses `STRATEGY_PRIOR` instead.)
 _PRIOR = (1.0, 1.0)
 
+#: Human-readable phrasing of each `STRATEGY_ARMS` value, for a read-only UI
+#: surface (Profile's "How you learn best"). One sentence describing the
+#: student, distinct from `personalization._STRATEGY_INSTRUCTIONS`, which
+#: instructs the model rather than describing the person.
+ARM_DISPLAY: dict[str, str] = {
+    "example_first": "Learns best through examples",
+    "analogy_first": "Learns best through analogies",
+    "step_by_step": "Learns best working through it step by step",
+    "theory_first": "Learns best starting from the theory",
+    "code_first": "Learns best from working code",
+    "socratic": "Learns best being asked questions rather than told answers",
+}
+
 #: Below this many effective (decayed) observations, a subject's strategy
 #: posterior is "we're still guessing," not a fact worth surfacing in a UI —
 #: see `strategy_summary`.

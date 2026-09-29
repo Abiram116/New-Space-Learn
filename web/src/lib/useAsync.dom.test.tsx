@@ -18,8 +18,10 @@
 
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '../api/errors'
 import { useAsync } from './useAsync'
 import { invalidate, readCache, writeCache } from './asyncCache'
+import { notifyBackendReady } from './connectivity'
 
 afterEach(() => {
   // The cache is a module-level singleton — leaking an entry between tests
@@ -108,5 +110,83 @@ describe('setData survives its own key being invalidated out from under it', () 
     // each one really does see the other's result, which is what routing
     // straight through setState (rather than a ref read twice) guarantees.
     expect(result.current.data).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('errorKind', () => {
+  it('classifies a failed load the same way api/errors.classifyError would', async () => {
+    const { result } = renderHook(() =>
+      useAsync(() => Promise.reject(new ApiError('rate_limited', 'busy', 429))),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.error).toBe('busy')
+    expect(result.current.errorKind).toBe('rate_limited')
+  })
+
+  it('clears on the next successful load', async () => {
+    let fail = true
+    const { result } = renderHook(() =>
+      useAsync(() =>
+        fail
+          ? Promise.reject(new ApiError('network', "Can't reach the server.", 0))
+          : Promise.resolve('ok'),
+      ),
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.errorKind).toBe('offline')
+
+    fail = false
+    act(() => result.current.refresh())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.errorKind).toBeNull()
+    expect(result.current.data).toBe('ok')
+  })
+})
+
+describe('reconnection', () => {
+  it('retries automatically once the backend reports ready again, only when a load failed', async () => {
+    let calls = 0
+    const fn = vi.fn(() => {
+      calls += 1
+      return calls === 1
+        ? Promise.reject(new ApiError('network', "Can't reach the server.", 0))
+        : Promise.resolve('recovered')
+    })
+    const { result } = renderHook(() => useAsync(fn))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(result.current.error).not.toBeNull()
+    expect(calls).toBe(1)
+
+    act(() => notifyBackendReady())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(calls).toBe(2)
+    expect(result.current.data).toBe('recovered')
+    expect(result.current.error).toBeNull()
+  })
+
+  it('does not refetch on reconnect when the last load already succeeded', async () => {
+    const fn = vi.fn(() => Promise.resolve('fine'))
+    const { result } = renderHook(() => useAsync(fn))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(fn).toHaveBeenCalledTimes(1)
+
+    act(() => notifyBackendReady())
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(fn).toHaveBeenCalledTimes(1)
+    expect(result.current.data).toBe('fine')
   })
 })

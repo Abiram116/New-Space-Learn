@@ -542,7 +542,12 @@ async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
             if not quiz_id:
                 continue
             label = _ACTION_LABEL[candidate.action].format(target=_short(candidate.target))
-            return BriefSuggestion(label=label, route=f"{candidate.route}/quizzes?q={quiz_id}")
+            return BriefSuggestion(
+                label=label,
+                route=f"{candidate.route}/quizzes?q={quiz_id}",
+                reason=candidate.reason,
+                action=candidate.action,
+            )
         if candidate.resolve == "deck":
             deck_id, deck_name = await _due_deck(candidate.subspace_id)
             if not deck_id:
@@ -554,14 +559,17 @@ async def _compute_suggestion(snap: Snapshot) -> BriefSuggestion | None:
                 # comment here used to justify dropping it, which meant every
                 # suggested-review link silently 404'd.
                 route=f"{candidate.route}/flashcards?deck={deck_id}",
+                reason=candidate.reason,
+                action=candidate.action,
             )
         # resolve == "none": the base `/s/{subject}/{subspace}` route is
         # already the real chat destination — nothing to look up. `ChatView`
-        # has no `?q=`-style prefill param (checked before this was written),
-        # so the reason lives in `candidate.reason` for a future UI, not in
-        # the URL.
+        # has no `?q=`-style prefill param, so `reason` is what actually
+        # carries the "why" to the UI now (Home shows it under the CTA).
         label = _ACTION_LABEL[candidate.action].format(target=_short(candidate.target))
-        return BriefSuggestion(label=label, route=candidate.route)
+        return BriefSuggestion(
+            label=label, route=candidate.route, reason=candidate.reason, action=candidate.action
+        )
 
     return None
 

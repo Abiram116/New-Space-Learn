@@ -34,15 +34,23 @@ import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
 import { subspacePath } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
+import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
+import { useSlowState, type SlowPhase } from '../../lib/useSlowState'
 import { toneDot, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { Fortnight } from './Fortnight'
 
 export function Home() {
-  const { spaces, loading: spacesLoading } = useSpaces()
+  const { spaces, loading: spacesLoading, error: spacesError, refresh: refreshSpaces } = useSpaces()
   const stats = useAsync(() => getCachedStats(), [])
   const brief = useAsync(() => getCachedBrief(), [])
+  // Cold-start awareness for the one blocking gate on this page (below) and
+  // for the two sections that keep loading behind it — see `useSlowState`'s
+  // own doc comment for why this is a hook rather than a fixed threshold.
+  const spacesPhase = useSlowState(spacesLoading)
+  const briefPhase = useSlowState(brief.loading)
+  const statsPhase = useSlowState(stats.loading)
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
 
   const anySpaces = spaces.length > 0
@@ -80,8 +88,30 @@ export function Home() {
    *
    * Guessing was never worth it. `/spaces` is one round trip now, and a brief
    * skeleton beats showing someone a dashboard that is about to be taken away.
+   *
+   * A failed load is handled here too, rather than falling through to
+   * `!anySpaces` below — an empty `spaces` array from a request that never
+   * came back would otherwise read as "you have nothing yet," which is a
+   * different sentence from "we couldn't reach the server," and only one of
+   * them is true.
    */
-  if (spacesLoading) return <HomeSkeleton />
+  if (spacesError && !spacesLoading) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4">
+        <EmptyState
+          icon="offline"
+          title="Couldn't load your home"
+          description={spacesError}
+          action={
+            <Button onClick={() => void refreshSpaces()}>
+              <Icon name="refresh" size={14} /> Retry
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+  if (spacesLoading) return <HomeSkeleton phase={spacesPhase} onRetry={() => void refreshSpaces()} />
 
   /* A brand-new account gets the introduction *instead of* the dashboard, not
      threaded through it. Until there is a subject there is nothing to brief,
@@ -113,6 +143,7 @@ export function Home() {
             <div className="flex flex-col gap-3">
               <Skeleton className="h-11 w-2/3 rounded-lg" />
               <Skeleton className="h-4 w-1/2 rounded" />
+              <SlowCaption phase={briefPhase} onRetry={brief.refresh} />
             </div>
           ) : (
             <div className="flex min-w-0 flex-col gap-2">
@@ -123,6 +154,11 @@ export function Home() {
                 {brief.data?.body ??
                   'Add a topic to your space and start asking questions about your own material.'}
               </p>
+              {/* A failed background refresh keeps whatever headline is
+                  already showing (the effect never clears `local` on
+                  error) — this is the footnote that says so instead of
+                  leaving the stale copy looking current. */}
+              {brief.error && <StaleNotice onRetry={brief.refresh} className="mt-0.5" />}
             </div>
           )}
 
@@ -132,16 +168,26 @@ export function Home() {
                 /* This is the one action the product is actually
                    recommending, computed from real weak-signal data — it
                    shouldn't look identical to a generic "open something"
-                   button. The foil ring marks it as the considered pick. */
-                <Link to={brief.data.suggestion.route}>
-                  <Button
-                    size="lg"
-                    className="ring-2 ring-brand/30 ring-offset-2 ring-offset-canvas transition-shadow hover:ring-brand/60"
-                  >
-                    {brief.data.suggestion.label}
-                    <Icon name="arrowRight" size={15} />
-                  </Button>
-                </Link>
+                   button. The foil ring marks it as the considered pick,
+                   and `reason` (the decision engine's own words — see
+                   `next_action` in `me/brief.py`) is what makes it legible
+                   as a recommendation rather than an arbitrary highlight. */
+                <div className="flex flex-col items-start gap-1.5">
+                  <Link to={brief.data.suggestion.route}>
+                    <Button
+                      size="lg"
+                      className="ring-2 ring-brand/30 ring-offset-2 ring-offset-canvas transition-shadow hover:ring-brand/60"
+                    >
+                      {brief.data.suggestion.label}
+                      <Icon name="arrowRight" size={15} />
+                    </Button>
+                  </Link>
+                  {brief.data.suggestion.reason && (
+                    <p className="max-w-xs text-[11.5px] leading-snug text-muted">
+                      {brief.data.suggestion.reason}
+                    </p>
+                  )}
+                </div>
               ) : (
                 <Link to={due > 0 ? `${cardsEntry?.link ?? first.link}/flashcards` : first.link}>
                   <Button size="lg">
@@ -220,6 +266,11 @@ export function Home() {
                 detail="Estimated from what you completed."
               />
             </div>
+            {stats.loading ? (
+              <SlowCaption phase={statsPhase} onRetry={stats.refresh} />
+            ) : (
+              stats.error && <StaleNotice onRetry={stats.refresh} />
+            )}
             <Fortnight stats={stats.data} loading={stats.loading} />
           </section>
           </Rise>
@@ -637,14 +688,20 @@ export type { Stats }
  * row of figures because *most* accounts land on the dashboard, but nothing in
  * it commits to content — showing a real headline here is what produced the
  * flash this replaces.
+ *
+ * `phase` (from `useSlowState`) is what keeps this honest past the first
+ * couple of seconds: Render's free tier cold-starts in ~30-60s, and a
+ * skeleton that never changes across that whole span reads as broken, not
+ * slow — see that hook's own doc comment.
  */
-function HomeSkeleton() {
+function HomeSkeleton({ phase, onRetry }: { phase: SlowPhase; onRetry: () => void }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto" aria-busy="true">
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
         <div className="flex flex-col gap-3 pb-8">
           <Skeleton className="h-11 w-2/3 max-w-md rounded-lg" />
           <Skeleton className="h-4 w-1/2 max-w-sm rounded" />
+          <SlowCaption phase={phase} onRetry={onRetry} className="mt-1" />
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line pt-7 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (

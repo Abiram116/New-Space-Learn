@@ -122,6 +122,96 @@ describe('the "Where to focus" panel', () => {
     expect(screen.getByText('Topic 3')).toBeInTheDocument()
     expect(screen.queryByText('Topic 4')).not.toBeInTheDocument()
   })
+
+  it('shows a misconception as a mix-up', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        top_misconceptions: [{ text: 'confuses Q-learning with SARSA', last_seen: null }],
+      }),
+    )
+    renderProfile()
+
+    await screen.findByText('Where to focus')
+    expect(screen.getByText(/Mix-up: confuses Q-learning with SARSA/)).toBeInTheDocument()
+  })
+
+  it('shows a root cause in plain "struggles with / likely because" terms', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        root_causes: [{ concept: 'Matrix multiplication', because_of: ['Attention', 'Backprop'] }],
+      }),
+    )
+    renderProfile()
+
+    expect(
+      await screen.findByText(/Struggles with Attention, Backprop — likely because of Matrix multiplication/),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a slipping item with how long ago it was last practised', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        slipping: [{ kind: 'topic', label: 'Bayesian Inference', days_since_activity: 12 }],
+      }),
+    )
+    renderProfile()
+
+    expect(await screen.findByText(/Fading: Bayesian Inference, last practised 12 days ago/)).toBeInTheDocument()
+  })
+
+  it('shows a recall/application split only when at least one side has evidence', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        weak_areas: [
+          {
+            subspace_id: 'sub-1', topic: 'Cross-attention', average: 42, subject: null,
+            recall_mastery: 70, application_mastery: 30,
+          },
+        ],
+      }),
+    )
+    renderProfile()
+
+    await screen.findByText('Cross-attention')
+    expect(screen.getByText('70%')).toBeInTheDocument()
+    expect(screen.getByText('30%')).toBeInTheDocument()
+  })
+
+  it('stays honest — no invented mastery split when neither side has evidence', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        weak_areas: [{ subspace_id: 'sub-1', topic: 'Cross-attention', average: 42, subject: null }],
+      }),
+    )
+    renderProfile()
+
+    await screen.findByText('Cross-attention')
+    expect(screen.queryByText('Recall')).not.toBeInTheDocument()
+    expect(screen.queryByText('Apply')).not.toBeInTheDocument()
+  })
+})
+
+describe('"How you learn best"', () => {
+  it('shows a style summary per subject once there is enough evidence', async () => {
+    getStudentModel.mockResolvedValue(
+      studentModel({
+        style_summaries: [{ subject: 'Machine Learning', strategy_summary: 'Learns best through examples' }],
+      }),
+    )
+    renderProfile()
+
+    expect(await screen.findByText('How you learn best')).toBeInTheDocument()
+    expect(screen.getByText('Machine Learning')).toBeInTheDocument()
+    expect(screen.getByText('Learns best through examples')).toBeInTheDocument()
+  })
+
+  it('stays off the page when nothing has enough evidence yet', async () => {
+    getStudentModel.mockResolvedValue(studentModel({ style_summaries: [] }))
+    renderProfile()
+
+    await waitFor(() => expect(getStudentModel).toHaveBeenCalled())
+    expect(screen.queryByText('How you learn best')).not.toBeInTheDocument()
+  })
 })
 
 describe('the activity heatmap legend', () => {

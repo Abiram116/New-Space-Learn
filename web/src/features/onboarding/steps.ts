@@ -1,50 +1,97 @@
 /**
- * The intake questions.
+ * The intake: five questions, what each one stores, and the one patch they
+ * become.
  *
- * Split out of the component so the sample-answer preview can be checked
- * against the *real* option values rather than a copy of them. `preview.ts`
- * keys its variants on these exact strings, and a test that hardcoded them
- * would keep passing after someone reworded a step — the failure it is
- * supposed to catch.
+ * Kept apart from the component so the fingerprint (`fingerprint.ts`) and the
+ * save path are both checked against the *real* option values rather than a
+ * copy of them — a test that hardcoded the strings would keep passing after
+ * someone reworded a step, which is the failure it exists to catch.
  */
 
+import type { StudentModelPatch } from '../../api/types'
+
 export type Option = {
-  /** What the student sees, and what is echoed back in the summary. */
+  /** What the student sees, and what is echoed back in the legend. */
   label: string
-  /** What is stored, and what the sample answer is keyed on. */
+  /** What is stored. */
   value: string
-  /** One line on what choosing this actually does. Not decoration — it is the
-   *  difference between picking a word and making a decision. */
+  /** One line on what choosing this actually does. Shown under the option and,
+   *  once chosen, beside the part of the fingerprint it drew. */
   hint: string
 }
 
-export type Step = {
-  id: string
+/** Everything the intake collects, as it is being collected. */
+export type Answers = {
+  name: string
+  /** `learning_style` option values — several can be true at once. */
+  styles: string[]
+  depth: string | null
+  session: string | null
+  goal: string
+}
+
+export const EMPTY_ANSWERS: Answers = { name: '', styles: [], depth: null, session: null, goal: '' }
+
+type Base = {
+  id: 'name' | 'style' | 'depth' | 'session' | 'goal'
   /** The question, asked plainly. */
   ask: string
   /** A sentence lowering the stakes. Every one of these is recoverable. */
   aside: string
+}
+
+export type TextStep = Base & {
+  kind: 'text'
+  field: 'name' | 'goal'
+  max: number
+  placeholder: string
+  autoComplete: string
+}
+
+export type ChoiceStep = Base & {
+  kind: 'choice'
+  field: 'styles' | 'depth' | 'session'
   options: Option[]
-  field: 'learning_style' | 'teaching_preference' | 'session_length_minutes'
-  freeform?: boolean
   /**
-   * Several answers can be true at once.
-   *
    * "What makes it click" is genuinely not one thing — an example *and* a
-   * comparison is the honest answer for most people, and forcing a single pick
-   * throws away half of what they would have told us. Single-select stays the
-   * default because most questions really do have one answer, and a
-   * multi-select that only ever takes one tap is a worse single-select.
+   * comparison is the honest answer for most people. Single-select stays the
+   * default because most questions really do have one answer.
    */
   multi?: boolean
 }
 
+export type Step = TextStep | ChoiceStep
+
+/**
+ * Server-side limits, mirrored so the client can never send a rejected patch.
+ *
+ * These match `StudentModelIn` in `api/app/schemas/__init__.py`. The intake
+ * sends every answer as ONE patch, so a single over-length field discards all
+ * of them. `api/tests/test_intake_contract.py` pins the same numbers from the
+ * other side. The name cap matches Profile's.
+ */
+export const LEARNING_STYLE_MAX = 240
+export const TEACHING_PREFERENCE_MAX = 400
+export const EXAM_CONTEXT_MAX = 140
+export const NAME_MAX = 60
+
 export const STEPS: Step[] = [
   {
+    id: 'name',
+    kind: 'text',
+    field: 'name',
+    ask: 'What should we call you?',
+    aside: 'Your name seeds the drawing — and it is how the app will greet you.',
+    max: NAME_MAX,
+    placeholder: 'Your name',
+    autoComplete: 'given-name',
+  },
+  {
     id: 'style',
+    kind: 'choice',
+    field: 'styles',
     ask: 'When something is new to you, what makes it click?',
     aside: 'Pick as many as fit — most people need more than one.',
-    field: 'learning_style',
     multi: true,
     options: [
       {
@@ -71,9 +118,10 @@ export const STEPS: Step[] = [
   },
   {
     id: 'depth',
+    kind: 'choice',
+    field: 'depth',
     ask: 'And how much do you want at once?',
     aside: 'This is the one people change most often. It is a slider, not a vow.',
-    field: 'teaching_preference',
     options: [
       {
         label: 'Keep it short',
@@ -94,9 +142,10 @@ export const STEPS: Step[] = [
   },
   {
     id: 'session',
+    kind: 'choice',
+    field: 'session',
     ask: 'How long is one of your study sessions?',
     aside: 'Used to size what gets suggested — never to nag you about it.',
-    field: 'session_length_minutes',
     options: [
       { label: '15 minutes', value: '15', hint: 'Between other things' },
       { label: '30 minutes', value: '30', hint: 'A focused block' },
@@ -105,29 +154,44 @@ export const STEPS: Step[] = [
     ],
   },
   {
-    id: 'anything',
-    ask: 'Anything else about how you like to be taught?',
-    aside: 'Skip it if nothing comes to mind — most people do, and that is fine.',
-    field: 'teaching_preference',
-    freeform: true,
-    options: [],
+    /* Goals change on a fortnightly cycle where preferences do not, which is
+       why this is last, optional, and one line — and why Settings keeps the
+       same field. It earns its place because "GATE 2027" and "passing Calc II"
+       should not be taught the same way, and it is the one answer the student
+       can see steering the whole thing: the north star on the drawing. */
+    id: 'goal',
+    kind: 'text',
+    field: 'goal',
+    ask: 'What are you working towards?',
+    aside: 'An exam, a job, a course — optional, and easy to change later.',
+    max: EXAM_CONTEXT_MAX,
+    placeholder: 'e.g. GATE 2027, an AI internship, passing Calculus II',
+    autoComplete: 'off',
   },
 ]
 
-/**
- * Server-side limits, mirrored so the client can never send a rejected patch.
- *
- * These match `StudentModelIn` in `api/app/schemas/__init__.py`. The intake
- * sends every answer as ONE patch, so a single over-length field discards all
- * of them — which is exactly what happened when the multi-select was added
- * against a 60-character `learning_style` cap. `api/tests/test_intake_contract.py`
- * pins the same numbers from the other side.
- */
-export const LEARNING_STYLE_MAX = 240
-const TEACHING_PREFERENCE_MAX = 400
+/** The first word of a name, for greetings. Empty when there is no name. */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? ''
+}
 
-/** Room left for free text after the depth answer is prefixed to it. */
-export const FREE_TEXT_MAX =
-  TEACHING_PREFERENCE_MAX -
-  Math.max(...(STEPS.find((s) => s.id === 'depth')?.options ?? []).map((o) => o.value.length)) -
-  1
+/**
+ * The answers as one `PATCH /me/student-model` body.
+ *
+ * Only answered fields are sent — a skipped question must not overwrite
+ * anything. Several style values are joined into one sentence rather than
+ * stored as a list: every consumer interpolates this into a prompt, and a JSON
+ * array mid-sentence would read as a bug to the model. Joined in the options'
+ * own order so the same picks always produce the same string.
+ */
+export function buildPatch(a: Answers): StudentModelPatch {
+  const patch: StudentModelPatch = {}
+  const style = STEPS.find((s): s is ChoiceStep => s.id === 'style')!
+  const styles = style.options.filter((o) => a.styles.includes(o.value)).map((o) => o.value)
+  if (styles.length) patch.learning_style = styles.join('; ').slice(0, LEARNING_STYLE_MAX)
+  if (a.depth) patch.teaching_preference = a.depth.slice(0, TEACHING_PREFERENCE_MAX)
+  if (a.session) patch.session_length_minutes = Number(a.session)
+  const goal = a.goal.trim()
+  if (goal) patch.exam_context = goal.slice(0, EXAM_CONTEXT_MAX)
+  return patch
+}

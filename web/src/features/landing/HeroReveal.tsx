@@ -89,50 +89,72 @@ export function HeroReveal({
     const tail = copy.querySelectorAll('[data-hero-tail]')
     if (!heading) return
 
-    // Per WORD, not per line. A whole line revealing at once is a curtain;
-    // words arriving with their own timing is someone speaking. The words
-    // overlap heavily (stagger is a fraction of the duration) so the phrase
-    // still lands as one gesture rather than a typewriter.
-    const split = new SplitText(heading, {
-      type: 'lines,words',
-      linesClass: 'sl-line',
-      wordsClass: 'sl-word',
-    })
+    let cancelled = false
+    let ctx: gsap.Context | undefined
+    let split: SplitText | undefined
 
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: EASE } })
+    // SplitText measures line/word boxes off whatever font is actually
+    // painted the moment it runs. Archivo (index.html) loads behind a
+    // render-blocking Google Fonts link with `display: swap`, so on a cold
+    // cache this effect's first tick can still be showing the Manrope
+    // fallback — splitting ITS line breaks, then visibly re-wrapping under
+    // the reveal a moment later once Archivo swaps in. `fonts.ready` (with a
+    // same-tick fallback where the API doesn't exist) means the split always
+    // matches the font the animation is actually going to show.
+    const run = () => {
+      if (cancelled) return
+      // Per WORD, not per line. A whole line revealing at once is a curtain;
+      // words arriving with their own timing is someone speaking. The words
+      // overlap heavily (stagger is a fraction of the duration) so the phrase
+      // still lands as one gesture rather than a typewriter.
+      split = new SplitText(heading, {
+        type: 'lines,words',
+        linesClass: 'sl-line',
+        wordsClass: 'sl-word',
+      })
 
-      tl.fromTo(
-        frame,
-        { opacity: 0, scale: 0.965, y: () => window.innerHeight * 0.56 + 26 },
-        { opacity: 1, scale: 1, y: () => window.innerHeight * 0.56, duration: DUR * 1.6 },
-        0,
-      )
-      // Words rise out of their own line box and scale down INTO place, so the
-      // type settles rather than simply appearing at final size.
-      tl.fromTo(
-        split.words,
-        { yPercent: 108, scale: 1.14, opacity: 0 },
-        {
-          yPercent: 0,
-          scale: 1,
-          opacity: 1,
-          duration: DUR * 1.25,
-          stagger: STAGGER * 0.8,
-        },
-        0.12,
-      )
-      tl.fromTo(
-        tail,
-        { opacity: 0, y: 14 },
-        { opacity: 1, y: 0, duration: DUR, stagger: STAGGER },
-        0.55,
-      )
-    }, sectionRef)
+      ctx = gsap.context(() => {
+        const tl = gsap.timeline({ defaults: { ease: EASE } })
+
+        tl.fromTo(
+          frame,
+          { opacity: 0, scale: 0.965, y: () => window.innerHeight * 0.56 + 26 },
+          { opacity: 1, scale: 1, y: () => window.innerHeight * 0.56, duration: DUR * 1.6 },
+          0,
+        )
+        // Words rise out of their own line box and scale down INTO place, so the
+        // type settles rather than simply appearing at final size.
+        tl.fromTo(
+          split!.words,
+          { yPercent: 108, scale: 1.14, opacity: 0 },
+          {
+            yPercent: 0,
+            scale: 1,
+            opacity: 1,
+            duration: DUR * 1.25,
+            stagger: STAGGER * 0.8,
+          },
+          0.12,
+        )
+        tl.fromTo(
+          tail,
+          { opacity: 0, y: 14 },
+          { opacity: 1, y: 0, duration: DUR, stagger: STAGGER },
+          0.55,
+        )
+      }, sectionRef)
+    }
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(run)
+    } else {
+      run()
+    }
 
     return () => {
-      ctx.revert()
-      split.revert()
+      cancelled = true
+      ctx?.revert()
+      split?.revert()
     }
   }, [reduced])
 

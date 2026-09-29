@@ -19,11 +19,20 @@ import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { ProgressBar } from '../../components/ui/Bits'
 import { Tip } from '../../components/ui/Tip'
+import { useReducedMotion } from '../../components/ui/motion'
+import {
+  AmbienceField,
+  noteCardGraded,
+  useAmbienceField,
+  useStudySession,
+} from '../../components/celebrate'
 import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
 import { nextIntervalLabel } from '../../lib/schedule'
 import { stripMarkdown } from '../../lib/text'
-import { GRADES, type Mode } from './model'
+import { EASE } from '../../components/celebrate/easing'
+import { useCardMotion } from './cardMotion'
+import { GRADES, GRADE_PULSE, type Mode } from './model'
 
 export function Review({
   mode,
@@ -54,6 +63,18 @@ export function Review({
   // id back, so id alone would wrongly gate its second pass too.
   const gradedRef = useRef<number>(-1)
 
+  // The room the session sits in: warmer as the queue empties, a pulse of
+  // light on a Good/Easy, a breath of dimness on an Again.
+  useStudySession()
+  const ambience = useAmbienceField()
+  const cardRef = useRef<HTMLDivElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
+  const reduced = useReducedMotion()
+  useEffect(() => {
+    ambience.api.progress(total ? mode.index / total : 0)
+  }, [ambience.api, mode.index, total])
+  useCardMotion(cardRef, mode.index, mode.flipped, reduced)
+
   /* What each grade costs, computed from this card's own ease/interval/reps
      with the same arithmetic the server runs. Shown on the button so the
      choice is informed rather than a guess about a hidden algorithm. */
@@ -73,7 +94,10 @@ export function Review({
       const { mode: m, card: c } = stateRef.current
       if (!c || gradedRef.current === m.index) return
       gradedRef.current = m.index
-      void gradeCard(c.id, g).catch(showError)
+      const saved = gradeCard(c.id, g)
+      saved.catch(showError)
+      noteCardGraded(saved, { anchor: cardRef, bar: barRef })
+      ambience.api.pulse(GRADE_PULSE[g])
       // Due counts and the streak just moved; don't let Home serve the
       // pre-review numbers from cache.
       clearStatsCache()
@@ -91,7 +115,7 @@ export function Review({
         setMode({ ...m, cards, index: m.index + 1, flipped: false, grades })
       }
     },
-    [onFinish, setMode, showError],
+    [onFinish, setMode, showError, ambience.api],
   )
 
   useEffect(() => {
@@ -125,34 +149,43 @@ export function Review({
         }
       />
 
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-4 py-6 lg:flex-row lg:items-start lg:justify-center">
+      <div className="relative isolate flex min-h-0 flex-1 flex-col items-center justify-center gap-8 px-4 py-6 lg:flex-row lg:items-start lg:justify-center">
+        <AmbienceField field={ambience} />
         <div className="flex w-full max-w-xl flex-col items-center gap-6 lg:pt-6">
           <div className="flex w-full items-center gap-3">
             <span className="setcode tabular-nums">
               {mode.index + 1} / {total}
             </span>
-            <ProgressBar value={((mode.index) / total) * 100} className="flex-1" />
+            <div ref={barRef} className="flex-1">
+              <ProgressBar value={(mode.index / total) * 100} />
+            </div>
           </div>
 
-          {/* The card. Real 3D — the back is a separate face, rotated behind. */}
-          <div
-            className="w-full [perspective:1600px]"
-            style={{ height: 'min(46vh, 340px)' }}
-          >
-            <button
-              type="button"
-              onClick={flip}
-              aria-label={mode.flipped ? 'Show question' : 'Show answer'}
-              className={cn(
-                'relative h-full w-full cursor-pointer text-left',
-                '[transform-style:preserve-3d] transition-transform duration-500',
-                'motion-reduce:transition-none',
-              )}
-              style={{ transform: mode.flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
-            >
-              <CardFace side="front" text={card.front} hint="Space to flip" />
-              <CardFace side="back" text={card.back} source={card.source} />
-            </button>
+          {/* The card. Real 3D — the back is a separate face, rotated behind.
+              Keyed per queue slot so the next card arrives face-up: turning
+              the old card back over used to show the NEW card's answer for
+              the first half of the rotation. The outer layer carries the lift
+              and the deal (see useCardMotion); the button only ever rotates. */}
+          <div className="w-full" style={{ height: 'min(46vh, 340px)' }}>
+            <div ref={cardRef} className="h-full w-full [perspective:1600px]">
+              <button
+                key={mode.index}
+                type="button"
+                onClick={flip}
+                aria-label={mode.flipped ? 'Show question' : 'Show answer'}
+                className={cn(
+                  'relative h-full w-full cursor-pointer text-left',
+                  '[transform-style:preserve-3d] motion-reduce:transition-none',
+                )}
+                style={{
+                  transform: mode.flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                  transition: reduced ? 'none' : `transform 780ms ${EASE.flip}`,
+                }}
+              >
+                <CardFace side="front" text={card.front} hint="Space to flip" />
+                <CardFace side="back" text={card.back} source={card.source} />
+              </button>
+            </div>
           </div>
 
           {/* The grade row is always here — dimmed and out of the tab order

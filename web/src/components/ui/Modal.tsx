@@ -69,7 +69,11 @@ export function Modal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-well/80 p-4 backdrop-blur-[2px]"
+      // Same beat as every other overlay in the app (`AttachmentViewer`,
+      // the dock panel) rather than a hard pop — one shared entrance for
+      // "something now covers the screen", reusing the existing keyframe
+      // instead of inventing a modal-specific one.
+      className="fixed inset-0 z-40 flex items-center justify-center bg-well/80 p-4 backdrop-blur-[2px] motion-safe:animate-[dockSwap_180ms_var(--ease-sl)_both]"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

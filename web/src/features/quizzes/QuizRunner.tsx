@@ -29,6 +29,7 @@ import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Leaf } from '../../components/ui/Surface'
 import { useReducedMotion } from '../../components/ui/motion'
+import { celebrate, useAmbience, useStudySession } from '../../components/celebrate'
 import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
 import { useAssessmentLock } from '../../lib/assessment'
@@ -82,6 +83,10 @@ export function QuizRunner({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const seconds = useElapsed()
+  // The room: brightens as questions are answered, pulses on a right answer,
+  // dims for a breath on a miss. A no-op outside a <StudyAmbience>.
+  const ambience = useAmbience()
+  useStudySession()
 
   const q = quiz.questions[index]
   const chosen = answers[index]
@@ -89,6 +94,10 @@ export function QuizRunner({
   const isCorrect = chosen === q.answer_index
   const answeredCount = revealed.filter(Boolean).length
   const isLast = index === total - 1
+
+  useEffect(() => {
+    ambience.progress(total ? answeredCount / total : 0)
+  }, [ambience, answeredCount, total])
 
   /** How many correct in a row up to and including this question. */
   const streak = useMemo(() => {
@@ -101,9 +110,21 @@ export function QuizRunner({
   }, [index, revealed, answers, quiz.questions])
 
   const choose = useCallback(
-    (choiceIndex: number) => {
+    (choiceIndex: number, el?: HTMLElement) => {
       // Locked once answered — see the note at the top of the file.
       if (revealed[index]) return
+      const correct = choiceIndex === quiz.questions[index].answer_index
+      let run = 0
+      if (correct) {
+        run = 1
+        for (let i = index - 1; i >= 0; i--) {
+          if (!revealed[i] || answers[i] !== quiz.questions[i].answer_index) break
+          run++
+        }
+      }
+      ambience.pulse(!correct ? 'miss' : run >= 3 ? 'bright' : 'good')
+      // Three or more in a row earns a flicker of stars off the answer itself.
+      if (run >= 3) celebrate('combo', { anchor: el, compact })
       setAnswers((prev) => {
         const next = [...prev]
         next[index] = choiceIndex
@@ -115,7 +136,7 @@ export function QuizRunner({
         return next
       })
     },
-    [index, revealed],
+    [index, revealed, answers, quiz.questions, ambience, compact],
   )
 
   const finish = useCallback(async () => {
@@ -206,7 +227,7 @@ export function QuizRunner({
               picked={chosen === i}
               isAnswer={q.answer_index === i}
               revealed={isRevealed}
-              onPick={() => choose(i)}
+              onPick={(el) => choose(i, el)}
             />
           ))}
         </div>
@@ -330,7 +351,7 @@ function Choice({
   picked: boolean
   isAnswer: boolean
   revealed: boolean
-  onPick: () => void
+  onPick: (el: HTMLElement) => void
 }) {
   // After the reveal the correct answer is always marked, whether or not it
   // was chosen — the point is to leave knowing which one was right, and a
@@ -348,18 +369,23 @@ function Choice({
   return (
     <button
       type="button"
-      onClick={onPick}
+      onClick={(e) => onPick(e.currentTarget)}
       disabled={revealed}
       className={cn(
         'flex items-start gap-2.5 rounded-xl border-[1.5px] px-3 py-2.5 text-left t-control duration-200',
         compact ? 'text-[12.5px]' : 'text-[14px]',
         revealed ? 'cursor-default' : 'cursor-pointer',
         tone,
+        // The reveal, felt: the right answer rises to meet you, a wrong pick
+        // settles back under your finger. Transform-only springs.
+        revealed && isAnswer && 'sl-pop',
+        revealed && picked && !isAnswer && 'sl-settle',
       )}
     >
       <span
         className={cn(
           'grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold',
+          revealed && (isAnswer || picked) && 'sl-bubble',
           !revealed
             ? picked
               ? 'bg-brand text-[#1a120f]'

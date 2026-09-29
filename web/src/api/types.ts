@@ -179,6 +179,14 @@ export type BriefSuggestion = {
   label: string
   /** In-app route, e.g. "/s/:spaceId/:subspaceId/flashcards". */
   route: string
+  /** Why this was picked, in the decision engine's own plain terms — e.g.
+   *  "You keep confusing Q-learning with SARSA." Absent only from a payload
+   *  cached before this field existed. */
+  reason?: string | null
+  /** The kind of next-step this resolved from (`fix_misconception`,
+   *  `root_cause`, `slipping`, `due_cards`, `weak_topic`, `continue`) — lets
+   *  the UI style a misconception fix differently from a plain "continue". */
+  action?: string | null
 }
 
 export type TopicSignal = {
@@ -192,6 +200,39 @@ export type TopicSignal = {
    *  getting worse; null when there aren't enough attempts to say. */
   trend?: number | null
   days_since_activity?: number | null
+  /** Mastery split by question kind — null until each side has enough
+   *  evidence on its own; a coin-flip split is worse than none. */
+  recall_mastery?: number | null
+  application_mastery?: number | null
+}
+
+/** One recurring mix-up — `last_seen` is the most recent occurrence, not
+ *  the first. */
+export type Misconception = {
+  text: string
+  last_seen?: string | null
+}
+
+/** A weak concept that keeps showing up as a prerequisite of other weak
+ *  concepts — the "likely because of" behind a cluster of symptoms. */
+export type RootCause = {
+  concept: string
+  because_of: string[]
+}
+
+/** A topic or concept that was solid a few weeks ago and has since dropped
+ *  or gone quiet. */
+export type Slipping = {
+  kind: 'topic' | 'concept'
+  label: string
+  days_since_activity?: number | null
+}
+
+/** How a student learns best in one subject, from the teaching-strategy
+ *  bandit — only present once there's enough evidence to say it honestly. */
+export type StyleSummary = {
+  subject: string
+  strategy_summary: string
 }
 
 export type StudentModel = {
@@ -212,6 +253,16 @@ export type StudentModel = {
   /** What the app has observed the student doing — never a preference they
    *  stated. Kept apart from the explicit fields on purpose. */
   observed_habits: string[]
+  /** Top recurring mix-ups across every topic. Absent/empty when there's
+   *  nothing recurring yet. */
+  top_misconceptions?: Misconception[]
+  /** Weak concepts underlying other weak concepts. */
+  root_causes?: RootCause[]
+  /** Topics/concepts that were solid a few weeks ago and have since slipped. */
+  slipping?: Slipping[]
+  /** "Learns best through examples", per subject — only for subjects with
+   *  enough evidence. Empty, never padded with a guess. */
+  style_summaries?: StyleSummary[]
 }
 
 export type StudentModelPatch = Partial<
@@ -258,6 +309,7 @@ export type Stats = {
   heatmap: HeatmapCell[]
   badges: Badge[]
   /** The target the streak bars are measured against. */
+  cards_reviewed_today?: number
   daily_goal: number
   composition: StudyComposition
   due_forecast: ForecastDay[]

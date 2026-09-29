@@ -19,6 +19,7 @@ import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
+import { StudyAmbience } from '../../../components/celebrate'
 import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
 import { QuizResults } from '../../quizzes/QuizResults'
@@ -63,44 +64,42 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
     }
   }, [subspaceId, quizzes, show, showError])
 
-  if (active && finished) {
-    return (
-      // `min-h-0` is load-bearing: QuizResults scrolls its review column, and
-      // without it the flex parent grows instead and the dock's own scroll
-      // takes over — which is the bug this whole screen was reported for.
-      <div className="flex min-h-0 flex-1 flex-col">
-        <QuizResults
-          compact
-          quiz={active}
-          answers={finished.answers}
-          result={finished.result}
-          onRetake={() => {
-            setFinished(null)
-            setAttempt((n) => n + 1)
-          }}
-          onBack={() => {
-            setActive(null)
-            setFinished(null)
-          }}
-        />
-      </div>
-    )
-  }
-
   if (active) {
     return (
-      <div className="-mr-1 flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
-        <QuizRunner
-          key={attempt}
-          compact
-          quiz={active}
-          onFinished={(result, answers) => {
-            setFinished({ result, answers })
-            void quizzes.refresh()
-          }}
-          onExit={() => setActive(null)}
-        />
-      </div>
+      // One room for the runner AND its results, so the light carries across
+      // the finish instead of restarting. The frame never scrolls; the runner
+      // scrolls inside it. On results `min-h-0` is load-bearing: QuizResults
+      // scrolls its own review column, and without it the flex parent grows
+      // instead and the dock's own scroll takes over.
+      <StudyAmbience compact innerClassName={finished ? undefined : '-mr-1 overflow-y-auto pr-1'}>
+        {finished ? (
+          <QuizResults
+            compact
+            quiz={active}
+            answers={finished.answers}
+            result={finished.result}
+            onRetake={() => {
+              setFinished(null)
+              setAttempt((n) => n + 1)
+            }}
+            onBack={() => {
+              setActive(null)
+              setFinished(null)
+            }}
+          />
+        ) : (
+          <QuizRunner
+            key={attempt}
+            compact
+            quiz={active}
+            onFinished={(result, answers) => {
+              setFinished({ result, answers })
+              void quizzes.refresh()
+            }}
+            onExit={() => setActive(null)}
+          />
+        )}
+      </StudyAmbience>
     )
   }
 

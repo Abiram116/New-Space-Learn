@@ -8,6 +8,7 @@
  */
 
 import type { Flashcard, Grade } from '../../api/types'
+import type { Pulse } from '../../components/celebrate'
 
 /**
  * Grades read as a difficulty ramp, cold → hot.
@@ -35,3 +36,12 @@ export type Mode =
   | { kind: 'deck'; deckId: string }
   | { kind: 'review'; deckId: string; cards: Flashcard[]; index: number; flipped: boolean; grades: Grade[] }
   | { kind: 'summary'; deckId: string; grades: Grade[] }
+
+/** How the room answers each grade. Again dims it for a breath — never red,
+ *  never dark; a miss is information. */
+export const GRADE_PULSE: Record<Grade, Pulse> = {
+  again: 'miss',
+  hard: 'soft',
+  good: 'good',
+  easy: 'bright',
+}

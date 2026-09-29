@@ -95,17 +95,29 @@ function ImageBlockView({ node, updateAttributes, selected, editor }: NodeViewPr
       const startW = width ?? 100
       setDragging(true)
 
+      // One `setDraft` per animation frame, not one per pointermove.
+      // Pointer events can fire well over 60/s, and each one used to trigger
+      // a React re-render *and* a real layout change (the width IS the
+      // resize) — coalescing onto rAF keeps that to at most one reflow per
+      // painted frame, which is the most a person can perceive anyway.
+      let raf = 0
+      let latest = startW
       const onMove = (e: PointerEvent) => {
         const dx = e.clientX - startX
         // Dragging the left handle outward grows the image, so its delta is
         // inverted relative to the right handle.
         const delta = ((edge === 'right' ? dx : -dx) / full) * 100
-        const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + delta))
-        setDraft(next)
+        latest = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startW + delta))
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => setDraft(latest))
       }
       const onUp = () => {
+        cancelAnimationFrame(raf)
         setDragging(false)
         setDraft((v) => {
+          // `v` is null when the pointer went up before any rAF-flushed move
+          // landed (a click with no real drag) — nothing to commit then,
+          // same as before this was throttled.
           if (v != null) updateAttributes({ width: Math.round(v) })
           return null
         })

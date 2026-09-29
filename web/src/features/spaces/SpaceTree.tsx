@@ -434,7 +434,10 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-8 z-50 w-40 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)]"
+          // Same entrance as every other popover in the app (Select's
+          // dropdown, Modal, the note editor's floating panels) — one family
+          // for "a small panel now exists here" rather than a silent pop.
+          className="absolute right-0 top-8 z-50 w-40 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
         >
           {items.map((item) => (
             <button

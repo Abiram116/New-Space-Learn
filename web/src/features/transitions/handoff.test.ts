@@ -6,11 +6,12 @@
  * testing. Each case here corresponds to a way the transition would look
  * broken to a student rather than to a way the code would throw.
  *
- * Timings are passed in, so these run in milliseconds rather than the real
- * ~2.5 seconds. `runHandoffSequence` takes them as arguments for this reason.
+ * Timings are passed in, and the clock (timers, rAF, Date) is faked, so these
+ * run instantly and cannot flake when the machine is busy — with real timers
+ * they failed intermittently under a loaded full-suite run.
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runHandoffSequence } from './Handoff'
 
 type Phase = 'in' | 'out' | null
@@ -24,11 +25,25 @@ function recorder() {
   }
 }
 
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+/** Run the sequence to completion on the fake clock; settles like the real one. */
+function drive(opts: Parameters<typeof runHandoffSequence>[0]): Promise<void> {
+  const run = runHandoffSequence(opts)
+  run.catch(() => {}) // observed by the caller; this only avoids an unhandled-rejection report
+  return vi.runAllTimersAsync().then(() => run)
+}
+
 describe('runHandoffSequence', () => {
   it('runs the work while the screen is covered, never before or after', async () => {
     const r = recorder()
 
-    await runHandoffSequence({
+    await drive({
       inMs: 40,
       outMs: 20,
       work: () => {
@@ -52,7 +67,7 @@ describe('runHandoffSequence', () => {
     let workAt = 0
     const start = Date.now()
 
-    await runHandoffSequence({
+    await drive({
       inMs: 200,
       outMs: 10,
       coverMs,
@@ -69,7 +84,7 @@ describe('runHandoffSequence', () => {
     const r = recorder()
     const start = Date.now()
 
-    await runHandoffSequence({
+    await drive({
       inMs: 30,
       outMs: 10,
       work: async () => {
@@ -87,7 +102,7 @@ describe('runHandoffSequence', () => {
   it('lets go when the work hangs, instead of holding the screen hostage', async () => {
     const r = recorder()
 
-    await runHandoffSequence({
+    await drive({
       inMs: 20,
       outMs: 10,
       ceilingMs: 60,
@@ -105,7 +120,7 @@ describe('runHandoffSequence', () => {
     const r = recorder()
 
     await expect(
-      runHandoffSequence({
+      drive({
         inMs: 20,
         outMs: 10,
         work: () => {
@@ -126,7 +141,7 @@ describe('runHandoffSequence', () => {
     })
 
     await expect(
-      runHandoffSequence({ inMs: 10, outMs: 10, work: () => {}, onPhase }),
+      drive({ inMs: 10, outMs: 10, work: () => {}, onPhase }),
     ).rejects.toThrow('render blew up')
 
     // The `finally` still fires, so the curtain is torn down rather than

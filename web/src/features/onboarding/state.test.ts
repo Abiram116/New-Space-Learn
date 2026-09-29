@@ -54,6 +54,8 @@ describe('hasPreferences', () => {
     expect(hasPreferences({ learning_style: 'examples first' } as never)).toBe(true)
     expect(hasPreferences({ session_length_minutes: 30 } as never)).toBe(true)
     expect(hasPreferences({ teaching_preference: 'go deep' } as never)).toBe(true)
+    // The goal step is last and the only one some students answer.
+    expect(hasPreferences({ exam_context: 'GATE 2027' } as never)).toBe(true)
   })
 
   it('rejects an empty or absent model', () => {
@@ -62,8 +64,9 @@ describe('hasPreferences', () => {
   })
 
   it('does not count an empty string as an answer', () => {
-    // Otherwise submitting the free-text step with nothing typed would read as
+    // Otherwise submitting a text step with nothing typed would read as
     // "already onboarded" and suppress the intake on every future device.
     expect(hasPreferences({ teaching_preference: '' } as never)).toBe(false)
+    expect(hasPreferences({ exam_context: '' } as never)).toBe(false)
   })
 })

@@ -15,7 +15,9 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
+from app import schemas
 from app.services import student_model as sm
+from app.services import style_bandit
 from app.services.student_model import ConceptView, TopicView
 
 from .conftest import OWNER
@@ -762,3 +764,116 @@ async def test_card_reviews_count_toward_recall_not_application(db):
     assert snap.topics[0].recall_mastery is not None
     assert snap.topics[0].recall_mastery > 50
     assert snap.topics[0].application_mastery is None
+
+
+# ── Projection to the API shape (`to_model`) ──────────────────────────────
+
+
+def test_to_model_carries_recall_and_application_mastery_per_topic():
+    topic = _topic(recall_mastery=80, application_mastery=40, mastery=30, evidence_n=5.0)
+    snap = sm.Snapshot(settings={}, topics=[topic], concepts=[], activity_days=[], streak_days=0)
+    signal = snap.to_model().weak_areas[0]
+    assert signal.recall_mastery == 80
+    assert signal.application_mastery == 40
+
+
+def test_to_model_projects_misconceptions_root_causes_and_slipping():
+    topic = _topic(
+        subspace_id="t1", mastery=55, evidence_n=5.0,
+        misconceptions=(
+            sm.MisconceptionView(text="confuses A with B", weight=3.0, seen=4, last_seen="2026-01-01"),
+        ),
+    )
+    weak = _concept(concept="a", label="A", mastery=30, evidence_n=5.0)
+    weak_prereq = _concept(
+        concept="prereq", label="Prereq", mastery=25, evidence_n=5.0, subspace_ids=("t1",),
+    )
+    slipping_topic = _topic(
+        subspace_id="t2", topic="Bayes", mastery=40, evidence_n=5.0,
+        is_slipping=True, days_since_activity=10,
+    )
+    snap = sm.Snapshot(
+        settings={},
+        topics=[topic, slipping_topic],
+        concepts=[weak, weak_prereq],
+        activity_days=[],
+        streak_days=0,
+        prereq_edges={"a": ("prereq",)},
+        concept_labels={"prereq": "Prereq"},
+        top_misconceptions=(
+            sm.MisconceptionView(text="confuses A with B", weight=3.0, seen=4, last_seen="2026-01-01"),
+        ),
+    )
+    model = snap.to_model()
+
+    assert model.top_misconceptions == [
+        schemas.MisconceptionOut(text="confuses A with B", last_seen="2026-01-01")
+    ]
+    assert len(model.root_causes) == 1
+    assert model.root_causes[0].concept == "Prereq"
+    assert model.root_causes[0].because_of == ["A"]
+    assert len(model.slipping) == 1
+    assert model.slipping[0].kind == "topic"
+    assert model.slipping[0].label == "Bayes"
+    assert model.slipping[0].days_since_activity == 10
+
+
+def test_to_model_defaults_are_empty_not_missing():
+    """A brand-new account must not crash `StudentModelOut` construction —
+    every new list field needs a safe default."""
+    snap = sm.Snapshot(settings={}, topics=[], concepts=[], activity_days=[], streak_days=0)
+    model = snap.to_model()
+    assert model.top_misconceptions == []
+    assert model.root_causes == []
+    assert model.slipping == []
+    assert model.style_summaries == []
+
+
+# ── `get()` — style_summaries wiring ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_attaches_style_summary_once_evidence_clears_the_floor(db):
+    """`get()` is the one place `style_bandit.strategy_summary` and the
+    snapshot meet — this is what actually proves Profile's 'How you learn
+    best' gets real data rather than just the fields existing in the schema.
+    """
+    style_bandit._read_cache.clear()
+    db.seed("user_settings", [{"user_id": OWNER}])
+    db.seed("subjects", [{"id": "subj-ml", "user_id": OWNER, "name": "Machine Learning"}])
+    db.seed("subspaces", [
+        {"id": "t1", "user_id": OWNER, "subject_id": "subj-ml", "name": "RL",
+         "last_activity_at": _days_ago(1)},
+    ])
+    db.seed(
+        "chat_messages",
+        [
+            {
+                "id": f"m{i}", "user_id": OWNER, "subspace_id": "t1",
+                "meta": {"style": {"teaching.strategy": "example_first"}},
+            }
+            for i in range(6)
+        ],
+    )
+    db.seed(
+        "response_feedback",
+        [
+            {"user_id": OWNER, "kind": "useful", "target_id": f"m{i}", "created_at": _days_ago(1)}
+            for i in range(6)
+        ],
+    )
+
+    model = await sm.get(OWNER)
+    assert len(model.style_summaries) == 1
+    assert model.style_summaries[0].subject == "Machine Learning"
+    assert model.style_summaries[0].strategy_summary == style_bandit.ARM_DISPLAY["example_first"]
+    style_bandit._read_cache.clear()
+
+
+@pytest.mark.asyncio
+async def test_get_has_no_style_summaries_below_the_evidence_floor(db):
+    style_bandit._read_cache.clear()
+    db.seed("user_settings", [{"user_id": OWNER}])
+    snap_model = await sm.get(OWNER)
+    assert snap_model.style_summaries == []
+    style_bandit._read_cache.clear()

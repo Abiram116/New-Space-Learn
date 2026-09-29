@@ -15,15 +15,60 @@
  * The key must describe the *request*, not the screen: two components asking
  * for the same thing should share an entry, and one component asking about two
  * different subspaces must not.
+ *
+ * ## What a screen gets, and what to do with it
+ *
+ * The returned `AsyncResult<T>` is deliberately more than `{data, loading}` —
+ * this is the shape the resilience work (cold starts, flaky upstream, 429s
+ * from the AI — see `AsyncState.tsx`) is built on, so a screen reading
+ * through this hook already has what it needs without a second round of
+ * plumbing:
+ *
+ *   - `loading` — true only for a *first* load (no cached or local data yet).
+ *     Feed this into `useSlowState` (`./useSlowState.ts`) to turn a plain
+ *     spinner into "waking up the server" / "still trying" copy once the
+ *     wait crosses a few seconds — `AsyncState.tsx` already does this for a
+ *     screen that renders one resource in its own region; Home/Profile call
+ *     `useSlowState` directly instead, to slot the same copy into a bespoke,
+ *     multi-resource layout that wrapper doesn't fit.
+ *   - `validating` — true whenever a fetch is in flight *behind* data already
+ *     on screen (a first load or a background revalidation — check `data`
+ *     first if only the latter matters to you). Render a small, unobtrusive
+ *     indicator, never a skeleton — the cache's whole point is that a revisit
+ *     doesn't go blank.
+ *   - `error` — set on a failed fetch. If `data` is still present, this is a
+ *     failed *background* revalidation: the stale data is deliberately kept
+ *     (nothing here clears it), so show a small inline notice next to it
+ *     rather than blanking the screen. If `data` is null, it's a genuine
+ *     failed first load — show `error` (already a friendly sentence, see
+ *     `api/errors.ts`'s `friendlyMessage`) with a way to call `refresh()`.
+ *   - `refresh()` — re-runs the request. Wire it to every Retry action.
+ *   - `setData()` — optimistic local edits; see its own comment below for the
+ *     invalidation race it's written to survive.
+ *
+ * **Reconnection retries a failed load automatically.** This hook subscribes
+ * to `./connectivity.ts`'s `onBackendReady` and calls its own `refresh()`
+ * whenever the backend goes from unreachable back to ready *while this hook
+ * currently holds an error* — a successful load is never touched by this.
+ * `OfflineBanner` is what fires that signal, from its own `/ready` polling.
  */
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { friendlyMessage } from '../api/errors'
+import { classifyError, friendlyMessage, type ErrorKind } from '../api/errors'
 import { readCache, subscribe, writeCache } from './asyncCache'
+import { onBackendReady } from './connectivity'
 
-export type AsyncState<T> = {
+// Named `AsyncResult`, not `AsyncState` — `./AsyncState.tsx` is the wrapper
+// COMPONENT the resilience work asked for by that exact name, and one file
+// exporting both a type and a component called `AsyncState` is confusing to
+// import from even though nothing stops it.
+export type AsyncResult<T> = {
   data: T | null
   error: string | null
+  /** `error`'s coarse bucket (offline / timeout / rate-limited / auth /
+   *  server / other) — see `api/errors.ts`'s `classifyError`. `null`
+   *  whenever `error` is, so a caller can check either together. */
+  errorKind: ErrorKind | null
   loading: boolean
   /** True while a *background* revalidation runs over data already on screen. */
   validating: boolean
@@ -38,7 +83,7 @@ export function useAsync<T>(
   fn: () => Promise<T>,
   deps: ReadonlyArray<unknown> = [],
   key?: string,
-): AsyncState<T> {
+): AsyncResult<T> {
   // Subscribed rather than read once, so an `invalidate()` elsewhere reaches a
   // mounted screen instead of leaving it on data already known to be wrong.
   const subscribeToKey = useCallback(
@@ -53,6 +98,7 @@ export function useAsync<T>(
 
   const [local, setLocal] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [errorKind, setErrorKind] = useState<ErrorKind | null>(null)
   const [validating, setValidating] = useState(true)
   const [tick, setTick] = useState(0)
   const generation = useRef(0)
@@ -73,6 +119,7 @@ export function useAsync<T>(
     const gen = ++generation.current
     setValidating(true)
     setError(null)
+    setErrorKind(null)
     fnRef.current()
       .then((result) => {
         if (gen !== generation.current) return
@@ -83,12 +130,25 @@ export function useAsync<T>(
       .catch((err) => {
         if (gen !== generation.current) return
         setError(friendlyMessage(err))
+        setErrorKind(classifyError(err))
         setValidating(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick, key, ...deps])
 
   const refresh = useCallback(() => setTick((t) => t + 1), [])
+
+  // Auto-retry on reconnect — but only a load that's actually dead. Reading
+  // `error` through a ref (rather than depending on it) keeps this
+  // subscribed exactly once per mount instead of re-subscribing on every
+  // state change; `onBackendReady` only ever fires on the rare
+  // unreachable→ready transition, so there's no freshness to lose by
+  // checking the ref at call time instead of at subscribe time.
+  const errorRef = useRef<string | null>(null)
+  errorRef.current = error
+  useEffect(() => onBackendReady(() => {
+    if (errorRef.current) refresh()
+  }), [refresh])
 
   const updateData = useCallback(
     (updater: (prev: T | null) => T | null) => {
@@ -124,6 +184,7 @@ export function useAsync<T>(
   return {
     data: data ?? null,
     error,
+    errorKind,
     // Only a *first* load is "loading". A revalidation over content already on
     // screen must not put a skeleton back over it — that would reintroduce the
     // exact flash this exists to remove.

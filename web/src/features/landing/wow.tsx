@@ -272,32 +272,53 @@ export function CTA({
   const pad = size === 'lg' ? 'px-7 py-4 text-[15.5px]' : 'px-5 py-3 text-[14px]'
   return (
     <Magnetic strength={0.22}>
-      <Link
-        to={to}
-        className={`group relative inline-flex items-center gap-2.5 overflow-hidden rounded-[12px] bg-brand font-bold text-[#1a120f] shadow-[0_10px_30px_-16px_rgba(255,90,60,0.9)] transition-[transform,box-shadow] duration-500 hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-18px_rgba(255,90,60,0.95)] ${pad}`}
-        style={{ transitionTimingFunction: EASE_CSS }}
-      >
-        {/* The wipe. `scaleX` from the left edge on the page's own easing —
-            the same movement as every headline reveal, at button scale. */}
+      {/* `group` lives on this wrapper, not the `Link` below, so the
+          pre-rendered shadow layer (a SIBLING of `Link`, not a child of it —
+          see its own comment) can still answer `group-hover:`. */}
+      <span className="group relative inline-block">
+        {/* THE HOVER GLOW, pre-rendered rather than animated. This used to be
+            a `box-shadow` in the `Link`'s own `transition-[...]` list, grown
+            larger on hover — every frame of that 500ms is a paint (box-shadow
+            has no compositor fast path), on the page's one most-hovered
+            element. Same visual result, no per-frame paint: the LARGER shadow
+            is baked into this layer once, sitting behind `Link` so its own
+            `overflow-hidden` can't clip the blur, and hovering only fades its
+            `opacity` in — a compositor-only property. */}
         <span
           aria-hidden
-          className="absolute inset-0 origin-left scale-x-0 bg-[#ffd7cb] transition-transform duration-500 group-hover:scale-x-100 motion-reduce:hidden"
-          style={{ transitionTimingFunction: EASE_CSS }}
+          className="pointer-events-none absolute inset-0 rounded-[12px] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+          style={{
+            boxShadow: '0 18px 40px -18px rgba(255,90,60,0.95)',
+            transitionTimingFunction: EASE_CSS,
+          }}
         />
-        <span className="relative z-10">{children}</span>
-        <Icon
-          name="arrowRight"
-          size={size === 'lg' ? 17 : 15}
-          // Its two sibling transitions on this button (the lift, the wipe fill)
-          // both pin transitionTimingFunction to EASE_CSS; this one didn't, so it
-          // fell back to Tailwind's default ease — a different curve firing
-          // alongside two correct ones on the same hover. Language.ts is
-          // explicit that the button-fill case is exactly what this system
-          // exists to cover.
-          className="relative z-10 transition-transform duration-500 group-hover:translate-x-1"
+        <Link
+          to={to}
+          className={`relative inline-flex items-center gap-2.5 overflow-hidden rounded-[12px] bg-brand font-bold text-[#1a120f] shadow-[0_10px_30px_-16px_rgba(255,90,60,0.9)] transition-transform duration-500 hover:-translate-y-0.5 ${pad}`}
           style={{ transitionTimingFunction: EASE_CSS }}
-        />
-      </Link>
+        >
+          {/* The wipe. `scaleX` from the left edge on the page's own easing —
+              the same movement as every headline reveal, at button scale. */}
+          <span
+            aria-hidden
+            className="absolute inset-0 origin-left scale-x-0 bg-[#ffd7cb] transition-transform duration-500 group-hover:scale-x-100 motion-reduce:hidden"
+            style={{ transitionTimingFunction: EASE_CSS }}
+          />
+          <span className="relative z-10">{children}</span>
+          <Icon
+            name="arrowRight"
+            size={size === 'lg' ? 17 : 15}
+            // Its two sibling transitions on this button (the lift, the wipe fill)
+            // both pin transitionTimingFunction to EASE_CSS; this one didn't, so it
+            // fell back to Tailwind's default ease — a different curve firing
+            // alongside two correct ones on the same hover. Language.ts is
+            // explicit that the button-fill case is exactly what this system
+            // exists to cover.
+            className="relative z-10 transition-transform duration-500 group-hover:translate-x-1"
+            style={{ transitionTimingFunction: EASE_CSS }}
+          />
+        </Link>
+      </span>
     </Magnetic>
   )
 }

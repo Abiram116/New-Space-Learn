@@ -13,14 +13,19 @@
  * strip — present, checkable, not competing.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Quiz, QuizResult } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Ledger } from '../../components/ui/Surface'
 import { CountUp, Stagger } from '../../components/ui/motion'
+import { celebrateQuiz, useAmbience } from '../../components/celebrate'
+import { scoreTier } from '../../components/celebrate/logic'
 import { cn } from '../../lib/cn'
 import { formatClock } from './QuizRunner'
+
+/** Results already celebrated, by identity — a remount mustn't replay it. */
+const celebrated = new WeakSet<QuizResult>()
 
 export function QuizResults({
   quiz,
@@ -45,6 +50,23 @@ export function QuizResults({
     [quiz.questions, answers],
   )
   const right = quiz.questions.length - missed.length
+
+  // The finish, tiered by the real score: fireworks for a perfect sheet,
+  // something smaller down to 60%, and below that no fireworks at all — an
+  // encouraging line, and the misses below doing the actual work.
+  const scoreRef = useRef<HTMLDivElement>(null)
+  const ambience = useAmbience()
+  useEffect(() => {
+    if (celebrated.has(result)) return // StrictMode's second mount
+    celebrated.add(result)
+    const tier = scoreTier(result.score)
+    ambience.progress(1)
+    if (tier !== 'none') ambience.pulse(tier === 'grand' ? 'bright' : 'good')
+    celebrateQuiz(
+      { quizId: quiz.id, score: result.score, right, total: quiz.questions.length },
+      { anchor: scoreRef, compact },
+    )
+  }, [result, quiz.id, quiz.questions.length, right, compact, ambience])
 
   /** Concepts to revise, worst first — the actionable output of a quiz. */
   const weakConcepts = useMemo(() => {
@@ -72,7 +94,7 @@ export function QuizResults({
         )}
       >
         <span className="setcode">Score</span>
-        <div className="flex items-baseline gap-1">
+        <div ref={scoreRef} className="flex items-baseline gap-1 self-start">
           <CountUp
             value={result.score}
             className={cn(

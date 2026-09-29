@@ -271,3 +271,26 @@ export async function ping(): Promise<boolean> {
     return false
   }
 }
+
+/** Shape of `GET /ready` — see `main.py`'s own docstring for why this is a
+ *  separate endpoint from `/health`: liveness (the process is up) and
+ *  readiness (it can actually serve a student) can disagree, most visibly
+ *  during a cold start where the process has started but the database
+ *  round trip or the embeddings model hasn't warmed up yet. */
+export type Readiness = { ready: boolean; database: boolean; embeddings: boolean }
+
+/**
+ * Readiness probe for `OfflineBanner`'s reconnect loop. A short, fixed
+ * timeout on purpose — this is polled every few seconds while reconnecting,
+ * so it must fail fast rather than queue up behind `DEFAULT_TIMEOUT_MS`'s
+ * 35s. Returns `null` (not a thrown error) when the server can't be reached
+ * at all, which is the caller's signal to keep backing off rather than
+ * report "reached it, just not ready yet."
+ */
+export async function checkReady(): Promise<Readiness | null> {
+  try {
+    return await apiFetch<Readiness>('/ready', { anonymous: true, method: 'GET', timeoutMs: 6_000 })
+  } catch {
+    return null
+  }
+}

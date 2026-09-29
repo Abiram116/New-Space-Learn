@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { memo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import type { FeedbackKind } from '../../api/feedback'
 import type { AskReason } from './feedbackPolicy'
@@ -28,7 +28,22 @@ export type MessageFeedback = {
   onRegenerate: () => void
 }
 
-export function ChatMessage({
+/**
+ * Memoized so a token arriving in the streaming bubble doesn't re-render
+ * every already-finished message in the thread.
+ *
+ * `ChatViewInner` re-renders on every `token` event (that's how the pending
+ * bubble updates), which used to re-run this component — and the full
+ * `ReactMarkdown` parse + `rehype-highlight` pass inside it — for every
+ * message in the conversation, once per token. On a long thread that is
+ * hundreds of needless full markdown re-parses for a single reply. Props for
+ * a finished message are referentially stable across that re-render
+ * (`message` keeps its object identity in `history.data`, `feedback` is
+ * `undefined` for everything but the last answer while streaming), so a
+ * plain memo is enough to make only the pending bubble — whose `message` prop
+ * is a fresh object every token — do the work of re-rendering.
+ */
+export const ChatMessage = memo(function ChatMessage({
   message,
   feedback,
   subspaceId,
@@ -145,7 +160,7 @@ export function ChatMessage({
     )}
     </Rise>
   )
-}
+})
 
 function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content: string }) {
   const { onOffered, reason } = feedback

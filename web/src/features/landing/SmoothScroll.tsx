@@ -93,6 +93,21 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     const onRefresh = () => lenis.resize()
     ScrollTrigger.addEventListener('refresh', onRefresh)
 
+    // FONT SWAP, THE OTHER LAYOUT-SHIFT SOURCE. `index.html` loads Archivo
+    // behind a render-blocking Google Fonts `<link>` with `display: swap`, so
+    // the page can paint its first frame in the Manrope fallback and swap to
+    // Archivo a beat later. Every ScrollTrigger on the page (the hero pin,
+    // the two `useScrollProgress` measurements) was set up against whatever
+    // that fallback's line heights and widths were; if the swap lands after
+    // that, every one of those measurements is now stale by however much the
+    // real display font differs, and scroll positions jump. `fonts.ready`
+    // resolves once the swap has actually happened (or immediately if there
+    // was nothing to swap), so refreshing there re-measures against the font
+    // that's actually on screen. Guarded for the API's absence rather than
+    // assumed — the App still works, just without this correction, on
+    // whatever ancient engine doesn't have it.
+    document.fonts?.ready?.then(() => ScrollTrigger.refresh())
+
     return () => {
       lenisRef.current = null
       gsap.ticker.remove(raf)

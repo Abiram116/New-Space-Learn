@@ -103,10 +103,39 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
      for. */
   const [regenerations, setRegenerations] = useState(0)
 
-  // Auto-scroll to bottom when messages arrive.
+  /* Auto-scroll to bottom, without fighting a student who scrolled up mid-
+     stream to reread something.
+     `pending` gets a new object on every single streamed token, so this used
+     to run a synchronous `scrollTop = scrollHeight` — a forced layout read
+     and write — once per token, and it did it unconditionally: scrolled up
+     to check an earlier message while the answer kept streaming, and the
+     view yanked you back to the bottom on the very next token. `stickRef`
+     tracks whether the reader is already at the bottom (updated by a passive
+     scroll listener, not read every render), and the scroll itself is
+     coalesced onto one rAF per frame so a burst of tokens between paints only
+     costs one layout write, not one per token. */
+  const stickRef = useRef(true)
+  const scrollRafRef = useRef(0)
+
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const NEAR_BOTTOM_PX = 96
+    const onScroll = () => {
+      stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el || !stickRef.current) return
+    cancelAnimationFrame(scrollRafRef.current)
+    scrollRafRef.current = requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+    })
+    return () => cancelAnimationFrame(scrollRafRef.current)
   }, [history.data, pending])
 
   const cancel = useCallback(() => {
@@ -118,6 +147,10 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   const send = useCallback(
     async (text: string, opts?: { regenerate?: boolean; images?: string[] }) => {
       const regenerate = opts?.regenerate ?? false
+      // Sending (or regenerating) is the one moment that should always jump
+      // back down, even if the reader had scrolled up mid-thread — it's their
+      // own action putting a new turn at the bottom.
+      stickRef.current = true
       // A regenerate is another attempt at a question already on screen, not
       // a new turn — appending a second identical bubble would show the
       // student's own question twice for one answer that changed. The

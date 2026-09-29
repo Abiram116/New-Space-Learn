@@ -54,6 +54,9 @@ export function markOnboarded(userId?: string | null): void {
 export function hasPreferences(model: StudentModel | null): boolean {
   if (!model) return false
   return Boolean(
-    model.learning_style || model.teaching_preference || model.session_length_minutes,
+    model.learning_style ||
+      model.teaching_preference ||
+      model.session_length_minutes ||
+      model.exam_context,
   )
 }

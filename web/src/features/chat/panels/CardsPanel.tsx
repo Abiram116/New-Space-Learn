@@ -18,9 +18,19 @@ import { generateCards, gradeCard, listCards, listDecks } from '../../../api/fla
 import type { Deck, Flashcard, Grade } from '../../../api/types'
 import { Icon } from '../../../components/ui/Icon'
 import { CardFace } from '../../flashcards/Review'
+import { useCardMotion } from '../../flashcards/cardMotion'
+import { GRADE_PULSE } from '../../flashcards/model'
+import { EASE } from '../../../components/celebrate/easing'
+import {
+  AmbienceField,
+  celebrate,
+  noteCardGraded,
+  useAmbienceField,
+  useStudySession,
+} from '../../../components/celebrate'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
-import { Stagger } from '../../../components/ui/motion'
+import { Stagger, useReducedMotion } from '../../../components/ui/motion'
 import { clearStatsCache } from '../../../lib/briefCache'
 import { cn } from '../../../lib/cn'
 import { nextIntervalLabel } from '../../../lib/schedule'
@@ -124,6 +134,13 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
   const [done, setDone] = useState(0)
   const { showError } = useToast()
 
+  // Same room and the same moments as the full review, at dock density.
+  useStudySession()
+  const ambience = useAmbienceField()
+  const cardRef = useRef<HTMLDivElement>(null)
+  const statusRef = useRef<HTMLDivElement>(null)
+  const reduced = useReducedMotion()
+
   useEffect(() => {
     listCards(deck.id, { dueOnly: true })
       .then(setCards)
@@ -141,6 +158,19 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
   }, [deck.id, showError])
 
   const card = cards?.[index] ?? null
+  useCardMotion(cardRef, index, flipped, reduced)
+  useEffect(() => {
+    if (cards?.length) ambience.api.progress(index / cards.length)
+  }, [ambience.api, index, cards])
+
+  // Deck clear: fires once, when the queue runs out with something reviewed.
+  const cleared = !card && done > 0
+  useEffect(() => {
+    if (!cleared) return
+    ambience.api.pulse('bright')
+    celebrate('deck', { anchor: statusRef, compact: true, facts: { count: done, deck: deck.name } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, at the moment it clears
+  }, [cleared])
   // Blocks a second `grade()` for the same card — see the identical guard
   // and its full reasoning on `Review.tsx`'s own `gradedRef`. Same bug,
   // same fix, independently implemented here since this is a second,
@@ -159,13 +189,16 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
       setIndex((i) => i + 1)
       setDone((n) => n + 1)
       clearStatsCache()
+      ambience.api.pulse(GRADE_PULSE[g])
+      const saved = gradeCard(card.id, g)
+      noteCardGraded(saved, { anchor: cardRef, compact: true })
       try {
-        await gradeCard(card.id, g)
+        await saved
       } catch (err) {
         showError(err)
       }
     },
-    [card, showError],
+    [card, showError, ambience.api],
   )
 
   if (!cards) return <Skeleton className="min-h-0 flex-1 rounded-xl" />
@@ -176,8 +209,12 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
       // to the dock height and pinned to the top they sat under a column of
       // nothing. A finished state is the one place centring is right — there
       // is no next thing below it to stay close to.
-      <div className="flex min-h-0 flex-1 flex-col justify-center gap-3">
-        <div className="rounded-xl border border-mint/35 bg-mint-soft/50 px-3 py-3 text-center">
+      <div className="relative isolate flex min-h-0 flex-1 flex-col justify-center gap-3">
+        <AmbienceField field={ambience} compact />
+        <div
+          ref={statusRef}
+          className="rounded-xl border border-mint/35 bg-mint-soft/50 px-3 py-3 text-center"
+        >
           <Icon name="check" size={18} className="text-mint-deep" />
           <div className="mt-1 text-[13px] font-bold text-mint-deep">
             {done > 0 ? `${done} reviewed` : 'Nothing due'}
@@ -198,7 +235,8 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="relative isolate flex min-h-0 flex-1 flex-col gap-3">
+      <AmbienceField field={ambience} compact />
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -227,21 +265,29 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
           itself. Grouping them keeps the grades right under the card, with
           the leftover space split evenly above and below instead. */}
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3">
-        <div className="w-full [perspective:1400px]" style={{ height: 'min(52vh, 280px)' }}>
-          <button
-            type="button"
-            onClick={() => setFlipped((f) => !f)}
-            aria-label={flipped ? 'Show question' : 'Show answer'}
-            className={cn(
-              'relative h-full w-full cursor-pointer text-left',
-              '[transform-style:preserve-3d] transition-transform duration-500',
-              'motion-reduce:transition-none',
-            )}
-            style={{ transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
-          >
-            <CardFace side="front" text={card.front} compact hint="Tap to flip" />
-            <CardFace side="back" text={card.back} source={card.source} compact />
-          </button>
+        {/* Keyed per card so the next one arrives face-up (turning the old
+            card back used to flash the NEW card's answer); the outer layer
+            carries the lift and the deal — see useCardMotion. */}
+        <div className="w-full" style={{ height: 'min(52vh, 280px)' }}>
+          <div ref={cardRef} className="h-full w-full [perspective:1400px]">
+            <button
+              key={index}
+              type="button"
+              onClick={() => setFlipped((f) => !f)}
+              aria-label={flipped ? 'Show question' : 'Show answer'}
+              className={cn(
+                'relative h-full w-full cursor-pointer text-left',
+                '[transform-style:preserve-3d] motion-reduce:transition-none',
+              )}
+              style={{
+                transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                transition: reduced ? 'none' : `transform 780ms ${EASE.flip}`,
+              }}
+            >
+              <CardFace side="front" text={card.front} compact hint="Tap to flip" />
+              <CardFace side="back" text={card.back} source={card.source} compact />
+            </button>
+          </div>
         </div>
 
         {!flipped ? (

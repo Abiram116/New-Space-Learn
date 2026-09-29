@@ -131,7 +131,11 @@ export function Select({
           aria-label={ariaLabel}
           tabIndex={-1}
           onKeyDown={onListKeyDown}
-          className="absolute z-30 mt-1 max-h-64 w-full min-w-[10rem] overflow-y-auto rounded-[10px] border border-line bg-raised p-1 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] outline-none"
+          // Same entrance every other popover in the app uses (Modal,
+          // AttachmentViewer, the dock panel) — a dropdown popping in with
+          // zero motion while everything around it eases is the one thing
+          // that read as unfinished.
+          className="absolute z-30 mt-1 max-h-64 w-full min-w-[10rem] overflow-y-auto rounded-[10px] border border-line bg-raised p-1 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.9)] outline-none motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
         >
           {options.map((o, i) => (
             <button

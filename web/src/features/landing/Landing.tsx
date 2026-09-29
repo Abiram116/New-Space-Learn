@@ -24,7 +24,14 @@
  * testimonials or benchmarks appear anywhere, because none exist.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { prefetchAuthChunks } from '../../routes/lazyRoutes'
 import { Link } from 'react-router-dom'
 import { Logo } from '../../components/ui/Logo'
@@ -58,7 +65,14 @@ export function Landing() {
   // it isn't part of what's being measured, only what's driven by the
   // measurement — so it's still rendered here as a sibling, fed the same
   // number.
-  const [closeProgress, setCloseProgress] = useState(0)
+  //
+  // Fed through a REF, not state. This used to be `useState` — `FeatureType`
+  // called `setCloseProgress` on every scroll tick, which re-rendered
+  // `Landing` and then `Close` underneath it on every one of those ticks, for
+  // the entire 72svh this section is scrubbing. `Close` now takes the number
+  // through an imperative handle (see its own comment) and writes it straight
+  // to the DOM; `Landing` itself never re-renders for it at all.
+  const closeRef = useRef<CloseHandle>(null)
 
   return (
     <SmoothScroll>
@@ -75,9 +89,9 @@ export function Landing() {
             fallbackSrc="/story.mp4"
             poster="/story-poster.webp"
           />
-          <FeatureType onCloseProgress={setCloseProgress} />
+          <FeatureType onCloseProgress={(p) => closeRef.current?.setProgress(p)} />
         </div>
-        <Close progress={closeProgress} />
+        <Close ref={closeRef} />
       </div>
     </SmoothScroll>
   )
@@ -344,7 +358,20 @@ function TopBar() {
    head rather than behind its body. Stacked over two lines it was buried:
    the figure covered the middle of both words and neither read. */
 
-function Close({ progress }: { progress: number }) {
+type CloseHandle = { setProgress: (p: number) => void }
+
+// `forwardRef` + `useImperativeHandle` rather than a `progress` prop — see
+// the header note on `closeRef` in `Landing()`. Every per-frame number this
+// component needs (the rise, the two continuous opacities below) is now
+// written straight to a DOM ref inside `setProgress`; the only things still
+// driven through React state are `landed`/`hidden`/`everLanded`, and those
+// only ever flip a couple of times per scroll (crossing a threshold each
+// way), not once per frame.
+const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  const shadowRef = useRef<HTMLDivElement>(null)
+  const depthCueRef = useRef<HTMLDivElement>(null)
+
   // "Landed" — close enough to fully revealed that the panel reads as
   // settled rather than still arriving. Drives the things that should
   // happen ONCE, after the scrub finishes, not continuously across it: the
@@ -357,8 +384,75 @@ function Close({ progress }: { progress: number }) {
   // revealed" (the panel itself keeps sliding the last few percent into
   // place after the flourish starts, not a visible jump), but it's out of
   // the steepest part of the curve's deceleration.
-  const landed = progress >= 0.92
-  const hidden = progress <= 0.001
+  const landedRef = useRef(false)
+  const hiddenRef = useRef(true)
+  const [landed, setLanded] = useState(false)
+  const [hidden, setHidden] = useState(true)
+
+  // The initial paint, before `setProgress` has ever been called (it fires
+  // from `FeatureType`'s own mount effect, a beat after this commits): the
+  // panel starts fully off-screen and both continuous layers below start
+  // invisible. Set imperatively, once, rather than as JSX `style` literals —
+  // literals there would fight `setProgress`'s writes to the same
+  // properties the next time `landed`/`hidden` flips and this component
+  // re-renders (React only rewrites a DOM style property when the JSX value
+  // for it actually changes between renders; a `transform`/`opacity` that
+  // never appears in JSX at all can't be re-clobbered that way).
+  useLayoutEffect(() => {
+    if (panelRef.current) panelRef.current.style.transform = 'translateY(100%)'
+    if (shadowRef.current) shadowRef.current.style.opacity = '0'
+    if (depthCueRef.current) depthCueRef.current.style.opacity = '0'
+  }, [])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      setProgress(progress: number) {
+        // Continuous, not transitioned — `progress` already comes from
+        // Lenis-smoothed scroll (see `SmoothScroll.tsx`), so mapping it
+        // straight to `translateY` is what makes this track the gesture 1:1
+        // instead of catching up to it after the fact.
+        const panel = panelRef.current
+        if (panel) panel.style.transform = `translateY(${((1 - progress) * 100).toFixed(2)}%)`
+
+        // THE DEPTH CUE. As this panel rises, its top edge is the leading
+        // surface sliding up and over whatever was on screen before it —
+        // the moment asked to read as "3D depth... at the top edge as it
+        // comes on top". A dark gradient hugging that edge, strongest at the
+        // midpoint of the scrub and fading out as the panel settles, reads
+        // as the edge casting a shadow onto the ground it's passing over
+        // rather than a flat sheet with no thickness. `sin(progress * π)`
+        // peaks exactly at progress 0.5 and returns to 0 at both ends, so
+        // the shadow is absent when the panel is barely visible (nothing to
+        // cast a shadow yet) AND absent once fully landed (nothing left to
+        // cast it onto). Still just an `opacity` write — the gradient
+        // itself (JSX, below) is static.
+        const depthCue = depthCueRef.current
+        if (depthCue) depthCue.style.opacity = String(Math.sin(Math.min(1, progress) * Math.PI) * 0.8)
+
+        // THE RISING PANEL'S OWN SHADOW — pre-rendered, not animated. This
+        // used to be a `box-shadow` recomputed in an inline style every
+        // scroll frame (bigger blur, bigger offset, as `progress` grew) —
+        // paint work on a `fixed inset-0` element for the full 72svh this
+        // scrubs across. The end-state shadow is baked into this layer once;
+        // scrolling only fades its `opacity`, a compositor-only property.
+        const shadow = shadowRef.current
+        if (shadow) shadow.style.opacity = String(progress)
+
+        const isLanded = progress >= 0.92
+        if (isLanded !== landedRef.current) {
+          landedRef.current = isLanded
+          setLanded(isLanded)
+        }
+        const isHidden = progress <= 0.001
+        if (isHidden !== hiddenRef.current) {
+          hiddenRef.current = isHidden
+          setHidden(isHidden)
+        }
+      },
+    }),
+    [],
+  )
 
   // Sticky, once `landed` first fires — never reset by scrolling back up,
   // only by a fresh page load (this is plain `useState`, so a real reload
@@ -394,13 +488,9 @@ function Close({ progress }: { progress: number }) {
     // real and should be interactive, matching how the reference site's
     // own scroll-linked reveal behaves.
     <div
+      ref={panelRef}
       className="fixed inset-0 z-30 overflow-hidden"
       style={{
-        // Continuous, not transitioned — `progress` already comes from
-        // Lenis-smoothed scroll (see `useScrollProgress`), so mapping it
-        // straight to `translateY` is what makes this track the gesture
-        // 1:1 instead of catching up to it after the fact.
-        transform: `translateY(${((1 - progress) * 100).toFixed(2)}%)`,
         // Bold and orange, on purpose — asked to specifically NOT read as a
         // continuation of the page's warm-graphite canvas. Anchored
         // bottom-right (roughly where the figure stands) so the brightest
@@ -412,27 +502,16 @@ function Close({ progress }: { progress: number }) {
         // the darker side rather than blending into a matching background.
         background:
           'radial-gradient(150ch 115ch at 88% 72%, #ff6b45 0%, #b23a1b 42%, #1f0d08 100%)',
-        boxShadow: `0 ${(40 * progress).toFixed(0)}px ${(100 * progress).toFixed(0)}px -30px rgba(0,0,0,${(0.55 * progress).toFixed(2)})`,
       }}
       aria-hidden={hidden}
       {...(hidden ? ({ inert: '' } as Record<string, string>) : {})}
     >
-      {/* THE DEPTH CUE. As this panel rises, its top edge is the leading
-          surface sliding up and over whatever was on screen before it —
-          the moment asked to read as "3D depth... at the top edge as it
-          comes on top". A dark gradient hugging that edge, strongest at the
-          midpoint of the scrub and fading out as the panel settles, reads
-          as the edge casting a shadow onto the ground it's passing over
-          rather than a flat sheet with no thickness. `sin(progress * π)`
-          peaks exactly at progress 0.5 and returns to 0 at both ends, so
-          the shadow is absent when the panel is barely visible (nothing
-          to cast a shadow yet) AND absent once fully landed (nothing left
-          to cast it onto). */}
+      <div ref={shadowRef} aria-hidden className="pointer-events-none absolute inset-0" style={{ boxShadow: '0 40px 100px -30px rgba(0,0,0,0.55)' }} />
       <div
+        ref={depthCueRef}
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 z-40 h-24"
         style={{
-          opacity: Math.sin(Math.min(1, progress) * Math.PI) * 0.8,
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.45), transparent)',
         }}
       />
@@ -727,4 +806,4 @@ function Close({ progress }: { progress: number }) {
       </div>
     </div>
   )
-}
+})

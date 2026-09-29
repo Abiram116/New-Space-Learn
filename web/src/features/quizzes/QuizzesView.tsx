@@ -30,6 +30,7 @@ import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { StudyAmbience } from '../../components/celebrate'
 import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
@@ -110,14 +111,19 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             </Button>
           }
         />
-        <QuizSession
-          quizId={activeId}
-          onBack={back}
-          onDone={() => {
-            show('Answers submitted.', 'success')
-            void quizzes.refresh()
-          }}
-        />
+        {/* The room the quiz is taken in — see components/celebrate/Ambience.
+            The frame stays put; the session scrolls inside it, which also
+            means a long question no longer runs off the bottom of the page. */}
+        <StudyAmbience innerClassName="overflow-y-auto">
+          <QuizSession
+            quizId={activeId}
+            onBack={back}
+            onDone={() => {
+              show('Answers submitted.', 'success')
+              void quizzes.refresh()
+            }}
+          />
+        </StudyAmbience>
       </div>
     )
   }

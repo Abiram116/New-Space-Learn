@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStudentModel } from '../../api/me'
-import type { Badge, Stats } from '../../api/types'
+import type { Badge, Stats, StudentModel } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -27,6 +27,8 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { Ledger } from '../../components/ui/Surface'
 import { getCachedStats } from '../../lib/briefCache'
 import { useAsync } from '../../lib/useAsync'
+import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
+import { useSlowState } from '../../lib/useSlowState'
 import { cn } from '../../lib/cn'
 import { useReducedMotion } from '../../components/ui/motion'
 import { toneBar, toneSoft, toneText } from '../../lib/tone'
@@ -50,6 +52,10 @@ export function Profile() {
   // new one; Settings fetches it separately with a plain effect, so this
   // doesn't touch that page at all.
   const student = useAsync(() => getStudentModel(), [], 'student-model')
+  // Cold-start awareness — see `useSlowState`'s own doc comment. Both loads
+  // run in parallel against the same possibly-cold backend.
+  const statsPhase = useSlowState(stats.loading)
+  const studentPhase = useSlowState(student.loading)
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -182,10 +188,14 @@ export function Profile() {
         </header>
 
         {stats.error && !stats.loading && (
-          <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
             {stats.error}
+            <Button size="sm" variant="secondary" onClick={stats.refresh}>
+              <Icon name="refresh" size={13} /> Retry
+            </Button>
           </div>
         )}
+        {stats.loading && <SlowCaption phase={statsPhase} onRetry={stats.refresh} />}
 
         {/* A brand-new account used to land on a wall of zeroes and empty
             charts with nothing explaining them. Say what this page will
@@ -281,22 +291,89 @@ export function Profile() {
           </section>
         )}
 
-        {/* Real quiz-derived weak topics — the same `TopicSignal` data
-            Settings' "Learning" tab already shows, surfaced here too since
-            this is the page meant to answer "how am I actually doing",
-            not just "what have I built". Silent when there's nothing yet —
-            a few quiz attempts, not a guess from account age. */}
-        {student.data && student.data.weak_areas.length > 0 && (
-          <section className="flex flex-col gap-2 border-t border-line pt-4">
+        {/* Real quiz-derived signal from `/me/student-model` — misconceptions,
+            root causes, slipping topics, weak areas with their recall/
+            application split where there's enough evidence for one. Silent
+            when there's nothing yet: a few quiz attempts, never a guess from
+            account age, and each row only appears when its own list is
+            non-empty — no invented facts, no padded-out placeholders. */}
+        {student.data && hasFocusSignal(student.data) && (
+          <section className="flex flex-col gap-3 border-t border-line pt-4">
             <span className="setcode-strong">Where to focus</span>
+
+            {student.data.top_misconceptions && student.data.top_misconceptions.length > 0 && (
+              <div className="flex flex-col gap-1.5 text-[13px]">
+                {student.data.top_misconceptions.map((m, i) => (
+                  <div key={i} className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate text-ink-2">Mix-up: {m.text}</span>
+                    {m.last_seen && (
+                      <span className="shrink-0 text-faint">{relativeDays(m.last_seen)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {student.data.root_causes && student.data.root_causes.length > 0 && (
+              <div className="flex flex-col gap-1.5 text-[13px]">
+                {student.data.root_causes.map((r, i) => (
+                  <p key={i} className="text-ink-2">
+                    Struggles with {r.because_of.join(', ')} — likely because of {r.concept}.
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {student.data.slipping && student.data.slipping.length > 0 && (
+              <div className="flex flex-col gap-1.5 text-[13px]">
+                {student.data.slipping.map((s, i) => (
+                  <p key={i} className="text-ink-2">
+                    Fading: {s.label}
+                    {s.days_since_activity != null &&
+                      `, last practised ${s.days_since_activity} day${s.days_since_activity === 1 ? '' : 's'} ago`}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {student.data.weak_areas.length > 0 && (
+              <div className="flex flex-col gap-2 text-[13px]">
+                {student.data.weak_areas.slice(0, 3).map((a) => (
+                  <div key={a.subspace_id} className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate text-ink-2">
+                        {a.topic}
+                        {a.subject && <span className="text-faint"> · {a.subject}</span>}
+                      </span>
+                      <span className="shrink-0 text-coral-deep">{a.average}% avg</span>
+                    </div>
+                    {(a.recall_mastery != null || a.application_mastery != null) && (
+                      <MasterySplit recall={a.recall_mastery} application={a.application_mastery} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {student.error && <StaleNotice onRetry={student.refresh} />}
+          </section>
+        )}
+        {student.loading && <SlowCaption phase={studentPhase} onRetry={student.refresh} />}
+
+        {/* The teaching-strategy bandit's own read-only summary — "you learn
+            best through examples" — only once a subject has cleared the
+            evidence floor `style_bandit.strategy_summary` enforces server-
+            side. Never a guess dressed as a fact: an empty list here just
+            means nothing has enough evidence yet, so the section is absent
+            rather than showing a placeholder. */}
+        {student.data && student.data.style_summaries && student.data.style_summaries.length > 0 && (
+          <section className="flex flex-col gap-2 border-t border-line pt-4">
+            <span className="setcode-strong">How you learn best</span>
             <div className="flex flex-col gap-1.5 text-[13px]">
-              {student.data.weak_areas.slice(0, 3).map((a) => (
-                <div key={a.subspace_id} className="flex items-center justify-between gap-3">
-                  <span className="min-w-0 truncate text-ink-2">
-                    {a.topic}
-                    {a.subject && <span className="text-faint"> · {a.subject}</span>}
-                  </span>
-                  <span className="shrink-0 text-coral-deep">{a.average}% avg</span>
+              {student.data.style_summaries.map((s, i) => (
+                <div key={i} className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-ink-2">{s.subject}</span>
+                  <span className="shrink-0 text-muted">{s.strategy_summary}</span>
                 </div>
               ))}
             </div>
@@ -684,5 +761,66 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
         </div>
       </div>
     </div>
+  )
+}
+
+/** Whether "Where to focus" has anything real to say. Kept apart from the
+ *  section's own JSX so the section can stay absent — not an empty shell
+ *  with just a heading — the moment every one of its lists is empty. */
+function hasFocusSignal(sm: StudentModel): boolean {
+  return (
+    (sm.top_misconceptions?.length ?? 0) > 0 ||
+    (sm.root_causes?.length ?? 0) > 0 ||
+    (sm.slipping?.length ?? 0) > 0 ||
+    sm.weak_areas.length > 0
+  )
+}
+
+/** "3d ago" / "just now" for a mix-up's `last_seen` — same grain as Home's
+ *  own relative-time copy, kept local rather than shared since it's the only
+ *  other place on the page that needs it. */
+function relativeDays(iso: string): string {
+  const diff = Date.now() - Date.parse(iso)
+  if (!Number.isFinite(diff)) return ''
+  const days = Math.floor(diff / 86_400_000)
+  if (days < 1) return 'today'
+  if (days === 1) return '1d ago'
+  return `${days}d ago`
+}
+
+/**
+ * Recall vs application mastery, task 6's split — two thin meters rather
+ * than a sentence, so "good at recall, shaky on application" reads at a
+ * glance under the topic it belongs to. Only rendered when at least one side
+ * has cleared the evidence floor (`recall_mastery`/`application_mastery` are
+ * `null` until then) — see the call site.
+ */
+function MasterySplit({
+  recall,
+  application,
+}: {
+  recall?: number | null
+  application?: number | null
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pl-0.5">
+      {recall != null && <MasteryBar label="Recall" value={recall} tone="sky" />}
+      {application != null && <MasteryBar label="Apply" value={application} tone="sun" />}
+    </div>
+  )
+}
+
+function MasteryBar({ label, value, tone }: { label: string; value: number; tone: 'sky' | 'sun' }) {
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] text-faint">
+      <span className="setcode">{label}</span>
+      <span className="relative h-1 w-12 overflow-hidden rounded-full bg-line-soft">
+        <span
+          className={cn('absolute inset-0 origin-left', toneBar[tone])}
+          style={{ transform: `scaleX(${Math.max(0, Math.min(100, value)) / 100})` }}
+        />
+      </span>
+      <span className="tabular-nums text-ink-3">{value}%</span>
+    </span>
   )
 }

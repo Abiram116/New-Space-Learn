@@ -68,19 +68,35 @@
  * sticky; top: 0`, which is what makes it read as LOCKED: once reached, it
  * holds at the top of the viewport for the full 72svh that follows, not
  * receding, not fading, just present, while `Close` (rendered separately,
- * fixed, in `Landing.tsx`) rises over it. `useScrollProgress` on this same
- * wrapper produces `closeProgress`, reported upward through
- * `onCloseProgress` so `Close` can track the identical number rather than
- * two components independently guessing at the same scroll position.
+ * fixed, in `Landing.tsx`) rises over it. A `ScrollTrigger` on this same
+ * wrapper (`start: 'top top', end: 'bottom bottom'` — exactly the fraction
+ * of `172svh` that is genuine scroll room) drives `closeProgress`, reported
+ * upward through `onCloseProgress` so `Close` can track the identical number
+ * rather than two components independently guessing at the same scroll
+ * position.
+ *
+ * THIS USED TO BE `useScrollProgress` — a React-state hook, rewritten out
+ * for the same reason `Close` no longer takes `progress` as a prop (see
+ * `Landing.tsx`): it drove a `setState` off a raw `scroll` listener, so
+ * every scroll tick through this section re-rendered `FeatureType`, and
+ * `onCloseProgress` then re-rendered `Landing` and `Close` behind it — three
+ * components re-rendering on every frame of a gesture that's supposed to be
+ * silky. `ScrollTrigger` already shares Lenis's own rAF (see
+ * `SmoothScroll.tsx`), so hooking this section into it directly, and handing
+ * the live number to plain callbacks instead of state, keeps the whole chain
+ * off React's render loop.
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { useScrollProgress } from '../../lib/useScrollProgress'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
+import { Flip } from 'gsap/Flip'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { useReducedMotion } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
 import { lenisRef } from './SmoothScroll'
+
+gsap.registerPlugin(Flip, ScrollTrigger)
 
 type Tone = 'sky' | 'sun' | 'mint' | 'coral'
 
@@ -155,16 +171,17 @@ export function FeatureType({
 }: {
   onCloseProgress: (p: number) => void
 }) {
-  const { ref, progress: closeProgress } = useScrollProgress<HTMLDivElement>()
+  const ref = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(0)
   const reduced = useReducedMotion()
 
-  // Reported upward rather than owned by `Landing()` — see the header note:
-  // this component now measures its own scroll room, and `Close` tracks the
-  // identical number through this callback instead of a shared hook call.
-  useEffect(() => {
-    onCloseProgress(closeProgress)
-  }, [closeProgress, onCloseProgress])
+  // `closeProgress` lives in a ref, not state — see the header note on why
+  // this section stopped using `useScrollProgress`. `onCloseProgress` is
+  // called straight from `ScrollTrigger`'s own `onUpdate`, every frame it
+  // fires, without ever touching React; `belowHalf` (below) is the only part
+  // of this number this component itself needs to RENDER off, and it only
+  // flips twice a scroll (crossing 0.5 each direction), not every frame.
+  const closeProgressRef = useRef(0)
 
   // `--tint` recolours the pointer-following lamp glow in `Landing.tsx` — a
   // history of exactly how NOT to gate this lives in git blame on this
@@ -186,7 +203,51 @@ export function FeatureType({
     io.observe(el)
     return () => io.disconnect()
   }, [])
-  const inView = nearby && closeProgress < 0.5
+
+  const [belowHalf, setBelowHalf] = useState(true)
+  const belowHalfRef = useRef(true)
+
+  // The single measurement for this section, replacing the old
+  // `useScrollProgress` state hook (see the header note). `ScrollTrigger`
+  // already updates on Lenis's own scroll event (`SmoothScroll.tsx`), so
+  // this rides the one shared rAF rather than opening a second, raw `scroll`
+  // listener — and `onUpdate` is a plain function call, not a `setState`, so
+  // scrolling through the full 72svh of this section's own room never
+  // re-renders `FeatureType` (or, through `onCloseProgress`, `Landing`/
+  // `Close`) on a per-frame basis. `start`/`end` reproduce exactly the old
+  // manual formula (`-rect.top / (rect.height - innerHeight)`): the fraction
+  // of `172svh` that's genuine scroll room, not the pinned `100svh`.
+  useEffect(() => {
+    if (reduced) {
+      onCloseProgress(1)
+      return
+    }
+    const el = ref.current
+    if (!el) return
+
+    const st = ScrollTrigger.create({
+      trigger: el,
+      start: 'top top',
+      end: 'bottom bottom',
+      onUpdate: (self) => {
+        closeProgressRef.current = self.progress
+        onCloseProgress(self.progress)
+        const below = self.progress < 0.5
+        if (below !== belowHalfRef.current) {
+          belowHalfRef.current = below
+          setBelowHalf(below)
+        }
+      },
+    })
+    closeProgressRef.current = st.progress
+    onCloseProgress(st.progress)
+    belowHalfRef.current = st.progress < 0.5
+    setBelowHalf(st.progress < 0.5)
+
+    return () => st.kill()
+  }, [reduced, onCloseProgress])
+
+  const inView = nearby && belowHalf
 
   useEffect(() => {
     if (!inView) {
@@ -198,6 +259,43 @@ export function FeatureType({
       document.documentElement.style.removeProperty('--tint')
     }
   }, [open, inView])
+
+  // THE OPEN/CLOSE FLIP. `columnRefs` collects the four `<Column>` buttons;
+  // `handleOpen` captures their geometry (`Flip.getState`) the instant
+  // before `setOpen` changes which one is wide, and the effect below plays
+  // from that captured start back to the real (already-updated) layout. See
+  // `Column`'s own comment for why this replaced a `flex-grow` transition.
+  const columnRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const flipState = useRef<Flip.FlipState | null>(null)
+
+  const handleOpen = (i: number) => {
+    if (i === open) return
+    const targets = columnRefs.current.filter((el): el is HTMLButtonElement => el !== null)
+    if (targets.length) flipState.current = Flip.getState(targets)
+    setOpen(i)
+  }
+
+  useLayoutEffect(() => {
+    const state = flipState.current
+    if (!state) return
+    flipState.current = null
+    const targets = columnRefs.current.filter((el): el is HTMLButtonElement => el !== null)
+    if (!targets.length) return
+    // `will-change` only for the ~700ms this actually runs, not left standing
+    // on four buttons for the rest of the page's life.
+    gsap.set(targets, { willChange: 'transform' })
+    Flip.from(state, {
+      targets,
+      duration: 0.7,
+      ease: 'expo.out',
+      // The one option that matters: without it, Flip tweens `width`/`height`
+      // directly — the exact layout-thrash this replaced. With it, Flip
+      // fakes the resize with `scaleX`/`scaleY` + translate, so the whole
+      // gesture is a transform on four elements, nothing else.
+      scale: true,
+      onComplete: () => gsap.set(targets, { clearProps: 'willChange' }),
+    })
+  }, [open])
 
   // MAGNETIC ENTRY. Approaching this section on a mouse wheel — discrete
   // notches, not a continuous gesture — a scroll can settle a few dozen
@@ -265,7 +363,7 @@ export function FeatureType({
 
   return (
     // `172svh` — 100svh of pinned content plus 72svh of genuine scroll room
-    // — is what `useScrollProgress` measures against to produce
+    // — is what the `ScrollTrigger` above measures against to produce
     // `closeProgress`. The inner block is `sticky top-0`, so it holds the
     // full viewport, unmoving, for that entire 72svh of scroll: locked, not
     // receding, exactly as asked. `Close` (a `position: fixed` overlay in
@@ -288,7 +386,8 @@ export function FeatureType({
               index={i}
               isOpen={open === i}
               isLast={i === FEATURES.length - 1}
-              onOpen={() => setOpen(i)}
+              onOpen={() => handleOpen(i)}
+              elRef={(el) => (columnRefs.current[i] = el)}
             />
           ))}
         </div>
@@ -303,12 +402,14 @@ function Column({
   isOpen,
   isLast,
   onOpen,
+  elRef,
 }: {
   feature: Feature
   index: number
   isOpen: boolean
   isLast: boolean
   onOpen: () => void
+  elRef: (el: HTMLButtonElement | null) => void
 }) {
   /* Bumped each time this column opens, so the arrival burst is a fresh
      element with a fresh animation rather than a finished one restarted. */
@@ -319,6 +420,7 @@ function Column({
 
   return (
     <button
+      ref={elRef}
       type="button"
       /* Hover for pointers, focus for keyboards, click for touch. Hover alone
          would make this unreachable by keyboard and dead on a phone. */
@@ -329,7 +431,15 @@ function Column({
       className={cn(
         'group relative min-h-0 min-w-0 cursor-pointer overflow-hidden text-left',
         !isLast && 'border-b-2 lg:border-b-0 lg:border-r-2',
-        'transition-[flex-grow,border-color] duration-700 ease-[var(--ease-out-expo)]',
+        // Only `border-color` transitions on CSS now — paint, not layout.
+        // The actual resize (`flexGrow` below) changes INSTANTLY; the
+        // `Flip.from` call in `FeatureType` (see its own comment) is what
+        // makes that instant change still look like a 700ms animation, via
+        // a transform instead of a live `width`/`flex-grow` tween. That used
+        // to be in this same `transition-[...]` list, animating layout on
+        // FOUR flex siblings at once every frame it ran — the single
+        // heaviest thing on this page before Flip replaced it.
+        'transition-colors duration-700 ease-[var(--ease-out-expo)]',
       )}
       style={{
         flexGrow: isOpen ? 3.6 : 0.8,

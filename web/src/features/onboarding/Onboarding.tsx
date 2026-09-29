@@ -1,39 +1,31 @@
 /**
- * First run — a workbench, not a form and not a transcript.
+ * First run — five questions that draw a picture of you.
  *
- * A new account has nothing: no subjects, no cards, no history. Dropping
- * someone into a dashboard of zeroes teaches them the product is empty, and a
- * settings form of dropdowns teaches them it is admin. The app genuinely needs
- * one thing before it can be useful — a sense of how this person wants to be
- * taught — so it asks.
+ * A new account has nothing: no subjects, no cards, no history, and a
+ * dashboard of zeroes teaches someone the product is empty at the moment they
+ * are deciding whether it is worth their time. The app genuinely needs one
+ * thing before it is useful — a sense of how this person wants to be taught —
+ * so it asks, briefly.
  *
- * **The problem with asking.** Four questions from a product you have not used
- * yet is unpleasant in a specific way: you cannot tell what any answer will do,
- * so you start guessing at the response the form wants, and then you rush or
- * skip. Two earlier versions of this screen made it worse — a dropdown form,
- * then a simulated chat that put a fake typing delay in front of every
- * question, which is a wait dressed as a personality.
+ * **The problem with asking** is that answers to a product you have not used
+ * feel like they vanish into a form. So every answer visibly *does* something:
+ * it flows out of the card you pressed and into a learning fingerprint that
+ * assembles beside the questions, one layer per answer (`fingerprint.ts` says
+ * which answer draws which mark). By the end the student is holding an object
+ * made of what they said — nothing on it is invented, and the ending says so.
  *
- * **So the consequence is on screen.** Every choice visibly rewrites a sample
- * answer beside it. Pick "a concrete example" and it opens with a speedometer;
- * pick "the formal definition" and it opens with the limit. There is no hidden
- * correct answer because every answer is visible, which turns the question from
- * a test into a control you are operating — and demonstrates the hand-off the
- * product is built on before the student has uploaded a single page.
+ * **It is directed like a title sequence** — an opening, cuts between
+ * questions, a finale — because this is the first minute of the product and
+ * it should feel made. But nothing waits on the choreography: every sequence
+ * fast-forwards on input, clicks never queue behind an animation, and under
+ * reduced motion the whole thing is a plain, instant form.
  *
- * **Nothing here is a model call.** The questions are fixed and the sample is
- * composed by lookup (see `preview.ts`). Spending a real generation on a
- * scripted screen would be slow, cost quota, and risk the model contradicting
- * the preference it is meant to be illustrating.
- *
- * **It does not ask what you are studying for.** That was on the original list
- * and it is the one question to cut: it changes on a fortnightly cycle, it is
- * already a field in Settings, and asking here would have someone type "finals"
- * on day one and be reminded of it in March. Preferences are stable; goals are
- * not.
+ * **Nothing here is a model call.** The questions and the drawing are fixed
+ * functions of the answers.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { gsap } from 'gsap'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { updateStudentModel } from '../../api/me'
 import { useAuth } from '../../auth/AuthProvider'
@@ -43,467 +35,739 @@ import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import {
-  LAMP_BASE_WARMTH,
-  lampGradient,
-  MOTES,
-  TABLE_IMAGE,
-  TABLE_MASK,
-  TABLE_SIZE,
-  VIGNETTE,
-} from '../../lib/room'
-import { useHandoff } from '../transitions/Handoff'
-import { composeSample, SAMPLE_QUESTION, sessionShape } from './preview'
-import { FREE_TEXT_MAX, STEPS } from './steps'
+import { LAMP_BASE_WARMTH, lampGradient, MOTES, TABLE_IMAGE, TABLE_MASK, TABLE_SIZE, VIGNETTE } from '../../lib/room'
+import { useHandoff, useHandoffReveal } from '../transitions/Handoff'
+import { Flow, type FlowHandle } from './Flow'
+import { Fingerprint, seedPoint, type Beat } from './Fingerprint'
+import { legend, type LegendKey } from './fingerprint'
+import { Letters, NameCondense, Opening, Words } from './Kinetic'
+import { DUR, EASE, EASE_IN, EASE_IN_OUT } from './motion'
 import { markOnboarded } from './state'
+import {
+  buildPatch,
+  EMPTY_ANSWERS,
+  firstName,
+  STEPS,
+  type Answers,
+  type ChoiceStep,
+  type Option,
+  type Step,
+  type TextStep,
+} from './steps'
 
-/**
- * The arrival waits for you, it does not race you.
- *
- * It was on a 4.2s timer, which was worse than either extreme: too short to
- * finish reading, long enough to feel like a wait, and it moved on whether you
- * were ready or not. Reading speed is not something to guess at.
- *
- * So the student starts it. Nothing advances until they act, and this ceiling
- * exists only so an unattended tab does not sit on the intro forever — it is a
- * failsafe, not a pace.
- */
-const ARRIVAL_CEILING_MS = 45_000
+const DONE = STEPS.length
 
-/** Before this, a click is almost certainly the one that landed you here. */
-const ARRIVAL_GUARD_MS = 900
-
-/**
- * The arrival: a rule drawn across the table, and words appearing behind it.
- *
- * The one moment in the product that is purely atmosphere, and it earns the
- * exception. Signing up is a form; the intake is four questions; between those
- * two the student has had nothing but demands, and a screen that asks for
- * nothing is what makes the next one feel like a conversation rather than more
- * paperwork.
- *
- * The mechanism is a plotter, not a fade. A hairline draws outward from the
- * centre, and each line of text is revealed by a clip that opens from the
- * centre at the same rate — so the words read as being *drawn onto the table*
- * by the passing rule rather than fading in beside it. Drafting, in the app's
- * own idiom, and the reason it does not look like a generic splash.
- */
-function Arrival() {
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 px-8"
-      // The whole page is mid-arrival, so this is the only thing worth
-      // announcing. Polite, not assertive: nothing here needs interrupting.
-      role="status"
-      aria-live="polite"
-    >
-      <p
-        className="max-w-2xl text-center text-[clamp(24px,3.4vw,42px)] font-semibold leading-[1.15] text-ink"
-        style={{ animation: 'wipeIn 1100ms 700ms var(--ease-sl) both' }}
-      >
-        Let's set the table.
-      </p>
-
-      {/* The rule. Drawn from the centre, and the text above is clipped open at
-          the same rate — one gesture, two things revealed by it. */}
-      <div
-        aria-hidden
-        className="h-px w-full max-w-md origin-center bg-[rgba(255,237,220,0.28)]"
-        style={{ animation: 'ruleSweep 1000ms 300ms var(--ease-sl) both' }}
-      />
-
-      <p
-        className="max-w-lg text-center text-[15px] leading-relaxed text-ink-3"
-        style={{ animation: 'lineUp 900ms 1900ms var(--ease-sl) both' }}
-      >
-        Four questions about how you like to be taught. There are no wrong
-        answers — you'll see what each one does as you pick it.
-      </p>
-
-      {/* The only instruction on screen, and it arrives last — after both
-          lines have had time to be read rather than alongside them. It breathes
-          so it stays findable without becoming the thing you look at. */}
-      <span
-        className="setcode"
-        style={{ animation: 'lineUp 900ms 3200ms var(--ease-sl) both, breathe 3.4s 4100ms ease-in-out infinite' }}
-      >
-        Click anywhere when you're ready
-      </span>
-    </div>
-  )
+/** Which fingerprint layer each step draws. */
+const LAYER: Record<Step['id'], LegendKey> = {
+  name: 'seed',
+  style: 'core',
+  depth: 'rings',
+  session: 'orbit',
+  goal: 'star',
 }
+
+/** The colour an answer travels in — the colour of the mark it becomes. */
+const TONE: Record<LegendKey, string> = {
+  seed: 'text-ink',
+  core: 'text-brand-300',
+  rings: 'text-ink-2',
+  orbit: 'text-sky',
+  star: 'text-sun',
+}
+const DOT: Record<LegendKey, string> = {
+  seed: 'bg-ink',
+  core: 'bg-brand-300',
+  rings: 'bg-ink-3',
+  orbit: 'bg-sky',
+  star: 'bg-sun',
+}
+
+/** A click this soon after a cut landed on content that just arrived under
+ *  the pointer — almost always the second half of a double-click. */
+const CUT_GUARD_MS = 320
+
+type Phase = 'opening' | 'live' | 'exit'
 
 export function Onboarding() {
   const navigate = useNavigate()
   const { show, showError } = useToast()
-  const { session } = useAuth()
+  const { user, setDisplayName } = useAuth()
   const reduced = useReducedMotion()
+  const reveal = useHandoffReveal()
   const { play } = useHandoff()
 
-  /**
-   * The arrival sequence, before any question is asked.
-   *
-   * Four seconds of nothing being demanded. A student who has just signed up
-   * has spent the last minute typing credentials into a form, and dropping
-   * them straight onto question one makes the product feel like more of the
-   * same admin — so the room gets a moment to be a room first, and the
-   * questions arrive into a screen that already feels settled.
-   *
-   * Skipped instantly under reduced motion, and dismissible with any click or
-   * key, because a beautiful thing you cannot get past stops being beautiful
-   * the second time you see it.
-   */
-  const [arrived, setArrived] = useState(reduced)
+  const initialName = ((user?.user_metadata?.display_name as string | undefined) ?? '').trim()
 
-  const [stepIndex, setStepIndex] = useState(0)
-  const [picked, setPicked] = useState<string[]>([])
-  const [freeText, setFreeText] = useState('')
-  const [saving, setSaving] = useState(false)
-  const answers = useRef<Record<string, string>>({})
-  /* Mirrors `answers.current` for rendering. The ref is what `finish` reads —
-     it must not be a render behind — and this is what the preview reads. */
-  const [chosen, setChosen] = useState<Record<string, string>>({})
+  /* The truth, and what the drawing shows. `drawn` trails `answers` by the
+     flight of the particles carrying a choice, so the fingerprint changes
+     the instant they land rather than before they have left. */
+  const [answers, setAnswers] = useState<Answers>(() => ({ ...EMPTY_ANSWERS, name: initialName }))
+  const answersRef = useRef(answers)
+  const [drawn, setDrawn] = useState(answers)
+  const [beat, setBeat] = useState<Beat>({ n: 0, key: 'seed' })
 
-  const step = STEPS[stepIndex]
-  const isLast = stepIndex === STEPS.length - 1
+  const [index, setIndex] = useState(0)
+  const [leaving, setLeaving] = useState<{ index: number; key: number } | null>(null)
+  const [phase, setPhase] = useState<Phase>(reduced ? 'live' : 'opening')
+  const [opening, setOpening] = useState(!reduced)
+  const [seeded, setSeeded] = useState(reduced)
+  const [burst, setBurst] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (arrived) return
-    const done = () => setArrived(true)
+  const dir = useRef(1)
+  const inDelay = useRef(0)
+  const cutAt = useRef(0)
+  const advance = useRef<number | null>(null)
+  const inRef = useRef<HTMLDivElement>(null)
+  const outRef = useRef<HTMLDivElement>(null)
+  const ruleRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLElement>(null)
+  const progressRef = useRef<HTMLDivElement>(null)
+  const fpWrap = useRef<HTMLDivElement>(null)
+  const flow = useRef<FlowHandle>(null)
+  const lastSave = useRef<{ key: string; done: Promise<void> } | null>(null)
 
-    // A short guard before input counts. Without it the click that submitted
-    // the sign-up form — or the one that dismissed the handoff — arrives here
-    // as the *first* event and skips the intro before it has drawn a frame.
-    let armed = false
-    const arm = window.setTimeout(() => {
-      armed = true
-    }, ARRIVAL_GUARD_MS)
-    const onInput = () => {
-      if (armed) done()
-    }
+  const step: Step | undefined = STEPS[index]
+  const opened = phase !== 'opening'
+  const first = firstName(answers.name)
+  const target = useCallback(() => seedPoint(fpWrap.current), [])
 
-    const ceiling = window.setTimeout(done, ARRIVAL_CEILING_MS)
-    // Listening on the window rather than putting a button on screen: a "skip
-    // intro" control would be the loudest thing in a composition whose whole
-    // point is that nothing is being demanded yet.
-    window.addEventListener('pointerdown', onInput)
-    window.addEventListener('keydown', onInput)
-    return () => {
-      window.clearTimeout(arm)
-      window.clearTimeout(ceiling)
-      window.removeEventListener('pointerdown', onInput)
-      window.removeEventListener('keydown', onInput)
-    }
-  }, [arrived])
+  /* ── Answers ───────────────────────────────────────────────────────── */
 
-  const finish = useCallback(
-    async (collected: Record<string, string>) => {
-      setSaving(true)
-      try {
-        const patch: Record<string, string | number> = {}
-        if (collected.learning_style) patch.learning_style = collected.learning_style
-        if (collected.session_length_minutes) {
-          patch.session_length_minutes = Number(collected.session_length_minutes)
-        }
-        // Two steps write `teaching_preference` — the depth choice and the
-        // free-text one. Joined rather than last-wins so a student who answers
-        // both keeps both.
-        const teaching = [collected.teaching_preference, collected.teaching_extra]
-          .filter(Boolean)
-          .join(' ')
-        if (teaching) patch.teaching_preference = teaching
-
-        if (Object.keys(patch).length > 0) await updateStudentModel(patch)
-      } catch (err) {
-        // A failed save must not trap someone on the intake forever — these are
-        // preferences, all editable in Settings, none worth blocking first use.
-        showError(err)
-      } finally {
-        // With the user id. Without it `markOnboarded` writes to a key that
-        // `hasSkippedLocally` never reads, so skipping sent you straight back
-        // to the screen you were trying to leave.
-        markOnboarded(session?.user?.id ?? null)
-        // The one moment this product gets to feel like an arrival. The
-        // dashboard mounts and fetches underneath the curtain, so it is
-        // finished and painted by the time it is uncovered.
-        void play('desk', () => {
-          navigate('/home', { replace: true })
-        })
-      }
-    },
-    [navigate, play, session, showError],
-  )
-
-  const commit = useCallback(
-    (value: string, key?: string) => {
-      const field = key ?? (step.freeform ? 'teaching_extra' : step.field)
-      const next = { ...answers.current }
-      if (value) next[field] = value
-      answers.current = next
-      setChosen(next)
-      setPicked([])
-      setFreeText('')
-      if (isLast) void finish(next)
-      else setStepIndex((i) => i + 1)
-    },
-    [step, isLast, finish],
-  )
-
-  const back = useCallback(() => {
-    setPicked([])
-    setStepIndex((i) => Math.max(0, i - 1))
+  const update = useCallback((patch: Partial<Answers>, live = false) => {
+    const next = { ...answersRef.current, ...patch }
+    answersRef.current = next
+    setAnswers(next)
+    if (live) setDrawn(next)
   }, [])
 
-  const skip = useCallback(() => {
-    // Say where it went. Skipping is a legitimate choice, but leaving without
-    // being told the questions still exist somewhere makes it look like a
-    // one-time door you just closed — and these are the settings that decide
-    // how every answer in the product is written.
-    show('You can set these any time — Settings → How you learn.', 'info')
-    void finish(answers.current)
-  }, [finish, show])
+  /** An answer has reached the drawing. */
+  const land = useCallback((key: LegendKey) => {
+    setDrawn(answersRef.current)
+    setBeat((b) => ({ n: b.n + 1, key }))
+  }, [])
 
-  /* The sample, composed from what has been answered so far. */
-  const sample = useMemo(
-    () => composeSample(chosen.learning_style, chosen.teaching_preference),
-    [chosen.learning_style, chosen.teaching_preference],
+  /** Send an answer from the element that gave it into the seed. */
+  const feed = useCallback(
+    (key: LegendKey, from: Element | null, origin?: { x: number; y: number } | null) => {
+      const to = target()
+      if (reduced || !from || !to || !flow.current) return land(key)
+      flow.current.emit({ from: from.getBoundingClientRect(), origin, to, tone: TONE[key], onArrive: () => land(key) })
+    },
+    [land, reduced, target],
   )
-  const shape = sessionShape(chosen.session_length_minutes)
 
-  /** Single-select commits on tap; multi-select waits for Continue. */
-  const canContinue = step.multi ? picked.length > 0 : true
+  /* ── Cuts between questions ────────────────────────────────────────── */
+
+  const go = useCallback(
+    (next: number, delay = 0) => {
+      if (advance.current) window.clearTimeout(advance.current)
+      advance.current = null
+      if (next === index || next < 0 || next > DONE) return
+      dir.current = next > index ? 1 : -1
+      inDelay.current = delay
+      cutAt.current = performance.now()
+      setLeaving(reduced ? null : { index, key: cutAt.current })
+      setIndex(next)
+    },
+    [index, reduced],
+  )
+
+  /** True when a click should be ignored — see CUT_GUARD_MS. */
+  const tooSoon = (e?: { detail?: number }) =>
+    phase !== 'live' || (e?.detail ?? 1) > 1 || performance.now() - cutAt.current < CUT_GUARD_MS
+
+  /**
+   * One shot: the outgoing question leaves with momentum in the direction of
+   * travel while the next is already on its way in — overlapping, never a
+   * blank frame — and a hairline wipes across between them.
+   */
+  useLayoutEffect(() => {
+    const inn = inRef.current
+    if (!inn) return
+    const words = inn.querySelectorAll('[data-word], [data-letter]')
+    const beats = inn.querySelectorAll('[data-beat]')
+    if (!opened) {
+      gsap.set(words, { yPercent: 115 })
+      gsap.set(beats, { opacity: 0 })
+      return
+    }
+    focusStep(inn)
+    // On a phone the options run below the fold; each new question starts
+    // back at the top, where the fingerprint can be seen answering.
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+    if (reduced) {
+      gsap.set([words, beats], { clearProps: 'all' })
+      return
+    }
+    const d = dir.current
+    const out = outRef.current
+    const tl = gsap.timeline({ onComplete: () => setLeaving(null) })
+    if (out) {
+      tl.to(out.querySelectorAll('[data-word], [data-letter]'), { yPercent: -115 * d, duration: DUR * 0.7, ease: EASE_IN, stagger: 0.018 }, 0)
+        .to(out.querySelectorAll('[data-beat]'), { x: -80 * d, opacity: 0, duration: DUR * 0.6, ease: EASE_IN, stagger: 0.03 }, 0)
+        .fromTo(
+          ruleRef.current,
+          { scaleX: 0, opacity: 1, transformOrigin: d > 0 ? '0% 50%' : '100% 50%' },
+          { scaleX: 1, duration: DUR * 0.55, ease: EASE_IN_OUT },
+          0,
+        )
+        .to(ruleRef.current, { scaleX: 0, transformOrigin: d > 0 ? '100% 50%' : '0% 50%', duration: DUR * 0.7, ease: EASE_IN_OUT })
+    }
+    const at = (out ? 0.22 : 0) + inDelay.current
+    tl.fromTo(words, { yPercent: 115 * d, rotation: 4 * d }, { yPercent: 0, rotation: 0, duration: DUR * 1.4, ease: EASE, stagger: 0.035 }, at)
+      .fromTo(beats, { x: 90 * d, opacity: 0 }, { x: 0, opacity: 1, duration: DUR * 1.3, ease: EASE, stagger: 0.055, clearProps: 'transform,opacity' }, at + 0.12)
+    return () => {
+      tl.kill()
+    }
+    // `leaving` is deliberately not a dependency: clearing it when the cut
+    // finishes must not replay the entrance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, opened, reduced])
+
+  /* The chrome — header and progress — arrives with the first question. */
+  useLayoutEffect(() => {
+    if (reduced) return
+    const chrome = [headerRef.current, progressRef.current]
+    if (!opened) gsap.set(chrome, { opacity: 0, y: -12 })
+    else gsap.to(chrome, { opacity: 1, y: 0, duration: DUR * 1.4, ease: EASE, stagger: 0.1, clearProps: 'transform' })
+  }, [opened, reduced])
+
+  /* ── Leaving ───────────────────────────────────────────────────────── */
+
+  /** Save, once per distinct set of answers. Never rejects. */
+  const save = useCallback(
+    (a: Answers) => {
+      const patch = buildPatch(a)
+      const name = a.name.trim()
+      const key = JSON.stringify([patch, name])
+      if (lastSave.current?.key === key) return lastSave.current.done
+      const done = (async () => {
+        const jobs: Promise<unknown>[] = []
+        if (Object.keys(patch).length) jobs.push(updateStudentModel(patch))
+        if (name && name !== initialName) jobs.push(setDisplayName(name))
+        const failed = (await Promise.allSettled(jobs)).find((r) => r.status === 'rejected')
+        // A failed save must not trap anyone here — every field is in Settings.
+        if (failed) showError(failed.reason)
+        // With the user id, or the gate never reads the flag back.
+        markOnboarded(user?.id ?? null)
+      })()
+      lastSave.current = { key, done }
+      return done
+    },
+    [initialName, setDisplayName, showError, user],
+  )
+
+  // Reaching the end saves straight away, so closing the tab on the finale
+  // does not lose the answers. Leaving saves again only if something changed.
+  useEffect(() => {
+    if (index === DONE) void save(answersRef.current)
+  }, [index, save])
+
+  const leave = useCallback(async () => {
+    if (phase === 'exit') return
+    setPhase('exit')
+    const saving = save(answersRef.current)
+    if (!reduced) await flyIntoLogo(fpWrap.current, headerRef.current, [inRef.current, progressRef.current])
+    void play('desk', async () => {
+      await saving
+      navigate('/home', { replace: true })
+    })
+  }, [navigate, phase, play, reduced, save])
+
+  const skipAll = useCallback(() => {
+    // Say where it went: leaving without being told the questions still exist
+    // makes it look like a one-time door you just closed.
+    show('You can set these any time — Settings → How you learn.', 'info')
+    void leave()
+  }, [leave, show])
+
+  /* ── Answering ─────────────────────────────────────────────────────── */
+
+  const pick = useCallback(
+    (s: ChoiceStep, o: Option, card: Element | null, point: { x: number; y: number } | null) => {
+      const key = LAYER[s.id]
+      if (s.multi) {
+        const on = answersRef.current.styles.includes(o.value)
+        update({ styles: on ? answersRef.current.styles.filter((v) => v !== o.value) : [...answersRef.current.styles, o.value] })
+        feed(key, card, point)
+        return
+      }
+      update({ [s.field]: o.value } as Partial<Answers>)
+      feed(key, card, point)
+      // A beat for the press to register on the card before the cut.
+      if (advance.current) window.clearTimeout(advance.current)
+      advance.current = window.setTimeout(() => go(index + 1), reduced ? 0 : 170)
+    },
+    [feed, go, index, reduced, update],
+  )
+
+  const submitText = useCallback(
+    (s: TextStep) => {
+      const value = answersRef.current[s.field].trim()
+      update({ [s.field]: value } as Partial<Answers>, true)
+      if (s.field === 'name' && value && !reduced) {
+        setBurst(value)
+        go(index + 1, 0.95)
+        return
+      }
+      land(LAYER[s.id])
+      go(index + 1)
+    },
+    [go, index, land, reduced, update],
+  )
+
+  const skipStep = useCallback(
+    (s: Step) => {
+      const cleared: Partial<Answers> =
+        s.field === 'styles' ? { styles: [] } : s.kind === 'choice' ? { [s.field]: null } : { [s.field]: '' }
+      update(cleared, true)
+      go(index + 1)
+    },
+    [go, index, update],
+  )
+
+  /* Keys: 1–9 pick an option, Enter continues where a button would. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (phase !== 'live' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t?.closest('input, textarea')) return
+      // Enter on a focused control is that control's own click.
+      if (e.key === 'Enter' && t?.closest('button, a')) return
+      if (index === DONE && e.key === 'Enter') return void leave()
+      if (!step || step.kind !== 'choice') return
+      if (e.key === 'Enter' && step.multi && answersRef.current.styles.length) return void go(index + 1)
+      const n = Number(e.key)
+      const o = step.options[n - 1]
+      if (!o || tooSoon()) return
+      const card = inRef.current?.querySelector(`[data-option="${n - 1}"]`) ?? null
+      const r = card?.getBoundingClientRect()
+      pick(step, o, card, r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
+  const rows = legend(answers)
+  const caption = rows.find((r) => r.key === beat.key) ?? rows[0]
+
+  const view = (i: number) => (
+    <StepView
+      index={i}
+      answers={answers}
+      first={first}
+      reduced={reduced}
+      onType={(field, value) => update({ [field]: value } as Partial<Answers>, true)}
+      onPick={(s, o, card, point, e) => !tooSoon(e) && pick(s, o, card, point)}
+      onSubmit={(s) => !tooSoon() && submitText(s)}
+      onContinue={() => !tooSoon() && go(index + 1)}
+      onSkip={(s) => !tooSoon() && skipStep(s)}
+      onBack={() => phase === 'live' && go(i - 1)}
+      onFinish={() => void leave()}
+    />
+  )
 
   return (
-    // `lg:cursor-none` scoped here, matching the landing page. First run is a
-    // surface you are being *shown*, so it keeps the reticle; the app proper
-    // does not, because a screen you work in needs the system cursor and every
-    // affordance it carries.
+    // `lg:cursor-none` scoped here, matching the landing page: first run is a
+    // surface you are being *shown*, so it keeps the reticle.
     <div className="relative flex min-h-dvh flex-col overflow-hidden bg-canvas lg:cursor-none">
       <DraftingCursor />
-      <Backdrop reduced={reduced} lit={stepIndex} />
+      <Backdrop reduced={reduced} lit={Math.min(index, DONE)} />
 
-      {!arrived && <Arrival />}
+      {opening && (
+        <Opening
+          run={reveal}
+          target={target}
+          onCue={() => setPhase('live')}
+          onSeed={() => setSeeded(true)}
+          onEnd={() => {
+            setPhase((p) => (p === 'opening' ? 'live' : p))
+            setSeeded(true)
+            setOpening(false)
+          }}
+        />
+      )}
+      {burst && <NameCondense name={burst} target={target} onLand={() => land('seed')} onEnd={() => setBurst(null)} />}
+      <Flow ref={flow} />
 
-      <header
-        className="relative z-10 flex items-center justify-between px-6 py-5 sm:px-10"
-        style={arrived && !reduced ? { animation: 'stepIn 700ms both var(--ease-sl)' } : undefined}
-      >
+      <header ref={headerRef} className="relative z-10 flex items-center justify-between px-4 py-5 sm:px-10">
         <Logo />
-        <button
-          type="button"
-          onClick={skip}
-          disabled={saving}
-          className="rounded-full px-3 py-1.5 text-[13.5px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
-        >
-          Skip for now
-        </button>
+        {index < DONE && (
+          <button
+            type="button"
+            onClick={skipAll}
+            disabled={phase === 'exit'}
+            className="rounded-full px-3 py-1.5 text-[13.5px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+          >
+            Skip for now
+          </button>
+        )}
       </header>
 
-      {/* Held back until the room has had its moment. Rendered rather than
-          hidden so the layout is already resolved when it appears — a reflow
-          on the first frame of the reveal would undo the whole effect. */}
       <main
         className={cn(
-          'relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 items-center gap-10 px-6 pb-14',
-          'lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16 lg:px-10',
-          !arrived && 'pointer-events-none',
+          'relative z-10 mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 content-start gap-5 px-4 pb-12 sm:px-6',
+          // Top-aligned, with the drawing pinned: re-centring on each
+          // question's height would make the fingerprint jump between steps.
+          'lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:items-start lg:gap-16 lg:px-10 lg:pt-[3vh]',
         )}
-        aria-hidden={!arrived}
-        style={
-          reduced
-            ? undefined
-            : arrived
-              ? { animation: 'stepIn 820ms 120ms both var(--ease-sl)' }
-              : { opacity: 0 }
-        }
       >
-        {/* ── The question ───────────────────────────────────────────── */}
-        <section className="flex flex-col">
-          <Progress index={stepIndex} total={STEPS.length} reduced={reduced} />
-
-          {/* Keyed on the step so every question animates in as its own beat.
-              This is the screen's one authored motion moment: the question and
-              its choices arrive together, and nothing else on the page moves
-              while you are reading them. */}
-          <div
-            key={step.id}
-            style={
-              reduced ? undefined : { animation: 'stepIn 520ms var(--ease-sl) both' }
-            }
+        {/* ── The fingerprint ─────────────────────────────────────────── */}
+        <div className="flex flex-col items-center lg:sticky lg:top-6 lg:order-2">
+          <div ref={fpWrap} className="w-[min(62vw,15rem)] sm:w-[19rem] lg:w-full lg:max-w-[30rem]">
+            <Fingerprint answers={drawn} reduced={reduced} ready={seeded} beat={beat} finale={index === DONE} />
+          </div>
+          <p
+            className={cn('mt-2 hidden min-h-[2.5rem] max-w-sm text-center lg:block', (index === DONE || !caption) && 'invisible')}
+            aria-live="polite"
           >
-            <h1 className="nameplate mt-7 text-[clamp(30px,3.6vw,50px)] leading-[1.02] text-ink">
-              {step.ask}
-            </h1>
-            <p className="mt-3 max-w-md text-[15px] leading-relaxed text-ink-3">
-              {step.aside}
-            </p>
+            {caption && (
+              <span key={`${caption.key}-${beat.n}`} className="block" style={reduced ? undefined : { animation: 'lineUp 600ms var(--ease-sl) both' }}>
+                <span className="setcode text-ink-3">{caption.label}</span>
+                <span className="ml-2 text-[13px] leading-snug text-muted">{caption.text}</span>
+              </span>
+            )}
+          </p>
+        </div>
 
-            <div className="mt-7">
-              {step.freeform ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    commit(freeText.trim())
-                  }}
-                  className="flex flex-col gap-3"
-                >
-                  <textarea
-                    autoFocus
-                    rows={3}
-                    /**
-                     * Capped so the save cannot fail on length.
-                     *
-                     * `teaching_preference` allows 400 server-side and is
-                     * written by *two* steps — the depth pick prefixes this
-                     * text — so the room left here is 400 minus the longest
-                     * depth value. Without the cap a student who typed a
-                     * paragraph got a 422 that discarded the entire intake,
-                     * including the three questions they had already answered.
-                     * Stopping the input is kinder than validating it after
-                     * the fact: there is nothing to correct if it cannot be
-                     * over-typed in the first place.
-                     */
-                    maxLength={FREE_TEXT_MAX}
-                    value={freeText}
-                    onChange={(e) => setFreeText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                        e.preventDefault()
-                        commit(freeText.trim())
-                      }
-                    }}
-                    placeholder="e.g. use analogies, and don't skip the maths"
-                    className="w-full resize-none rounded-[16px] border border-line bg-raised px-4 py-3.5 text-[15px] leading-relaxed text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/60"
-                  />
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-[14.5px] font-semibold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
-                    >
-                      {saving ? 'Setting up…' : 'Finish'}
-                      <Icon name="arrowRight" size={14} />
-                    </button>
-                    {!freeText.trim() && (
-                      <span className="text-[13px] text-faint">
-                        or leave it blank
-                      </span>
-                    )}
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-2">
-                    {step.options.map((o, i) => {
-                      const on = picked.includes(o.label)
-                      return (
-                        <button
-                          key={o.value}
-                          type="button"
-                          aria-pressed={step.multi ? on : undefined}
-                          onClick={() =>
-                            step.multi
-                              ? setPicked((prev) =>
-                                  prev.includes(o.label)
-                                    ? prev.filter((l) => l !== o.label)
-                                    : [...prev, o.label],
-                                )
-                              : commit(o.value)
-                          }
-                          style={reduced ? undefined : { animationDelay: `${120 + i * 55}ms` }}
-                          className={cn(
-                            'group flex items-center gap-3.5 rounded-[14px] border px-4 py-3 text-left',
-                            'transition-[border-color,background-color,transform] duration-200',
-                            'cursor-pointer active:scale-[0.995]',
-                            !reduced && 'motion-safe:animate-[stepIn_420ms_var(--ease-sl)_both]',
-                            on
-                              ? 'border-brand/70 bg-brand-soft'
-                              : 'border-line bg-raised/70 hover:border-brand/40 hover:bg-raised',
-                          )}
-                        >
-                          {/* A mark, not a checkbox: it reads as a selection on
-                              a sheet rather than as a form control. */}
-                          <span
-                            aria-hidden
-                            className={cn(
-                              'grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors',
-                              on
-                                ? 'border-brand bg-brand text-[#1a120f]'
-                                : 'border-line text-transparent group-hover:border-brand/50',
-                            )}
-                          >
-                            <Icon name="check" size={12} />
-                          </span>
-                          <span className="min-w-0">
-                            <span
-                              className={cn(
-                                'block text-[15.5px] font-semibold',
-                                on ? 'text-brand-deep' : 'text-ink',
-                              )}
-                            >
-                              {o.label}
-                            </span>
-                            <span className="mt-0.5 block text-[13px] leading-snug text-muted">
-                              {o.hint}
-                            </span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-
-                  {step.multi && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        commit(
-                          step.options
-                            .filter((o) => picked.includes(o.label))
-                            // Joined into one sentence rather than stored as a
-                            // list: every consumer interpolates this into a
-                            // prompt, and a JSON array appearing mid-sentence
-                            // would read as a bug to the model.
-                            .map((o) => o.value)
-                            .join('; '),
-                        )
-                      }
-                      disabled={!canContinue}
-                      className={cn(
-                        'mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5',
-                        'text-[14.5px] font-semibold t-control duration-200',
-                        canContinue
-                          ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.98]'
-                          : 'cursor-default bg-line-soft text-faint',
-                      )}
-                    >
-                      {picked.length === 0 ? 'Pick what fits' : 'Continue'}
-                      {picked.length > 0 && <Icon name="arrowRight" size={14} />}
-                    </button>
-                  )}
-                </>
-              )}
+        {/* ── The question ────────────────────────────────────────────── */}
+        <section className="relative min-w-0 lg:order-1 lg:min-h-[32rem]">
+          <div ref={progressRef}>
+            <Progress index={index} reduced={reduced} />
+          </div>
+          <div className="relative mt-7">
+            <div ref={ruleRef} aria-hidden className="absolute -top-3.5 left-0 right-0 h-px bg-brand/70" style={{ opacity: 0 }} />
+            {leaving && (
+              <div key={leaving.key} ref={outRef} className="pointer-events-none absolute inset-x-0 top-0" aria-hidden inert>
+                {view(leaving.index)}
+              </div>
+            )}
+            <div key={index} ref={inRef}>
+              {view(index)}
             </div>
           </div>
-
-          {stepIndex > 0 && (
-            <button
-              type="button"
-              onClick={back}
-              className="mt-6 inline-flex w-fit items-center gap-1.5 text-[13px] text-muted transition-colors cursor-pointer hover:text-ink"
-            >
-              <Icon name="arrowLeft" size={12} /> Back
-            </button>
-          )}
         </section>
-
-        {/* ── What the answers did ───────────────────────────────────── */}
-        <Preview
-          paragraphs={sample.paragraphs}
-          shape={shape}
-          reduced={reduced}
-          answered={stepIndex}
-        />
       </main>
+    </div>
+  )
+}
+
+/** Focus where the next action is, without scrolling the stage. */
+function focusStep(el: HTMLElement) {
+  const input = el.querySelector<HTMLInputElement>('input')
+  const target = input ?? el.querySelector<HTMLElement>('h1')
+  target?.focus({ preventScroll: true })
+}
+
+/**
+ * The fingerprint shrinks and flies into the logo, where the app's own mark
+ * will be when the curtain lifts — the thing you just made is carried in.
+ */
+function flyIntoLogo(fp: HTMLElement | null, header: HTMLElement | null, [content, progress]: (HTMLElement | null)[]): Promise<void> {
+  const mark = header?.querySelector('.logo-mark')
+  if (!fp || !mark) return Promise.resolve()
+  const a = fp.getBoundingClientRect()
+  const b = mark.getBoundingClientRect()
+  return new Promise((resolve) => {
+    gsap
+      .timeline({ onComplete: resolve })
+      .to(content?.querySelectorAll('[data-word], [data-letter]') ?? [], { yPercent: -115, duration: DUR * 0.7, ease: EASE_IN, stagger: 0.012 }, 0)
+      .to([...(content?.querySelectorAll('[data-beat]') ?? []), progress], { y: -24, opacity: 0, duration: DUR * 0.6, ease: EASE_IN, stagger: 0.03 }, 0)
+      .to(fp, { scale: 1.06, duration: 0.2, ease: EASE_IN_OUT }, 0.1)
+      .to(
+        fp,
+        {
+          x: b.left + b.width / 2 - (a.left + a.width / 2),
+          y: b.top + b.height / 2 - (a.top + a.height / 2),
+          scale: (b.width / a.width) * 1.4,
+          rotation: -200,
+          duration: DUR * 1.5,
+          ease: EASE_IN_OUT,
+        },
+        0.3,
+      )
+      .to(fp, { opacity: 0, duration: 0.2 }, 0.3 + DUR * 1.5 - 0.15)
+      .fromTo(mark, { scale: 1 }, { scale: 1.35, duration: 0.16, ease: EASE, yoyo: true, repeat: 1 }, 0.3 + DUR * 1.5 - 0.1)
+  })
+}
+
+/* ── One question ─────────────────────────────────────────────────────── */
+
+type StepViewProps = {
+  index: number
+  answers: Answers
+  first: string
+  reduced: boolean
+  onType: (field: 'name' | 'goal', value: string) => void
+  onPick: (s: ChoiceStep, o: Option, card: Element, point: { x: number; y: number } | null, e: { detail: number }) => void
+  onSubmit: (s: TextStep) => void
+  onContinue: () => void
+  onSkip: (s: Step) => void
+  onBack: () => void
+  onFinish: () => void
+}
+
+function StepView(p: StepViewProps) {
+  const s = STEPS[p.index]
+  if (!s) return <Ending {...p} />
+
+  // Greets them once there is a name to greet them by.
+  const eyebrow = s.id === 'style' && p.first ? `Good to meet you, ${p.first}.` : s.id === 'goal' ? (p.first ? `Last one, ${p.first}.` : 'Last one.') : null
+
+  return (
+    <div className="flex flex-col">
+      {eyebrow && (
+        <p data-beat className="setcode setcode-hot mb-3">
+          {eyebrow}
+        </p>
+      )}
+      <h1 tabIndex={-1} id={`ask-${s.id}`} className="nameplate break-words text-[clamp(28px,3.6vw,50px)] leading-[1.02] text-ink outline-none">
+        <Words text={s.ask} />
+      </h1>
+      <p data-beat className="mt-3 max-w-md text-[15px] leading-relaxed text-ink-3">
+        {s.aside}
+      </p>
+
+      <div className="mt-7">{s.kind === 'text' ? <TextAnswer step={s} {...p} /> : <ChoiceAnswer step={s} {...p} />}</div>
+
+      <div data-beat className="mt-6 flex items-center gap-5">
+        {p.index > 0 && (
+          <button type="button" onClick={p.onBack} className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors cursor-pointer hover:text-ink">
+            <Icon name="arrowLeft" size={12} /> Back
+          </button>
+        )}
+        {s.kind === 'choice' && (
+          <button type="button" onClick={() => p.onSkip(s)} className="text-[13px] text-faint transition-colors cursor-pointer hover:text-ink">
+            Skip this one
+          </button>
+        )}
+        {s.kind === 'choice' && (
+          <span className="setcode ml-auto hidden lg:inline">Keys 1–{s.options.length}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TextAnswer({ step, answers, onType, onSubmit }: StepViewProps & { step: TextStep }) {
+  const value = answers[step.field]
+  const empty = !value.trim()
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        onSubmit(step)
+      }}
+      className="flex flex-col gap-5"
+    >
+      <div data-beat>
+        <input
+          value={value}
+          onChange={(e) => onType(step.field, e.target.value)}
+          maxLength={step.max}
+          placeholder={step.placeholder}
+          autoComplete={step.autoComplete}
+          aria-labelledby={`ask-${step.id}`}
+          spellCheck={false}
+          className="w-full border-0 border-b border-line bg-transparent pb-2.5 text-[clamp(20px,2.2vw,28px)] font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-faint focus:border-brand/70"
+        />
+      </div>
+      <div data-beat className="flex items-center gap-3">
+        <button
+          type="submit"
+          className="inline-flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-[14.5px] font-semibold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98]"
+        >
+          {step.id === 'goal' ? 'Finish' : 'Continue'}
+          <Icon name="arrowRight" size={14} />
+        </button>
+        {empty && <span className="text-[13px] text-faint">{step.id === 'goal' ? 'or leave it blank' : 'or skip it'}</span>}
+      </div>
+    </form>
+  )
+}
+
+function ChoiceAnswer({ step, answers, reduced, onPick, onContinue }: StepViewProps & { step: ChoiceStep }) {
+  const chosen = (o: Option) => (step.multi ? answers.styles.includes(o.value) : answers[step.field] === o.value)
+  const count = step.multi ? answers.styles.length : 0
+  return (
+    <>
+      <div className="flex flex-col gap-2">
+        {step.options.map((o, i) => (
+          <div data-beat key={o.value}>
+            <OptionCard
+              index={i}
+              option={o}
+              on={chosen(o)}
+              multi={!!step.multi}
+              reduced={reduced}
+              onPick={(card, point, e) => onPick(step, o, card, point, e)}
+            />
+          </div>
+        ))}
+      </div>
+      {step.multi && (
+        <div data-beat>
+          <button
+            type="button"
+            onClick={onContinue}
+            disabled={count === 0}
+            className={cn(
+              'mt-5 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[14.5px] font-semibold t-control duration-200',
+              count > 0 ? 'bg-brand text-[#1a120f] cursor-pointer hover:brightness-110 active:scale-[0.98]' : 'cursor-default bg-line-soft text-faint',
+            )}
+          >
+            {count === 0 ? 'Pick what fits' : 'Continue'}
+            {count > 0 && <Icon name="arrowRight" size={14} />}
+          </button>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
+ * An option you can feel: it leans toward the cursor, gives under a press and
+ * springs back, and a ripple leaves the point you touched — which is where the
+ * stream into the fingerprint starts.
+ */
+function OptionCard({
+  index,
+  option,
+  on,
+  multi,
+  reduced,
+  onPick,
+}: {
+  index: number
+  option: Option
+  on: boolean
+  multi: boolean
+  reduced: boolean
+  onPick: (card: Element, point: { x: number; y: number } | null, e: { detail: number }) => void
+}) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const lean = useRef<{ x: gsap.QuickToFunc; y: gsap.QuickToFunc } | null>(null)
+  const live = !reduced
+
+  const onMove = (e: React.PointerEvent) => {
+    if (!live || e.pointerType !== 'mouse' || !ref.current) return
+    lean.current ??= {
+      x: gsap.quickTo(ref.current, 'x', { duration: 0.5, ease: 'power3.out' }),
+      y: gsap.quickTo(ref.current, 'y', { duration: 0.5, ease: 'power3.out' }),
+    }
+    const r = ref.current.getBoundingClientRect()
+    lean.current.x(((e.clientX - r.left) / r.width - 0.5) * 10)
+    lean.current.y(((e.clientY - r.top) / r.height - 0.5) * 6)
+  }
+  const release = () => {
+    if (!live || !ref.current) return
+    gsap.to(ref.current, { x: 0, y: 0, scale: 1, duration: 0.9, ease: 'elastic.out(1, 0.4)', overwrite: 'auto' })
+  }
+  const press = () => {
+    if (live) gsap.to(ref.current, { scale: 0.965, duration: 0.12, ease: EASE_IN_OUT, overwrite: 'auto' })
+  }
+  const unpress = () => {
+    if (live) gsap.to(ref.current, { scale: 1, duration: 0.8, ease: 'elastic.out(1.1, 0.35)', overwrite: 'auto' })
+  }
+
+  const click = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const card = e.currentTarget
+    // Keyboard activation reports (0, 0) — start from the middle instead.
+    const point = e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : null
+    if (live) ripple(card, point)
+    onPick(card, point, e)
+  }
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      data-option={index}
+      aria-pressed={multi ? on : undefined}
+      onClick={click}
+      onPointerMove={onMove}
+      onPointerLeave={release}
+      onPointerDown={press}
+      onPointerUp={unpress}
+      className={cn(
+        'group relative flex w-full items-center gap-3.5 overflow-hidden rounded-[14px] border px-4 py-3 text-left',
+        'transition-[border-color,background-color] duration-200 cursor-pointer',
+        on ? 'border-brand/70 bg-brand-soft' : 'border-line bg-raised/70 hover:border-brand/40 hover:bg-raised',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'relative grid h-6 w-6 shrink-0 place-items-center rounded-full border font-mono text-[11px] transition-colors',
+          on ? 'border-brand bg-brand text-[#1a120f]' : 'border-line text-faint group-hover:border-brand/50 group-hover:text-ink-3',
+        )}
+      >
+        {on ? <Icon name="check" size={12} /> : index + 1}
+      </span>
+      <span className="relative min-w-0">
+        <span className={cn('block text-[15.5px] font-semibold', on ? 'text-brand-deep' : 'text-ink')}>{option.label}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-muted">{option.hint}</span>
+      </span>
+    </button>
+  )
+}
+
+function ripple(card: HTMLElement, point: { x: number; y: number } | null) {
+  const r = card.getBoundingClientRect()
+  const x = point ? point.x - r.left : r.width / 2
+  const y = point ? point.y - r.top : r.height / 2
+  const size = Math.hypot(Math.max(x, r.width - x), Math.max(y, r.height - y)) * 2
+  const dot = document.createElement('span')
+  dot.setAttribute('aria-hidden', 'true')
+  dot.className = 'pointer-events-none absolute rounded-full bg-brand/35'
+  Object.assign(dot.style, { left: `${x - size / 2}px`, top: `${y - size / 2}px`, width: `${size}px`, height: `${size}px` })
+  card.prepend(dot)
+  gsap.fromTo(dot, { scale: 0, opacity: 1 }, { scale: 1, opacity: 0, duration: DUR * 1.1, ease: EASE, onComplete: () => dot.remove() })
+}
+
+/* ── The finale ───────────────────────────────────────────────────────── */
+
+function Ending({ answers, first, onBack, onFinish }: StepViewProps) {
+  const rows = legend(answers)
+  return (
+    <div className="flex flex-col">
+      <p data-beat className="setcode setcode-hot mb-3">
+        Your learning fingerprint
+      </p>
+      <h1 tabIndex={-1} className="nameplate break-words text-[clamp(30px,4.2vw,58px)] leading-[0.98] text-ink outline-none">
+        <Words text="This is you," />{' '}
+        {first ? <Letters text={`${first}.`} className="text-brand-300" /> : <Words text="so far." />}
+      </h1>
+      <p data-beat className="mt-4 max-w-md text-[15px] leading-relaxed text-ink-3">
+        As you've told us — every mark on it comes from an answer you just gave, and nothing else. The rest, the app learns as you study. All of
+        it can be changed in Settings.
+      </p>
+
+      {rows.length > 0 && (
+        <ul className="mt-6 flex flex-col gap-2.5">
+          {rows.map((r) => (
+            <li data-beat key={r.key} className="flex items-baseline gap-3">
+              <span aria-hidden className={cn('h-2 w-2 shrink-0 translate-y-[-1px] rounded-full', DOT[r.key])} />
+              <span className="setcode w-[5.5rem] shrink-0 text-ink-3">{r.label}</span>
+              <span className={cn('min-w-0 text-[14px] leading-snug', r.key === 'star' ? 'font-semibold text-sun-deep' : 'text-ink-2')}>{r.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div data-beat className="mt-8 flex items-center gap-5">
+        <button
+          type="button"
+          onClick={onFinish}
+          className="inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-[15px] font-semibold text-[#1a120f] t-control duration-200 cursor-pointer hover:brightness-110 active:scale-[0.98]"
+        >
+          Start studying
+          <Icon name="arrowRight" size={14} />
+        </button>
+        <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-[13px] text-muted transition-colors cursor-pointer hover:text-ink">
+          <Icon name="arrowLeft" size={12} /> Change an answer
+        </button>
+      </div>
     </div>
   )
 }
@@ -511,156 +775,59 @@ export function Onboarding() {
 /* ── Progress ─────────────────────────────────────────────────────────── */
 
 /**
- * Four segments on a rule.
- *
- * Ruled stock rather than dots, because this is a measurement — how much is
- * left — and the app already says measurements sit on a rule. It exists to
- * answer "how long is this going to take" before the student has to wonder,
- * which is most of what makes a multi-step form feel like a chore.
+ * Five segments on a rule — a measurement of how much is left, so it sits on
+ * a rule like every other measurement in the app. Each fills by `scaleX`.
  */
-function Progress({
-  index,
-  total,
-  reduced,
-}: {
-  index: number
-  total: number
-  reduced: boolean
-}) {
+function Progress({ index, reduced }: { index: number; reduced: boolean }) {
+  const total = STEPS.length
   return (
     <div className="flex items-center gap-3">
       <div className="flex flex-1 gap-1.5" role="presentation">
         {Array.from({ length: total }, (_, i) => (
-          <span
-            key={i}
-            className={cn(
-              'h-[3px] flex-1 rounded-full',
-              !reduced && 'transition-colors duration-500',
-              i < index ? 'bg-brand/55' : i === index ? 'bg-brand' : 'bg-line',
-            )}
-          />
+          <span key={i} className="relative h-[3px] flex-1 overflow-hidden rounded-full bg-line">
+            <span
+              className={cn('absolute inset-0 origin-left rounded-full', i < index ? 'bg-brand/55' : 'bg-brand')}
+              style={{
+                transform: `scaleX(${i <= index ? 1 : 0})`,
+                transition: reduced ? undefined : 'transform 900ms var(--ease-sl)',
+              }}
+            />
+          </span>
         ))}
       </div>
-      <span className="setcode tabular-nums">
-        {index + 1} / {total}
-      </span>
+      <span className="setcode tabular-nums">{index < total ? `${index + 1} / ${total}` : 'Done'}</span>
     </div>
-  )
-}
-
-/* ── Preview ──────────────────────────────────────────────────────────── */
-
-/**
- * The sample answer, rewritten by whatever has been chosen.
- *
- * A Leaf, deliberately: this is a thing you *read*, and it is the one place on
- * this screen showing the product's actual output rather than its controls.
- * Labelled a sample and given a fixed question, so it illustrates behaviour
- * without implying the app has answered anything yet — nothing here may claim
- * usage that does not exist.
- */
-function Preview({
-  paragraphs,
-  shape,
-  reduced,
-  answered,
-}: {
-  paragraphs: string[]
-  shape: string | null
-  reduced: boolean
-  answered: number
-}) {
-  return (
-    <aside className="lg:sticky lg:top-24">
-      <div className="flex items-center gap-2 pb-3">
-        <Icon name="sparkle" size={12} className="text-brand" />
-        <span className="setcode">How answers will read</span>
-      </div>
-
-      <div className="leaf rounded-r-[14px] py-1 pr-5">
-        <p className="text-[13px] font-semibold text-muted">{SAMPLE_QUESTION}</p>
-
-        {/* Keyed on the composed text so a changed answer re-runs the fade.
-            This is the payoff of the whole screen — the moment a choice stops
-            being abstract — so it gets the motion, and the rest of the panel
-            stays still. */}
-        <div
-          key={paragraphs.join('|')}
-          className="mt-3 flex flex-col gap-3"
-          style={reduced ? undefined : { animation: 'sampleIn 480ms var(--ease-sl) both' }}
-        >
-          {paragraphs.map((p, i) => (
-            <p key={i} className="text-[14.5px] leading-[1.7] text-ink-2">
-              {p}
-            </p>
-          ))}
-        </div>
-
-        {shape && (
-          <p
-            key={shape}
-            className="mt-4 border-t border-line pt-3 text-[13px] leading-snug text-muted"
-            style={reduced ? undefined : { animation: 'sampleIn 480ms var(--ease-sl) both' }}
-          >
-            {shape}
-          </p>
-        )}
-      </div>
-
-      <p className="mt-3 text-[12.5px] leading-snug text-faint">
-        {answered === 0
-          ? 'A sample, so you can see what each choice does.'
-          : 'Every one of these is changeable later in Settings.'}
-      </p>
-    </aside>
   )
 }
 
 /* ── Backdrop ─────────────────────────────────────────────────────────── */
 
 /**
- * A quiet study space, after hours.
+ * A quiet study space, after hours: a lamp, a table, dust, the room falling
+ * away. The same values as the sign-up handoff (`lib/room`), so the curtain
+ * lifts onto exactly this frame.
  *
- * Built from four things and no more — a lamp, a table, dust, and the room
- * falling away. An earlier version had nine drifting card outlines under a
- * foil sweep, which was busy, pitched at "collection" when the moment is
- * *arrival*, and cost ten infinite transform animations to say it.
- *
- * `lit` rises with the step: the lamp warms very slightly as the student works
- * through, so finishing arrives somewhere brighter than it started. It is
- * meant to be felt rather than noticed.
+ * `lit` rises with the step and the lamp warms very slightly — meant to be
+ * felt rather than noticed. The extra warmth is its own layer faded by
+ * opacity; transitioning the gradient itself repainted the whole viewport on
+ * every frame.
  */
 function Backdrop({ reduced, lit }: { reduced: boolean; lit: number }) {
-  const warmth = LAMP_BASE_WARMTH + Math.min(lit, 3) * 0.018
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-      {/* The lamp. One source, warm and high, pooling down the page — a desk
-          lamp left on rather than the two-source stage lighting the landing
-          page uses. Tungsten rather than brand orange: at this size the brand
-          hue reads as an alert, and warm amber reads as a room. */}
-      <div
-        className="absolute inset-0 transition-[background] duration-[1200ms]"
-        style={{
-          background: lampGradient(warmth),
-        }}
-      />
-
-      {/* The table. The product's own graticule, masked to the lit pool so it
-          reads as ruling on a surface the lamp happens to fall on — not as
-          wallpaper running out to the window frame. */}
+      <div className="absolute inset-0" style={{ background: lampGradient(LAMP_BASE_WARMTH) }} />
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: TABLE_IMAGE,
-          backgroundSize: TABLE_SIZE,
-          maskImage: TABLE_MASK,
-          WebkitMaskImage: TABLE_MASK,
+          background: 'radial-gradient(80rem 52rem at 50% -18%, rgba(255,176,116,0.09), transparent 66%)',
+          opacity: lit / DONE,
+          transition: reduced ? undefined : 'opacity 1200ms var(--ease-sl)',
         }}
       />
-
-      {/* Dust, turning in the light. Skipped entirely under reduced motion — a
-          static dot field is just specks on the screen, so there is nothing
-          worth keeping once the movement is gone. */}
+      <div
+        className="absolute inset-0"
+        style={{ backgroundImage: TABLE_IMAGE, backgroundSize: TABLE_SIZE, maskImage: TABLE_MASK, WebkitMaskImage: TABLE_MASK }}
+      />
       {!reduced &&
         MOTES.map((m) => (
           <div
@@ -672,19 +839,12 @@ function Backdrop({ reduced, lit }: { reduced: boolean; lit: number }) {
               width: m.s,
               height: m.s,
               opacity: m.o,
-              filter: 'blur(0.4px)',
               animation: `mote ${m.dur}s ${m.d}s ease-in-out infinite`,
             }}
           />
         ))}
-
-      {/* The room falling away. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background: VIGNETTE,
-        }}
-      />
+      <div className="absolute inset-0" style={{ background: VIGNETTE }} />
     </div>
   )
 }
+

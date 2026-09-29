@@ -11,6 +11,9 @@ exercise because they stub `_compute_suggestion` out entirely.
 
 from __future__ import annotations
 
+import pytest
+
+from app.routers.me import brief as brief_module
 from app.routers.me.brief import next_action
 from app.services import student_model as sm
 
@@ -152,3 +155,41 @@ def test_due_cards_reason_uses_the_real_due_count():
     cands = next_action(_snap(topics=[topic]))
     due = next(c for c in cands if c.action == "due_cards")
     assert "7 cards" in due.reason
+
+
+# ── `_compute_suggestion` carries reason/action onto `BriefSuggestion` ───
+#
+# `next_action` is pure and covered above without a database; this is the
+# one seam where its `reason`/`action` actually have to survive the async
+# resolution step and reach the schema Home renders from.
+
+
+@pytest.mark.asyncio
+async def test_compute_suggestion_carries_reason_and_action_for_a_none_resolve(db):
+    """`fix_misconception` resolves to `resolve="none"` — the base route,
+    nothing to look up — so this is the simplest path through
+    `_compute_suggestion` and the one most likely to have dropped the new
+    fields entirely (no per-branch code touches them)."""
+    topic = _topic(
+        quiz_average=40, quiz_attempts=4, mastery=55, evidence_n=5.0,
+        misconceptions=(
+            sm.MisconceptionView(text="confuses A with B", weight=3.0, seen=4, last_seen="x"),
+        ),
+    )
+    suggestion = await brief_module._compute_suggestion(_snap(topics=[topic]))
+    assert suggestion is not None
+    assert suggestion.action == "fix_misconception"
+    assert "confuses A with B" in suggestion.reason
+
+
+@pytest.mark.asyncio
+async def test_compute_suggestion_carries_reason_and_action_for_a_deck_resolve(db):
+    topic = _topic(topic="Bayesian Inference", cards_due=7)
+    db.seed("decks", [{"id": "d1", "user_id": "owner", "subspace_id": "t1", "name": "Deck"}])
+    db.seed("flashcards", [
+        {"id": "c1", "deck_id": "d1", "due_at": "2020-01-01T00:00:00Z"},
+    ])
+    suggestion = await brief_module._compute_suggestion(_snap(topics=[topic]))
+    assert suggestion is not None
+    assert suggestion.action == "due_cards"
+    assert "7 cards" in suggestion.reason
