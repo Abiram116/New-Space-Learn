@@ -23,6 +23,7 @@ import { celebrateQuiz, useAmbience } from '../../components/celebrate'
 import { bestVerdict, scoreTier } from '../../components/celebrate/logic'
 import { cn } from '../../lib/cn'
 import { formatClock } from './QuizRunner'
+import './stage.css'
 
 /** Results already celebrated, by identity — a remount mustn't replay it. */
 const celebrated = new WeakSet<QuizResult>()
@@ -85,132 +86,292 @@ export function QuizResults({
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [missed])
 
-  return (
-    <div
-      className={cn(
-        'flex min-h-0 w-full flex-1',
-        compact ? 'flex-col gap-3' : 'mx-auto max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:gap-8',
-        !compact && 'flex-col lg:flex-row lg:items-start',
-      )}
-    >
-      {/* LEDGER — a score is the definitive "measured against" object. */}
-      <Ledger
+  const [filter, setFilter] = useState<'all' | 'missed'>('all')
+
+  if (compact) {
+    return (
+      <div
         className={cn(
-          'flex shrink-0 flex-col gap-3 p-5 pt-0',
-          !compact && 'lg:sticky lg:top-6 lg:w-72',
+          'flex min-h-0 w-full flex-1',
+          compact ? 'flex-col gap-3' : 'mx-auto max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:gap-8',
+          !compact && 'flex-col lg:flex-row lg:items-start',
         )}
       >
-        <span className="setcode">Score</span>
-        <div ref={scoreRef} className="flex items-baseline gap-1 self-start">
-          <CountUp
-            value={result.score}
-            className={cn(
-              'nameplate text-[48px] leading-none tabular-nums',
-              result.score >= 80
-                ? 'text-mint-deep'
-                : result.score >= 60
-                  ? 'text-sky-deep'
-                  : 'text-coral-deep',
-            )}
-          />
-          <span className="setcode">%</span>
-        </div>
-
-        {/* Directly under the score it qualifies. A new best is a badge; any
-            later attempt gets one quiet line; a first attempt gets nothing. */}
-        {verdict.kind === 'best' && (
-          <div
-            role="status"
-            data-testid="quiz-best-badge"
-            className="inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-2.5 py-1 text-[12px] font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
-          >
-            <Icon name="sparkle" size={12} />
-            New personal best · {verdict.previous}% → {verdict.score}%
+        {/* LEDGER — a score is the definitive "measured against" object. */}
+        <Ledger
+          className={cn(
+            'flex shrink-0 flex-col gap-3 p-5 pt-0',
+            !compact && 'lg:sticky lg:top-6 lg:w-72',
+          )}
+        >
+          <span className="setcode">Score</span>
+          <div ref={scoreRef} className="flex items-baseline gap-1 self-start">
+            <CountUp
+              value={result.score}
+              className={cn(
+                'nameplate text-[48px] leading-none tabular-nums',
+                result.score >= 80
+                  ? 'text-mint-deep'
+                  : result.score >= 60
+                    ? 'text-sky-deep'
+                    : 'text-coral-deep',
+              )}
+            />
+            <span className="setcode">%</span>
           </div>
-        )}
-        {verdict.kind === 'later' && (
-          <p data-testid="quiz-best-line" className="text-[12px] tabular-nums text-muted">
-            Best: {verdict.best}% · attempt {verdict.attempts}
-          </p>
-        )}
 
-        {/* Four figures on one rule, per the design track: a result is a set of
-            measurements, not a set of cards. */}
-        <div className="flex items-baseline gap-4 border-t border-line pt-3">
-          <Figure label="right" value={`${right}`} />
-          <Figure label="missed" value={`${missed.length}`} />
-          {result.duration_seconds != null && (
-            <Figure label="taken" value={formatClock(result.duration_seconds)} />
+          {/* Directly under the score it qualifies. A new best is a badge; any
+              later attempt gets one quiet line; a first attempt gets nothing. */}
+          {verdict.kind === 'best' && (
+            <div
+              role="status"
+              data-testid="quiz-best-badge"
+              className="inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-2.5 py-1 text-[12px] font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
+            >
+              <Icon name="sparkle" size={12} />
+              New personal best · {verdict.previous}% → {verdict.score}%
+            </div>
+          )}
+          {verdict.kind === 'later' && (
+            <p data-testid="quiz-best-line" className="text-[12px] tabular-nums text-muted">
+              Best: {verdict.best}% · attempt {verdict.attempts}
+            </p>
+          )}
+
+          {/* Four figures on one rule, per the design track: a result is a set of
+              measurements, not a set of cards. */}
+          <div className="flex items-baseline gap-4 border-t border-line pt-3">
+            <Figure label="right" value={`${right}`} />
+            <Figure label="missed" value={`${missed.length}`} />
+            {result.duration_seconds != null && (
+              <Figure label="taken" value={formatClock(result.duration_seconds)} />
+            )}
+          </div>
+
+          {weakConcepts.length > 0 && (
+            <div className="flex flex-col gap-1.5 border-t border-line pt-3">
+              <span className="setcode">Revise these</span>
+              <div className="flex flex-wrap gap-1.5">
+                {weakConcepts.map(([tag, n]) => (
+                  <span
+                    key={tag}
+                    className="rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-semibold text-coral-deep"
+                  >
+                    {tag}
+                    {n > 1 && <span className="ml-1 opacity-70">×{n}</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-1 flex flex-col gap-2">
+            <Button onClick={onRetake} size="sm">
+              <Icon name="refresh" size={13} /> Retake
+            </Button>
+            <Button variant="ghost" onClick={onBack} size="sm">
+              Back to quizzes
+            </Button>
+          </div>
+        </Ledger>
+
+        {/* The review scrolls in its OWN container so the verdict above stays
+            put. Without this the page grew past the viewport and the score —
+            the thing you came back for — scrolled off the top. */}
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+          {missed.length > 0 && (
+            <section className="flex flex-col gap-2">
+              <span className="setcode">
+                What went wrong ({missed.length})
+              </span>
+              <Stagger step={30} max={180}>
+                {missed.map(({ q, i }) => (
+                  <MissedQuestion
+                    key={i}
+                    number={i + 1}
+                    question={q.q}
+                    chosen={answers[i] >= 0 ? q.choices[answers[i]] : null}
+                    answer={q.choices[q.answer_index]}
+                    explanation={q.explanation}
+                    subtopic={q.subtopic}
+                    // The misconception behind the CHOSEN wrong option, not the
+                    // correct one — that's what the student actually needs
+                    // named. Absent on an unanswered question or a quiz from
+                    // before the field existed.
+                    misconception={
+                      answers[i] >= 0 ? q.misconceptions?.[answers[i]] : null
+                    }
+                    compact={compact}
+                  />
+                ))}
+              </Stagger>
+            </section>
+          )}
+
+          {right > 0 && (
+            <CorrectStrip
+              items={quiz.questions
+                .map((q, i) => ({ q, i }))
+                .filter(({ q, i }) => answers[i] === q.answer_index)}
+            />
           )}
         </div>
+      </div>
+    )
+  }
 
-        {weakConcepts.length > 0 && (
-          <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-            <span className="setcode">Revise these</span>
-            <div className="flex flex-wrap gap-1.5">
-              {weakConcepts.map(([tag, n]) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-semibold text-coral-deep"
-                >
-                  {tag}
-                  {n > 1 && <span className="ml-1 opacity-70">×{n}</span>}
-                </span>
-              ))}
+  const questions = quiz.questions
+  const shown = filter === 'missed' ? missed : questions.map((q, i) => ({ q, i }))
+  const tone =
+    result.score >= 80 ? 'text-mint-deep' : result.score >= 60 ? 'text-sky-deep' : 'text-coral-deep'
+
+  return (
+    <div className="study-stage flex w-full flex-1 flex-col">
+      <div className="px-[var(--stage-pad-x)] py-[var(--stage-pad-y)]">
+        <div className="stage-results">
+          {/* LEDGER — a score is the definitive "measured against" object.
+              Sticky beside the review on a wide stage, so the number you came
+              back for never scrolls away while you read the misses. */}
+          <Ledger className="stage-score-panel flex flex-col gap-[clamp(14px,2dvh,20px)] pb-[clamp(18px,2.4dvh,28px)]">
+            <div ref={scoreRef} className="flex items-baseline gap-1 self-start">
+              <CountUp value={result.score} className={cn('nameplate stage-score leading-none tabular-nums', tone)} />
+              <span className={cn('nameplate text-[clamp(1.5rem,1rem+1cqw,2.25rem)] leading-none', tone)}>%</span>
             </div>
-          </div>
-        )}
 
-        <div className="mt-1 flex flex-col gap-2">
-          <Button onClick={onRetake} size="sm">
-            <Icon name="refresh" size={13} /> Retake
-          </Button>
-          <Button variant="ghost" onClick={onBack} size="sm">
-            Back to quizzes
-          </Button>
-        </div>
-      </Ledger>
+            {/* Directly under the score it qualifies. A new best is a badge; any
+                later attempt gets one quiet line; a first attempt gets nothing. */}
+            {verdict.kind === 'best' && (
+              <div
+                role="status"
+                data-testid="quiz-best-badge"
+                className="stage-label inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-3 py-1.5 font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
+              >
+                <Icon name="sparkle" size={14} />
+                New personal best · {verdict.previous}% → {verdict.score}%
+              </div>
+            )}
+            {verdict.kind === 'later' && (
+              <p data-testid="quiz-best-line" className="stage-label tabular-nums text-muted">
+                Best: {verdict.best}% · attempt {verdict.attempts}
+              </p>
+            )}
 
-      {/* The review scrolls in its OWN container so the verdict above stays
-          put. Without this the page grew past the viewport and the score —
-          the thing you came back for — scrolled off the top. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
-        {missed.length > 0 && (
-          <section className="flex flex-col gap-2">
-            <span className="setcode">
-              What went wrong ({missed.length})
-            </span>
-            <Stagger step={30} max={180}>
-              {missed.map(({ q, i }) => (
-                <MissedQuestion
-                  key={i}
-                  number={i + 1}
-                  question={q.q}
-                  chosen={answers[i] >= 0 ? q.choices[answers[i]] : null}
-                  answer={q.choices[q.answer_index]}
-                  explanation={q.explanation}
-                  subtopic={q.subtopic}
-                  // The misconception behind the CHOSEN wrong option, not the
-                  // correct one — that's what the student actually needs
-                  // named. Absent on an unanswered question or a quiz from
-                  // before the field existed.
-                  misconception={
-                    answers[i] >= 0 ? q.misconceptions?.[answers[i]] : null
-                  }
-                  compact={compact}
-                />
-              ))}
-            </Stagger>
+            <div className="ruled-datum grid grid-cols-3 gap-3 pt-[clamp(12px,1.6dvh,16px)]">
+              <StageFigure label="Right" value={`${right}/${questions.length}`} />
+              <StageFigure label="Missed" value={`${missed.length}`} />
+              {result.duration_seconds != null && (
+                <StageFigure label="Time" value={formatClock(result.duration_seconds)} />
+              )}
+            </div>
+
+            {weakConcepts.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <span className="stage-label font-semibold text-ink-3">Revise these</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {weakConcepts.map(([tag, n]) => (
+                    <span
+                      key={tag}
+                      className="stage-label rounded-full bg-coral-soft px-2.5 py-1 font-semibold text-coral-deep"
+                    >
+                      {tag}
+                      {n > 1 && <span className="ml-1 opacity-70">×{n}</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-1 flex flex-col gap-2.5">
+              <Button onClick={onRetake} size="xl">
+                <Icon name="refresh" size={16} /> Retake
+              </Button>
+              <Button variant="secondary" onClick={onBack} size="lg">
+                Back to quizzes
+              </Button>
+            </div>
+          </Ledger>
+
+          {/* Every question, open. Misses carry the full story — your answer,
+              the right one, why, and the mix-up behind the pick; the ones you
+              got right are a single compact row. "Missed" narrows to the work. */}
+          <section className="flex min-w-0 flex-col gap-4" aria-labelledby="quiz-review-heading">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2
+                id="quiz-review-heading"
+                className="text-[clamp(1.25rem,1rem+0.6cqw,1.625rem)] font-bold tracking-[-0.01em] text-ink"
+              >
+                Review
+              </h2>
+              <div role="tablist" aria-label="Filter questions" className="flex rounded-xl border border-line bg-well p-1">
+                {(
+                  [
+                    ['all', 'All', questions.length],
+                    ['missed', 'Missed', missed.length],
+                  ] as const
+                ).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === key}
+                    aria-controls="quiz-review-list"
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      'stage-label inline-flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-1.5 font-semibold',
+                      't-control duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
+                      filter === key ? 'bg-raised text-ink shadow-[inset_0_1px_0_rgba(255,237,220,0.06)]' : 'text-muted hover:text-ink',
+                    )}
+                  >
+                    {label}
+                    <span
+                      className={cn(
+                        'rounded-md px-1.5 font-mono text-[0.85em] tabular-nums',
+                        filter === key
+                          ? key === 'missed' && count > 0
+                            ? 'bg-coral-soft text-coral-deep'
+                            : 'bg-line-soft text-ink-3'
+                          : 'text-faint',
+                      )}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div id="quiz-review-list" role="list" className="flex flex-col gap-2.5" data-testid="quiz-review">
+              {shown.length === 0 && (
+                <p className="stage-body rounded-2xl border border-mint/30 bg-mint-soft/40 px-5 py-4 text-mint-deep">
+                  Nothing missed — a clean sheet.
+                </p>
+              )}
+              <Stagger step={30} max={180}>
+                {shown.map(({ q, i }) => {
+                  const pick = answers[i]
+                  const wasRight = pick === q.answer_index
+                  return wasRight ? (
+                    <StageCorrectRow key={i} number={i + 1} question={q.q} answer={q.choices[q.answer_index]} />
+                  ) : (
+                    <StageMissedRow
+                      key={i}
+                      number={i + 1}
+                      question={q.q}
+                      chosen={pick >= 0 ? q.choices[pick] : null}
+                      answer={q.choices[q.answer_index]}
+                      explanation={q.explanation}
+                      subtopic={q.subtopic}
+                      // The misconception behind the CHOSEN wrong option, not
+                      // the correct one — that's what needs naming. Absent on
+                      // an unanswered question or an older quiz.
+                      misconception={pick >= 0 ? q.misconceptions?.[pick] : null}
+                    />
+                  )
+                })}
+              </Stagger>
+            </div>
           </section>
-        )}
-
-        {right > 0 && (
-          <CorrectStrip
-            items={quiz.questions
-              .map((q, i) => ({ q, i }))
-              .filter(({ q, i }) => answers[i] === q.answer_index)}
-          />
-        )}
+        </div>
       </div>
     </div>
   )
@@ -323,5 +484,97 @@ function CorrectStrip({ items }: { items: { q: Quiz['questions'][number]; i: num
         </div>
       )}
     </section>
+  )
+}
+
+/* ── Stage pieces (full page) ────────────────────────────────────────── */
+
+function StageFigure({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="nameplate text-[clamp(1.375rem,1rem+0.7cqw,1.875rem)] leading-none tabular-nums text-ink">
+        {value}
+      </span>
+      <span className="stage-label text-muted">{label}</span>
+    </div>
+  )
+}
+
+/** A question you got right: one row, the answer beside a tick. */
+function StageCorrectRow({ number, question, answer }: { number: number; question: string; answer: string }) {
+  return (
+    <div
+      role="listitem"
+      className="flex items-start gap-3 rounded-2xl border border-line-soft bg-surface/60 px-[clamp(14px,1.5cqw,20px)] py-3"
+    >
+      <span className="stage-label mt-[0.2em] w-6 shrink-0 font-mono tabular-nums text-faint">{number}</span>
+      <div className="min-w-0 flex-1">
+        <p className="stage-body leading-snug text-ink-2">{question}</p>
+        <p className="stage-label mt-1 flex items-start gap-1.5 font-semibold text-mint-deep">
+          <Icon name="check" size={14} className="mt-[0.2em] shrink-0" />
+          <span className="min-w-0">{answer}</span>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/** A miss, open: what you picked, what was right, why, and the mix-up. */
+function StageMissedRow({
+  number,
+  question,
+  chosen,
+  answer,
+  explanation,
+  subtopic,
+  misconception,
+}: {
+  number: number
+  question: string
+  chosen: string | null
+  answer: string
+  explanation?: string | null
+  subtopic?: string | null
+  misconception?: string | null
+}) {
+  return (
+    <div
+      role="listitem"
+      className="flex items-start gap-3 rounded-2xl border border-coral/30 bg-coral-soft/40 px-[clamp(14px,1.5cqw,20px)] py-[clamp(14px,1.8dvh,18px)]"
+    >
+      <span className="stage-label mt-[0.25em] w-6 shrink-0 font-mono tabular-nums text-coral-deep">{number}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[clamp(1rem,0.85rem+0.35cqw,1.1875rem)] font-semibold leading-snug text-ink">{question}</p>
+
+        <dl className="stage-body mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 @max-[36rem]:grid-cols-1 @max-[36rem]:gap-y-0.5">
+          <dt className="stage-label pt-[0.15em] text-muted">Your answer</dt>
+          <dd className={cn('flex items-start gap-1.5', chosen ? 'text-coral-deep' : 'italic text-muted')}>
+            {chosen ? (
+              <>
+                <Icon name="close" size={15} className="mt-[0.25em] shrink-0" />
+                <span className="line-through decoration-coral/60">{chosen}</span>
+              </>
+            ) : (
+              'Not answered'
+            )}
+          </dd>
+          <dt className="stage-label pt-[0.15em] text-muted @max-[36rem]:mt-2">Correct</dt>
+          <dd className="flex items-start gap-1.5 font-semibold text-mint-deep">
+            <Icon name="check" size={15} className="mt-[0.25em] shrink-0" />
+            <span>{answer}</span>
+          </dd>
+        </dl>
+
+        {explanation && (
+          <p className="stage-body mt-3 max-w-[68ch] leading-relaxed text-ink-2">{explanation}</p>
+        )}
+        {/* The specific confusion behind the wrong pick — only when this
+            question was tagged for it. */}
+        {misconception && (
+          <p className="stage-body mt-2 font-medium text-coral-deep">Common mix-up: {misconception}</p>
+        )}
+        {subtopic && <span className="setcode stage-label mt-3 block">{subtopic}</span>}
+      </div>
+    </div>
   )
 }

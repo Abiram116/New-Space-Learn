@@ -1,0 +1,178 @@
+/* ── The study stage ─────────────────────────────────────────────────────
+   Full-page quiz, quiz results and card review. Everything here is SCOPED:
+   these three screens get a wider column and a bigger reading scale, and
+   nothing in this file touches the app's global type scale, palette or
+   tokens. Colour stays in Tailwind classes on the components.
+
+   Sizes are fluid against the stage's own width (container units), not the
+   viewport — the chat dock opening beside a quiz narrows the stage, and the
+   type should follow the room it is actually in. Targets at a 1920×1080
+   window (stage ≈ 1650px after the 264px rail):
+     column ~865px · stem ~28px · options 20px · card face ~36px · labels ≥13px
+   and they settle to ~720px / 23px / 18px at 1366, and 100% / 20px / 16px on
+   a 390px phone. Heights use dvh so a short laptop screen still fits the
+   whole question without scrolling. */
+
+.study-stage {
+  container-type: inline-size;
+  min-height: 0;
+  --stage-col: min(100%, clamp(40rem, 27rem + 26cqw, 56rem));
+  --stage-wide: min(100%, clamp(40rem, 18rem + 50cqw, 76rem));
+  --stage-pad-x: clamp(16px, 2.6cqw, 48px);
+  --stage-pad-y: clamp(16px, 3.2dvh, 44px);
+
+  --stage-label: clamp(0.8125rem, 0.75rem + 0.14cqw, 0.9375rem);
+  --stage-count: clamp(1.75rem, 1rem + 1.5cqw, 2.75rem);
+  --stage-stem: clamp(1.25rem, 0.75rem + 1cqw, 1.75rem);
+  --stage-option: clamp(1rem, 0.8rem + 0.5cqw, 1.25rem);
+  --stage-body: clamp(0.9375rem, 0.82rem + 0.3cqw, 1.125rem);
+
+  --stage-face: clamp(1.5rem, 0.9rem + 1.3cqw, 2.375rem);
+  --stage-face-long: clamp(1.25rem, 0.8rem + 0.75cqw, 1.75rem);
+  --stage-back: clamp(1.125rem, 0.8rem + 0.6cqw, 1.5rem);
+  --stage-back-long: clamp(1rem, 0.8rem + 0.35cqw, 1.25rem);
+  --stage-card-h: clamp(16rem, 46dvh, 32rem);
+
+  --stage-score: clamp(4rem, 2rem + 4cqw, 6rem);
+}
+
+/* Three rows: the free space above and below share equally, so the stage
+   sits in the optical middle of the room. The third row is where the quiz
+   verdict lands — it only pushes the stage up once it is taller than the
+   empty space already beneath it, so answering a question does not make
+   the question jump away from under the cursor. */
+.stage-grid {
+  display: grid;
+  /* Basis 0, not auto: an auto basis measures the grid at max-content, where
+     every 1fr row is inflated to the tallest one — the verdict row would
+     then push an equal empty row above the stage and shove it DOWN. From a
+     zero basis the grid takes the room's height (or its min-content, if
+     taller), and the fr rows split what is actually left over. */
+  flex: 1 1 0%;
+  /* And no content-based minimum either: Chrome measures that minimum at
+     max-content too (same inflated rows). The grid is exactly the room's
+     height; when the stage plus its verdict are taller than the room, row
+     one collapses to nothing and the rest overflows into the scroller. */
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) var(--stage-col) minmax(0, 1fr);
+  grid-template-rows: 1fr auto 1fr;
+  column-gap: 0;
+  padding: var(--stage-pad-y) var(--stage-pad-x);
+}
+.stage-grid > .stage-main {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+.stage-grid > .stage-below {
+  grid-column: 2;
+  grid-row: 3;
+  align-self: start;
+  min-width: 0;
+}
+.stage-grid > .stage-aside {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
+  justify-self: start;
+  margin-left: clamp(24px, 3cqw, 64px);
+  width: 14rem;
+  display: none;
+}
+/* Only once the gutter can hold it without crowding the column. */
+@container (min-width: 88rem) {
+  .stage-grid > .stage-aside {
+    display: flex;
+  }
+}
+
+.stage-label {
+  font-size: var(--stage-label);
+}
+.stage-count {
+  font-size: var(--stage-count);
+}
+.stage-count-total {
+  font-size: calc(var(--stage-count) * 0.5);
+}
+.stage-stem {
+  font-size: var(--stage-stem);
+  text-wrap: pretty;
+}
+.stage-option {
+  font-size: var(--stage-option);
+}
+.stage-body {
+  font-size: var(--stage-body);
+}
+.stage-face {
+  font-size: var(--stage-face);
+  text-wrap: balance;
+}
+.stage-face-long {
+  font-size: var(--stage-face-long);
+  text-wrap: pretty;
+}
+.stage-back {
+  font-size: var(--stage-back);
+  text-wrap: pretty;
+}
+.stage-back-long {
+  font-size: var(--stage-back-long);
+  text-wrap: pretty;
+}
+.stage-card {
+  height: var(--stage-card-h);
+}
+.stage-score {
+  font-size: var(--stage-score);
+}
+
+/* The key legend is for a keyboard — hidden where there isn't one. */
+.stage-keys {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .stage-keys {
+    display: flex;
+  }
+  .stage-touch-only {
+    display: none;
+  }
+}
+
+/* The highlighted grade in card review — keyboard-only, so fine pointers
+   only. Needs to beat the Tailwind utilities on the button, which it does by
+   being unlayered. */
+@media (hover: hover) and (pointer: fine) {
+  .stage-grade[data-active] {
+    border-color: var(--color-brand-300);
+    background-color: var(--color-raised);
+    outline: 2px solid var(--color-brand-300);
+    outline-offset: 3px;
+  }
+}
+/* Touch: the pressed grade still shows focus when reached by a keyboard. */
+.stage-grade:focus-visible {
+  outline: 2px solid var(--color-brand-300);
+  outline-offset: 3px;
+}
+
+/* Results: score beside the review once there is room for both. */
+.stage-results {
+  display: grid;
+  width: var(--stage-wide);
+  margin-inline: auto;
+  gap: clamp(24px, 3cqw, 56px);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@container (min-width: 60rem) {
+  .stage-results {
+    grid-template-columns: clamp(17rem, 24cqw, 22rem) minmax(0, 1fr);
+  }
+  .stage-results > .stage-score-panel {
+    position: sticky;
+    top: var(--stage-pad-y);
+  }
+}

@@ -12,6 +12,9 @@
  * and "Leave" stay mounted) with the action button relabelled "Try again",
  * reusing the same answers already in state; and "Leave" disables for as
  * long as a submission is outstanding.
+ *
+ * On the full page the options are a radiogroup (role="radio"); the dock's
+ * compact runner keeps plain buttons.
  */
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -71,7 +74,7 @@ describe('a failed submission is recoverable, not a dead end', () => {
     const user = userEvent.setup()
     renderRunner()
 
-    await user.click(screen.getByRole('button', { name: /Compresses/ }))
+    await user.click(screen.getByRole('radio', { name: /Compresses/ }))
     await user.click(screen.getByRole('button', { name: 'See results' }))
 
     await waitFor(() => expect(submitQuiz).toHaveBeenCalledTimes(1))
@@ -88,7 +91,7 @@ describe('a failed submission is recoverable, not a dead end', () => {
     const user = userEvent.setup()
     renderRunner({ onFinished })
 
-    await user.click(screen.getByRole('button', { name: /Compresses/ }))
+    await user.click(screen.getByRole('radio', { name: /Compresses/ }))
     await user.click(screen.getByRole('button', { name: 'See results' }))
     await screen.findByText("network error")
 
@@ -108,7 +111,7 @@ describe('"Leave" cannot abandon an in-flight submission unnoticed', () => {
     const user = userEvent.setup()
     renderRunner()
 
-    await user.click(screen.getByRole('button', { name: /Compresses/ }))
+    await user.click(screen.getByRole('radio', { name: /Compresses/ }))
     await user.click(screen.getByRole('button', { name: 'See results' }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: /Leave/ })).toBeDisabled())
@@ -123,7 +126,7 @@ describe('"Leave" cannot abandon an in-flight submission unnoticed', () => {
 
     expect(screen.getByRole('button', { name: /Leave/ })).not.toBeDisabled()
 
-    await user.click(screen.getByRole('button', { name: /Compresses/ }))
+    await user.click(screen.getByRole('radio', { name: /Compresses/ }))
     await user.click(screen.getByRole('button', { name: 'See results' }))
 
     await waitFor(() => expect(submitQuiz).toHaveBeenCalled())
