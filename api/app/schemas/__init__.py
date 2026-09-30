@@ -501,6 +501,12 @@ class StudentModelIn(BaseModel):
     session_length_minutes: int | None = Field(default=None, ge=5, le=180)
     exam_context: str | None = Field(default=None, max_length=140)
     teaching_preference: str | None = Field(default=None, max_length=400)
+    #: Set by the phone intake, which deliberately leaves out the two
+    #: "how do you like it explained" questions (they are about the chat
+    #: tutor, which lives on desktop). Desktop reads it to offer those two
+    #: questions once, and clears it when they are answered or dismissed.
+    #: Stored in the same `student_model` JSON as the fields above — no column.
+    intake_skipped_style: bool | None = None
 
 
 # ── Response feedback ──────────────────────────────────────────────────
@@ -622,6 +628,10 @@ class StudentModelOut(BaseModel):
     #: bandit — only for subjects with enough evidence to say so honestly.
     #: Empty, not padded with guesses, when nothing qualifies yet.
     style_summaries: list[StyleSummaryOut] = []
+    #: True when first-run intake happened on a phone and skipped the
+    #: learning-style/depth questions; see `StudentModelIn`. Read back from
+    #: the stored JSON by the `/me/student-model` endpoints.
+    intake_skipped_style: bool = False
 
 
 class BriefSuggestion(BaseModel):

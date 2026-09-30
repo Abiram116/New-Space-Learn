@@ -273,10 +273,22 @@ export type StudentModel = {
   /** "Learns best through examples", per subject — only for subjects with
    *  enough evidence. Empty, never padded with a guess. */
   style_summaries?: StyleSummary[]
+  /** True when first-run intake happened on a phone and left out the
+   *  learning-style/depth questions. Desktop offers those two once and
+   *  clears this when they're answered or dismissed. Absent from older
+   *  payloads — treat as false. */
+  intake_skipped_style?: boolean
 }
 
 export type StudentModelPatch = Partial<
-  Pick<StudentModel, 'learning_style' | 'session_length_minutes' | 'exam_context' | 'teaching_preference'>
+  Pick<
+    StudentModel,
+    | 'learning_style'
+    | 'session_length_minutes'
+    | 'exam_context'
+    | 'teaching_preference'
+    | 'intake_skipped_style'
+  >
 >
 
 export type Brief = {

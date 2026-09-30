@@ -8,8 +8,10 @@ import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
 import { GoogleGlyph } from './GoogleGlyph'
+import { useIsMobile } from '../../lib/useIsMobile'
 
 export function SignUp() {
+  const phone = useIsMobile()
   const navigate = useNavigate()
   const { show } = useToast()
   const { play } = useHandoff()
@@ -135,6 +137,20 @@ export function SignUp() {
     )
   }
 
+  const google = (
+    <Button
+      type="button"
+      variant="outline3d"
+      size="xl"
+      onClick={signUpGoogle}
+      disabled={googleBusy}
+      className="w-full"
+    >
+      <GoogleGlyph />
+      {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+    </Button>
+  )
+
   return (
     <AuthShell
       title={
@@ -155,6 +171,13 @@ export function SignUp() {
       }
     >
       <form className="flex flex-col gap-3" onSubmit={submit} noValidate>
+        {/* Phones lead with Google: one tap, no typing on a small keyboard. */}
+        {phone && (
+          <>
+            {google}
+            <Divider />
+          </>
+        )}
         <Input
           name="name"
           label="Name"
@@ -193,23 +216,12 @@ export function SignUp() {
           {busy ? 'Creating account…' : 'Create account'}
         </Button>
 
-        <div className="flex items-center gap-2.5 text-xs text-faint">
-          <span className="h-px flex-1 bg-line" />
-          or
-          <span className="h-px flex-1 bg-line" />
-        </div>
-
-        <Button
-          type="button"
-          variant="outline3d"
-          size="xl"
-          onClick={signUpGoogle}
-          disabled={googleBusy}
-          className="w-full"
-        >
-          <GoogleGlyph />
-          {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-        </Button>
+        {!phone && (
+          <>
+            <Divider />
+            {google}
+          </>
+        )}
 
         <p className="text-xs text-faint">
           By signing up you agree that we'll store your uploads to answer your
@@ -222,4 +234,14 @@ export function SignUp() {
 
 function isEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center gap-2.5 text-xs text-faint">
+      <span className="h-px flex-1 bg-line" />
+      or
+      <span className="h-px flex-1 bg-line" />
+    </div>
+  )
 }

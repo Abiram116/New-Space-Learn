@@ -18,6 +18,8 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { getStudentModel } from '../../api/me'
 import { useAuth } from '../../auth/AuthProvider'
 import { FirstPaintFallback } from '../../components/ui/FirstPaint'
+import { writeCache } from '../../lib/asyncCache'
+import { STUDENT_MODEL_KEY } from './skippedStyle'
 import { hasPreferences, hasSkippedLocally } from './state'
 
 type Verdict = 'checking' | 'needs-intake' | 'ready'
@@ -42,6 +44,9 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
     getStudentModel()
       .then((model) => {
+        // Kept for the screens behind the gate: Home reads it (never fetches
+        // it) to decide whether to offer the questions a phone intake skipped.
+        writeCache(STUDENT_MODEL_KEY, model)
         if (live) setVerdict(hasPreferences(model) ? 'ready' : 'needs-intake')
       })
       .catch(() => {

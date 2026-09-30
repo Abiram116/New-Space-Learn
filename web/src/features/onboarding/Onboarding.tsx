@@ -45,7 +45,9 @@ import { legend, type LegendKey, type Slot } from './fingerprint'
 import { Letters, NameBurst, Opening, Words } from './Kinetic'
 import { DUR, EASE, EASE_IN } from './motion'
 import { Organism } from './Organism'
+import { PhoneOnboarding } from './PhoneOnboarding'
 import { markOnboarded } from './state'
+import { useIsMobile } from '../../lib/useIsMobile'
 import {
   buildPatch,
   EMPTY_ANSWERS,
@@ -104,7 +106,17 @@ const wait = (ms: number) => new Promise<void>((r) => window.setTimeout(r, ms))
 const TEXT = '[data-word], [data-letter]'
 const BEATS = '[data-beat]'
 
+/**
+ * First run, by device. A phone gets three light questions and a small CSS
+ * brand moment (`PhoneOnboarding`); everything else gets the full sequence
+ * below, unchanged. Decided once per mount by the app's one phone rule.
+ */
 export function Onboarding() {
+  const phone = useIsMobile()
+  return phone ? <PhoneOnboarding /> : <DesktopOnboarding />
+}
+
+function DesktopOnboarding() {
   const navigate = useNavigate()
   const { show, showError } = useToast()
   const { user, setDisplayName } = useAuth()

@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deleteAccount,
   getSettings,
@@ -42,6 +42,8 @@ import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal, ModalFooter } from '../../components/ui/Modal'
+import { BottomSheet } from '../../components/ui/BottomSheet'
+import { useImmersive } from '../../components/layout/immersive'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { SectionLabel } from '../../components/ui/Bits'
 // The six labelled-row primitives used to be defined at the bottom of this
@@ -50,7 +52,13 @@ import { SectionLabel } from '../../components/ui/Bits'
 // this file is ~150 lines shorter for it.
 import { RowWithNumber, RowWithText, RowWithToggle, SavingDot } from '../../components/ui/Row'
 import { useToast } from '../../components/ui/Toast'
+import { Icon, type IconName } from '../../components/ui/Icon'
+import { writeCache } from '../../lib/asyncCache'
 import { cn } from '../../lib/cn'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
+import { StyleIntakeCard } from '../onboarding/StyleIntakeCard'
+import { setBotsEnabled, useBotsEnabled } from '../../lib/botPreference'
 
 const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy'] as const
 type Section = (typeof SECTIONS)[number]
@@ -67,6 +75,8 @@ export function Settings() {
   const { show, showError } = useToast()
   const navigate = useNavigate()
 
+  const phone = useIsMobile()
+  const botsOn = useBotsEnabled()
   const [active, setActive] = useState<Section>('Account')
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [student, setStudent] = useState<StudentModel | null>(null)
@@ -98,7 +108,11 @@ export function Settings() {
       .then(setPrefs)
       .catch((err) => setError(friendlyMessage(err)))
     getStudentModel()
-      .then(setStudent)
+      .then((m) => {
+        setStudent(m)
+        // Home reads this cache to decide whether to offer skipped questions.
+        writeCache(STUDENT_MODEL_KEY, m)
+      })
       .catch((err) => setError(friendlyMessage(err)))
     // Failure here is deliberately quiet: the preference panel is additive,
     // and a settings page that refuses to render because one inspection list
@@ -247,6 +261,402 @@ export function Settings() {
   const initials = displayName.slice(0, 2).toUpperCase()
   const email = user?.email ?? ''
 
+  /** One section's controls — the desktop panel and the phone detail screen
+   *  render the same thing, so a setting can never exist on one and not the
+   *  other. */
+  const panel = (active: Section) => (
+    <>
+      {error && (
+        <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
+          {error}
+        </div>
+      )}
+
+      {!prefs && !error && <PageSpinner label="Loading preferences…" />}
+
+      {prefs && active === 'Account' && (
+        <>
+          {!phone && <SectionLabel>ACCOUNT</SectionLabel>}
+          <div className="rounded-xl border border-line bg-surface flex items-center gap-3 p-4">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
+              {initials}
+            </span>
+            <div className="min-w-0 text-[15px]">
+              <b className="block truncate">{displayName}</b>
+              <div className="truncate text-[13px] text-muted">{email}</div>
+            </div>
+          </div>
+
+          <form
+            className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void changePassword()
+            }}
+          >
+            <div className="text-[15px] font-semibold text-ink">Change password</div>
+            <Input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="New password"
+              autoComplete="new-password"
+              aria-label="New password"
+              hint="At least 8 characters."
+            />
+            {/* Directly under the field it submits. Same label while busy
+                so the button does not change width. */}
+            <Button
+              type="submit"
+              disabled={passwordBusy || newPassword.length === 0}
+              className="w-full min-w-40 sm:w-auto sm:self-start"
+            >
+              {passwordBusy ? 'Updating…' : 'Update password'}
+            </Button>
+          </form>
+        </>
+      )}
+
+      {prefs && active === 'Study' && (
+        <>
+          {!phone && <SectionLabel>STUDY</SectionLabel>}
+          <div className="rounded-xl border border-line bg-surface overflow-hidden">
+            <RowWithNumber
+              label="Daily goal"
+              suffix="cards"
+              value={prefs.daily_goal}
+              onChange={(n) => patch('daily_goal', { daily_goal: n })}
+              saving={savingKey === 'daily_goal'}
+              min={1}
+              max={500}
+            />
+            <RowWithToggle
+              label="Streak freeze"
+              hint="Miss one day without breaking your streak."
+              checked={prefs.streak_freeze_enabled}
+              onChange={(v) =>
+                patch('streak_freeze_enabled', { streak_freeze_enabled: v })
+              }
+              last
+            />
+          </div>
+          <p className="text-[13px] leading-relaxed text-faint">
+            Every control on this page does something the moment you change
+            it — there is nothing here waiting on a feature that hasn't
+            shipped.
+          </p>
+        </>
+      )}
+
+      {student && active === 'How you learn' && (
+        <>
+          {!phone && <SectionLabel>HOW YOU LEARN</SectionLabel>}
+          {/* Signed up on a phone: the two questions it skipped. Desktop
+              only — they shape the chat tutor, which a phone doesn't have. */}
+          {!phone && <StyleIntakeCard model={student} onUpdated={setStudent} />}
+          <p className="text-[13px] leading-relaxed text-faint">
+            What the AI knows about how you study — the fields below feed
+            every chat reply and generated card, quiz, and note. Profile
+            shows how your quiz scores are actually trending; this page is
+            only what you've set and what's been learned from feedback.
+          </p>
+          <div className="rounded-xl border border-line bg-surface overflow-hidden">
+            <RowWithText
+              label="Learning style"
+              placeholder="e.g. visual, worked examples, analogies"
+              value={student.learning_style}
+              onChange={(v) => patchStudentText('learning_style', { learning_style: v })}
+              saving={savingKey === 'learning_style'}
+            />
+            <RowWithNumber
+              label="Session length"
+              suffix="min"
+              value={student.session_length_minutes ?? 20}
+              onChange={(n) =>
+                patchStudent('session_length_minutes', { session_length_minutes: n })
+              }
+              saving={savingKey === 'session_length_minutes'}
+              min={5}
+              max={180}
+            />
+            <RowWithText
+              label="Studying for"
+              placeholder="e.g. Amazon OA next week"
+              value={student.exam_context}
+              onChange={(v) => patchStudentText('exam_context', { exam_context: v })}
+              saving={savingKey === 'exam_context'}
+              last
+            />
+          </div>
+          <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+            <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
+            <textarea
+              value={student.teaching_preference ?? ''}
+              onChange={(e) =>
+                patchStudentText('teaching_preference', {
+                  teaching_preference: e.target.value || null,
+                })
+              }
+              placeholder="Optional — free text the AI reads before every reply."
+              rows={3}
+              className="w-full resize-none rounded-[10px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
+            />
+            {savingKey === 'teaching_preference' && (
+              <div className="mt-1.5">
+                <SavingDot />
+              </div>
+            )}
+          </div>
+
+          {/* What the personalization layer currently believes, with its
+              source and how sure it is.
+
+              Inspectable by requirement rather than as a nicety: anything
+              that changes how you are taught should be something you can
+              read, question and delete. Confidence is shown as a plain
+              word, not a percentage — "fairly sure" is honest about the
+              precision, where "0.62" implies a measurement. */}
+          {learned.length > 0 && (
+            <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-ink-3">What I’ve learned about how you like to learn</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={resetLearned}
+                  disabled={resetting}
+                  className="ml-auto min-w-24 shrink-0"
+                >
+                  Reset
+                </Button>
+              </div>
+              <div className="flex flex-col gap-2">
+                {learned.map((p) => (
+                  <div key={p.key} className="flex flex-col gap-0.5">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className={cn('min-w-0', p.actionable ? 'text-ink' : 'text-muted')}>
+                        {PREF_LABEL[p.key] ?? p.key}: <b>{PREF_VALUE[p.value] ?? p.value}</b>
+                      </span>
+                      <span className="setcode shrink-0">{confidenceWord(p)}</span>
+                    </div>
+                    <span className="text-[12.5px] text-faint">{p.because}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[12.5px] text-faint">
+                Reset clears what I learned from your feedback. It doesn’t touch
+                anything you set yourself above.
+              </p>
+            </div>
+          )}
+
+          {/* Observations, shown to the student because they feed every
+              prompt and anything feeding a prompt should be inspectable.
+              Read-only on purpose: these are things the app noticed, not
+              things you told it, and the editable fields above are where
+              your own words go. Conflating the two would show you a
+              sentence you never wrote in a box that implies you did. */}
+          {student.observed_habits.length > 0 && (
+            <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+              <div className="mb-2 text-ink-3">What I’ve noticed</div>
+              <ul className="flex flex-col gap-1.5 text-ink-2">
+                {student.observed_habits.map((h) => (
+                  <li key={h} className="leading-snug">
+                    {h}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-[12.5px] text-faint">
+                Observed from what you’ve done, not from anything you set.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {prefs && active === 'AI & sources' && (
+        <>
+          {!phone && <SectionLabel>AI &amp; SOURCES</SectionLabel>}
+          <div className="rounded-xl border border-line bg-surface overflow-hidden">
+            <RowWithToggle
+              label="Answer only from my docs"
+              hint="Refuses to guess when the sources don't cover a question."
+              checked={prefs.answer_only_from_docs}
+              onChange={(v) =>
+                patch('answer_only_from_docs', { answer_only_from_docs: v })
+              }
+            />
+            <RowWithToggle
+              label="Always show citations"
+              hint="Inserts [[n]] markers when the AI cites a source."
+              checked={prefs.always_show_citations}
+              onChange={(v) =>
+                patch('always_show_citations', { always_show_citations: v })
+              }
+            />
+            <RowWithToggle
+              label="Show the agent bots"
+              hint="Nova and the crew: little faces and messages while the AI works. Off gives a plain interface. Saved on this device."
+              checked={botsOn}
+              onChange={setBotsEnabled}
+              last
+            />
+          </div>
+          {phone && (
+            <p className="flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
+              <Icon name="skill" size={15} className="mt-0.5 shrink-0 text-mint" />
+              Skills shape the chat tutor and are managed on desktop.
+            </p>
+          )}
+        </>
+      )}
+
+      {prefs && active === 'Privacy' && (
+        <>
+          {!phone && <SectionLabel>PRIVACY</SectionLabel>}
+          <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-[14px]">
+            <p className="text-muted">
+              Sign out on this device. Your data stays in your account.
+            </p>
+            {/* Signing out is reversible, so it is an ordinary secondary
+                button — coral is reserved for things that cannot be undone. */}
+            <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto sm:self-start">
+              Sign out
+            </Button>
+          </div>
+
+          <SectionLabel className="mt-4">DANGER ZONE</SectionLabel>
+          <div className="flex flex-col gap-3 rounded-xl border border-coral/30 bg-surface p-4 text-[14px]">
+            <p className="text-muted">
+              Permanently delete your account and everything in it — every
+              subject, document, chat, note, deck, and quiz. This can't be
+              undone.
+            </p>
+            <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:self-start">
+              Delete account
+            </Button>
+          </div>
+        </>
+      )}
+    </>
+  )
+
+  const deleteDialog = (
+    <Modal
+      open={deleteOpen}
+      onClose={closeDelete}
+      title="Delete your account?"
+      width="sm"
+      footer={
+        <ModalFooter>
+          <Button variant="secondary" onClick={closeDelete} disabled={deleteBusy}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="delete-account-form"
+            disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
+            variant="danger"
+            className="min-w-40"
+          >
+            {deleteBusy ? 'Deleting…' : 'Delete my account'}
+          </Button>
+        </ModalFooter>
+      }
+    >
+      <form
+        id="delete-account-form"
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (deleteConfirmText.trim().toLowerCase() === 'delete') void doDeleteAccount()
+        }}
+      >
+        <p className="text-[14px] leading-relaxed text-muted">
+          This permanently deletes your account and every subject, document,
+          chat, note, deck, and quiz in it. There is no undo. Type{' '}
+          <b className="text-ink">delete</b> to confirm.
+        </p>
+        <Input
+          value={deleteConfirmText}
+          onChange={(e) => setDeleteConfirmText(e.target.value)}
+          placeholder="delete"
+          aria-label="Type delete to confirm"
+          autoFocus
+        />
+      </form>
+    </Modal>
+  )
+
+  if (phone) {
+    return (
+      <PhoneSettings
+        panel={panel}
+        displayName={displayName}
+        initials={initials}
+        email={email}
+        summary={{
+          Account: email || displayName,
+          Study: prefs ? `${prefs.daily_goal} cards a day` : '',
+          'How you learn': student?.session_length_minutes ? `${student.session_length_minutes}-minute sessions` : '',
+          'AI & sources': prefs ? (prefs.answer_only_from_docs ? 'Only from your docs' : 'Docs and general knowledge') : '',
+          Privacy: 'Sign out, delete account',
+        }}
+        deleteDialog={
+          /* Phones confirm in a sheet from the bottom edge, where the thumb
+             already is; the destructive button sits last, full width, apart
+             from Cancel. Same form and the same typed confirmation. */
+          <BottomSheet
+            open={deleteOpen}
+            onClose={closeDelete}
+            title="Delete account?"
+            footer={
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="submit"
+                  form="delete-account-form-phone"
+                  size="xl"
+                  disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
+                  variant="danger"
+                  className="w-full"
+                >
+                  {deleteBusy ? 'Deleting…' : 'Delete my account'}
+                </Button>
+                <Button variant="secondary" size="xl" onClick={closeDelete} disabled={deleteBusy} className="w-full">
+                  Cancel
+                </Button>
+              </div>
+            }
+          >
+            <form
+              id="delete-account-form-phone"
+              className="flex flex-col gap-4"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (deleteConfirmText.trim().toLowerCase() === 'delete') void doDeleteAccount()
+              }}
+            >
+              <p className="text-[15px] leading-relaxed text-muted">
+                This permanently deletes your account and every subject, document,
+                chat, note, deck, and quiz in it. There is no undo. Type{' '}
+                <b className="text-ink">delete</b> to confirm.
+              </p>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="delete"
+                aria-label="Type delete to confirm"
+                autoCapitalize="none"
+                autoCorrect="off"
+                className="min-h-12 text-[16px]"
+              />
+            </form>
+          </BottomSheet>
+        }
+      />
+    )
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       {/* Desktop: a left rail. It appears at `lg`, not `sm` — beside the app's
@@ -288,310 +698,11 @@ export function Settings() {
           aria-label={active}
           className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-7"
         >
-          {error && (
-            <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
-              {error}
-            </div>
-          )}
-
-          {!prefs && !error && <PageSpinner label="Loading preferences…" />}
-
-          {prefs && active === 'Account' && (
-            <>
-              <SectionLabel>ACCOUNT</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface flex items-center gap-3 p-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
-                  {initials}
-                </span>
-                <div className="min-w-0 text-[15px]">
-                  <b className="block truncate">{displayName}</b>
-                  <div className="truncate text-[13px] text-muted">{email}</div>
-                </div>
-              </div>
-
-              <form
-                className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void changePassword()
-                }}
-              >
-                <div className="text-[15px] font-semibold text-ink">Change password</div>
-                <Input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="New password"
-                  autoComplete="new-password"
-                  aria-label="New password"
-                  hint="At least 8 characters."
-                />
-                {/* Directly under the field it submits. Same label while busy
-                    so the button does not change width. */}
-                <Button
-                  type="submit"
-                  disabled={passwordBusy || newPassword.length === 0}
-                  className="w-full min-w-40 sm:w-auto sm:self-start"
-                >
-                  {passwordBusy ? 'Updating…' : 'Update password'}
-                </Button>
-              </form>
-            </>
-          )}
-
-          {prefs && active === 'Study' && (
-            <>
-              <SectionLabel>STUDY</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden">
-                <RowWithNumber
-                  label="Daily goal"
-                  suffix="cards"
-                  value={prefs.daily_goal}
-                  onChange={(n) => patch('daily_goal', { daily_goal: n })}
-                  saving={savingKey === 'daily_goal'}
-                  min={1}
-                  max={500}
-                />
-                <RowWithToggle
-                  label="Streak freeze"
-                  hint="Miss one day without breaking your streak."
-                  checked={prefs.streak_freeze_enabled}
-                  onChange={(v) =>
-                    patch('streak_freeze_enabled', { streak_freeze_enabled: v })
-                  }
-                  last
-                />
-              </div>
-              <p className="text-[13px] leading-relaxed text-faint">
-                Every control on this page does something the moment you change
-                it — there is nothing here waiting on a feature that hasn't
-                shipped.
-              </p>
-            </>
-          )}
-
-          {student && active === 'How you learn' && (
-            <>
-              <SectionLabel>HOW YOU LEARN</SectionLabel>
-              <p className="text-[13px] leading-relaxed text-faint">
-                What the AI knows about how you study — the fields below feed
-                every chat reply and generated card, quiz, and note. Profile
-                shows how your quiz scores are actually trending; this page is
-                only what you've set and what's been learned from feedback.
-              </p>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden">
-                <RowWithText
-                  label="Learning style"
-                  placeholder="e.g. visual, worked examples, analogies"
-                  value={student.learning_style}
-                  onChange={(v) => patchStudentText('learning_style', { learning_style: v })}
-                  saving={savingKey === 'learning_style'}
-                />
-                <RowWithNumber
-                  label="Session length"
-                  suffix="min"
-                  value={student.session_length_minutes ?? 20}
-                  onChange={(n) =>
-                    patchStudent('session_length_minutes', { session_length_minutes: n })
-                  }
-                  saving={savingKey === 'session_length_minutes'}
-                  min={5}
-                  max={180}
-                />
-                <RowWithText
-                  label="Studying for"
-                  placeholder="e.g. Amazon OA next week"
-                  value={student.exam_context}
-                  onChange={(v) => patchStudentText('exam_context', { exam_context: v })}
-                  saving={savingKey === 'exam_context'}
-                  last
-                />
-              </div>
-              <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-                <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
-                <textarea
-                  value={student.teaching_preference ?? ''}
-                  onChange={(e) =>
-                    patchStudentText('teaching_preference', {
-                      teaching_preference: e.target.value || null,
-                    })
-                  }
-                  placeholder="Optional — free text the AI reads before every reply."
-                  rows={3}
-                  className="w-full resize-none rounded-[10px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
-                />
-                {savingKey === 'teaching_preference' && (
-                  <div className="mt-1.5">
-                    <SavingDot />
-                  </div>
-                )}
-              </div>
-
-              {/* What the personalization layer currently believes, with its
-                  source and how sure it is.
-
-                  Inspectable by requirement rather than as a nicety: anything
-                  that changes how you are taught should be something you can
-                  read, question and delete. Confidence is shown as a plain
-                  word, not a percentage — "fairly sure" is honest about the
-                  precision, where "0.62" implies a measurement. */}
-              {learned.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-                  <div className="mb-3 flex items-center gap-2">
-                    <span className="text-ink-3">What I’ve learned about how you like to learn</span>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={resetLearned}
-                      disabled={resetting}
-                      className="ml-auto min-w-24 shrink-0"
-                    >
-                      Reset
-                    </Button>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {learned.map((p) => (
-                      <div key={p.key} className="flex flex-col gap-0.5">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <span className={cn('min-w-0', p.actionable ? 'text-ink' : 'text-muted')}>
-                            {PREF_LABEL[p.key] ?? p.key}: <b>{PREF_VALUE[p.value] ?? p.value}</b>
-                          </span>
-                          <span className="setcode shrink-0">{confidenceWord(p)}</span>
-                        </div>
-                        <span className="text-[12.5px] text-faint">{p.because}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="mt-3 text-[12.5px] text-faint">
-                    Reset clears what I learned from your feedback. It doesn’t touch
-                    anything you set yourself above.
-                  </p>
-                </div>
-              )}
-
-              {/* Observations, shown to the student because they feed every
-                  prompt and anything feeding a prompt should be inspectable.
-                  Read-only on purpose: these are things the app noticed, not
-                  things you told it, and the editable fields above are where
-                  your own words go. Conflating the two would show you a
-                  sentence you never wrote in a box that implies you did. */}
-              {student.observed_habits.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-                  <div className="mb-2 text-ink-3">What I’ve noticed</div>
-                  <ul className="flex flex-col gap-1.5 text-ink-2">
-                    {student.observed_habits.map((h) => (
-                      <li key={h} className="leading-snug">
-                        {h}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 text-[12.5px] text-faint">
-                    Observed from what you’ve done, not from anything you set.
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-
-          {prefs && active === 'AI & sources' && (
-            <>
-              <SectionLabel>AI &amp; SOURCES</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden">
-                <RowWithToggle
-                  label="Answer only from my docs"
-                  hint="Refuses to guess when the sources don't cover a question."
-                  checked={prefs.answer_only_from_docs}
-                  onChange={(v) =>
-                    patch('answer_only_from_docs', { answer_only_from_docs: v })
-                  }
-                />
-                <RowWithToggle
-                  label="Always show citations"
-                  hint="Inserts [[n]] markers when the AI cites a source."
-                  checked={prefs.always_show_citations}
-                  onChange={(v) =>
-                    patch('always_show_citations', { always_show_citations: v })
-                  }
-                  last
-                />
-              </div>
-            </>
-          )}
-
-          {prefs && active === 'Privacy' && (
-            <>
-              <SectionLabel>PRIVACY</SectionLabel>
-              <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-[14px]">
-                <p className="text-muted">
-                  Sign out on this device. Your data stays in your account.
-                </p>
-                {/* Signing out is reversible, so it is an ordinary secondary
-                    button — coral is reserved for things that cannot be undone. */}
-                <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto sm:self-start">
-                  Sign out
-                </Button>
-              </div>
-
-              <SectionLabel className="mt-4">DANGER ZONE</SectionLabel>
-              <div className="flex flex-col gap-3 rounded-xl border border-coral/30 bg-surface p-4 text-[14px]">
-                <p className="text-muted">
-                  Permanently delete your account and everything in it — every
-                  subject, document, chat, note, deck, and quiz. This can't be
-                  undone.
-                </p>
-                <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:self-start">
-                  Delete account
-                </Button>
-              </div>
-            </>
-          )}
+          {panel(active)}
         </div>
       </div>
 
-      <Modal
-        open={deleteOpen}
-        onClose={closeDelete}
-        title="Delete your account?"
-        width="sm"
-        footer={
-          <ModalFooter>
-            <Button variant="secondary" onClick={closeDelete} disabled={deleteBusy}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="delete-account-form"
-              disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
-              variant="danger"
-              className="min-w-40"
-            >
-              {deleteBusy ? 'Deleting…' : 'Delete my account'}
-            </Button>
-          </ModalFooter>
-        }
-      >
-        <form
-          id="delete-account-form"
-          className="flex flex-col gap-4"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (deleteConfirmText.trim().toLowerCase() === 'delete') void doDeleteAccount()
-          }}
-        >
-          <p className="text-[14px] leading-relaxed text-muted">
-            This permanently deletes your account and every subject, document,
-            chat, note, deck, and quiz in it. There is no undo. Type{' '}
-            <b className="text-ink">delete</b> to confirm.
-          </p>
-          <Input
-            value={deleteConfirmText}
-            onChange={(e) => setDeleteConfirmText(e.target.value)}
-            placeholder="delete"
-            aria-label="Type delete to confirm"
-            autoFocus
-          />
-        </form>
-      </Modal>
+      {deleteDialog}
     </div>
   )
 }
@@ -736,6 +847,144 @@ function SectionTabs({ active, onSelect }: { active: Section; onSelect: (s: Sect
           edges.end ? 'opacity-100' : 'opacity-0',
         )}
       />
+    </div>
+  )
+}
+
+// ── Phones: a grouped list, then one section at a time ─────────────────
+
+const SECTION_ICON: Record<Section, IconName> = {
+  Account: 'user',
+  Study: 'deck',
+  'How you learn': 'sparkle',
+  'AI & sources': 'doc',
+  Privacy: 'lock',
+}
+
+/** URL-safe name for a section, so the phone's back gesture leaves a detail. */
+export function sectionSlug(name: Section): string {
+  return name.replace(/\W+/g, '-').replace(/-+$/, '').toLowerCase()
+}
+
+function sectionFromSlug(slug: string | null): Section | null {
+  if (!slug) return null
+  return SECTIONS.find((n) => sectionSlug(n) === slug) ?? null
+}
+
+/**
+ * Settings on a phone: an iOS-style grouped list, each row opening its
+ * section as its own screen with a slim back bar.
+ *
+ * The open section lives in the URL (`?section=study`) and is *pushed*, so the
+ * system back gesture — the thing a thumb actually does — returns to the list
+ * instead of leaving Settings. The on-screen back button does the same.
+ */
+function PhoneSettings({
+  panel,
+  displayName,
+  initials,
+  email,
+  summary,
+  deleteDialog,
+}: {
+  panel: (s: Section) => React.ReactNode
+  displayName: string
+  initials: string
+  email: string
+  summary: Record<Section, string>
+  deleteDialog: React.ReactNode
+}) {
+  const [params, setParams] = useSearchParams()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const open = sectionFromSlug(params.get('section'))
+  // A section is a pushed screen: its own slim bar with Back replaces the
+  // shell's, so there is exactly one way back and it goes to the list.
+  useImmersive(open !== null)
+
+  const show = (name: Section) => setParams({ section: sectionSlug(name) }, { state: { fromList: true } })
+  const back = () => {
+    if ((location.state as { fromList?: boolean } | null)?.fromList) navigate(-1)
+    else setParams({}, { replace: true })
+  }
+
+  if (open) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="relative z-10 flex h-12 shrink-0 items-center gap-1 border-b border-line bg-canvas px-1.5">
+          <button
+            type="button"
+            onClick={back}
+            className="flex min-h-11 min-w-11 cursor-pointer items-center gap-0.5 rounded-[10px] px-2 text-[15px] font-semibold text-brand active:bg-line-soft"
+          >
+            <Icon name="arrowLeft" size={16} />
+            Settings
+          </button>
+          <h1 className="pointer-events-none absolute inset-x-0 text-center text-[16px] font-semibold text-ink">{open}</h1>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            role="region"
+            aria-label={open}
+            className="mx-auto flex w-full max-w-xl flex-col gap-4 px-4 pb-10 pt-4 [&_input]:text-[16px] [&_textarea]:text-[16px]"
+          >
+            {panel(open)}
+          </div>
+        </div>
+        {deleteDialog}
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-10 pt-5">
+        {/* The shell's top bar already titles this screen "Settings". */}
+        <button
+          type="button"
+          onClick={() => show('Account')}
+          className="flex min-h-[72px] cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left active:bg-line-soft"
+        >
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-coral-soft text-[14px] font-semibold text-coral-deep">
+            {initials}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[17px] font-semibold text-ink">{displayName}</span>
+            <span className="block truncate text-[14px] text-muted">{email}</span>
+          </span>
+          <Icon name="chevronRight" size={16} className="shrink-0 text-faint" />
+        </button>
+
+        <nav aria-label="Settings sections" className="overflow-hidden rounded-xl border border-line bg-surface">
+          <ul>
+            {SECTIONS.filter((n) => n !== 'Account').map((name) => (
+              <li key={name} className="border-b border-line last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => show(name)}
+                  className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left active:bg-line-soft"
+                >
+                  <span
+                    className={cn(
+                      'grid h-8 w-8 shrink-0 place-items-center rounded-[9px]',
+                      name === 'Privacy' ? 'bg-coral-soft text-coral-deep' : 'bg-raised text-ink-3',
+                    )}
+                  >
+                    <Icon name={SECTION_ICON[name]} size={15} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[16px] font-medium text-ink">{name}</span>
+                    {summary[name] && (
+                      <span className="block truncate text-[13px] text-muted">{summary[name]}</span>
+                    )}
+                  </span>
+                  <Icon name="chevronRight" size={16} className="shrink-0 text-faint" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
     </div>
   )
 }

@@ -14,8 +14,10 @@ import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
 import { GoogleGlyph } from './GoogleGlyph'
+import { useIsMobile } from '../../lib/useIsMobile'
 
 export function SignIn() {
+  const phone = useIsMobile()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { play } = useHandoff()
@@ -98,6 +100,20 @@ export function SignIn() {
     }
   }
 
+  const google = (
+    <Button
+      type="button"
+      variant="outline3d"
+      size="xl"
+      onClick={signInGoogle}
+      disabled={googleBusy}
+      className="w-full"
+    >
+      <GoogleGlyph />
+      {googleBusy ? 'Redirecting…' : 'Continue with Google'}
+    </Button>
+  )
+
   return (
     <AuthShell
       title={
@@ -118,6 +134,13 @@ export function SignIn() {
       }
     >
       <form className="flex flex-col gap-3" onSubmit={submit} noValidate>
+        {/* Phones lead with Google: one tap, no typing on a small keyboard. */}
+        {phone && (
+          <>
+            {google}
+            <Divider />
+          </>
+        )}
         <Input
           name="email"
           type="email"
@@ -142,7 +165,11 @@ export function SignIn() {
           <button
             type="button"
             onClick={forgot}
-            className="text-xs font-semibold text-brand cursor-pointer"
+            className={
+              phone
+                ? 'min-h-11 cursor-pointer px-1 text-[14px] font-semibold text-brand'
+                : 'text-xs font-semibold text-brand cursor-pointer'
+            }
           >
             Forgot password?
           </button>
@@ -166,23 +193,12 @@ export function SignIn() {
           {busy ? 'Signing in…' : 'Sign in'}
         </Button>
 
-        <div className="flex items-center gap-2.5 text-xs text-faint">
-          <span className="h-px flex-1 bg-line" />
-          or
-          <span className="h-px flex-1 bg-line" />
-        </div>
-
-        <Button
-          type="button"
-          variant="outline3d"
-          size="xl"
-          onClick={signInGoogle}
-          disabled={googleBusy}
-          className="w-full"
-        >
-          <GoogleGlyph />
-          {googleBusy ? 'Redirecting…' : 'Continue with Google'}
-        </Button>
+        {!phone && (
+          <>
+            <Divider />
+            {google}
+          </>
+        )}
       </form>
     </AuthShell>
   )
@@ -190,4 +206,14 @@ export function SignIn() {
 
 function isEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center gap-2.5 text-xs text-faint">
+      <span className="h-px flex-1 bg-line" />
+      or
+      <span className="h-px flex-1 bg-line" />
+    </div>
+  )
 }

@@ -61,19 +61,33 @@ async def patch_settings(
 # ── Student Model ──────────────────────────────────────────────────────
 
 
+def _skipped_style(explicit: object) -> bool:
+    """Whether the stored intake skipped the style questions.
+
+    Read here rather than in `Snapshot.to_model` because it is not part of
+    the student model's reasoning at all — it only tells a desktop UI that
+    two questions are still worth asking."""
+    return isinstance(explicit, dict) and bool(explicit.get("intake_skipped_style"))
+
+
 @router.get("/me/student-model", response_model=StudentModelOut)
 async def get_student_model(
     user: CurrentUser = Depends(get_current_user),
 ) -> StudentModelOut:
-    await _ensure_settings_row(user.id)
-    return await student_model_service.get(user.id)
+    row = await _ensure_settings_row(user.id)
+    model = await student_model_service.get(user.id)
+    return model.model_copy(
+        update={"intake_skipped_style": _skipped_style(row.get("student_model"))}
+    )
 
 
 @router.patch("/me/student-model", response_model=StudentModelOut)
 async def patch_student_model(
     body: StudentModelIn, user: CurrentUser = Depends(get_current_user)
 ) -> StudentModelOut:
-    await _ensure_settings_row(user.id)
-    return await student_model_service.set_explicit(
-        user.id, body.model_dump(exclude_unset=True)
-    )
+    row = await _ensure_settings_row(user.id)
+    patch = body.model_dump(exclude_unset=True)
+    model = await student_model_service.set_explicit(user.id, patch)
+    stored = dict(row.get("student_model") or {})
+    stored.update(patch)
+    return model.model_copy(update={"intake_skipped_style": _skipped_style(stored)})

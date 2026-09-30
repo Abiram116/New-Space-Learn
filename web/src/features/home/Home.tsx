@@ -11,9 +11,10 @@
  * come from the spaces list. Nothing here is invented for decoration.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type {
+  Brief,
   ForecastDay,
   Space,
   Stats,
@@ -34,18 +35,41 @@ import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
 import { HOME_BRIEF_KEY, HOME_STATS_KEY } from '../../lib/homeKeys'
 import { subspacePath } from '../../lib/nav'
-import { useAsync } from '../../lib/useAsync'
+import { useAsync, type AsyncResult } from '../../lib/useAsync'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
 import { useSlowState, type SlowPhase } from '../../lib/useSlowState'
 import { toneDot, toneText } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
 import { useSpaces } from '../spaces/SpacesProvider'
+import { StyleIntakeCard, useCachedStudentModel } from '../onboarding/StyleIntakeCard'
+import { deriveChecklist, hideChecklist, isChecklistHidden } from './checklist'
+import { FirstSteps, type StepTarget } from './FirstSteps'
 import { Fortnight } from './Fortnight'
+import { Today } from './Today'
+import { topicsByRecency } from './today'
 
+/**
+ * Home, by device. Both shapes read the same brief and stats caches, so moving
+ * between a phone and a laptop shows the same facts — only the shape differs:
+ * Today on a phone, the dashboard everywhere else.
+ */
 export function Home() {
-  const { spaces, loading: spacesLoading, error: spacesError, refresh: refreshSpaces } = useSpaces()
+  const phone = useIsMobile()
   const stats = useAsync(() => getCachedStats(), [], HOME_STATS_KEY)
   const brief = useAsync(() => getCachedBrief(), [], HOME_BRIEF_KEY)
+  return phone ? <Today stats={stats} brief={brief} /> : <DesktopHome stats={stats} brief={brief} />
+}
+
+function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: AsyncResult<Brief> }) {
+  const { spaces, loading: spacesLoading, error: spacesError, refresh: refreshSpaces } = useSpaces()
+  const studentModel = useCachedStudentModel()
+  // Keyed by one of the account's own subject ids rather than the user id, so
+  // this page needs nothing from auth (and two accounts on one machine still
+  // don't share the choice).
+  const accountKey = spaces.map((s) => s.id).sort()[0] ?? null
+  const [hiddenFor, setHiddenFor] = useState<string | null>(null)
+  const checklistHidden = hiddenFor === accountKey || isChecklistHidden(accountKey)
   // Cold-start awareness for the one blocking gate on this page (below) and
   // for the two sections that keep loading behind it — see `useSlowState`'s
   // own doc comment for why this is a hook rather than a fixed threshold.
@@ -71,6 +95,32 @@ export function Home() {
   const emptySubjects = spaces.filter((sp) => sp.subspaces.length === 0).slice(0, 3)
 
   const due = stats.data?.cards_due ?? 0
+
+  // The first-run checklist, from counts already on hand. Step 1's target
+  // depends on what exists: no subject yet opens the new-subject dialog; a
+  // subject with no topic can only be pointed at the rail.
+  const topics = useMemo(() => topicsByRecency(spaces), [spaces])
+  const checklist = deriveChecklist(topics, stats.loading ? null : stats.data)
+  const materialTopic = topics.find((t) => (t.subspace.counts?.docs ?? 0) > 0) ?? topics[0]
+  const stepTargets: Record<'material' | 'practice' | 'tutor', StepTarget> = {
+    material: !anySpaces
+      ? { kind: 'button', label: 'Create a subject', onClick: () => setNewSpaceOpen(true) }
+      : materialTopic
+        ? { kind: 'link', to: `${materialTopic.link}/docs`, label: 'Add material' }
+        : { kind: 'hint', text: 'Add a topic to your subject from the rail, then drop a PDF into it.' },
+    practice: materialTopic
+      ? {
+          kind: 'link',
+          to: `${materialTopic.link}/flashcards`,
+          label: 'Make cards',
+          alt: { to: `${materialTopic.link}/quizzes`, label: 'or a quiz' },
+        }
+      : { kind: 'hint', text: 'Add material first.' },
+    tutor: materialTopic
+      ? { kind: 'link', to: materialTopic.link, label: 'Ask the tutor' }
+      : { kind: 'hint', text: 'Add material first.' },
+  }
+  const showChecklist = !checklist.complete && !checklistHidden && !stats.loading
 
   /**
    * Decide nothing until the subjects are in.
@@ -123,7 +173,10 @@ export function Home() {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
-          <FirstRun onCreate={() => setNewSpaceOpen(true)} />
+          <FirstRun
+            onCreate={() => setNewSpaceOpen(true)}
+            steps={<FirstSteps checklist={checklist} targets={stepTargets} />}
+          />
         </div>
         <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
       </div>
@@ -200,6 +253,21 @@ export function Home() {
             </div>
           )}
         </header>
+
+        {/* Signed up on a phone: the two questions it skipped, offered once. */}
+        <StyleIntakeCard model={studentModel} className="mb-7" />
+
+        {showChecklist && (
+          <FirstSteps
+            checklist={checklist}
+            targets={stepTargets}
+            className="mb-7"
+            onHide={() => {
+              hideChecklist(accountKey)
+              setHiddenFor(accountKey)
+            }}
+          />
+        )}
 
         {/* ── Standing: four figures on one rule, the fortnight as evidence ──
 

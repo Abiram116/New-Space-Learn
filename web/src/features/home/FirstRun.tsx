@@ -23,13 +23,26 @@
  * using it.
  */
 
+import type { ReactNode } from 'react'
 import { Button } from '../../components/ui/Button'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { useReducedMotion } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
 import { useHandoffReveal } from '../transitions/Handoff'
 
-export function FirstRun({ onCreate }: { onCreate: () => void }) {
+export function FirstRun({
+  onCreate,
+  steps,
+}: {
+  onCreate: () => void
+  /**
+   * The first-run checklist. When given it leads the page, directly under the
+   * introduction, and replaces the lone "Create your first subject" button —
+   * step 1 of the checklist is that same action, now with the two steps after
+   * it in view.
+   */
+  steps?: ReactNode
+}) {
   const reduced = useReducedMotion()
   /**
    * Held until the curtain starts lifting.
@@ -61,9 +74,15 @@ export function FirstRun({ onCreate }: { onCreate: () => void }) {
         note, a deck, or a quiz.
       </p>
 
+      {steps && (
+        <div className="mt-10 w-full max-w-5xl" style={at(300)}>
+          {steps}
+        </div>
+      )}
+
       <Loop reduced={reduced} reveal={reveal} />
 
-      <div style={at(1180)} className="mt-11 flex flex-col items-center gap-3">
+      {!steps && <div style={at(1180)} className="mt-11 flex flex-col items-center gap-3">
         <Button size="lg" onClick={onCreate}>
           Create your first subject
           <Icon name="arrowRight" size={15} />
@@ -71,7 +90,7 @@ export function FirstRun({ onCreate }: { onCreate: () => void }) {
         <p className="text-[13px] text-faint">
           A subject holds topics — “Reinforcement Learning”, then “Q-learning”.
         </p>
-      </div>
+      </div>}
 
       <Surfaces reveal={reveal} reduced={reduced} />
       <TwoKinds reveal={reveal} reduced={reduced} />

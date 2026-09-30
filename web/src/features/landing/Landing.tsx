@@ -39,8 +39,19 @@ import { FeatureType } from './FeatureType'
 import { HeroReveal } from './HeroReveal'
 import { SmoothScroll } from './SmoothScroll'
 import { attractor, CTA, DraftingCursor, SourceDrift } from './wow'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { PhoneLanding } from './PhoneLanding'
 
+/**
+ * Phones get a plain native-scroll page with the same identity (see
+ * `PhoneLanding`); the scroll-scrubbed film below is for everything else and
+ * is not touched by that split.
+ */
 export function Landing() {
+  return useIsMobile() ? <PhoneLanding /> : <DesktopLanding />
+}
+
+function DesktopLanding() {
   // The warm-up ping moved to AuthProvider (mounts above the router, fires on
   // every load including this one) so it also covers a student who bookmarks
   // straight into an authenticated page and never sees this component. See

@@ -31,12 +31,14 @@ import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
 import { useSlowState } from '../../lib/useSlowState'
 import { cn } from '../../lib/cn'
 import { useReducedMotion } from '../../components/ui/motion'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { toneBar, toneSoft, toneText } from '../../lib/tone'
 
 /** Heatmap steps, warm→hot, so a dense week reads at a glance. */
 const INTENSITY = ['bg-line-soft', 'bg-brand/25', 'bg-brand/55', 'bg-brand']
 
 export function Profile() {
+  const phone = useIsMobile()
   const { user, setDisplayName } = useAuth()
   const navigate = useNavigate()
   const { showError } = useToast()
@@ -154,7 +156,14 @@ export function Profile() {
               />
             ) : (
               <h1 className="group flex min-w-0 items-center gap-2">
-                <span className="nameplate truncate text-[clamp(26px,4vw,38px)] leading-none text-ink">
+                {/* A phone has the width to itself here — wrap rather than cut
+                    the name to "ABIR…". */}
+                <span
+                  className={cn(
+                    'nameplate text-[clamp(26px,4vw,38px)] leading-none text-ink',
+                    phone ? 'min-w-0 break-words leading-[1.05]' : 'truncate',
+                  )}
+                >
                   {displayName}
                 </span>
                 {/* Edit lives on the name itself rather than in a settings
@@ -182,10 +191,29 @@ export function Profile() {
           </div>
           {/* Only one action here. Profile is where you read your record;
               signing out lives with the account it belongs to, in Settings. */}
-          <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
-            <Icon name="settings" size={14} /> Settings
-          </Button>
+          {!phone && (
+            <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
+              <Icon name="settings" size={14} /> Settings
+            </Button>
+          )}
         </header>
+
+        {/* On a phone this page is the "You" tab, and Settings is a row in it —
+            a full-width target under the thumb rather than a small chip beside
+            the name. */}
+        {phone && (
+          <button
+            type="button"
+            onClick={() => navigate('/settings')}
+            className="-mt-2 flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface px-4 text-left active:bg-line-soft"
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-raised text-ink-3">
+              <Icon name="settings" size={15} />
+            </span>
+            <span className="min-w-0 flex-1 text-[16px] font-medium text-ink">Settings</span>
+            <Icon name="chevronRight" size={16} className="shrink-0 text-faint" />
+          </button>
+        )}
 
         {stats.error && !stats.loading && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
@@ -235,8 +263,9 @@ export function Profile() {
               ))}
             </div>
           ) : d ? (
-            <>
+            <div className={phone ? 'flex flex-col gap-2.5 pt-2' : 'contents'}>
               <Measure
+                stacked={phone}
                 icon="flame"
                 label="Current streak"
                 value={d.streak_days}
@@ -246,6 +275,7 @@ export function Profile() {
                 tone="brand"
               />
               <Measure
+                stacked={phone}
                 icon="deck"
                 label="Reviewed this week"
                 value={d.composition?.cards_reviewed ?? 0}
@@ -268,8 +298,9 @@ export function Profile() {
                 reference={d.quiz_average != null ? 'of 100' : 'none taken yet'}
                 empty={d.quiz_average == null}
                 tone="mint"
+                stacked={phone}
               />
-            </>
+            </div>
           ) : null}
         </section>
 
@@ -479,6 +510,7 @@ function Measure({
   reference,
   tone,
   empty = false,
+  stacked = false,
 }: {
   icon: IconName
   label: string
@@ -491,6 +523,9 @@ function Measure({
   tone: 'brand' | 'sky' | 'sun' | 'mint'
   /** No data yet. Shows a dash rather than implying a score of zero. */
   empty?: boolean
+  /** Phones: a card per figure — label and value over a full-width rail, the
+   *  reference in words beneath, instead of one squeezed row. */
+  stacked?: boolean
 }) {
   const reduced = useReducedMotion()
   const [shown, setShown] = useState(reduced)
@@ -502,6 +537,41 @@ function Measure({
 
   const pct = Math.min(100, Math.round((value / against) * 100))
   const lit = !empty && value > 0
+
+  if (stacked) {
+    return (
+      <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface px-4 py-3.5">
+        <div className="flex items-center gap-3">
+          <span
+            className={cn(
+              'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+              toneSoft[tone],
+              lit ? toneText[tone] : 'text-faint',
+            )}
+          >
+            <Icon3D name={icon} size={15} lifted={lit} />
+          </span>
+          <span className="min-w-0 flex-1 text-[15px] text-ink-3">{label}</span>
+          <span className="flex shrink-0 items-baseline gap-1">
+            <span className={cn('nameplate text-[26px] leading-none tabular-nums', lit ? toneText[tone] : 'text-ink-3')}>
+              {empty ? '—' : value}
+            </span>
+            {unit && <span className="setcode">{unit}</span>}
+          </span>
+        </div>
+        <span className="relative h-[6px] overflow-hidden rounded-full bg-line-soft">
+          <span
+            className={cn('absolute inset-0 origin-left', toneBar[tone])}
+            style={{
+              transform: `scaleX(${shown ? pct / 100 : 0})`,
+              transition: reduced ? undefined : 'transform 900ms var(--ease-sl)',
+            }}
+          />
+        </span>
+        <span className="text-[13px] text-muted">{reference}</span>
+      </div>
+    )
+  }
 
   return (
     <div className="ruled ruled-datum flex items-center gap-3 py-3">

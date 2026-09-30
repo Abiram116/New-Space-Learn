@@ -3,6 +3,7 @@ import { AGENTS, type AgentId } from './agents'
 import { POSES, type BotMood } from './moods'
 import { followPointer, phaseFrom, watchVisibility } from './runtime'
 import './mascot.css'
+import { useBotsEnabled } from '../../lib/botPreference'
 
 export interface BotProps {
   agent?: AgentId
@@ -105,7 +106,12 @@ function Eye({ x, side }: { x: number; side: 'l' | 'r' }) {
   )
 }
 
-export function Bot({ agent = 'tutor', mood = 'idle', size = 96, className, label, title, look = false }: BotProps) {
+/** Renders nothing when the student has switched the bots off (Settings). */
+export function Bot(props: BotProps) {
+  return useBotsEnabled() ? <BotFace {...props} /> : null
+}
+
+function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, label, title, look = false }: BotProps) {
   const ref = useRef<SVGSVGElement>(null)
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const clip = `bot-screen-${uid}`

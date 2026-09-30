@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
 import { cn } from '../../lib/cn'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { LitGrid, ParallaxLayer, usePointerParallax } from '../landing/motion'
 
 /**
@@ -36,6 +37,31 @@ export function AuthShell({
   // every load) so it also covers a student who bookmarks straight into an
   // authenticated page and never renders this component at all. See
   // AuthProvider.tsx and docs/operations/performance-and-cost.md §6.
+  const phone = useIsMobile()
+
+  /* Phones: minimal chrome, top-aligned so the fields sit high and the form
+     simply scrolls when the keyboard comes up (a centred column is what the
+     keyboard covers). Every input is 16px — anything smaller makes iOS zoom
+     the page on focus — and at least 48px tall, like the buttons. */
+  if (phone) {
+    return (
+      <div className="flex min-h-dvh flex-col bg-canvas px-5 pb-[max(24px,env(safe-area-inset-bottom))] pt-[max(16px,env(safe-area-inset-top))] text-ink">
+        <Link to="/welcome" aria-label="Space Learn" className="self-start py-2">
+          <Logo size={26} textClassName="text-[17px]" />
+        </Link>
+        <div className="mx-auto flex w-full max-w-md flex-col gap-6 pt-6">
+          <div className="flex flex-col gap-2">
+            <h1 className="nameplate text-[clamp(28px,8.2vw,34px)] leading-[1] text-ink">{title}</h1>
+            <p className="text-[15px] leading-relaxed text-muted">{subtitle}</p>
+          </div>
+          <div className="[&_input]:min-h-12 [&_input]:text-[16px]">{children}</div>
+          <div className="pb-2 text-[14.5px] text-muted [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_button]:min-h-11">
+            {footer}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="grid min-h-full bg-canvas text-ink xl:grid-cols-[minmax(0,520px)_1fr]">

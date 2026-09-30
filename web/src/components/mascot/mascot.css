@@ -336,3 +336,20 @@
   .bot-progress-bar > i { animation: none !important; transition: none !important; }
   .bot-progress-bar > i { width: 100%; opacity: 0.45; }
 }
+
+/* Bots switched off in Settings: keep the words, drop the character and the
+   speech-bubble chrome so the line reads as ordinary text. */
+.bot-says--plain {
+  gap: 0;
+}
+.bot-says--plain .bot-bubble {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  animation: none;
+}
+.bot-says--plain .bot-bubble::before,
+.bot-says--plain .bot-bubble::after {
+  display: none;
+}
