@@ -23,6 +23,8 @@ import { celebrateQuiz, useAmbience } from '../../components/celebrate'
 import { bestVerdict, scoreTier } from '../../components/celebrate/logic'
 import { cn } from '../../lib/cn'
 import { formatClock } from './QuizRunner'
+import { StickyActionBar } from '../../components/ui/StickyActionBar'
+import { useIsMobile } from '../../lib/useIsMobile'
 import './stage.css'
 
 /** Results already celebrated, by identity — a remount mustn't replay it. */
@@ -43,6 +45,7 @@ export function QuizResults({
   onBack: () => void
   compact?: boolean
 }) {
+  const isMobile = useIsMobile() && !compact
   const missed = useMemo(
     () =>
       quiz.questions
@@ -227,7 +230,7 @@ export function QuizResults({
 
   return (
     <div className="study-stage flex w-full flex-1 flex-col">
-      <div className="px-[var(--stage-pad-x)] py-[var(--stage-pad-y)]">
+      <div className={isMobile ? 'flex-1 px-4 py-4' : 'px-[var(--stage-pad-x)] py-[var(--stage-pad-y)]'}>
         <div className="stage-results">
           {/* LEDGER — a score is the definitive "measured against" object.
               Sticky beside the review on a wide stage, so the number you came
@@ -281,14 +284,17 @@ export function QuizResults({
               </div>
             )}
 
-            <div className="mt-1 flex flex-col gap-2.5">
-              <Button onClick={onRetake} size="xl">
-                <Icon name="refresh" size={16} /> Retake
-              </Button>
-              <Button variant="secondary" onClick={onBack} size="lg">
-                Back to quizzes
-              </Button>
-            </div>
+            {/* On a phone these live in the pinned bar below, in thumb reach. */}
+            {!isMobile && (
+              <div className="mt-1 flex flex-col gap-2.5">
+                <Button onClick={onRetake} size="xl">
+                  <Icon name="refresh" size={16} /> Retake
+                </Button>
+                <Button variant="secondary" onClick={onBack} size="lg">
+                  Back to quizzes
+                </Button>
+              </div>
+            )}
           </Ledger>
 
           {/* Every question, open. Misses carry the full story — your answer,
@@ -373,6 +379,16 @@ export function QuizResults({
           </section>
         </div>
       </div>
+      {isMobile && (
+        <StickyActionBar className="mt-auto">
+          <Button variant="secondary" onClick={onBack} className="min-h-14 flex-1">
+            Back
+          </Button>
+          <Button onClick={onRetake} className="min-h-14 flex-[1.5]">
+            <Icon name="refresh" size={16} /> Retake
+          </Button>
+        </StickyActionBar>
+      )}
     </div>
   )
 }

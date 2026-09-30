@@ -33,6 +33,9 @@ import { stripMarkdown } from '../../lib/text'
 import { EASE } from '../../components/celebrate/easing'
 import { anyModalOpen, isConfirmKey, stageKeyGate } from '../quizzes/keys'
 import { KeyHints, StageCount, type KeyHint } from '../quizzes/StageKit'
+import { useImmersive } from '../../components/layout/immersive'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { PhoneReview } from './PhoneReview'
 import { useCardMotion } from './cardMotion'
 import { DEFAULT_GRADE_HIGHLIGHT, reviewKeyAction, type ReviewKeyAction } from './keys'
 import { GRADES, GRADE_PULSE, type Mode } from './model'
@@ -57,6 +60,10 @@ export function Review({
 }) {
   const card = mode.cards[mode.index]
   const total = mode.cards.length
+  // Phones get their own immersive stage; everything below (grading, the
+  // Again re-queue, the key handling) is shared with it.
+  const isMobile = useIsMobile()
+  useImmersive(isMobile)
   // Keep the handler in a ref so the key listener never goes stale.
   const stateRef = useRef({ mode, card })
   useLayoutEffect(() => {
@@ -131,7 +138,7 @@ export function Review({
       const cards = g === 'again' ? [...m.cards, c] : m.cards
       if (m.index + 1 >= cards.length) {
         onFinish()
-        setMode({ kind: 'summary', deckId: m.deckId, grades })
+        setMode({ kind: 'summary', deckId: m.deckId, grades, limit: m.limit, pending: m.pending, mixed: m.mixed })
       } else {
         setMode({ ...m, cards, index: m.index + 1, flipped: false, grades })
       }
@@ -195,6 +202,30 @@ export function Review({
   }, [])
 
   if (!card) return null
+
+  if (isMobile) {
+    return (
+      <PhoneReview
+        index={mode.index}
+        total={total}
+        card={card}
+        flipped={mode.flipped}
+        previews={previews}
+        highlight={highlight}
+        cardRef={cardRef}
+        faceRef={faceRef}
+        barRef={barRef}
+        gradeRefs={gradeRefs}
+        reduced={reduced}
+        // Light on a phone: the compact field is a single soft glow.
+        ambience={<AmbienceField field={ambience} compact />}
+        onClose={() => setMode({ kind: 'decks' })}
+        onFlip={flip}
+        onGrade={grade}
+        onHighlight={(i) => setHl({ index: mode.index, value: i })}
+      />
+    )
+  }
 
   const hints: KeyHint[] = mode.flipped
     ? [

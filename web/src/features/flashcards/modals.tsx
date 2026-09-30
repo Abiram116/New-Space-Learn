@@ -47,6 +47,7 @@ export function NewDeckModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
+          className="pointer-coarse:text-base"
           maxLength={LIMITS.deckName}
           placeholder="Photosynthesis"
           autoFocus
@@ -106,6 +107,7 @@ export function GenerateModal({
           label="Topic"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
+          className="pointer-coarse:text-base"
           maxLength={LIMITS.cardsTopic}
           placeholder={subspaceName}
           hint="Left blank, it draws on everything indexed in this topic."

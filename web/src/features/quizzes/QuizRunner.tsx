@@ -36,6 +36,10 @@ import { cn } from '../../lib/cn'
 import { useAssessmentLock } from '../../lib/assessment'
 import { anyModalOpen, quizKeyAction, stageKeyGate, type QuizKeyAction } from './keys'
 import { KeyHints, StageCount, type KeyHint } from './StageKit'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { PhoneQuizStage } from './PhoneQuiz'
+import { haptic } from './phoneKit'
+import { useImmersive } from '../../components/layout/immersive'
 
 /**
  * Said when you get one right.
@@ -78,6 +82,11 @@ export function QuizRunner({
   // finishing, backing out, closing the panel, navigating away — unmounts it,
   // so there is no route that forgets to unlock.
   useAssessmentLock('quiz')
+  // Phones get their own immersive stage (PhoneQuiz.tsx); the dock keeps its
+  // compact layout and desktop its full one. Same state and handlers for all.
+  const isMobile = useIsMobile()
+  const phone = isMobile && !compact
+  useImmersive(phone)
 
   const total = quiz.questions.length
   const [index, setIndex] = useState(0)
@@ -126,6 +135,7 @@ export function QuizRunner({
         }
       }
       ambience.pulse(!correct ? 'miss' : run >= 3 ? 'bright' : 'good')
+      if (phone) haptic(correct ? 10 : [14, 40, 14])
       // Three or more in a row earns a flicker of stars off the answer itself.
       if (run >= 3) celebrate('combo', { anchor: el, compact })
       setAnswers((prev) => {
@@ -139,7 +149,7 @@ export function QuizRunner({
         return next
       })
     },
-    [index, revealed, answers, quiz.questions, ambience, compact],
+    [index, revealed, answers, quiz.questions, ambience, compact, phone],
   )
 
   // A second submit while the first is in flight — Enter pressed again, or a
@@ -371,6 +381,54 @@ export function QuizRunner({
               </Button>
             ))}
         </div>
+      </div>
+    )
+  }
+
+  if (phone) {
+    const headline = isCorrect
+      ? streak >= 3
+        ? STREAK[Math.min(streak - 3, STREAK.length - 1)]
+        : NICE[index % NICE.length]
+      : 'Not this time.'
+    return (
+      <div className="flex min-h-0 w-full flex-1 flex-col">
+        <PhoneQuizStage
+          index={index}
+          total={total}
+          seconds={seconds}
+          clock={formatClock(seconds)}
+          questions={quiz.questions}
+          answers={answers}
+          revealed={revealed}
+          highlight={highlight}
+          optionRefs={optionRefs}
+          isLast={isLast}
+          busy={busy}
+          error={error}
+          headline={headline}
+          onChoose={(i, el) => choose(i, el)}
+          onFocusOption={setHighlight}
+          onNext={goNext}
+          onFinish={finish}
+          onLeave={() => requestLeave(false)}
+        />
+        <ConfirmDialog
+          open={confirmLeave}
+          title="Leave this quiz?"
+          description={
+            answeredCount > 0
+              ? `You've answered ${answeredCount} of ${total}. Answers are only saved when you see your results, so this attempt won't count.`
+              : 'Nothing has been answered yet, so there is nothing to lose.'
+          }
+          confirmLabel="Leave quiz"
+          destructive
+          onCancel={() => setConfirmLeave(false)}
+          onConfirm={() => {
+            setConfirmLeave(false)
+            onExit()
+          }}
+        />
       </div>
     )
   }

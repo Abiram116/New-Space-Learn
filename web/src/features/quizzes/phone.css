@@ -1,0 +1,80 @@
+/* Phone-only motion + touch helpers for the revision screens.
+   Transform / opacity only. Scoped class names, nothing global. */
+
+@keyframes panelUp {
+  from {
+    transform: translateY(40%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.phone-panel-up {
+  animation: panelUp 260ms var(--ease-sl) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone-panel-up {
+    animation: none;
+  }
+}
+
+/* Horizontal chip rows: no scrollbar, edge-to-edge scroll. */
+.phone-chips {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.phone-chips::-webkit-scrollbar {
+  display: none;
+}
+
+/* Taps should feel instant: no 300ms wait, no grey flash. */
+.phone-tap {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Quiz stage: question above, answers below — and side by side when a phone is
+   held sideways and there is no height to stack them in. */
+.phone-quiz-body {
+  display: flex;
+  flex: 1 1 0%;
+  min-height: 0;
+  flex-direction: column;
+}
+.phone-quiz-q {
+  display: flex;
+  flex: 1 1 0%;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.phone-quiz-a {
+  display: flex;
+  flex: 0 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .phone-quiz-body {
+    flex-direction: row;
+  }
+  .phone-quiz-q,
+  .phone-quiz-a {
+    flex: 1 1 0%;
+  }
+}
+
+/* Short screens (small phones, or sideways): once the verdict panel is up there
+   is no room for the correct row as well as the explanation, and the panel
+   already spells the answer out — so the row folds away. */
+@media (max-height: 640px), (orientation: landscape) and (max-height: 520px) {
+  .phone-fold-short {
+    display: none;
+  }
+}
+.phone-quiz-q {
+  min-height: 96px;
+}

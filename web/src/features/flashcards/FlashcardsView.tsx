@@ -9,7 +9,7 @@
  * stale interval math.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
 import {
@@ -43,6 +43,10 @@ import { toneBar } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { StickyActionBar } from '../../components/ui/StickyActionBar'
+import { ActionSheet, ListRow, PhoneTitle, useRowSheet } from '../quizzes/phoneKit'
+import { PhoneDecks } from './PhoneDecks'
 import { Review } from './Review'
 import { Summary } from './Summary'
 import { GenerateModal, NewDeckModal } from './modals'
@@ -71,6 +75,7 @@ function Inner({
   base: string
 }) {
   const { show, showError } = useToast()
+  const isMobile = useIsMobile()
   // Global on purpose — see the identical note on `listAllNotes` in
   // NotesView. `subspaceId` still decides where a NEW deck is created; it
   // no longer decides what's visible.
@@ -125,6 +130,65 @@ function Inner({
     [show, showError],
   )
 
+  /**
+   * A capped session over whatever is due across the decks — the welcome-back
+   * "start with 10 of your 46" and the session-length cap. Pulls deck by deck
+   * until the batch is full, so it never fetches (or shows) the whole backlog.
+   * `totalDue` counts due cards NOT in `exclude`; what is left after this batch
+   * rides along as `pending`, which is what "Keep going" is offered from.
+   */
+  const startDueSession = useCallback(
+    async (limit: number | undefined, exclude: Set<string>, totalDue: number) => {
+      const pool = (decks.data ?? []).filter((d) => d.due > 0)
+      const picked: Flashcard[] = []
+      try {
+        for (const d of pool) {
+          if (limit && picked.length >= limit) break
+          const fresh = (await listCards(d.id, { dueOnly: true })).filter((c) => !exclude.has(c.id))
+          picked.push(...(limit ? fresh.slice(0, limit - picked.length) : fresh))
+        }
+      } catch (err) {
+        showError(err)
+        return
+      }
+      if (picked.length === 0) {
+        show('Nothing due right now. Come back when it ripens.', 'info')
+        return
+      }
+      setMode({
+        kind: 'review',
+        deckId: picked[0].deck_id,
+        cards: picked,
+        index: 0,
+        flipped: false,
+        grades: [],
+        limit,
+        pending: Math.max(0, totalDue - picked.length),
+        mixed: new Set(picked.map((c) => c.deck_id)).size > 1,
+      })
+    },
+    [decks.data, show, showError],
+  )
+
+  // `?review=due&limit=N` — handled once, then cleared so Back doesn't restart it.
+  const reviewedIds = useRef<Set<string>>(new Set())
+  const dueHandled = useRef(false)
+  useEffect(() => {
+    if (params.get('review') !== 'due' || dueHandled.current || decks.loading || !decks.data) return
+    dueHandled.current = true
+    const n = Math.floor(Number(params.get('limit')))
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('review')
+        next.delete('limit')
+        return next
+      },
+      { replace: true },
+    )
+    void startDueSession(n > 0 ? n : undefined, new Set(), decks.data.reduce((t, d) => t + d.due, 0))
+  }, [params, setParams, decks.loading, decks.data, startDueSession])
+
   const removeDeck = async () => {
     if (!deleteDeckId) return
     const id = deleteDeckId
@@ -140,6 +204,8 @@ function Inner({
   }
 
   if (mode.kind === 'review') {
+    // Remember what this session covered, for "Keep going" (see above).
+    for (const c of mode.cards) reviewedIds.current.add(c.id)
     return (
       <Review
         mode={mode}
@@ -156,10 +222,20 @@ function Inner({
     // "nothing due" toast. Offer the next deck that actually has cards ready,
     // and when nothing does, the other way to use what you just reviewed.
     const nextDeck = (decks.data ?? []).find((d) => d.id !== mode.deckId && d.due > 0) ?? null
+    const keepGoing =
+      mode.limit && mode.pending
+        ? {
+            count: Math.min(mode.limit, mode.pending),
+            // `exclude` is every card just reviewed: the PATCHes that clear
+            // them may still be in flight, so the server can still call them due.
+            onGo: () => void startDueSession(mode.limit, reviewedIds.current, mode.pending!),
+          }
+        : null
     return (
       <Summary
         grades={mode.grades}
-        deckName={deck?.name ?? 'Deck'}
+        keepGoing={keepGoing}
+        deckName={mode.mixed ? 'your due cards' : (deck?.name ?? 'Deck')}
         onDone={backToDecks}
         nextDeck={nextDeck}
         onReviewNext={beginReview}
@@ -187,6 +263,72 @@ function Inner({
     subjectFilter === 'all'
       ? all
       : all.filter((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === subjectFilter)
+
+  const deckDialogs = (
+    <>
+      <NewDeckModal
+        open={newDeckOpen}
+        onClose={() => setNewDeckOpen(false)}
+        onCreate={async (name) => {
+          const deck = await createDeck(subspaceId, { name })
+          decks.setData((prev) => [...(prev ?? []), deck])
+          setNewDeckOpen(false)
+          openDeck(deck.id)
+        }}
+      />
+
+      <GenerateModal
+        open={genOpen}
+        subspaceName={subspaceName}
+        onClose={() => setGenOpen(false)}
+        onGenerate={async (topic, count) => {
+          const cards = await generateCards(subspaceId, { topic, count })
+          setGenOpen(false)
+          await decks.refresh()
+          show(`Wrote ${cards.length} cards.`, 'success')
+          // Land on the deck it just wrote, same as "Write with AI" selects
+          // the new note and quiz generation opens the new quiz — this used
+          // to leave you on the plain grid with no way to tell which of
+          // possibly many decks the cards just went into.
+          if (cards[0]) openDeck(cards[0].deck_id)
+        }}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteDeckId)}
+        title="Delete this deck?"
+        description="Every card in it goes too. This can't be undone."
+        confirmLabel="Delete"
+        onCancel={() => setDeleteDeckId(null)}
+        onConfirm={removeDeck}
+      />
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PhoneDecks
+          decks={list}
+          loading={decks.loading}
+          error={decks.error}
+          onRetry={decks.refresh}
+          subjects={subjectOptions}
+          subjectFilter={subjectFilter}
+          onSubjectFilter={setSubjectFilter}
+          toneOf={(d) => (d.subspace_id ? subspaceToSpace.get(d.subspace_id)?.tone : undefined)}
+          totalDue={totalDue}
+          subspaceName={subspaceName}
+          onOpen={openDeck}
+          onReview={(id) => void beginReview(id)}
+          onDelete={setDeleteDeckId}
+          onNew={() => setNewDeckOpen(true)}
+          onGenerate={() => setGenOpen(true)}
+        />
+        {deckDialogs}
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -296,42 +438,7 @@ function Inner({
         )}
       </div>
 
-      <NewDeckModal
-        open={newDeckOpen}
-        onClose={() => setNewDeckOpen(false)}
-        onCreate={async (name) => {
-          const deck = await createDeck(subspaceId, { name })
-          decks.setData((prev) => [...(prev ?? []), deck])
-          setNewDeckOpen(false)
-          openDeck(deck.id)
-        }}
-      />
-
-      <GenerateModal
-        open={genOpen}
-        subspaceName={subspaceName}
-        onClose={() => setGenOpen(false)}
-        onGenerate={async (topic, count) => {
-          const cards = await generateCards(subspaceId, { topic, count })
-          setGenOpen(false)
-          await decks.refresh()
-          show(`Wrote ${cards.length} cards.`, 'success')
-          // Land on the deck it just wrote, same as "Write with AI" selects
-          // the new note and quiz generation opens the new quiz — this used
-          // to leave you on the plain grid with no way to tell which of
-          // possibly many decks the cards just went into.
-          if (cards[0]) openDeck(cards[0].deck_id)
-        }}
-      />
-
-      <ConfirmDialog
-        open={Boolean(deleteDeckId)}
-        title="Delete this deck?"
-        description="Every card in it goes too. This can't be undone."
-        confirmLabel="Delete"
-        onCancel={() => setDeleteDeckId(null)}
-        onConfirm={removeDeck}
-      />
+      {deckDialogs}
     </div>
   )
 }
@@ -431,6 +538,8 @@ function DeckDetail({
   onReview: () => void
 }) {
   const { show, showError } = useToast()
+  const isMobile = useIsMobile()
+  const cardSheet = useRowSheet<Flashcard>()
   const cards = useAsync(() => listCards(deckId), [deckId], `cards:${deckId}`)
   const [editing, setEditing] = useState<Flashcard | 'new' | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -466,6 +575,121 @@ function DeckDetail({
   }
 
   const list = cards.data ?? []
+
+  const cardDialogs = (
+    <>
+      <CardEditor
+        key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
+        card={editing}
+        onClose={() => setEditing(null)}
+        onSave={save}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteId)}
+        title="Delete this card?"
+        description="It won't come back."
+        confirmLabel="Delete"
+        onCancel={() => setDeleteId(null)}
+        onConfirm={remove}
+      />
+    </>
+  )
+
+  if (isMobile) {
+    const dueNow = list.filter((c) => new Date(c.due_at).getTime() <= Date.now()).length
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PhoneTitle
+          title={deckName}
+          sub={list.length > 0 ? `${list.length} card${list.length === 1 ? '' : 's'}` : undefined}
+          onBack={onBack}
+          backLabel="All decks"
+        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {cards.loading && (
+            <div className="flex flex-col gap-px" aria-busy>
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-20 rounded-none" />
+              ))}
+            </div>
+          )}
+
+          {!cards.loading && cards.error && (
+            <div className="mx-4 flex flex-col items-start gap-2 rounded-xl bg-coral-soft px-4 py-3 text-[15px] text-coral-deep">
+              <p>{cards.error}</p>
+              <Button size="sm" variant="secondary" onClick={cards.refresh}>
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {!cards.loading && !cards.error && list.length === 0 && (
+            <div className="px-4 py-4">
+              <EmptyState
+                icon="deck"
+                title="This deck is empty"
+                description="Add the first question and answer. Cards you write yourself tend to stick best."
+                action={<Button size="lg" onClick={() => setEditing('new')}>Add a card</Button>}
+              />
+            </div>
+          )}
+
+          {list.length > 0 && (
+            <ul className="border-t border-line-soft">
+              <li className="border-b border-line-soft">
+                <button
+                  type="button"
+                  onClick={() => setEditing('new')}
+                  className="phone-tap flex min-h-14 w-full items-center gap-3 px-4 text-left text-[16px] font-semibold text-brand-deep active:bg-surface"
+                >
+                  <Icon name="plus" size={18} /> Add a card
+                </button>
+              </li>
+              {list.map((card) => (
+                <ListRow
+                  key={card.id}
+                  onOpen={() => setEditing(card)}
+                  onMore={() => cardSheet.open(card)}
+                  moreLabel="Card actions"
+                >
+                  <span className="line-clamp-2 text-[16px] font-semibold leading-snug text-ink">
+                    {stripMarkdown(card.front)}
+                  </span>
+                  <span className="line-clamp-2 text-[14px] leading-snug text-muted">
+                    {stripMarkdown(card.back)}
+                  </span>
+                </ListRow>
+              ))}
+            </ul>
+          )}
+
+          {list.length > 0 && (
+            <StickyActionBar>
+              <Button size="xl" className="min-h-14 flex-1" onClick={onReview}>
+                {dueNow > 0 ? `Review ${dueNow} due` : 'Review'}
+              </Button>
+            </StickyActionBar>
+          )}
+        </div>
+
+        <ActionSheet
+          open={cardSheet.target !== null}
+          title="Card"
+          onClose={cardSheet.close}
+          actions={
+            cardSheet.target
+              ? [
+                  { label: 'Edit card', icon: 'pencil', onSelect: () => setEditing(cardSheet.target!) },
+                  { label: 'Delete card', icon: 'trash', danger: true, onSelect: () => setDeleteId(cardSheet.target!.id) },
+                ]
+              : []
+          }
+        />
+        {cardDialogs}
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -576,21 +800,7 @@ function DeckDetail({
         )}
       </div>
 
-      <CardEditor
-        key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
-        card={editing}
-        onClose={() => setEditing(null)}
-        onSave={save}
-      />
-
-      <ConfirmDialog
-        open={Boolean(deleteId)}
-        title="Delete this card?"
-        description="It won't come back."
-        confirmLabel="Delete"
-        onCancel={() => setDeleteId(null)}
-        onConfirm={remove}
-      />
+      {cardDialogs}
     </div>
   )
 }
@@ -634,6 +844,7 @@ function CardEditor({
           value={front}
           onChange={(e) => setFront(e.target.value)}
           rows={2}
+          className="pointer-coarse:text-base"
           maxLength={LIMITS.cardFront}
           placeholder="What does one turn of the Krebs cycle yield?"
         />
@@ -643,6 +854,7 @@ function CardEditor({
           value={back}
           onChange={(e) => setBack(e.target.value)}
           rows={4}
+          className="pointer-coarse:text-base"
           maxLength={LIMITS.cardBack}
           placeholder="How much future reward is worth relative to immediate reward."
         />

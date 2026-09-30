@@ -15,6 +15,8 @@ import { Button } from '../../components/ui/Button'
 import { Ledger } from '../../components/ui/Surface'
 import { AmbienceField, celebrate, useAmbienceField } from '../../components/celebrate'
 import { cn } from '../../lib/cn'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { StickyActionBar } from '../../components/ui/StickyActionBar'
 import { GRADES } from './model'
 
 /** Sessions already celebrated, by identity — a remount mustn't replay it. */
@@ -27,6 +29,7 @@ export function Summary({
   nextDeck,
   onReviewNext,
   quizHref,
+  keepGoing,
 }: {
   grades: Grade[]
   deckName: string
@@ -34,12 +37,15 @@ export function Summary({
   nextDeck: Deck | null
   onReviewNext: (deckId: string) => void
   quizHref: string
+  /** A capped session left due cards behind: offer the next batch, not the lot. */
+  keepGoing?: { count: number; onGo: () => void } | null
 }) {
   const tally = useMemo(() => {
     const counts: Record<Grade, number> = { again: 0, hard: 0, good: 0, easy: 0 }
     for (const g of grades) counts[g] += 1
     return counts
   }, [grades])
+  const isMobile = useIsMobile()
   const solid = tally.good + tally.easy
   const pct = grades.length ? Math.round((solid / grades.length) * 100) : 0
 
@@ -57,20 +63,48 @@ export function Summary({
     if (cards > 0) celebrate('deck', { anchor: pctRef, facts: { count: cards, deck: deckName } })
   }, [grades, tally.again, deckName, ambience.api])
 
+  const actions = (
+    <>
+      <Button variant="secondary" onClick={onDone} className={isMobile ? 'min-h-14 flex-1' : 'flex-1'}>
+        Done
+      </Button>
+      {keepGoing ? (
+        <Button onClick={keepGoing.onGo} className={cn('min-w-0 flex-1', isMobile && 'min-h-14 flex-[1.6]')}>
+          <span className="truncate">Keep going: {keepGoing.count} more</span>
+        </Button>
+      ) : nextDeck ? (
+        <Button onClick={() => onReviewNext(nextDeck.id)} className={cn('min-w-0 flex-1', isMobile && 'min-h-14 flex-[1.6]')}>
+          <span className="truncate">
+            Review {nextDeck.due} more in {nextDeck.name}
+          </span>
+        </Button>
+      ) : (
+        <Link to={quizHref} className={cn('min-w-0 flex-1', isMobile && 'flex-[1.6]')}>
+          <Button className={cn('w-full', isMobile && 'min-h-14')}>Take a quiz on this</Button>
+        </Link>
+      )}
+    </>
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <SubspaceHeader title="Session complete" />
-      <div className="relative isolate flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-6">
-        <AmbienceField field={ambience} />
+      {!isMobile && <SubspaceHeader title="Session complete" />}
+      <div
+        className={cn(
+          'relative isolate flex min-h-0 flex-1 items-center justify-center overflow-y-auto',
+          isMobile ? 'p-4' : 'p-6',
+        )}
+      >
+        <AmbienceField field={ambience} compact={isMobile} />
         {/* LEDGER — the session verdict, not a trophy. `foil` in particular
             had to go: foil is this system's cue for a collectible, and putting
             it on a score turned "you got 60%" into something that looked like
             a reward for getting 60%. The card faces you just reviewed stay
             Cards, because those genuinely are objects you own. */}
-        <Ledger className="flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center">
+        <Ledger className="flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center max-sm:p-5 max-sm:pt-3">
           <div ref={pctRef}>
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
-            <p className="setcode mt-1">solid on {deckName}</p>
+            <p className={cn('mt-1', isMobile ? 'text-[13px] text-muted' : 'setcode')}>solid on {deckName}</p>
           </div>
 
           <div className="grid grid-cols-4 gap-2">
@@ -79,35 +113,21 @@ export function Summary({
                 <span className={cn('nameplate text-[22px] tabular-nums', g.text)}>
                   {tally[g.key]}
                 </span>
-                <span className="setcode">{g.label}</span>
+                <span className={isMobile ? 'text-[12.5px] text-muted' : 'setcode'}>{g.label}</span>
               </div>
             ))}
           </div>
 
-          <p className="text-[13px] leading-relaxed text-muted">
+          <p className={cn('leading-relaxed text-muted', isMobile ? 'text-[15px]' : 'text-[13px]')}>
             {tally.again > 0
               ? `${tally.again} card${tally.again === 1 ? '' : 's'} came back short — those return sooner.`
               : 'Nothing missed. The whole deck moves further out.'}
           </p>
 
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onDone} className="flex-1">
-              Done
-            </Button>
-            {nextDeck ? (
-              <Button onClick={() => onReviewNext(nextDeck.id)} className="min-w-0 flex-1">
-                <span className="truncate">
-                  Review {nextDeck.due} more in {nextDeck.name}
-                </span>
-              </Button>
-            ) : (
-              <Link to={quizHref} className="min-w-0 flex-1">
-                <Button className="w-full">Take a quiz on this</Button>
-              </Link>
-            )}
-          </div>
+          {!isMobile && <div className="flex gap-2">{actions}</div>}
         </Ledger>
       </div>
+      {isMobile && <StickyActionBar>{actions}</StickyActionBar>}
     </div>
   )
 }

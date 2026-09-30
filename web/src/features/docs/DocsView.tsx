@@ -21,12 +21,8 @@ import { cn } from '../../lib/cn'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import { SourceItem } from './SourceItem'
-
-type LocalUpload = {
-  key: string
-  name: string
-  progress: number
-}
+import { useIsMobile } from '../../lib/useIsMobile'
+import { PhoneDocs, type LocalUpload } from './PhoneDocs'
 
 const POLL_MS = 2500
 const POLL_MAX_MS = 10_000
@@ -40,6 +36,7 @@ export function DocsView() {
 
 function DocsInner({ subspaceId }: { subspaceId: string }) {
   const { show, showError } = useToast()
+  const isMobile = useIsMobile()
   const [docs, setDocs] = useState<Document[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [uploads, setUploads] = useState<LocalUpload[]>([])
@@ -67,6 +64,20 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       return next
     }, { replace: true })
   }, [params, setParams])
+
+  // `?add=1` — "add material" straight from somewhere else (Today's checklist,
+  // a share target). On a phone it opens the Add sheet; the param is cleared so a
+  // refresh or Back doesn't re-open it. Wide screens just drop it.
+  const [addSignal, setAddSignal] = useState(0)
+  useEffect(() => {
+    if (params.get('add') !== '1') return
+    if (isMobile) setAddSignal((n) => n + 1)
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete('add')
+      return next
+    }, { replace: true })
+  }, [params, setParams, isMobile])
 
   useEffect(() => {
     if (!docs || !highlightId) return
@@ -178,8 +189,41 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
     [show, showError],
   )
 
+  const deleteDialog = (
+    <ConfirmDialog
+      open={Boolean(deleteId)}
+      title="Delete this document?"
+      description="Its chunks are removed from the knowledge base. Notes and chats stay."
+      confirmLabel="Delete"
+      onCancel={() => setDeleteId(null)}
+      onConfirm={del}
+      destructive
+      loading={deleting}
+    />
+  )
+
   const loading = docs === null && !error
   const isEmpty = docs !== null && docs.length === 0 && uploads.length === 0
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PhoneDocs
+          docs={docs}
+          uploads={uploads}
+          loading={loading}
+          error={error}
+          highlightId={highlightId}
+          openAddSignal={addSignal}
+          onFiles={(files) => void startUpload(files)}
+          onDelete={setDeleteId}
+          onReprocess={(id) => void reprocess(id)}
+          extra={<RelatedTopics subspaceId={subspaceId} />}
+        />
+        {deleteDialog}
+      </div>
+    )
+  }
 
   return (
     <div
@@ -288,16 +332,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
         )}
       </div>
 
-      <ConfirmDialog
-        open={Boolean(deleteId)}
-        title="Delete this document?"
-        description="Its chunks are removed from the knowledge base. Notes and chats stay."
-        confirmLabel="Delete"
-        onCancel={() => setDeleteId(null)}
-        onConfirm={del}
-        destructive
-        loading={deleting}
-      />
+      {deleteDialog}
     </div>
   )
 }

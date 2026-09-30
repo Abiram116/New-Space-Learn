@@ -27,6 +27,8 @@ import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
 import { toneBar } from '../../lib/tone'
 import { NoteBriefDialog } from '../chat/NoteBriefDialog'
+import { isMobileNow, useIsMobile } from '../../lib/useIsMobile'
+import { PhoneNotes } from './PhoneNotes'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { useSpaces } from '../spaces/SpacesProvider'
 
@@ -48,6 +50,7 @@ function Inner({
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
   const { spaces } = useSpaces()
+  const isMobile = useIsMobile()
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('n'))
@@ -77,7 +80,9 @@ function Inner({
       const data = await listAllNotes()
       setNotes(data)
       setError(null)
-      setSelectedId((cur) => cur ?? data[0]?.id ?? null)
+      // On a phone the list IS the landing screen — auto-opening the first
+      // note would skip it and drop you into an editor you never asked for.
+      setSelectedId((cur) => cur ?? (isMobileNow() ? null : (data[0]?.id ?? null)))
     } catch (err) {
       setError(friendlyMessage(err))
     }
@@ -193,6 +198,67 @@ function Inner({
 
   const loading = notes === null && !error
   const totalNotes = notes?.length ?? 0
+
+  const dialogs = (
+    <>
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete this note?"
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={del}
+        destructive
+        loading={deleting}
+      />
+
+      <NoteBriefDialog
+        open={noteBriefOpen}
+        busy={writingNote}
+        onCancel={() => setNoteBriefOpen(false)}
+        onGenerate={writeNote}
+      />
+    </>
+  )
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {current ? (
+          <NoteEditor
+            key={current.id}
+            note={current}
+            subspaceId={subspaceId}
+            base={base}
+            onPatch={(patch) => applyPatch(current.id, patch)}
+            onDelete={() => setConfirmDelete(current.id)}
+            onBack={() => select(null)}
+          />
+        ) : (
+          <PhoneNotes
+            notes={notes}
+            visible={visible}
+            loading={loading}
+            error={error}
+            onRetry={() => void refresh()}
+            filter={filter}
+            onFilter={setFilter}
+            showOriginFilter={showOriginFilter}
+            subjects={subjectOptions}
+            subjectFilter={subjectFilter}
+            onSubjectFilter={setSubjectFilter}
+            search={search}
+            onSearch={setSearch}
+            toneOf={(n) => (n.subspace_id ? subspaceToSpace.get(n.subspace_id)?.tone : undefined)}
+            onOpen={select}
+            onDelete={setConfirmDelete}
+            onNew={newBlank}
+            onAi={() => setNoteBriefOpen(true)}
+          />
+        )}
+        {dialogs}
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -472,22 +538,7 @@ function Inner({
       )}
       </div>
 
-      <ConfirmDialog
-        open={Boolean(confirmDelete)}
-        title="Delete this note?"
-        confirmLabel="Delete"
-        onCancel={() => setConfirmDelete(null)}
-        onConfirm={del}
-        destructive
-        loading={deleting}
-      />
-
-      <NoteBriefDialog
-        open={noteBriefOpen}
-        busy={writingNote}
-        onCancel={() => setNoteBriefOpen(false)}
-        onGenerate={writeNote}
-      />
+      {dialogs}
     </div>
   )
 }

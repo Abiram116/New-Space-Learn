@@ -31,6 +31,8 @@ import { cn } from '../../lib/cn'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { StudyAmbience } from '../../components/celebrate'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { PhoneQuizzes } from './PhoneQuizzes'
 import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
@@ -43,6 +45,7 @@ export function QuizzesView() {
 function Inner({ subspaceId }: { subspaceId: string }) {
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
+  const isMobile = useIsMobile()
   // Global on purpose — see the identical note on `listAllNotes` in
   // NotesView. `subspaceId` still decides which topic a NEW quiz draws its
   // material from; it no longer decides what's visible in the list.
@@ -99,6 +102,25 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     [quizzes, startQuiz, subspaceId, showError],
   )
 
+  if (activeId && isMobile) {
+    // No page header: the quiz stage brings its own slim top row, and the
+    // shell's bars are hidden while it is up.
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <StudyAmbience compact innerClassName="overflow-y-auto">
+          <QuizSession
+            quizId={activeId}
+            onBack={back}
+            onDone={() => {
+              show('Answers submitted.', 'success')
+              void quizzes.refresh()
+            }}
+          />
+        </StudyAmbience>
+      </div>
+    )
+  }
+
   if (activeId) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -124,6 +146,39 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             }}
           />
         </StudyAmbience>
+      </div>
+    )
+  }
+
+  const visibleQuizzes =
+    subjectFilter === 'all'
+      ? quizzes.data
+      : (quizzes.data ?? []).filter(
+          (q) => q.subspace_id && subspaceToSpace.get(q.subspace_id)?.id === subjectFilter,
+        )
+
+  if (isMobile) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PhoneQuizzes
+          quizzes={visibleQuizzes}
+          loading={quizzes.loading}
+          error={quizzes.error}
+          onRetry={quizzes.refresh}
+          subjects={subjectOptions}
+          subjectFilter={subjectFilter}
+          onSubjectFilter={setSubjectFilter}
+          toneOf={(q) => (q.subspace_id ? subspaceToSpace.get(q.subspace_id)?.tone : undefined)}
+          generating={generating}
+          onOpen={startQuiz}
+          onGenerate={() => setGenOpen(true)}
+        />
+        <GenerateQuizModal
+          open={genOpen}
+          busy={generating}
+          onClose={() => setGenOpen(false)}
+          onGenerate={generate}
+        />
       </div>
     )
   }
@@ -317,6 +372,7 @@ function QuizSession({
   onDone: () => void
   onBack: () => void
 }) {
+  const isMobile = useIsMobile()
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [finished, setFinished] = useState<{ result: QuizResult; answers: number[] } | null>(
@@ -338,6 +394,12 @@ function QuizSession({
     return (
       <div className="mx-auto max-w-lg p-6">
         <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">{error}</div>
+        {/* The phone has no page header to go back with. */}
+        {isMobile && (
+          <Button variant="secondary" size="lg" className="mt-3 w-full" onClick={onBack}>
+            Back to quizzes
+          </Button>
+        )}
       </div>
     )
   }
@@ -390,6 +452,7 @@ function GenerateQuizModal({
       <div className="flex flex-col gap-4">
         <Input
           label="Topic (optional)"
+          className="pointer-coarse:text-base"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           maxLength={LIMITS.quizTopic}
@@ -398,6 +461,7 @@ function GenerateQuizModal({
         />
         <Input
           label="Questions"
+          className="pointer-coarse:text-base"
           type="number"
           min={1}
           max={20}

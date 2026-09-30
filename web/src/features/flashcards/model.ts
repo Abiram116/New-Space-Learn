@@ -34,8 +34,15 @@ export const GRADES: {
 export type Mode =
   | { kind: 'decks' }
   | { kind: 'deck'; deckId: string }
-  | { kind: 'review'; deckId: string; cards: Flashcard[]; index: number; flipped: boolean; grades: Grade[] }
-  | { kind: 'summary'; deckId: string; grades: Grade[] }
+  | ({ kind: 'review'; deckId: string; cards: Flashcard[]; index: number; flipped: boolean; grades: Grade[] } & SessionMeta)
+  | ({ kind: 'summary'; deckId: string; grades: Grade[] } & SessionMeta)
+
+/**
+ * Set only on a capped "due across my decks" session (`?review=due&limit=N`):
+ * how big each batch is, how many due cards are still waiting behind it, and
+ * whether it drew from more than one deck (so the summary can't name just one).
+ */
+export type SessionMeta = { limit?: number; pending?: number; mixed?: boolean }
 
 /** How the room answers each grade. Again dims it for a breath — never red,
  *  never dark; a miss is information. */

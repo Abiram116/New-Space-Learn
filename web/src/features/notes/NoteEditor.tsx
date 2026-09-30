@@ -14,7 +14,7 @@
  * literally the same code.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
 import { Editor, EditorContent, useEditor } from '@tiptap/react'
@@ -55,6 +55,11 @@ import { Select } from '../../components/ui/Select'
 import { Rise } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { ActionSheet } from '../quizzes/phoneKit'
+import { useImmersive } from '../../components/layout/immersive'
+import { PhoneFormatBar } from './PhoneFormatBar'
+import './phone.css'
 
 const lowlight = createLowlight(common)
 
@@ -96,6 +101,14 @@ export function NoteEditor({
    */
   compact?: boolean
 }) {
+  // A phone gets a reading-first page: its own slim top bar, larger type, and a
+  // formatting bar on the keyboard instead of the floating selection bubble.
+  // The dock (`compact`) is never the phone layout — chat is desktop-only.
+  const isMobile = useIsMobile()
+  const phone = isMobile && !compact
+  useImmersive(phone)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
   const [title, setTitle] = useState(note.title)
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
@@ -503,6 +516,19 @@ export function NoteEditor({
     editorRef.current = editor
   }, [editor])
 
+  // Phone only: the formatting bar lives exactly as long as the editor has focus.
+  useEffect(() => {
+    if (!editor || !phone) return
+    const on = () => setFocused(true)
+    const off = () => setFocused(false)
+    editor.on('focus', on)
+    editor.on('blur', off)
+    return () => {
+      editor.off('focus', on)
+      editor.off('blur', off)
+    }
+  }, [editor, phone])
+
   /* Where the slash menu (and the Ask AI panel) actually renders — next to
      the `/` you typed, not pinned to the top of the note.
 
@@ -717,11 +743,46 @@ export function NoteEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title])
 
+  const statusLine = (
+    <span className={cn('flex items-center gap-1.5', aiBusy ? 'setcode-hot' : 'setcode', phone && 'text-[12.5px]')}>
+      {aiBusy ? (
+        <>
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+          Writing…
+        </>
+      ) : status === 'saving' ? (
+        <>
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
+          Saving…
+        </>
+      ) : status === 'saved' ? (
+        <span className="flex items-center gap-1 text-mint-deep">
+          <Icon name="check" size={11} /> Saved
+        </span>
+      ) : status === 'error' ? (
+        <span className="flex items-center gap-1 text-coral-deep">
+          <Icon name="alert" size={11} /> Couldn’t save
+        </span>
+      ) : (
+        `Edited ${relativeTime(note.updated_at)}`
+      )}
+    </span>
+  )
+
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className={cn('flex min-w-0 flex-1 flex-col', phone && 'notes-phone')}>
+      {phone && (
+        <PhoneBar
+          onBack={onBack}
+          onMenu={() => setMenuOpen(true)}
+          status={statusLine}
+        />
+      )}
+
       {/* One quiet bar. Everything that used to compete for attention here —
           twelve format buttons and a bright Delete — has moved to where it is
           actually needed: marks onto the selection, Delete into a menu. */}
+      {!phone && (
       <div
         className={cn(
           'flex shrink-0 items-center gap-2.5 border-b border-line py-2.5',
@@ -759,29 +820,7 @@ export function NoteEditor({
             labels meant to lead) so "the AI is writing right now" reads as
             a live, active thing happening — not the same quiet grey as
             "saved 2 minutes ago". */}
-        <span className={cn('flex items-center gap-1.5', aiBusy ? 'setcode-hot' : 'setcode')}>
-          {aiBusy ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-              Writing…
-            </>
-          ) : status === 'saving' ? (
-            <>
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
-              Saving…
-            </>
-          ) : status === 'saved' ? (
-            <span className="flex items-center gap-1 text-mint-deep">
-              <Icon name="check" size={11} /> Saved
-            </span>
-          ) : status === 'error' ? (
-            <span className="flex items-center gap-1 text-coral-deep">
-              <Icon name="alert" size={11} /> Couldn’t save
-            </span>
-          ) : (
-            `Edited ${relativeTime(note.updated_at)}`
-          )}
-        </span>
+        {statusLine}
 
         {/* One click, labelled, and it says what it deletes.
             Burying this behind a gear was the wrong correction: it turned a
@@ -798,6 +837,7 @@ export function NoteEditor({
           <Icon name="trash" size={13} /> Delete
         </button>
       </div>
+      )}
 
       {/* Formatting follows the selection. Nothing on screen until there is
           something to format.
@@ -812,7 +852,7 @@ export function NoteEditor({
           was wrong is that a selection toolbar had become a menu bar. The four
           things people reach for *while a selection is live* stay out; the rest
           moves one click away, where being a longer list costs nothing. */}
-      {editor && (
+      {editor && !phone && (
         <BubbleMenu
           editor={editor}
           options={{ placement: 'top', offset: 8 }}
@@ -855,7 +895,11 @@ export function NoteEditor({
         <div
           className={cn(
             'w-full',
-            compact ? 'px-3 pb-16 pt-4' : 'px-5 pb-24 pt-10 sm:px-8 lg:px-10',
+            compact
+              ? 'px-3 pb-16 pt-4'
+              : phone
+                ? 'px-4 pb-32 pt-4'
+                : 'px-5 pb-24 pt-10 sm:px-8 lg:px-10',
           )}
         >
           {/* The note arrives rather than snapping.
@@ -878,6 +922,13 @@ export function NoteEditor({
           {/* A title, not a form field. The bordered input made the first line
               of a note look like something to fill in rather than something to
               write. */}
+          {phone ? (
+            <PhoneTitleField
+              value={title}
+              onChange={setTitle}
+              onEnter={() => editorRef.current?.commands.focus('start')}
+            />
+          ) : (
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -889,6 +940,11 @@ export function NoteEditor({
               compact ? 'text-[20px]' : 'text-[clamp(26px,3.2vw,36px)]',
             )}
           />
+          )}
+          {/* Who wrote it, quietly, where a reader looks first. */}
+          {phone && note.origin !== 'user' && (
+            <p className="-mt-1 text-[12.5px] text-faint">{originLabel(note.origin)}</p>
+          )}
           <div ref={editorSurfaceRef} className="relative min-h-0 flex-1">
             {/* Language picker, shown only while the caret is inside a code
                 block. A permanent control would be a dead widget on every note
@@ -1149,6 +1205,93 @@ export function NoteEditor({
           </Rise>
         </div>
       </div>
+
+      {phone && editor && (
+        <PhoneFormatBar editor={editor} visible={focused} onAi={runInlineAi} />
+      )}
+      {phone && (
+        <ActionSheet
+          open={menuOpen}
+          title="Note"
+          onClose={() => setMenuOpen(false)}
+          actions={[{ label: 'Delete note', icon: 'trash', danger: true, onSelect: onDelete }]}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * The title on a phone: it wraps instead of clipping at the edge, because a
+ * reader should see the whole thing. Still one logical line — Enter moves to
+ * the body rather than adding a break.
+ */
+function PhoneTitleField({
+  value,
+  onChange,
+  onEnter,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onEnter: () => void
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+  return (
+    <textarea
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/\n/g, ' '))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          onEnter()
+        }
+      }}
+      maxLength={LIMITS.noteTitle}
+      placeholder="Untitled note"
+      aria-label="Note title"
+      enterKeyHint="next"
+      className="nameplate block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[26px] leading-tight text-ink outline-none placeholder:text-faint"
+    />
+  )
+}
+
+/** The phone's slim top bar: back, save state, and a ⋯ for the rest. */
+function PhoneBar({
+  onBack,
+  onMenu,
+  status,
+}: {
+  onBack: () => void
+  onMenu: () => void
+  status: React.ReactNode
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-1 border-b border-line px-2 pt-1">
+      <button
+        type="button"
+        onClick={onBack}
+        aria-label="Back to notes"
+        className="phone-tap -ml-0.5 flex min-h-11 items-center gap-1 rounded-full pl-2 pr-3 text-[15px] font-semibold text-ink-3 active:bg-line-soft"
+      >
+        <Icon name="arrowLeft" size={20} /> Notes
+      </button>
+      <span className="min-w-0 flex-1 truncate text-right">{status}</span>
+      <button
+        type="button"
+        onClick={onMenu}
+        aria-label="Note actions"
+        className="phone-tap grid size-11 shrink-0 place-items-center rounded-full text-ink-3 active:bg-line-soft"
+      >
+        <Icon name="more" size={19} />
+      </button>
     </div>
   )
 }

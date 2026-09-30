@@ -4,7 +4,7 @@ import { Icon, type IconName } from '../../components/ui/Icon'
 import { toneSoft, toneText } from '../../lib/tone'
 import type { Tone } from '../../api/types'
 
-const statusMeta: Record<
+export const statusMeta: Record<
   DocStatus,
   { note: string; icon: IconName; tone: Tone; barClass: string }
 > = {
@@ -122,7 +122,7 @@ export function SourceItem({
   )
 }
 
-function fileIcon(mime: string | null): IconName {
+export function fileIcon(mime: string | null): IconName {
   if (!mime) return 'doc'
   if (mime.includes('markdown') || mime.includes('text')) return 'note'
   return 'doc'

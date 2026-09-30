@@ -1,0 +1,35 @@
+/* Notes on a phone: a page you read first, and edit when you tap into it. */
+
+.notes-phone .notes-doc {
+  font-size: 17px;
+  line-height: 1.65;
+}
+.notes-phone .notes-doc :is(p, li) {
+  overflow-wrap: anywhere;
+}
+/* Wide tables and code scroll inside themselves, never the page. */
+.notes-phone .notes-doc table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.notes-phone .notes-doc pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+/* Task checkboxes are a tap target too. */
+.notes-phone .notes-doc ul[data-type='taskList'] input[type='checkbox'] {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+.notes-phone .notes-doc ul[data-type='taskList'] li > label {
+  margin-top: 0.3rem;
+}
+
+/* The formatting bar rides on top of the keyboard. */
+.notes-formatbar {
+  scrollbar-width: none;
+}
+.notes-formatbar::-webkit-scrollbar {
+  display: none;
+}
