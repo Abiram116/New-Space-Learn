@@ -63,54 +63,67 @@ export function SubspaceHeader({
     { key: 'flashcards', to: `${base}/flashcards`, label: 'Cards' },
   ]
 
+  const tabStrip = showTabs && (
+    <nav
+      aria-label="Topic sections"
+      // Scrolls sideways on a phone rather than truncating a label. The
+      // negative margin lets the strip bleed to the screen edge while the
+      // first tab still lines up with the title.
+      className={cn(
+        'flex gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        // With a page action the tabs get their own full-width row under the
+        // title, so the action can hold the top-right corner on every screen
+        // size. Without one (Chat) they share the title's row from `sm` up.
+        actions
+          ? '-mx-4 w-[calc(100%+2rem)] px-4 sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6'
+          : '-mx-4 w-[calc(100%+2rem)] px-4 sm:mx-0 sm:ml-auto sm:w-auto sm:overflow-visible sm:px-0',
+      )}
+    >
+      {tabs.map((tab) => (
+        <NavLink
+          key={tab.label}
+          to={tab.to}
+          end={tab.end}
+          onClick={(e) => {
+            if (onSelectTab?.(tab.key)) e.preventDefault()
+          }}
+          className={({ isActive }) =>
+            cn(
+              'flex min-h-10 shrink-0 items-center rounded-[10px] px-3.5 py-2 text-[14px] transition-colors pointer-coarse:min-h-11',
+              // When the caller is driving, its state decides what is
+              // current — the router still thinks we are on /chat.
+              (activeTab ? activeTab === tab.key : isActive)
+                ? 'bg-brand-soft font-semibold text-brand'
+                : 'font-medium text-ink-3 hover:bg-line-soft hover:text-ink',
+            )
+          }
+        >
+          {tab.label}
+        </NavLink>
+      ))}
+    </nav>
+  )
+
   return (
-    // Below `sm` the title and the tab strip stack: five tabs plus a breadcrumb
-    // cannot share 375px without one of them truncating to uselessness.
-    <header className="flex shrink-0 flex-col gap-2 border-b-[1.5px] border-line bg-surface px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2.5 sm:px-6">
-      <div className="min-w-0">
-        {/* Same signal as the tab strip below: a "Subject › Topic"
-            breadcrumb over a screen that lists every topic's notes/cards/
-            quizzes at once claims a scope the screen doesn't have anymore
-            — it read as "you're still looking at just this topic" on
-            account-wide libraries. */}
+    // DOM order is visual order: title, then the page action (top-right), then
+    // the tab strip. With no action the tabs sit beside the title on wide
+    // screens instead, and below `sm` they drop under it.
+    <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b-[1.5px] border-line bg-surface px-4 py-3 sm:px-6">
+      <div className="min-w-0 flex-1 basis-40">
+        {/* Same signal as the tab strip: a "Subject › Topic" breadcrumb over a
+            screen that lists every topic's notes/cards/quizzes at once claims a
+            scope the screen doesn't have anymore. */}
         {showTabs && (
-          <div className="truncate text-[11.5px] text-faint">
+          <div className="truncate text-[12.5px] text-faint">
             {title ? `${spaceName} › ${subspaceName}` : spaceName}
           </div>
         )}
-        <h1 className="truncate font-display text-[17px] font-semibold">{displayTitle}</h1>
+        <h1 className="truncate font-display text-[19px] font-semibold leading-snug">{displayTitle}</h1>
       </div>
 
-      {showTabs && (
-        <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 text-[12.5px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:ml-auto sm:overflow-visible sm:px-0">
-          {tabs.map((tab) => (
-            <NavLink
-              key={tab.label}
-              to={tab.to}
-              end={tab.end}
-              onClick={(e) => {
-                if (onSelectTab?.(tab.key)) e.preventDefault()
-              }}
-              className={({ isActive }) =>
-                cn(
-                  'shrink-0 rounded-[9px] px-2.5 py-1.5 transition-colors',
-                  // When the caller is driving, its state decides what is
-                  // current — the router still thinks we are on /chat.
-                  (activeTab ? activeTab === tab.key : isActive)
-                    ? 'bg-brand-soft font-semibold text-brand'
-                    : 'text-ink-3 hover:bg-line-soft',
-                )
-              }
-            >
-              {tab.label}
-            </NavLink>
-          ))}
-        </nav>
-      )}
+      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
 
-      {actions ? (
-        <div className={cn('flex items-center gap-2', !showTabs && 'sm:ml-auto')}>{actions}</div>
-      ) : null}
+      {tabStrip}
     </header>
   )
 }

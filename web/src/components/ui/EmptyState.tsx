@@ -34,7 +34,7 @@ export function EmptyState({
       </span>
       <div className="max-w-sm">
         <h3 className="nameplate text-[19px] text-ink">{title}</h3>
-        {description && <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{description}</p>}
+        {description && <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{description}</p>}
       </div>
       {action}
     </div>

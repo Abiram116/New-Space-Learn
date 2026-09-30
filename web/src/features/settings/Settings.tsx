@@ -24,7 +24,7 @@
  * was a second path to the same place, not a setting.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   deleteAccount,
@@ -41,7 +41,7 @@ import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { Modal } from '../../components/ui/Modal'
+import { Modal, ModalFooter } from '../../components/ui/Modal'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { SectionLabel } from '../../components/ui/Bits'
 // The six labelled-row primitives used to be defined at the bottom of this
@@ -54,6 +54,8 @@ import { cn } from '../../lib/cn'
 
 const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy'] as const
 type Section = (typeof SECTIONS)[number]
+const PANEL_ID = 'settings-panel'
+const tabId = (name: string) => `settings-tab-${name.replace(/\W+/g, '-').toLowerCase()}`
 
 /** Free-text fields debounce their PATCH instead of firing one per
  *  keystroke — typing "Amazon OA next week" used to be six or seven network
@@ -210,6 +212,11 @@ export function Settings() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteBusy, setDeleteBusy] = useState(false)
 
+  const closeDelete = () => {
+    setDeleteOpen(false)
+    setDeleteConfirmText('')
+  }
+
   const doDeleteAccount = async () => {
     setDeleteBusy(true)
     try {
@@ -241,15 +248,22 @@ export function Settings() {
   const email = user?.email ?? ''
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <nav className="hidden w-[180px] shrink-0 flex-col gap-1 border-r border-line bg-surface p-3 sm:flex">
-        <h1 className="mb-2 font-display text-[15px] font-semibold text-ink">Settings</h1>
+    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      {/* Desktop: a left rail. It appears at `lg`, not `sm` — beside the app's
+          own 264px sidebar a tablet has no room for a third column. */}
+      <nav
+        aria-label="Settings sections"
+        className="hidden w-[208px] shrink-0 flex-col gap-1 border-r border-line bg-surface p-3 lg:flex"
+      >
+        <h1 className="mb-2 px-2.5 pt-1 font-display text-[18px] font-semibold text-ink">Settings</h1>
         {SECTIONS.map((name) => (
           <button
             key={name}
+            type="button"
             onClick={() => setActive(name)}
+            aria-current={active === name ? 'page' : undefined}
             className={cn(
-              'rounded-[9px] px-2.5 py-2 text-left text-[13px] transition-colors cursor-pointer',
+              'min-h-10 rounded-[10px] px-3 py-2 text-left text-[14px] transition-colors cursor-pointer',
               active === name
                 ? 'bg-brand-soft font-bold text-brand-deep'
                 : 'text-ink-3 hover:bg-line-soft hover:text-ink',
@@ -260,10 +274,22 @@ export function Settings() {
         ))}
       </nav>
 
+      {/* Below `lg`: the same sections as a pinned, scrollable tab strip. It
+          sits outside the scrolling pane, so it stays put while the page moves. */}
+      <div className="shrink-0 border-b border-line bg-surface lg:hidden">
+        <h1 className="px-4 pt-3 font-display text-[18px] font-semibold text-ink sm:px-6">Settings</h1>
+        <SectionTabs active={active} onSelect={setActive} />
+      </div>
+
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-7">
+        <div
+          role="tabpanel"
+          id={PANEL_ID}
+          aria-label={active}
+          className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-7"
+        >
           {error && (
-            <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
               {error}
             </div>
           )}
@@ -274,39 +300,49 @@ export function Settings() {
             <>
               <SectionLabel>ACCOUNT</SectionLabel>
               <div className="rounded-xl border border-line bg-surface flex items-center gap-3 p-4">
-                <span className="flex h-10 w-10 items-center justify-center rounded-[13px] bg-coral-soft text-xs font-semibold text-coral-deep">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
                   {initials}
                 </span>
-                <div className="min-w-0 text-[13px]">
-                  <b className="truncate block">{displayName}</b>
-                  <div className="truncate text-xs text-muted">{email}</div>
+                <div className="min-w-0 text-[15px]">
+                  <b className="block truncate">{displayName}</b>
+                  <div className="truncate text-[13px] text-muted">{email}</div>
                 </div>
               </div>
 
-              <div className="rounded-xl border border-line bg-surface flex flex-col gap-3 p-4">
-                <div className="text-[13px] font-semibold text-ink">Change password</div>
+              <form
+                className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void changePassword()
+                }}
+              >
+                <div className="text-[15px] font-semibold text-ink">Change password</div>
                 <Input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="New password"
+                  autoComplete="new-password"
+                  aria-label="New password"
                   hint="At least 8 characters."
                 />
+                {/* Directly under the field it submits. Same label while busy
+                    so the button does not change width. */}
                 <Button
-                  onClick={changePassword}
+                  type="submit"
                   disabled={passwordBusy || newPassword.length === 0}
-                  className="self-start"
+                  className="w-full min-w-40 sm:w-auto sm:self-start"
                 >
                   {passwordBusy ? 'Updating…' : 'Update password'}
                 </Button>
-              </div>
+              </form>
             </>
           )}
 
           {prefs && active === 'Study' && (
             <>
               <SectionLabel>STUDY</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden">
                 <RowWithNumber
                   label="Daily goal"
                   suffix="cards"
@@ -326,7 +362,7 @@ export function Settings() {
                   last
                 />
               </div>
-              <p className="text-xs text-faint">
+              <p className="text-[13px] leading-relaxed text-faint">
                 Every control on this page does something the moment you change
                 it — there is nothing here waiting on a feature that hasn't
                 shipped.
@@ -337,13 +373,13 @@ export function Settings() {
           {student && active === 'How you learn' && (
             <>
               <SectionLabel>HOW YOU LEARN</SectionLabel>
-              <p className="text-xs text-faint">
+              <p className="text-[13px] leading-relaxed text-faint">
                 What the AI knows about how you study — the fields below feed
                 every chat reply and generated card, quiz, and note. Profile
                 shows how your quiz scores are actually trending; this page is
                 only what you've set and what's been learned from feedback.
               </p>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden">
                 <RowWithText
                   label="Learning style"
                   placeholder="e.g. visual, worked examples, analogies"
@@ -371,7 +407,7 @@ export function Settings() {
                   last
                 />
               </div>
-              <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
+              <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
                 <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
                 <textarea
                   value={student.teaching_preference ?? ''}
@@ -382,7 +418,7 @@ export function Settings() {
                   }
                   placeholder="Optional — free text the AI reads before every reply."
                   rows={3}
-                  className="w-full resize-none rounded-md border border-line bg-well px-2.5 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+                  className="w-full resize-none rounded-[10px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
                 />
                 {savingKey === 'teaching_preference' && (
                   <div className="mt-1.5">
@@ -400,17 +436,18 @@ export function Settings() {
                   word, not a percentage — "fairly sure" is honest about the
                   precision, where "0.62" implies a measurement. */}
               {learned.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
-                  <div className="mb-2 flex items-baseline gap-2">
+                <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+                  <div className="mb-3 flex items-center gap-2">
                     <span className="text-ink-3">What I’ve learned about how you like to learn</span>
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={resetLearned}
                       disabled={resetting}
-                      className="ml-auto shrink-0 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-coral-deep disabled:cursor-default disabled:opacity-50"
+                      className="ml-auto min-w-24 shrink-0"
                     >
-                      {resetting ? 'Resetting…' : 'Reset'}
-                    </button>
+                      Reset
+                    </Button>
                   </div>
                   <div className="flex flex-col gap-2">
                     {learned.map((p) => (
@@ -421,11 +458,11 @@ export function Settings() {
                           </span>
                           <span className="setcode shrink-0">{confidenceWord(p)}</span>
                         </div>
-                        <span className="text-[11.5px] text-faint">{p.because}</span>
+                        <span className="text-[12.5px] text-faint">{p.because}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2.5 text-[11.5px] text-faint">
+                  <p className="mt-3 text-[12.5px] text-faint">
                     Reset clears what I learned from your feedback. It doesn’t touch
                     anything you set yourself above.
                   </p>
@@ -439,7 +476,7 @@ export function Settings() {
                   your own words go. Conflating the two would show you a
                   sentence you never wrote in a box that implies you did. */}
               {student.observed_habits.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface p-3.5 text-[13px]">
+                <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
                   <div className="mb-2 text-ink-3">What I’ve noticed</div>
                   <ul className="flex flex-col gap-1.5 text-ink-2">
                     {student.observed_habits.map((h) => (
@@ -448,7 +485,7 @@ export function Settings() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-2.5 text-[11.5px] text-faint">
+                  <p className="mt-3 text-[12.5px] text-faint">
                     Observed from what you’ve done, not from anything you set.
                   </p>
                 </div>
@@ -459,7 +496,7 @@ export function Settings() {
           {prefs && active === 'AI & sources' && (
             <>
               <SectionLabel>AI &amp; SOURCES</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface overflow-hidden text-[13px]">
+              <div className="rounded-xl border border-line bg-surface overflow-hidden">
                 <RowWithToggle
                   label="Answer only from my docs"
                   hint="Refuses to guess when the sources don't cover a question."
@@ -484,23 +521,25 @@ export function Settings() {
           {prefs && active === 'Privacy' && (
             <>
               <SectionLabel>PRIVACY</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4 text-sm">
+              <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-[14px]">
                 <p className="text-muted">
                   Sign out on this device. Your data stays in your account.
                 </p>
-                <Button onClick={doSignOut} variant="danger" className="self-start">
+                {/* Signing out is reversible, so it is an ordinary secondary
+                    button — coral is reserved for things that cannot be undone. */}
+                <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto sm:self-start">
                   Sign out
                 </Button>
               </div>
 
-              <SectionLabel className="mt-1">DANGER ZONE</SectionLabel>
-              <div className="rounded-xl border border-line bg-surface flex flex-col gap-2 p-4 text-sm">
+              <SectionLabel className="mt-4">DANGER ZONE</SectionLabel>
+              <div className="flex flex-col gap-3 rounded-xl border border-coral/30 bg-surface p-4 text-[14px]">
                 <p className="text-muted">
                   Permanently delete your account and everything in it — every
                   subject, document, chat, note, deck, and quiz. This can't be
                   undone.
                 </p>
-                <Button onClick={() => setDeleteOpen(true)} variant="danger" className="self-start">
+                <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:self-start">
                   Delete account
                 </Button>
               </div>
@@ -511,15 +550,35 @@ export function Settings() {
 
       <Modal
         open={deleteOpen}
-        onClose={() => {
-          setDeleteOpen(false)
-          setDeleteConfirmText('')
-        }}
+        onClose={closeDelete}
         title="Delete your account?"
         width="sm"
+        footer={
+          <ModalFooter>
+            <Button variant="secondary" onClick={closeDelete} disabled={deleteBusy}>
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="delete-account-form"
+              disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
+              variant="danger"
+              className="min-w-40"
+            >
+              {deleteBusy ? 'Deleting…' : 'Delete my account'}
+            </Button>
+          </ModalFooter>
+        }
       >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-muted">
+        <form
+          id="delete-account-form"
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (deleteConfirmText.trim().toLowerCase() === 'delete') void doDeleteAccount()
+          }}
+        >
+          <p className="text-[14px] leading-relaxed text-muted">
             This permanently deletes your account and every subject, document,
             chat, note, deck, and quiz in it. There is no undo. Type{' '}
             <b className="text-ink">delete</b> to confirm.
@@ -528,28 +587,10 @@ export function Settings() {
             value={deleteConfirmText}
             onChange={(e) => setDeleteConfirmText(e.target.value)}
             placeholder="delete"
+            aria-label="Type delete to confirm"
             autoFocus
           />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setDeleteOpen(false)
-                setDeleteConfirmText('')
-              }}
-              disabled={deleteBusy}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={doDeleteAccount}
-              disabled={deleteBusy || deleteConfirmText.trim().toLowerCase() !== 'delete'}
-              variant="danger"
-            >
-              {deleteBusy ? 'Deleting…' : 'Delete my account'}
-            </Button>
-          </div>
-        </div>
+        </form>
       </Modal>
     </div>
   )
@@ -595,4 +636,106 @@ function confidenceWord(p: Preference): string {
   if (p.confidence >= 0.75) return 'confident'
   if (p.confidence >= 0.5) return 'fairly sure'
   return 'leaning that way'
+}
+
+/**
+ * The phone/tablet section switcher.
+ *
+ * A real tablist: one tab in the tab order at a time, arrow keys move between
+ * them, and the active chip is scrolled into view so it is never hiding off the
+ * edge. Edge fades appear only on the side that still has more chips, which is
+ * what tells a thumb "swipe me" — a strip that just stops at the screen edge
+ * reads as five items of which the rest do not exist.
+ */
+function SectionTabs({ active, onSelect }: { active: Section; onSelect: (s: Section) => void }) {
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ start: false, end: true })
+
+  const measure = useCallback(() => {
+    const el = stripRef.current
+    if (!el) return
+    setEdges({
+      start: el.scrollLeft > 4,
+      end: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    })
+  }, [])
+
+  // Keep the current chip on screen whenever the section changes, however it
+  // changed (tap, arrow key, or the initial render).
+  useEffect(() => {
+    const chip = stripRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
+    chip?.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+    measure()
+  }, [active, measure])
+
+  useEffect(() => {
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [measure])
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const i = SECTIONS.indexOf(active)
+    let next = i
+    if (e.key === 'ArrowRight') next = (i + 1) % SECTIONS.length
+    else if (e.key === 'ArrowLeft') next = (i - 1 + SECTIONS.length) % SECTIONS.length
+    else if (e.key === 'Home') next = 0
+    else if (e.key === 'End') next = SECTIONS.length - 1
+    else return
+    e.preventDefault()
+    onSelect(SECTIONS[next])
+    stripRef.current
+      ?.querySelector<HTMLElement>(`#${tabId(SECTIONS[next])}`)
+      ?.focus()
+  }
+
+  return (
+    <div className="relative">
+      <div
+        ref={stripRef}
+        role="tablist"
+        aria-label="Settings sections"
+        onScroll={measure}
+        onKeyDown={onKeyDown}
+        className="flex snap-x snap-proximity gap-2 overflow-x-auto scroll-px-4 px-4 py-2.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
+      >
+        {SECTIONS.map((name) => {
+          const selected = active === name
+          return (
+            <button
+              key={name}
+              id={tabId(name)}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-controls={PANEL_ID}
+              tabIndex={selected ? 0 : -1}
+              onClick={() => onSelect(name)}
+              className={cn(
+                'min-h-11 shrink-0 snap-start whitespace-nowrap rounded-full border px-4 text-[14px] transition-colors cursor-pointer',
+                selected
+                  ? 'border-brand/40 bg-brand-soft font-bold text-brand-deep'
+                  : 'border-line bg-raised font-medium text-ink-3 hover:border-line-dash hover:text-ink',
+              )}
+            >
+              {name}
+            </button>
+          )
+        })}
+      </div>
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface to-transparent t-move duration-150',
+          edges.start ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          'pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-surface to-transparent t-move duration-150',
+          edges.end ? 'opacity-100' : 'opacity-0',
+        )}
+      />
+    </div>
+  )
 }

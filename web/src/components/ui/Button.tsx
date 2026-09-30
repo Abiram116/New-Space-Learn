@@ -60,11 +60,15 @@ const variants: Record<Variant, string> = {
   ].join(' '),
 }
 
+/* One height floor for the whole app: nothing you press is shorter than 40px,
+   and on a coarse pointer (a finger) the compact sizes grow to 44px. `sm` and
+   `md` share a height on purpose — they differ in horizontal padding and type,
+   so a toolbar mixing them still sits on one baseline. */
 const sizes: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-[12px] rounded-[9px]',
-  md: 'px-4 py-2.5 text-[13px] rounded-[11px]',
-  lg: 'px-5 py-3 text-[14px] rounded-[13px]',
-  xl: 'px-6 py-3.5 text-[15px] rounded-[14px]',
+  sm: 'min-h-10 px-3.5 py-1.5 text-[13px] rounded-[10px] pointer-coarse:min-h-11',
+  md: 'min-h-10 px-4 py-2 text-[14px] rounded-[11px] pointer-coarse:min-h-11',
+  lg: 'min-h-11 px-5 py-2.5 text-[15px] rounded-[13px]',
+  xl: 'min-h-12 px-6 py-3 text-[16px] rounded-[14px]',
 }
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -76,7 +80,7 @@ export function Button({ variant = 'primary', size = 'md', className, ...props }
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 font-bold t-control duration-100 cursor-pointer',
+        'inline-flex items-center justify-center gap-2 font-bold t-control duration-100 cursor-pointer',
         'disabled:opacity-40 disabled:cursor-default disabled:pointer-events-none',
         variants[variant],
         sizes[size],

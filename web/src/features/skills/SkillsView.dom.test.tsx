@@ -223,7 +223,7 @@ describe('the custom icon option', () => {
     const user = userEvent.setup()
     renderView()
 
-    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
     await user.click(screen.getByRole('button', { name: 'Custom icon' }))
 
     await user.click(screen.getByRole('button', { name: 'jade tone' }))
@@ -247,12 +247,12 @@ describe('the custom icon option', () => {
     const user = userEvent.setup()
     renderView()
 
-    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
     await user.click(screen.getByRole('button', { name: 'Custom icon' }))
     expect(screen.getByRole('button', { name: 'flame' })).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
-    await user.click(screen.getByRole('button', { name: '+ New skill' }))
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
 
     expect(screen.queryByRole('button', { name: 'flame' })).not.toBeInTheDocument()
   })

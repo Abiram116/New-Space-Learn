@@ -114,7 +114,7 @@ export function Select({
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-line bg-canvas px-2.5 py-1.5 text-[12.5px] text-ink-2 outline-none transition-colors cursor-pointer hover:border-line-dash focus:border-brand disabled:cursor-default disabled:opacity-50 disabled:hover:border-line"
+        className="flex w-full items-center justify-between gap-2 min-h-10 rounded-[10px] border border-line bg-canvas px-3 py-1.5 text-[13.5px] text-ink-2 outline-none transition-colors cursor-pointer hover:border-line-dash focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-default disabled:opacity-50 disabled:hover:border-line"
       >
         <span className="truncate">{selected?.label ?? ariaLabel}</span>
         <Icon
@@ -149,7 +149,7 @@ export function Select({
                 setOpen(false)
               }}
               className={cn(
-                'flex w-full items-center break-words rounded-[8px] px-2.5 py-1.5 text-left text-[12.5px] transition-colors cursor-pointer',
+                'flex w-full items-center break-words rounded-[8px] min-h-9 px-3 py-1.5 text-left text-[13.5px] transition-colors cursor-pointer',
                 o.value === value
                   ? 'bg-brand-soft font-semibold text-brand-deep'
                   : 'text-ink-2 hover:bg-line-soft',

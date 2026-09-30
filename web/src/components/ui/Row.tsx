@@ -24,9 +24,14 @@ export function RowShell({
   hint,
   children,
   last,
+  saving,
 }: {
   label: string
   hint?: string
+  /** Shows the autosave tell beside the LABEL, not beside the control — the
+   *  control is right-aligned, so anything appended to it shoves it sideways
+   *  every time a save starts. The label column has slack to absorb it. */
+  saving?: boolean
   children: ReactNode
   /** Drops the bottom rule. The last row's rule would double the container's
    *  own border and read as a heavier line than the ones above it. */
@@ -35,15 +40,18 @@ export function RowShell({
   return (
     <div
       className={cn(
-        'flex items-center gap-2.5 px-3.5 py-3',
+        'flex min-h-14 items-center gap-3 px-4 py-2.5 text-[14px]',
         !last && 'border-b border-line-soft',
       )}
     >
-      <div className="min-w-0">
-        <div>{label}</div>
-        {hint && <div className="text-[11px] text-faint">{hint}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span>{label}</span>
+          {saving && <SavingDot />}
+        </div>
+        {hint && <div className="mt-0.5 text-[12.5px] leading-snug text-faint">{hint}</div>}
       </div>
-      <div className="ml-auto flex items-center gap-2">{children}</div>
+      <div className="ml-auto flex shrink-0 items-center gap-2">{children}</div>
     </div>
   )
 }
@@ -55,7 +63,7 @@ export function RowShell({
  */
 export function SavingDot() {
   return (
-    <span className="flex items-center gap-1 text-[10px] text-sun-deep">
+    <span className="flex items-center gap-1 text-[12px] text-sun-deep">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sun" />
       saving…
     </span>
@@ -102,7 +110,7 @@ export function RowWithNumber({
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last}>
+    <RowShell label={label} last={last} saving={saving}>
       <input
         type="number"
         value={value}
@@ -114,10 +122,9 @@ export function RowWithNumber({
           // persisted and come back as a broken number input.
           if (Number.isFinite(n)) onChange(n)
         }}
-        className="w-16 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
+        className="h-10 w-20 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
       />
-      {suffix && <span className="text-xs text-muted">{suffix}</span>}
-      {saving && <SavingDot />}
+      {suffix && <span className="text-[13px] text-muted">{suffix}</span>}
     </RowShell>
   )
 }
@@ -136,14 +143,13 @@ export function RowWithTime({
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last} hint="Off when empty.">
+    <RowShell label={label} last={last} saving={saving} hint="Off when empty.">
       <input
         type="time"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value || null)}
-        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
+        className="h-10 rounded-[10px] border border-line bg-well px-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
       />
-      {saving && <SavingDot />}
     </RowShell>
   )
 }
@@ -164,15 +170,14 @@ export function RowWithText({
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last}>
+    <RowShell label={label} last={last} saving={saving}>
       <input
         type="text"
         value={value ?? ''}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value || null)}
-        className="w-52 rounded-md border border-line bg-well px-2 py-1 text-right text-sm text-ink outline-none transition-colors focus:border-brand"
+        className="h-10 w-40 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink sm:w-56 outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
       />
-      {saving && <SavingDot />}
     </RowShell>
   )
 }
@@ -193,11 +198,11 @@ export function RowWithSelect<T extends string>({
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last}>
+    <RowShell label={label} last={last} saving={saving}>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border border-line bg-well px-2 py-1 text-sm text-ink outline-none transition-colors focus:border-brand"
+        className="h-10 rounded-[10px] border border-line bg-well px-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -205,7 +210,6 @@ export function RowWithSelect<T extends string>({
           </option>
         ))}
       </select>
-      {saving && <SavingDot />}
     </RowShell>
   )
 }

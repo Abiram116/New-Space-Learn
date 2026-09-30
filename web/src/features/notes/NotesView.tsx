@@ -207,7 +207,7 @@ function Inner({
         title="Notes"
         tabs={false}
         actions={
-          <div className="flex shrink-0 gap-1.5">
+          <div className="flex shrink-0 gap-2">
             {/* "Write with AI" (the fuller label) lives in the empty state
                 below, where there's room. Here it's next to "New" in a
                 header shared with the tab strip, so it stays compact. */}
@@ -218,10 +218,10 @@ function Inner({
               aria-label="Write a note with AI"
               title="Write a note with AI"
             >
-              <Icon name="sparkle" size={13} /> AI note
+              <Icon name="sparkle" size={14} /> AI note
             </Button>
             <Button size="sm" onClick={newBlank}>
-              <Icon name="plus" size={13} /> New
+              <Icon name="plus" size={14} /> New
             </Button>
           </div>
         }
@@ -244,14 +244,14 @@ function Inner({
             <label className="relative flex items-center">
               <Icon
                 name="search"
-                size={13}
-                className="pointer-events-none absolute left-2.5 text-faint"
+                size={15}
+                className="pointer-events-none absolute left-3 text-faint"
               />
               <input
                 placeholder="Search notes"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-[10px] border border-line bg-canvas py-1.5 pl-8 pr-2.5 text-[12.5px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
+                className="h-10 w-full rounded-[10px] border border-line bg-canvas pl-9 pr-3 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
               />
             </label>
           )}
@@ -275,7 +275,7 @@ function Inner({
                         : 'Notes you have written or edited — some may also be AI-written'
                   }
                   className={cn(
-                    'flex-1 rounded-[8px] px-2 py-1 text-[11.5px] transition-colors cursor-pointer',
+                    'min-h-10 flex-1 rounded-[10px] px-2 py-1 text-[13px] transition-colors cursor-pointer',
                     filter === f
                       ? 'bg-brand-soft font-bold text-brand-deep'
                       : 'text-muted hover:bg-line-soft hover:text-ink-3',
@@ -311,7 +311,7 @@ function Inner({
             </div>
           )}
           {error && (
-            <div className="flex flex-col items-start gap-2 p-4 text-xs text-coral-deep">
+            <div className="flex flex-col items-start gap-2 p-4 text-[12.5px] text-coral-deep">
               <p>{error}</p>
               <Button size="sm" variant="secondary" onClick={() => void refresh()}>
                 Retry
@@ -354,7 +354,7 @@ function Inner({
                   key={item.id}
                   onClick={() => select(item.id)}
                   className={cn(
-                    'relative block w-full px-4 py-3 text-left transition-colors cursor-pointer',
+                    'relative block w-full px-4 py-3.5 text-left transition-colors cursor-pointer',
                     active ? 'bg-surface' : 'hover:bg-surface/60',
                   )}
                 >
@@ -370,14 +370,14 @@ function Inner({
                   />
                   <div
                     className={cn(
-                      'truncate text-[13px]',
+                      'truncate text-[14.5px]',
                       active ? 'font-bold text-ink' : 'font-semibold text-ink-2',
                     )}
                   >
                     {item.title || 'Untitled note'}
                   </div>
                   {preview && (
-                    <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-muted">
+                    <div className="mt-1 line-clamp-2 text-[13px] leading-snug text-muted">
                       {preview}
                     </div>
                   )}
@@ -385,7 +385,7 @@ function Inner({
                       bar rather than a full-colour badge — a cue, not a
                       second thing shouting for attention next to the title. */}
                   {(item.subject_name || item.subspace_name) && (
-                    <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] text-faint">
+                    <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-faint">
                       <span
                         aria-hidden
                         className={cn(

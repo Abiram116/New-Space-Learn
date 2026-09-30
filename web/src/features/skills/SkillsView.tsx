@@ -29,7 +29,7 @@ import { Card, DashedCard } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
-import { Modal } from '../../components/ui/Modal'
+import { Modal, ModalFooter } from '../../components/ui/Modal'
 import { SectionLabel, Toggle } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import {
@@ -317,7 +317,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         placeholder="Socratic Tutor"
       />
 
-      <div className="flex flex-col gap-1.5 text-xs">
+      <div className="flex flex-col gap-1.5 text-[12.5px]">
         <span className="font-semibold text-muted">Icon &amp; colour</span>
         <div className="flex gap-1.5">
           {SKILL_ICON_CHOICES.map((choice) => {
@@ -329,7 +329,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                 title={choice.label}
                 aria-label={choice.label}
                 className={cn(
-                  'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
+                  'grid h-10 w-10 place-items-center rounded-[10px] border cursor-pointer transition-colors',
                   toneSoft[choice.tone],
                   toneText[choice.tone],
                   active ? 'border-brand' : 'border-transparent hover:border-line-dash',
@@ -349,7 +349,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             aria-label="Custom icon"
             aria-expanded={customIconOpen}
             className={cn(
-              'grid h-9 w-9 place-items-center rounded-[10px] border cursor-pointer transition-colors',
+              'grid h-10 w-10 place-items-center rounded-[10px] border cursor-pointer transition-colors',
               customIconOpen
                 ? 'border-brand bg-line-soft text-ink'
                 : 'border-dashed border-line-dash text-faint hover:border-brand/50 hover:text-brand-deep',
@@ -370,7 +370,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                   aria-label={`${t} tone`}
                   aria-pressed={form.tone === t}
                   className={cn(
-                    'h-6 w-6 rounded-full border-2 cursor-pointer transition-transform',
+                    'h-8 w-8 rounded-full border-2 cursor-pointer transition-transform',
                     toneDot[t],
                     form.tone === t ? 'border-ink scale-110' : 'border-transparent hover:scale-105',
                   )}
@@ -386,7 +386,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                   title={iconName}
                   aria-label={iconName}
                   className={cn(
-                    'grid h-8 w-8 place-items-center rounded-md border cursor-pointer transition-colors',
+                    'grid h-9 w-9 place-items-center rounded-md border cursor-pointer transition-colors',
                     toneSoft[form.tone ?? 'brand'],
                     toneText[form.tone ?? 'brand'],
                     form.icon === iconName
@@ -411,7 +411,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         hint="Written in second person. Kept as a system prompt when this skill is active."
       />
 
-      <div className="flex flex-col gap-1.5 text-xs">
+      <div className="flex flex-col gap-1.5 text-[12.5px]">
         <span className="font-semibold text-muted">Remembers</span>
         {/* The toggle above already controls WHERE this skill applies — every
             space it's switched on in, forever, until switched off. This
@@ -420,7 +420,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             saying outright, because "Everything" sitting one row under a
             per-space activation toggle reads like "every space" if you
             don't stop to check — it isn't; it's still this topic only. */}
-        <p className="text-[11px] leading-snug text-faint">
+        <p className="text-[12.5px] leading-snug text-faint">
           How much of this topic's chat history it can see when answering —
           not where it's active. It stays scoped to this space either way.
         </p>
@@ -431,7 +431,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               title={opt.hint}
               onClick={() => setForm({ ...form, memory_scope: opt.value })}
               className={cn(
-                'flex items-center gap-1 rounded-full px-2.5 py-1.5 cursor-pointer',
+                'flex min-h-10 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13.5px] cursor-pointer',
                 form.memory_scope === opt.value
                   ? 'bg-line-soft text-ink'
                   : 'border-[1.5px] border-line bg-canvas text-faint',
@@ -455,29 +455,48 @@ function Inner({ subspaceId }: { subspaceId: string }) {
         className="resize-none overflow-hidden"
       />
 
-      <div className="mt-auto flex gap-2 pt-3">
-        <Button onClick={save} disabled={busy} className="flex-1">
-          {busy ? 'Saving…' : editingExisting ? 'Save changes' : 'Create skill'}
-        </Button>
-        {(editingExisting || !isWide) && (
-          <Button variant="secondary" onClick={closeEditor}>
-            Cancel
-          </Button>
-        )}
-      </div>
     </>
+  )
+
+  /* Cancel left, primary right; the one destructive action (deleting an
+     existing skill) is pinned to the far edge, away from the primary. */
+  const editorFooter = (
+    <ModalFooter
+      start={
+        editingExisting ? (
+          <Button
+            variant="ghost"
+            onClick={() => setConfirmDelete(editingExisting.id)}
+            className="text-coral-deep hover:bg-coral-soft hover:text-coral-deep"
+          >
+            Delete
+          </Button>
+        ) : undefined
+      }
+    >
+      <Button variant="secondary" onClick={closeEditor} disabled={busy}>
+        Cancel
+      </Button>
+      <Button onClick={save} disabled={busy} aria-busy={busy} className="min-w-36">
+        {busy ? 'Saving…' : editingExisting ? 'Save changes' : 'Create skill'}
+      </Button>
+    </ModalFooter>
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title="Skills"
-        actions={<Button onClick={() => openEditor(null)}>+ New skill</Button>}
+        actions={
+          <Button onClick={() => openEditor(null)}>
+            <Icon name="plus" size={15} /> New skill
+          </Button>
+        }
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
-          <p className="text-[13px] text-muted">
+          <p className="text-[14px] leading-relaxed text-muted">
             Skills are reusable instructions the AI applies inside this space —
             think of them as tutor personas with their own rules and tools.
           </p>
@@ -539,7 +558,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         <button
                           onClick={() => openEditor(skill.id)}
                           className={cn(
-                            'flex-1 text-left text-[15px] font-bold cursor-pointer',
+                            'min-h-10 min-w-0 flex-1 truncate text-left text-[15px] font-bold cursor-pointer',
                             selectedId === skill.id && 'text-brand',
                           )}
                         >
@@ -552,7 +571,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         />
                       </div>
                       {skill.description && (
-                        <p className="text-xs text-muted line-clamp-2">
+                        <p className="text-[13px] text-muted line-clamp-2">
                           {skill.description}
                         </p>
                       )}
@@ -562,13 +581,13 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           between it and the description above. mt-auto turns
                           that into a footer that actually sits at the
                           card's bottom edge, however tall the card gets. */}
-                      <div className="mt-auto flex items-center gap-3 text-[11px] text-faint">
+                      <div className="mt-auto flex items-center gap-3 text-[12.5px] text-faint">
                         <span>
                           Remembers {MEMORY_SCOPE_OPTIONS.find((o) => o.value === skill.memory_scope)?.label.toLowerCase() ?? 'this session'}
                         </span>
                         <button
                           onClick={() => setConfirmDelete(skill.id)}
-                          className="ml-auto opacity-0 group-hover:opacity-100 hover:text-coral-deep transition-opacity cursor-pointer"
+                          className="-my-2 ml-auto min-h-10 rounded-md px-2 text-muted transition-[opacity,color] cursor-pointer hover:text-coral-deep pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
                         >
                           Remove
                         </button>
@@ -601,7 +620,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               ))}
             </div>
           ) : library.length === 0 ? (
-            <p className="text-xs text-muted">The library is empty right now.</p>
+            <p className="text-[12.5px] text-muted">The library is empty right now.</p>
           ) : (
             // Ten cards in one undifferentiated row read as a wall, not a
             // menu — grouped by what each skill is actually for, "which one
@@ -613,7 +632,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               {libraryShelves.map(({ category, skills }) => (
                 <div key={category ?? '__other'} className="flex flex-col gap-1.5">
                   {category && <span className="setcode">{category}</span>}
-                  <div className="flex flex-wrap gap-2.5 text-xs">
+                  <div className="flex flex-wrap gap-2.5 text-[12.5px]">
                     {skills.map((lib) => {
                       const owned = ownNames.has(lib.name)
                       return (
@@ -628,10 +647,10 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                           >
                             <Icon name={resolveSkillIcon(lib.icon)} size={14} />
                           </span>
-                          <b>{lib.name}</b>
+                          <b className="text-[14px]">{lib.name}</b>
                         </div>
                         {lib.description && (
-                          <div className="mt-1 text-muted">{lib.description}</div>
+                          <div className="mt-1 text-[13px] leading-snug text-muted">{lib.description}</div>
                         )}
                         {owned ? (
                           // Already cloned — a second "Add" produced a second,
@@ -645,7 +664,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         ) : (
                           <button
                             onClick={() => cloneLibrary(lib)}
-                            className="mt-2 font-semibold text-brand cursor-pointer"
+                            className="mt-2 -mb-1.5 min-h-10 rounded-md pr-3 text-[13.5px] font-semibold text-brand cursor-pointer hover:text-brand-300"
                           >
                             Add →
                           </button>
@@ -666,11 +685,12 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             or opening an existing one to edit. A form sitting open with
             nothing to fill in yet read as unfinished, not helpful. */}
         {editorOpen && (isWide ? (
-          <aside className="flex w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l-[1.5px] border-line bg-surface p-5">
-            <h2 className="font-display text-[15px] font-semibold">
+          <aside className="flex w-[360px] shrink-0 flex-col border-l-[1.5px] border-line bg-surface">
+            <h2 className="shrink-0 border-b border-line px-5 py-3.5 font-display text-[17px] font-semibold">
               {editingExisting ? 'Edit skill' : 'New skill'}
             </h2>
-            {editorBody}
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-5">{editorBody}</div>
+            <div className="shrink-0 border-t border-line px-5 py-3.5">{editorFooter}</div>
           </aside>
         ) : (
           <Modal
@@ -678,10 +698,9 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             onClose={closeEditor}
             title={editingExisting ? 'Edit skill' : 'New skill'}
             width="lg"
+            footer={editorFooter}
           >
-            <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto">
-              {editorBody}
-            </div>
+            <div className="flex flex-col gap-3">{editorBody}</div>
           </Modal>
         ))}
       </div>

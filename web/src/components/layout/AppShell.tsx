@@ -11,7 +11,7 @@ import { OfflineBanner } from './OfflineBanner'
 /**
  * Two layouts, one tree.
  *
- * ≥ md: the sidebar is a persistent 238px rail, as designed.
+ * ≥ md: the sidebar is a persistent 264px rail, as designed.
  * < md: the rail would eat two-thirds of a phone screen, so it moves into an
  * off-canvas drawer opened from a compact top bar. Same component either way —
  * only the container changes.
@@ -69,7 +69,7 @@ export function AppShell() {
           <div
             className={cn(
               'hidden h-full min-h-0 shrink-0 border-r border-line transition-[width] duration-200 ease-out md:block',
-              collapsed ? 'w-[60px]' : 'w-[238px]',
+              collapsed ? 'w-[68px]' : 'w-[264px]',
             )}
           >
             <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />
@@ -92,7 +92,7 @@ export function AppShell() {
               }`}
             />
             <div
-              className={`absolute inset-y-0 left-0 w-[270px] max-w-[85vw] overflow-hidden rounded-r-2xl border-r border-line shadow-[0_0_60px_rgba(0,0,0,0.7)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
+              className={`absolute inset-y-0 left-0 w-[300px] max-w-[88vw] overflow-hidden rounded-r-2xl border-r border-line shadow-[0_0_60px_rgba(0,0,0,0.7)] transition-transform duration-200 ease-out motion-reduce:transition-none ${
                 navOpen ? 'translate-x-0' : '-translate-x-full'
               }`}
             >

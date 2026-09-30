@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { LIMITS } from '../../lib/limits'
 import { isOpenIn, toggleIn } from './treeState'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
@@ -140,11 +141,11 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 text-[14.5px]">
+    <div className="flex min-w-0 flex-col gap-1 text-[15px]">
       {spaces.map((space) => {
         const open = isOpen(space.id)
         return (
-          <div key={space.id} className="group/space flex min-w-0 flex-col gap-0.5">
+          <div key={space.id} className="group/space flex min-w-0 flex-col gap-1">
             <div className="group/row flex min-w-0 items-center">
               {renamingSpace === space.id ? (
                 <input
@@ -158,7 +159,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   }}
                   maxLength={LIMITS.spaceName}
                   aria-label={`Rename ${space.name}`}
-                  className="min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-2.5 py-1.5 text-[14px] font-semibold text-ink outline-none"
+                  className="min-h-10 min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-3 text-[15px] font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                 />
               ) : (
               <button
@@ -171,7 +172,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   // straight past the rail's `overflow-x-hidden` edge. That
                   // is why the menu appeared on "dfcs" and not on
                   // "Reinforcment Learning": the bug was name length.
-                  'flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2.5 py-1.5 text-left transition-colors cursor-pointer',
+                  'flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2.5 py-2 text-left transition-colors cursor-pointer pointer-coarse:min-h-11',
                   space.id === spaceId
                     ? 'bg-brand-tint font-bold text-ink'
                     : cn('font-semibold hover:bg-line-soft', toneText[space.tone]),
@@ -183,7 +184,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     open ? 'rotate-90 text-brand' : 'text-faint',
                   )}
                 >
-                  <Icon name="chevronRight" size={13} />
+                  <Icon name="chevronRight" size={14} />
                 </span>
                 <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
                 <span className="truncate">{space.name}</span>
@@ -237,7 +238,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
             </div>
 
             {open && (
-              <div className="ml-4 flex min-w-0 flex-col gap-0.5 border-l border-line pl-2.5">
+              <div className="ml-[18px] flex min-w-0 flex-col gap-1 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
                   <div key={sub.id} className="group/row flex min-w-0 items-center">
                     {renamingSubspace === sub.id ? (
@@ -252,7 +253,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         }}
                         maxLength={LIMITS.subspaceName}
                   aria-label={`Rename ${sub.name}`}
-                        className="min-w-0 flex-1 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
+                        className="min-h-10 min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-3 text-[14px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                       />
                     ) : (
                       <NavLink
@@ -260,14 +261,14 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         onClick={onNavigate}
                         className={({ isActive }) =>
                           cn(
-                            'min-w-0 flex-1 truncate rounded-[9px] px-2.5 py-1.5 transition-colors',
+                            'flex min-h-10 min-w-0 flex-1 items-center rounded-[10px] px-2.5 py-2 text-[14.5px] transition-colors pointer-coarse:min-h-11',
                             isActive
                               ? 'bg-brand-soft font-bold text-brand-deep'
                               : 'font-medium text-ink-2 hover:bg-line-soft hover:text-ink',
                           )
                         }
                       >
-                        {sub.name}
+                        <span className="truncate">{sub.name}</span>
                       </NavLink>
                     )}
                     {/* The same `⋯` as the subject row above, for the same
@@ -313,7 +314,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     }}
                     maxLength={LIMITS.subspaceName}
                     placeholder="New topic"
-                    className="min-w-0 rounded-[9px] border border-brand/50 bg-well px-2.5 py-1 text-[13px] text-ink outline-none"
+                    className="min-h-10 min-w-0 rounded-[10px] border border-brand/50 bg-well px-3 text-[14px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
                   />
                 ) : (
                   <button
@@ -321,9 +322,9 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       setAddingIn(space.id)
                       setNewTopic('')
                     }}
-                    className="flex items-center gap-1.5 rounded-[9px] px-2.5 py-1.5 text-left text-faint transition-colors hover:text-brand cursor-pointer"
+                    className="flex min-h-10 items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-[14px] text-muted transition-colors hover:bg-line-soft hover:text-brand cursor-pointer pointer-coarse:min-h-11"
                   >
-                    <Icon name="plus" size={13} /> add topic
+                    <Icon name="plus" size={14} /> Add topic
                   </button>
                 )}
               </div>
@@ -382,85 +383,157 @@ export type RowAction = {
  */
 function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  // Where the menu sits, in viewport coordinates. It is rendered through a
+  // portal with `position: fixed` because the rail's list clips overflow —
+  // an absolutely-positioned menu on the last few rows was cut off or forced
+  // the list to scroll.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const close = (returnFocus: boolean) => {
+    setOpen(false)
+    if (returnFocus) triggerRef.current?.focus()
+  }
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      const t = e.target as Node
+      if (menuRef.current?.contains(t) || triggerRef.current?.contains(t)) return
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') close(true)
     }
+    const dismiss = () => setOpen(false)
     // `mousedown`, not `click`: a click that lands on another row would
     // otherwise activate that row *and* leave this menu open behind it.
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
+    window.addEventListener('resize', dismiss)
+    window.addEventListener('scroll', dismiss, true)
     return () => {
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', dismiss)
+      window.removeEventListener('scroll', dismiss, true)
     }
   }, [open])
 
+  // Focus lands on the first item when the menu opens, so the keyboard flow is
+  // trigger -> Enter -> arrows -> Enter, and Escape hands focus back.
+  useEffect(() => {
+    if (open && pos) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+  }, [open, pos])
+
+  const toggle = () => {
+    if (open) return close(false)
+    const rect = triggerRef.current?.getBoundingClientRect()
+    if (rect) {
+      const menuHeight = items.length * 44 + 10
+      const below = rect.bottom + 4
+      // Flip upward when there is no room below (last rows in a short window).
+      const top = below + menuHeight > window.innerHeight - 8 ? Math.max(8, rect.top - 4 - menuHeight) : below
+      setPos({ top, right: Math.max(8, window.innerWidth - rect.right) })
+    }
+    setOpen(true)
+  }
+
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    const els = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])
+    const at = els.indexOf(document.activeElement as HTMLElement)
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      els[(at + 1) % els.length]?.focus()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      els[(at - 1 + els.length) % els.length]?.focus()
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      els[0]?.focus()
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      els[els.length - 1]?.focus()
+    } else if (e.key === 'Tab') {
+      // A menu is not a place to tab through; leaving it closes it.
+      setOpen(false)
+    }
+  }
+
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div className="shrink-0">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Actions for ${name}`}
         title={`Actions for ${name}`}
         className={cn(
-          'grid h-7 w-7 place-items-center rounded-md cursor-pointer',
+          // 40px square on every device — the ⋯ is the only way to rename or
+          // delete, so it is never a small target.
+          'grid h-10 w-10 place-items-center rounded-[10px] cursor-pointer pointer-coarse:h-11 pointer-coarse:w-11',
           'transition-[opacity,background-color,color] duration-150',
           open ? 'bg-line-soft text-ink' : 'text-muted hover:bg-line-soft hover:text-ink',
           /* Quiet until you reach for it — but only where "reaching for it"
-             is a thing that exists. A plain `opacity-0` is what made this
-             control unreachable on a phone twice: no hover, no button, no way
-             to rename or delete anything. `@media (hover: hover)` scopes the
-             hiding to pointer devices; a touch screen keeps it visible. Focus
-             and the open state both override, so keyboard users are fine too.
-             `group-hover/row` is the shared hook both row types set. */
-          '[@media(hover:hover)]:opacity-0',
-          '[@media(hover:hover)]:group-hover/row:opacity-100',
-          '[@media(hover:hover)]:focus-visible:opacity-100',
-          open && '[@media(hover:hover)]:opacity-100',
+             exists. `pointer-fine` scopes the hiding to mouse/trackpad; a
+             touch screen (coarse pointer) always shows it, which is what
+             makes rename/delete reachable on a phone. Hover on the row,
+             keyboard focus anywhere inside it, or an open menu all reveal it
+             on desktop. `group/row` is the shared hook both row types set. */
+          'pointer-fine:opacity-0',
+          'pointer-fine:group-hover/row:opacity-100',
+          'pointer-fine:group-has-[:focus-visible]/row:opacity-100',
+          'pointer-fine:focus-visible:opacity-100',
+          open && 'pointer-fine:opacity-100',
         )}
       >
-        <Icon name="more" size={15} />
+        <Icon name="more" size={18} />
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          // Same entrance as every other popover in the app (Select's
-          // dropdown, Modal, the note editor's floating panels) — one family
-          // for "a small panel now exists here" rather than a silent pop.
-          className="absolute right-0 top-8 z-50 w-40 rounded-[10px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
-        >
-          {items.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false)
-                item.onSelect()
-              }}
-              className={cn(
-                'flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-2 text-left text-[13px] transition-colors cursor-pointer',
-                item.destructive
-                  ? 'text-coral-deep hover:bg-coral-soft'
-                  : 'text-ink-2 hover:bg-line-soft hover:text-ink',
-              )}
-            >
-              <Icon name={item.icon} size={13} filled={item.iconFilled} />
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`Actions for ${name}`}
+            onKeyDown={onMenuKey}
+            style={{ top: pos.top, right: pos.right }}
+            // Same entrance as every other popover in the app (Select's
+            // dropdown, Modal, the note editor's floating panels) — one family
+            // for "a small panel now exists here" rather than a silent pop.
+            className="fixed z-50 w-52 rounded-[12px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
+          >
+            {items.map((item, i) => (
+              <div key={item.label}>
+                {/* Destructive item sits behind a rule: it is never adjacent to
+                    the everyday actions above it. */}
+                {item.destructive && i > 0 && <div className="mx-1 my-1 border-t border-line" />}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    close(false)
+                    item.onSelect()
+                  }}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[14px] transition-colors cursor-pointer md:min-h-10 pointer-coarse:min-h-11',
+                    item.destructive
+                      ? 'text-coral-deep hover:bg-coral-soft focus-visible:bg-coral-soft'
+                      : 'text-ink-2 hover:bg-line-soft hover:text-ink focus-visible:bg-line-soft',
+                  )}
+                >
+                  <Icon name={item.icon} size={16} filled={item.iconFilled} />
+                  {item.label}
+                </button>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

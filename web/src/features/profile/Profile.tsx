@@ -169,9 +169,9 @@ export function Profile() {
                   }}
                   aria-label="Rename yourself"
                   title="Rename yourself"
-                  className="shrink-0 rounded-md p-1.5 text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
                 >
-                  <Icon name="pencil" size={14} />
+                  <Icon name="pencil" size={16} />
                 </button>
               </h1>
             )}
@@ -419,7 +419,7 @@ export function Profile() {
                   window, not a fixed number of minutes — without this, the
                   darkest cell reads as "a lot" with no way to know if that
                   means 20 minutes or 3 hours short of hovering every cell. */}
-              <span className="text-[11px] text-faint">— relative to your busiest day here</span>
+              <span className="text-[12.5px] text-faint">— relative to your busiest day here</span>
             </div>
           </Ledger>
 
@@ -611,7 +611,7 @@ function BadgeSeal({ badge }: { badge: Badge }) {
           one-word label and a wrapping one produce the same tile. */}
       <span
         className={cn(
-          'line-clamp-2 min-h-[2.1em] text-[11px] leading-tight',
+          'line-clamp-2 min-h-[2.1em] text-[12px] leading-tight',
           badge.earned ? 'font-bold text-ink' : 'text-faint',
         )}
       >
@@ -622,7 +622,7 @@ function BadgeSeal({ badge }: { badge: Badge }) {
           what actually keeps the row uniform. */}
       <div className="flex h-3 w-full items-center justify-center">
         {badge.earned ? (
-          badge.tier !== 'common' && <span className="setcode text-[9px]">{badge.tier}</span>
+          badge.tier !== 'common' && <span className="setcode text-[11px]">{badge.tier}</span>
         ) : badge.target > 1 ? (
           /* Standing, not the rule. "7 of 10" is a target you are close to;
              the rule alone is a wall you may not have started climbing. Drawn
@@ -704,11 +704,11 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
   return (
     <div className="flex w-full gap-2">
       {/* Weekday axis, on the cells' own row grid. */}
-      <div className="grid shrink-0 grid-rows-7 gap-[3px] pt-[calc(0.5rem+3px)]">
+      <div className="grid shrink-0 grid-rows-7 gap-[3px] pt-[calc(0.75rem+4px)]">
         {['Mon', '', 'Wed', '', 'Fri', '', ''].map((d, i) => (
           <span
             key={i}
-            className="setcode flex items-center text-[9px] leading-none"
+            className="setcode flex items-center text-[11px] leading-none"
           >
             {d}
           </span>
@@ -716,7 +716,7 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="mb-1 grid h-2 gap-[3px]" style={cols}>
+        <div className="mb-1 grid h-3 gap-[3px]" style={cols}>
           {months.map((m) => (
             <span
               key={m.label + m.col}
@@ -724,7 +724,7 @@ function Heatmap({ cells }: { cells: Stats['heatmap'] }) {
               // deliberate: a tick labels the column it starts at and is
               // allowed to run past it.
               style={{ gridColumnStart: m.col + 1 }}
-              className="setcode overflow-visible whitespace-nowrap text-[9px] leading-none"
+              className="setcode overflow-visible whitespace-nowrap text-[11px] leading-none"
             >
               {m.label}
             </span>
@@ -812,7 +812,7 @@ function MasterySplit({
 
 function MasteryBar({ label, value, tone }: { label: string; value: number; tone: 'sky' | 'sun' }) {
   return (
-    <span className="flex items-center gap-1.5 text-[11px] text-faint">
+    <span className="flex items-center gap-1.5 text-[12.5px] text-faint">
       <span className="setcode">{label}</span>
       <span className="relative h-1 w-12 overflow-hidden rounded-full bg-line-soft">
         <span

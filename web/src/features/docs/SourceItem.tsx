@@ -96,14 +96,14 @@ export function SourceItem({
       )}
 
       {detailed && (onReprocess || onDelete) && (
-        <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-2.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <div className="mt-auto flex items-center gap-1.5 border-t border-line pt-2.5 transition-opacity pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100">
           {onReprocess && (doc.status === 'processing' || doc.status === 'failed') && (
             <button
               type="button"
               onClick={onReprocess}
-              className="flex items-center gap-1 rounded-md bg-brand-soft px-2 py-1 text-[11.5px] font-bold text-brand-deep cursor-pointer"
+              className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-brand-soft px-3 text-[13px] font-bold text-brand-deep cursor-pointer"
             >
-              <Icon name="refresh" size={11} /> Reprocess
+              <Icon name="refresh" size={13} /> Reprocess
             </button>
           )}
           {onDelete && (
@@ -111,9 +111,9 @@ export function SourceItem({
               type="button"
               onClick={onDelete}
               aria-label={`Delete ${doc.name}`}
-              className="ml-auto rounded-md p-1.5 text-faint transition-colors hover:text-coral cursor-pointer"
+              className="ml-auto grid h-10 w-10 place-items-center rounded-[10px] text-muted transition-colors hover:bg-coral-soft hover:text-coral-deep cursor-pointer"
             >
-              <Icon name="trash" size={13} />
+              <Icon name="trash" size={16} />
             </button>
           )}
         </div>

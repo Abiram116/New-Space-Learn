@@ -40,11 +40,11 @@ export function Input({
         aria-describedby={error && inputId ? `${inputId}-err` : undefined}
       />
       {error ? (
-        <p id={inputId ? `${inputId}-err` : undefined} className="text-xs font-semibold text-coral-deep">
+        <p id={inputId ? `${inputId}-err` : undefined} className="text-[12.5px] font-semibold text-coral-deep">
           {error}
         </p>
       ) : hint ? (
-        <p className="text-xs text-faint">{hint}</p>
+        <p className="text-[12.5px] text-faint">{hint}</p>
       ) : null}
     </div>
   )
@@ -83,9 +83,9 @@ export function Textarea({
         aria-invalid={Boolean(error) || undefined}
       />
       {error ? (
-        <p className="text-xs font-semibold text-coral-deep">{error}</p>
+        <p className="text-[12.5px] font-semibold text-coral-deep">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-faint">{hint}</p>
+        <p className="text-[12.5px] text-faint">{hint}</p>
       ) : null}
     </div>
   )

@@ -78,22 +78,22 @@ export function RelatedTopics({
       )}
     >
       {layout === 'row' && (
-        <span className="text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+        <span className="text-[12px] font-semibold uppercase tracking-wide text-muted">
           Related topics
         </span>
       )}
       {links.map((l) => (
         <span
           key={l.id}
-          className="flex max-w-full items-center gap-1.5 rounded-full border border-line bg-well px-2.5 py-1 text-[12.5px] text-ink-3"
+          className="flex min-h-9 max-w-full items-center gap-1 rounded-full border border-line bg-well py-1 pl-3.5 pr-1.5 text-[13.5px] text-ink-3"
         >
           <span className="truncate">{l.name}</span>
           <button
             onClick={() => remove(l.id)}
-            className="shrink-0 text-faint transition-colors hover:text-coral-deep cursor-pointer"
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-coral-soft hover:text-coral-deep cursor-pointer pointer-coarse:h-9 pointer-coarse:w-9"
             aria-label={`Unlink ${l.name}`}
           >
-            <Icon name="close" size={11} />
+            <Icon name="close" size={13} />
           </button>
         </span>
       ))}
@@ -101,13 +101,13 @@ export function RelatedTopics({
         <button
           onClick={() => setPicking((v) => !v)}
           className={cn(
-            'flex items-center gap-1 rounded-full border border-dashed border-line px-2.5 py-1',
-            'text-[12.5px] text-faint transition-colors cursor-pointer',
+            'flex min-h-9 items-center gap-1.5 rounded-full border border-dashed border-line-dash px-3.5 py-1 pointer-coarse:min-h-11',
+            'text-[13.5px] text-muted transition-colors cursor-pointer',
             'hover:border-brand hover:text-brand-deep',
             layout === 'stack' && 'w-full justify-center',
           )}
         >
-          <Icon name="plus" size={11} /> Link a topic
+          <Icon name="plus" size={13} /> Link a topic
         </button>
         {picking && (
           <div
@@ -121,13 +121,13 @@ export function RelatedTopics({
             )}
           >
             {candidates.length === 0 && (
-              <p className="px-2.5 py-2 text-[12.5px] text-faint">No other topics to link.</p>
+              <p className="px-3 py-2.5 text-[13.5px] text-faint">No other topics to link.</p>
             )}
             {candidates.map((c) => (
               <button
                 key={c.id}
                 onClick={() => add(c.id)}
-                className="block w-full truncate rounded-lg px-2.5 py-1.5 text-left text-[13px] text-ink-3 transition-colors hover:bg-line-soft hover:text-ink cursor-pointer"
+                className="block min-h-10 w-full truncate rounded-lg px-3 py-2 text-left text-[14px] text-ink-3 transition-colors hover:bg-line-soft hover:text-ink cursor-pointer"
               >
                 {c.name} <span className="text-faint">· {c.spaceName}</span>
               </button>

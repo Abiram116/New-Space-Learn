@@ -1,4 +1,4 @@
-import { Modal } from './Modal'
+import { Modal, ModalFooter } from './Modal'
 import { Button } from './Button'
 
 /** Destructive-action confirmation. Copy stays neutral; caller supplies verb. */
@@ -22,18 +22,30 @@ export function ConfirmDialog({
   loading?: boolean
 }) {
   return (
-    <Modal open={open} onClose={onCancel} title={title} width="sm">
-      <div className="flex flex-col gap-4">
-        {description && <p className="text-sm text-muted">{description}</p>}
-        <div className="flex justify-end gap-2">
+    <Modal
+      open={open}
+      onClose={onCancel}
+      title={title}
+      width="sm"
+      footer={
+        <ModalFooter>
           <Button variant="secondary" onClick={onCancel} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={onConfirm} disabled={loading} variant={destructive ? 'danger' : 'primary'}>
+          {/* The destructive button is labelled with the verb ("Delete"), and
+              holds its width while loading so the row does not jump. */}
+          <Button
+            onClick={onConfirm}
+            disabled={loading}
+            variant={destructive ? 'danger' : 'primary'}
+            className="min-w-28"
+          >
             {loading ? 'Working…' : confirmLabel}
           </Button>
-        </div>
-      </div>
+        </ModalFooter>
+      }
+    >
+      {description && <p className="text-[14px] leading-relaxed text-muted">{description}</p>}
     </Modal>
   )
 }

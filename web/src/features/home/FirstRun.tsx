@@ -140,7 +140,7 @@ function Loop({ reduced, reveal }: { reduced: boolean; reveal: boolean }) {
           <Rule w="100%" />
           <Rule w="64%" />
         </div>
-        <span className="mt-3 inline-flex items-center gap-1 rounded-md bg-sky-soft px-1.5 py-0.5 text-[10.5px] font-bold text-sky-deep">
+        <span className="mt-3 inline-flex items-center gap-1 rounded-md bg-sky-soft px-1.5 py-0.5 text-[12.5px] font-bold text-sky-deep">
           1 · page 4
         </span>
       </Panel>
@@ -168,7 +168,7 @@ function Loop({ reduced, reveal }: { reduced: boolean; reveal: boolean }) {
           {['Again', 'Hard', 'Good', 'Easy'].map((g) => (
             <span
               key={g}
-              className="flex-1 rounded-[5px] border border-line py-[3px] text-center text-[9px] font-semibold text-muted"
+              className="flex-1 rounded-[5px] border border-line py-[3px] text-center text-[12.5px] font-semibold text-muted"
             >
               {g}
             </span>
@@ -210,7 +210,7 @@ function Panel({
       <div className={cn('px-3.5 py-3', className)}>{children}</div>
       <figcaption className="px-1">
         <span className="block text-[12.5px] font-semibold text-ink-3">{caption}</span>
-        <span className="mt-0.5 block text-[12px] leading-snug text-muted">{note}</span>
+        <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">{note}</span>
       </figcaption>
     </figure>
   )

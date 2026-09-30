@@ -68,12 +68,12 @@ export function Tip({
       <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-md bg-sky-soft text-sky-deep">
         <Icon name={icon} size={12} />
       </span>
-      <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-muted">{children}</p>
+      <p className="min-w-0 flex-1 text-[13px] leading-relaxed text-muted">{children}</p>
       <button
         type="button"
         onClick={close}
         aria-label="Dismiss tip"
-        className="-mr-1 -mt-0.5 shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-line-soft hover:text-ink-3"
+        className="-mr-1.5 -mt-1.5 grid h-9 w-9 shrink-0 place-items-center rounded-md text-faint transition-colors hover:bg-line-soft hover:text-ink-3"
       >
         <Icon name="close" size={12} />
       </button>

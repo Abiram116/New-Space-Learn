@@ -17,7 +17,7 @@ export function Chip({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-semibold',
+        'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12.5px] font-semibold',
         active
           ? 'bg-brand-soft text-brand-deep ring-1 ring-brand/30'
           : 'bg-line-soft text-muted',
@@ -38,7 +38,7 @@ export function OutlinePill({
   return (
     <button
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border border-line bg-raised px-3 py-1.5 text-[11.5px] font-semibold text-ink-3',
+        'inline-flex items-center gap-1.5 min-h-9 rounded-full border border-line bg-raised px-3.5 py-1.5 text-[12.5px] font-semibold text-ink-3 pointer-coarse:min-h-11',
         'transition-colors hover:border-brand/40 hover:text-brand-deep cursor-pointer',
         className,
       )}
@@ -85,7 +85,9 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 cursor-pointer',
+        // The ::before widens the touch target to ~44px without changing the
+        // 24px-tall switch the row is drawn around.
+        'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 cursor-pointer before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[""]',
         checked ? 'bg-brand' : 'bg-line',
         'ring-1 ring-inset',
         checked ? 'ring-brand-300/50' : 'ring-line-dash/60',

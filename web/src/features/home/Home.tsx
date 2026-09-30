@@ -32,6 +32,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { Ledger } from '../../components/ui/Surface'
 import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
+import { HOME_BRIEF_KEY, HOME_STATS_KEY } from '../../lib/homeKeys'
 import { subspacePath } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
 import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
@@ -43,8 +44,8 @@ import { Fortnight } from './Fortnight'
 
 export function Home() {
   const { spaces, loading: spacesLoading, error: spacesError, refresh: refreshSpaces } = useSpaces()
-  const stats = useAsync(() => getCachedStats(), [])
-  const brief = useAsync(() => getCachedBrief(), [])
+  const stats = useAsync(() => getCachedStats(), [], HOME_STATS_KEY)
+  const brief = useAsync(() => getCachedBrief(), [], HOME_BRIEF_KEY)
   // Cold-start awareness for the one blocking gate on this page (below) and
   // for the two sections that keep loading behind it — see `useSlowState`'s
   // own doc comment for why this is a hook rather than a fixed threshold.
@@ -183,7 +184,7 @@ export function Home() {
                     </Button>
                   </Link>
                   {brief.data.suggestion.reason && (
-                    <p className="max-w-xs text-[11.5px] leading-snug text-muted">
+                    <p className="max-w-xs text-[12.5px] leading-snug text-muted">
                       {brief.data.suggestion.reason}
                     </p>
                   )}
@@ -320,7 +321,7 @@ export function Home() {
                     <span className="setcode truncate">{space.name}</span>
                   </div>
                   <div>
-                    <p className="text-[13px] leading-snug text-muted">
+                    <p className="text-[14px] leading-snug text-muted">
                       No topics yet. Add one from the rail to start collecting.
                     </p>
                   </div>
@@ -423,7 +424,7 @@ function Figure({
         </span>
       )}
 
-      <p className="mt-auto text-[12px] leading-snug text-muted">{detail}</p>
+      <p className="mt-auto text-[12.5px] leading-snug text-muted">{detail}</p>
     </div>
   )
   return to ? <Link to={to} className="contents">{body}</Link> : body
@@ -537,7 +538,7 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
             <div key={d.day} className="flex flex-1 flex-col items-center gap-1.5">
               <span
                 className={cn(
-                  'text-[11px] font-bold tabular-nums',
+                  'text-[12.5px] font-bold tabular-nums',
                   i === 0 ? 'text-brand' : 'text-faint',
                 )}
               >
@@ -654,7 +655,7 @@ function Composition({
               <span className="setcode">Goal · {dailyGoal} cards/day</span>
               <span
                 className={cn(
-                  'text-[12px] font-bold tabular-nums',
+                  'text-[12.5px] font-bold tabular-nums',
                   data && data.cards_reviewed >= dailyGoal * 7
                     ? 'text-mint-deep'
                     : 'text-faint',

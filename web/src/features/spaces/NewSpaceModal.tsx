@@ -3,7 +3,7 @@ import type { Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { Modal } from '../../components/ui/Modal'
+import { Modal, ModalFooter } from '../../components/ui/Modal'
 import { cn } from '../../lib/cn'
 import { toneDot } from '../../lib/tone'
 import { useSpaces } from './SpacesProvider'
@@ -51,8 +51,33 @@ export function NewSpaceModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="New space" width="md">
-      <div className="flex flex-col gap-4">
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="New space"
+      width="md"
+      footer={
+        <ModalFooter>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          {/* Same label while busy — the spinner-less "Creating…" swap made the
+              button change width under the cursor. `aria-busy` carries the
+              state instead. */}
+          <Button type="submit" form="new-space-form" disabled={busy} aria-busy={busy} className="min-w-36">
+            {busy ? 'Creating…' : 'Create space'}
+          </Button>
+        </ModalFooter>
+      }
+    >
+      <form
+        id="new-space-form"
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void submit()
+        }}
+      >
         <Input
           label="Subject"
           value={name}
@@ -67,37 +92,32 @@ export function NewSpaceModal({
           placeholder="Transformers"
           hint="You can add more topics later."
         />
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-muted">Color</span>
-          <div className="flex gap-2">
+        <div className="flex flex-col gap-1.5" role="group" aria-label="Color">
+          <span className="setcode">Color</span>
+          <div className="flex flex-wrap gap-2">
             {tones.map((t) => (
               <button
                 key={t}
                 type="button"
                 aria-label={`Set color ${t}`}
+                aria-pressed={tone === t}
                 onClick={() => setTone(t)}
                 className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] cursor-pointer',
-                  tone === t ? 'border-ink' : 'border-line',
+                  'flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors',
+                  tone === t ? 'border-ink' : 'border-line hover:border-line-dash',
                 )}
               >
-                <span className={cn('h-4 w-4 rounded-full', toneDot[t])} />
+                <span className={cn('h-5 w-5 rounded-full', toneDot[t])} />
               </button>
             ))}
           </div>
         </div>
         {err && (
-          <div className="rounded-lg bg-coral-soft px-3 py-2 text-sm text-coral-deep">{err}</div>
+          <div role="alert" className="rounded-lg bg-coral-soft px-3 py-2.5 text-[14px] text-coral-deep">
+            {err}
+          </div>
         )}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={submit} disabled={busy}>
-            {busy ? 'Creating…' : 'Create space'}
-          </Button>
-        </div>
-      </div>
+      </form>
     </Modal>
   )
 }

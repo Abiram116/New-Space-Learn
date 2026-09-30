@@ -62,18 +62,18 @@ export function Sidebar({
     <>
       <aside
         className={cn(
-          'flex h-full min-h-0 w-full flex-col gap-3 overflow-x-hidden bg-surface p-3',
-          collapsed && 'items-center px-2',
+          'flex h-full min-h-0 w-full flex-col gap-4 overflow-x-hidden bg-surface p-3',
+          collapsed && 'items-center gap-3 px-2',
         )}
       >
-        <div className={cn('flex items-center gap-2', collapsed && 'flex-col gap-3')}>
+        <div className={cn('flex w-full items-center gap-2 px-1 pt-1', collapsed && 'flex-col gap-3 px-0')}>
           <Link
             to="/home"
             onClick={onNavigate}
             className="flex min-w-0 items-center gap-2.5"
             aria-label="Space Learn — home"
           >
-            <LogoMark size={26} />
+            <LogoMark size={28} />
             {!collapsed && (
               /* Sized to FIT the rail rather than be clipped by it. The display
                  face is now Archivo at a 112% width axis, which is materially
@@ -96,16 +96,16 @@ export function Sidebar({
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               className={cn(
-                'hidden shrink-0 rounded-md p-1.5 text-faint transition-colors hover:bg-line-soft hover:text-ink md:block',
+                'hidden h-10 w-10 shrink-0 place-items-center rounded-[10px] text-faint transition-colors hover:bg-line-soft hover:text-ink md:grid',
                 !collapsed && 'ml-auto',
               )}
             >
-              <Icon name={collapsed ? 'expand' : 'collapse'} size={16} />
+              <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
             </button>
           )}
         </div>
 
-        <nav className="flex flex-col gap-0.5 text-[14.5px]">
+        <nav aria-label="Primary" className={cn('flex w-full flex-col gap-1 text-[15px]', collapsed && 'items-center')}>
           {nav.map((item) => (
             <NavLink
               key={item.label}
@@ -128,8 +128,8 @@ export function Sidebar({
               aria-disabled={!item.enabled}
               className={({ isActive }) =>
                 cn(
-                  'flex min-w-0 items-center gap-2.5 rounded-[9px] px-2.5 py-2 transition-colors',
-                  collapsed && 'justify-center px-0',
+                  'flex min-h-11 min-w-0 items-center gap-3 rounded-[10px] px-3 py-2 transition-colors md:min-h-10 pointer-coarse:min-h-11',
+                  collapsed && 'w-11 justify-center px-0',
                   isActive && item.enabled
                     ? 'bg-brand-soft font-semibold text-brand-deep'
                     : 'font-semibold text-ink-2 hover:bg-line-soft hover:text-ink',
@@ -144,7 +144,7 @@ export function Sidebar({
                       the shape alone, not only from the colour. */}
                   <Icon3D
                     name={item.icon}
-                    size={17}
+                    size={20}
                     lifted={isActive && item.enabled}
                   />
                   {!collapsed && <span className="truncate">{item.label}</span>}
@@ -155,16 +155,16 @@ export function Sidebar({
         </nav>
 
         {!collapsed && (
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2 border-t border-line px-1 pt-4">
             <SectionLabel>Subjects</SectionLabel>
             <button
               type="button"
-              className="ml-auto rounded-md p-1 text-faint transition-colors hover:bg-line-soft hover:text-brand cursor-pointer"
+              className="ml-auto grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-[10px] text-muted transition-colors hover:bg-line-soft hover:text-brand pointer-coarse:h-11 pointer-coarse:w-11"
               aria-label="New subject"
               title="New subject"
               onClick={() => setNewSpaceOpen(true)}
             >
-              <Icon name="plus" size={14} />
+              <Icon name="plus" size={16} />
             </button>
           </div>
         )}
@@ -175,17 +175,18 @@ export function Sidebar({
             onClick={() => setNewSpaceOpen(true)}
             aria-label="New subject"
             title="New subject"
-            className="rounded-[9px] p-2 text-faint transition-colors hover:bg-line-soft hover:text-brand"
+            className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-[10px] text-muted transition-colors hover:bg-line-soft hover:text-brand"
           >
-            <Icon name="plus" size={16} />
+            <Icon name="plus" size={18} />
           </button>
         ) : (
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
+          // -mx/px keeps a flush row's focus ring inside the clip box.
+          <div className="-mx-1 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-1 py-0.5">
             {loading ? (
               <div className="flex flex-col gap-2">
-                <Skeleton className="h-7" />
-                <Skeleton className="h-7" />
-                <Skeleton className="h-7" />
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
               </div>
             ) : (
               <SpaceTree onNavigate={onNavigate} />
@@ -200,13 +201,13 @@ export function Sidebar({
           <Link
             to={`${base}/skills`}
             onClick={onNavigate}
-            className="group flex items-center gap-2.5 rounded-[10px] border border-line bg-raised px-2.5 py-2 transition-colors hover:border-brand/40"
+            className="group flex min-h-12 items-center gap-3 rounded-[12px] border border-line bg-raised px-3 py-2 transition-colors hover:border-brand/40"
           >
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-brand-soft text-brand-deep">
-              <Icon name="skill" size={15} />
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand-deep">
+              <Icon name="skill" size={17} />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-[13.5px] font-bold text-ink">Skills</span>
+              <span className="block truncate text-[15px] font-bold text-ink">Skills</span>
               <span className="setcode">AI personalities</span>
             </span>
           </Link>
@@ -214,21 +215,25 @@ export function Sidebar({
 
         <div
           className={cn(
-            'flex items-center gap-2.5 border-t border-line pt-2.5',
-            collapsed && 'flex-col border-t-0 pt-0',
+            'flex items-center gap-1 border-t border-line pt-3',
+            collapsed && 'w-full flex-col gap-2 border-t border-line',
           )}
         >
           <Link
             to="/profile"
             onClick={onNavigate}
             title={collapsed ? displayName : undefined}
-            className="flex min-w-0 items-center gap-2.5 transition-colors hover:text-brand-deep"
+            aria-label={collapsed ? `${displayName} — profile` : undefined}
+            className={cn(
+              'flex min-h-11 min-w-0 items-center gap-3 rounded-[10px] px-1.5 transition-colors hover:bg-line-soft',
+              collapsed ? 'justify-center' : 'flex-1',
+            )}
           >
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-coral-soft text-[11px] font-bold text-coral-deep">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-coral-soft text-[12px] font-bold text-coral-deep">
               {initials}
             </span>
             {!collapsed && (
-              <span className="min-w-0 text-[12.5px]">
+              <span className="min-w-0 text-[14px]">
                 <span className="block truncate font-bold text-ink">{displayName}</span>
               </span>
             )}
@@ -237,13 +242,12 @@ export function Sidebar({
             to="/settings"
             onClick={onNavigate}
             className={cn(
-              'shrink-0 rounded-md p-1.5 text-faint transition-colors hover:bg-line-soft hover:text-ink',
-              !collapsed && 'ml-auto',
+              'grid h-11 w-11 shrink-0 place-items-center rounded-[10px] text-muted transition-colors hover:bg-line-soft hover:text-ink',
             )}
             aria-label="Settings"
             title="Settings"
           >
-            <Icon name="settings" size={16} />
+            <Icon name="settings" size={18} />
           </Link>
         </div>
       </aside>
