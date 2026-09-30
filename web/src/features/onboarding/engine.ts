@@ -41,7 +41,9 @@ import {
   approachParams,
   home,
   paramsFor,
+  presence,
   rng,
+  shares,
   spinRate,
   type Home,
   type Mote,
@@ -62,6 +64,9 @@ type Star = Mote & {
   vis: number
   /** Last star-stream phase, to catch the wrap and teleport across it. */
   su: number
+  /** Last drawn alpha and tone — reused on frames a dim star is skipped. */
+  al: number
+  tn: number
 }
 
 type Guest = {
@@ -199,15 +204,44 @@ function makeSprite(tint: RGB, glint: boolean): Sprite {
   return c
 }
 
-/** How many stars this device and this galaxy deserve. */
-function budget(r: number): number {
-  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
-  const cores = navigator.hardwareConcurrency || 4
-  let n = Math.max(1300, Math.min(4200, r * 9))
-  if (coarse || window.innerWidth < 720) n *= 0.75
-  if (cores <= 4) n *= 0.75
-  return Math.round(n)
+/**
+ * Quality tiers. Many students are on weak laptops and phones, and a canvas
+ * that falls back to software raster pays for every star it draws — so the
+ * star budget and the pixel ratio both step down together.
+ */
+export type Tier = 'high' | 'mid' | 'low'
+export const TIERS: Record<Tier, { perR: number; min: number; max: number; dpr: number }> = {
+  high: { perR: 9, min: 1300, max: 4200, dpr: 2 },
+  mid: { perR: 6.5, min: 900, max: 2600, dpr: 1.5 },
+  low: { perR: 4.2, min: 600, max: 1400, dpr: 1 },
 }
+const LOWER: Record<Tier, Tier> = { high: 'mid', mid: 'low', low: 'low' }
+
+/** How many stars a galaxy of on-screen radius `r` gets on this tier. */
+export function budgetFor(r: number, tier: Tier): number {
+  const t = TIERS[tier]
+  return Math.round(Math.max(t.min, Math.min(t.max, r * t.perR)))
+}
+
+/**
+ * A first guess from what the device says about itself. The engine then
+ * checks the guess against a second of real frames and steps down if it was
+ * optimistic — hardware hints are coarse, frame times are not.
+ */
+export function detectTier(): Tier {
+  const nav = navigator as Navigator & { deviceMemory?: number }
+  const cores = nav.hardwareConcurrency || 4
+  const mem = nav.deviceMemory ?? 8
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+  if (cores <= 2 || mem <= 2) return 'low'
+  if (cores <= 4 || mem <= 4 || coarse || window.innerWidth < 720) return 'mid'
+  return 'high'
+}
+
+/** Faint stars are pinpoints batched into paths — this many brightness
+ *  levels, two sizes, four tones. Only the brighter stars get a sprite. */
+const PIN_LEVELS = [0.22, 0.42, 0.65, 0.9]
+const SPRITE_FROM = 0.85
 
 export class OrganismEngine {
   readonly dir: Direction
@@ -240,6 +274,16 @@ export class OrganismEngine {
   private raf = 0
   private slowFrames = 0
   private frameEma = 1 / 60
+  private tier: Tier = 'high'
+  /** First-second probe: frames seen, and their summed duration. */
+  private probe = { n: 0, sum: 0, done: false }
+  private frameNo = 0
+  /** The dust, pre-posed (rotated and inclined) at the anchor's radius, so
+   *  each frame is one axis-aligned blit instead of a rotated one. */
+  private posed: HTMLCanvasElement | null = null
+  private posedRot = 1e9
+  private posedR = 0
+  private posedAt = -1
   private dead = false
   /** Star sprites per tone ([lead, counter, white, gold]), plain and glinting. */
   private sprites: { point: Sprite; glint: Sprite }[] = []
@@ -256,6 +300,7 @@ export class OrganismEngine {
     this.reduced = opts.reduced
     this.ctx = canvas.getContext('2d')
     this.palette = readPalette()
+    this.tier = detectTier()
     this.T = paramsFor(opts.answers)
     this.P = this.T
     this.dir = {
@@ -305,7 +350,7 @@ export class OrganismEngine {
   /** Where the galaxy lives on screen. Pushed in on layout changes only. */
   setAnchor(x: number, y: number, r: number) {
     this.anchor = { x, y, r }
-    const want = budget(r)
+    const want = budgetFor(r, this.tier)
     if (Math.round(want * 1.3) > this.stars.length) this.allocate(want)
     else this.cap = want
     if (this.reduced) this.paintStatic()
@@ -315,7 +360,7 @@ export class OrganismEngine {
     if (!this.ctx) return
     const w = window.innerWidth
     const h = window.innerHeight
-    let dpr = Math.min(2, window.devicePixelRatio || 1)
+    let dpr = Math.min(TIERS[this.tier].dpr, window.devicePixelRatio || 1)
     dpr = Math.min(dpr, Math.sqrt(MAX_BACKING / (w * h)))
     this.w = w
     this.h = h
@@ -348,6 +393,8 @@ export class OrganismEngine {
         vy: 0,
         vis: 0,
         su: 0,
+        al: 0,
+        tn: 2,
       })
     }
     this.cap = n
@@ -619,7 +666,7 @@ export class OrganismEngine {
   private ensureDust(P: Params, cols: RGB[]) {
     const key = [...P.form, P.layers, P.tilt, ...P.colour]
     const moved = !this.dust || key.some((v, i) => Math.abs(v - (this.dustKey[i] ?? 1e9)) > 0.015)
-    if (!moved || (this.dust && this.t - this.dustAt < 0.14)) return
+    if (!moved || (this.dust && this.t - this.dustAt < 0.3)) return
     const c = this.dust ?? document.createElement('canvas')
     c.width = c.height = DUST
     const g = c.getContext('2d')
@@ -629,6 +676,8 @@ export class OrganismEngine {
     const scale = DUST / (2 * DUST_EXTENT)
     const r = rng(0xd0057)
     const out: Home = { x: 0, y: 0, alpha: 1, tone: 0, stream: -1, size: 1 }
+    const DP = { ...P, orbit: 0, star: 0, turb: 0 }
+    const DS = shares(DP)
     // A broad, faint disc glow first, so the clouds sit in something.
     const disc = g.createRadialGradient(DUST / 2, DUST / 2, 0, DUST / 2, DUST / 2, scale * 1.05)
     disc.addColorStop(0, rgba(mixRGB(cols[0], this.palette.ink, 0.5), 0.07))
@@ -637,7 +686,7 @@ export class OrganismEngine {
     g.fillRect(0, 0, DUST, DUST)
     for (let i = 0; i < 110; i++) {
       const m: Mote = { a: r() * TAU, l: 0.12 + 0.88 * Math.pow(r(), 0.9), j: r(), k: r(), o: 0.5, ph: r() * 0.74, s: 0 }
-      home({ ...P, orbit: 0, star: 0, turb: 0 }, m, 0, out, 0)
+      home(DP, m, 0, out, 0, DS)
       const x = DUST / 2 + out.x * scale
       const y = DUST / 2 + out.y * scale
       const rad = (0.06 + 0.12 * r()) * scale
@@ -652,6 +701,39 @@ export class OrganismEngine {
     this.dust = c
     this.dustKey = key
     this.dustAt = this.t
+    this.posedRot = 1e9
+  }
+
+  /**
+   * Pose the dust: bake its rotation and the disc's inclination into a
+   * screen-aligned canvas, a few times a second at most. The dust turns
+   * slowly enough that stepping it every ~0.2s is invisible, and it turns a
+   * rotated, scaled blit per frame — the single most expensive draw here on
+   * a software canvas — into a plain one.
+   */
+  private poseDust(rot: number) {
+    const d = this.dust
+    if (!d) return
+    const R = this.anchor.r
+    const stale = Math.abs(rot - this.posedRot) > 0.012 || Math.abs(R - this.posedR) > 1
+    if (!stale || (this.posed && this.t - this.posedAt < 0.18 && Math.abs(R - this.posedR) <= 1)) return
+    // Half resolution: the dust is soft, and it is scaled on the way out.
+    const half = Math.ceil(DUST_EXTENT * R * 0.5)
+    const c = this.posed ?? document.createElement('canvas')
+    if (c.width !== half * 2) c.width = c.height = half * 2
+    const g = c.getContext('2d')
+    if (!g) return
+    g.setTransform(1, 0, 0, 1, 0, 0)
+    g.clearRect(0, 0, c.width, c.height)
+    g.translate(half, half)
+    g.rotate(VIEW)
+    g.scale(1, INCL)
+    g.rotate(rot)
+    g.drawImage(d, -half, -half, half * 2, half * 2)
+    this.posed = c
+    this.posedRot = rot
+    this.posedR = R
+    this.posedAt = this.t
   }
 
   /** Galaxy units → screen, through the inclined view. */
@@ -671,6 +753,22 @@ export class OrganismEngine {
     // Smoothed, so one long frame (a GC, a route chunk parsing) never costs
     // stars — only a sustained shortfall does, and it is never undone, so
     // the count cannot oscillate.
+    this.frameNo++
+    // The first-second probe: if the hardware guess was optimistic, step
+    // down a tier once — fewer stars and fewer pixels — and never back up.
+    const pr = this.probe
+    if (!pr.done && this.frameNo > 8) {
+      pr.n++
+      pr.sum += dt
+      if (pr.n >= 45) {
+        pr.done = true
+        if (pr.sum / pr.n > 0.024 && this.tier !== 'low') {
+          this.tier = LOWER[this.tier]
+          this.resize()
+          this.setAnchor(this.anchor.x, this.anchor.y, this.anchor.r)
+        }
+      }
+    }
     this.frameEma += (dt - this.frameEma) * 0.05
     this.slowFrames = this.frameEma > 0.025 ? this.slowFrames + 1 : 0
     if (this.slowFrames > 90 && this.quality > 0.45) {
@@ -727,16 +825,13 @@ export class OrganismEngine {
     // Nebula dust, turning with the arms; it thins out as the galaxy gathers.
     const dustA = born * (1 - col) * fade * Math.min(1, P.energy + 0.1)
     if (this.dust && dustA > 0.01) {
-      ctx.save()
-      ctx.translate(cx, cy)
-      ctx.rotate(VIEW)
-      ctx.scale(1, INCL)
-      ctx.rotate(rot)
-      ctx.globalAlpha = dustA
-      const e = DUST_EXTENT * R
-      ctx.drawImage(this.dust, -e, -e, e * 2, e * 2)
-      ctx.restore()
-      ctx.globalAlpha = 1
+      this.poseDust(rot)
+      if (this.posed) {
+        ctx.globalAlpha = dustA
+        const e = DUST_EXTENT * R
+        ctx.drawImage(this.posed, cx - e, cy - e, e * 2, e * 2)
+        ctx.globalAlpha = 1
+      }
     }
 
     this.drawCores(ctx, P, cols, cx, cy, R, rot, energy, fade, col)
@@ -777,14 +872,37 @@ export class OrganismEngine {
     const sp: Point = { x: 0, y: 0 }
     const bright = this.bright
     bright.length = 0
+    const sh = shares(P)
+    // Pinpoints for the faint majority: [tone][level][size] → one path each.
+    const pins: Path2D[] = []
+    for (let i = 0; i < 32; i++) pins.push(new Path2D())
+    const pinK = Math.sqrt(sizeK)
+    // In a settled frame, dim stars move at half rate: each is updated on
+    // alternate frames with a doubled step. Anything in motion — the intro,
+    // the finale, a ripple, the cursor nearby — updates every star.
+    const steady = conv >= 1 && fly === 0 && col === 0 && d.birth >= 1 && this.ripples.length === 0
+    const parity = this.frameNo & 1
 
     for (let i = 0; i < this.stars.length; i++) {
       const p = this.stars[i]
       const on = i < active
       if (!on && p.vis < 0.004) continue
 
-      p.a += spinRate(P, p) * spinBoost * dt
-      home(P, p, t, out, rot)
+      let sdt = dt
+      if (steady && p.s < 0.6 && p.vis > 0.99 && on) {
+        const near = pt.on > 0.01 && (p.x - pt.x) * (p.x - pt.x) + (p.y - pt.y) * (p.y - pt.y) < lens2 * 2.5
+        if (!near) {
+          if ((i & 1) === parity) {
+            // Not its turn: draw it where it is.
+            if (p.al >= 0.02) this.pin(pins, p, p.al, p.tn, pinK)
+            continue
+          }
+          sdt = dt * 2
+        }
+      }
+
+      p.a += spinRate(P, p) * spinBoost * sdt
+      home(P, p, t, out, rot, sh)
       this.project(out.x, out.y, cx, cy, R, sp)
       let hx = sp.x
       let hy = sp.y
@@ -863,18 +981,24 @@ export class OrganismEngine {
         p.x = hx
         p.y = hy
       } else {
-        p.vx += fx * dt
-        p.vy += fy * dt
-        p.x += p.vx * dt
-        p.y += p.vy * dt
+        p.vx += fx * sdt
+        p.vy += fy * sdt
+        p.x += p.vx * sdt
+        p.y += p.vy * sdt
       }
-      p.vis += ((on ? 1 : 0) - p.vis) * Math.min(1, dt * 2.4)
+      p.vis += ((on ? 1 : 0) - p.vis) * Math.min(1, sdt * 2.4)
 
       const twinkle = 0.8 + 0.2 * Math.sin(t * (0.6 + 2.2 * p.j) + p.ph * 40)
       const lum = 0.36 + 0.64 * Math.pow(p.s, 2.2)
       let a = p.vis * out.alpha * lum * twinkle * energy * fade * trail * (conv < 1 ? 0.4 + 0.6 * conv : 1) + glow * 0.5
+      p.al = a
+      p.tn = out.tone
       if (a < 0.02) continue
       if (a > 1) a = 1
+      if (p.s < SPRITE_FROM && glow < 0.3) {
+        this.pin(pins, p, a, out.tone, pinK)
+        continue
+      }
       const isGlint = p.s > 0.994 && fly === 0
       const size = (isGlint ? 15 + 1500 * (p.s - 0.994) : 4.6 + 9 * Math.pow(p.s, 6)) * out.size * sizeK * (1 + glow * 0.4)
       const spr = sprites[out.tone]
@@ -883,6 +1007,17 @@ export class OrganismEngine {
       if (p.s > 0.955 && bright.length < 140 && conv >= 1 && col === 0) bright.push(p.x, p.y, a)
     }
     ctx.globalAlpha = 1
+    // The pinpoints: 32 fills for the faint majority, instead of a blit each.
+    const tints = this.spriteCols
+    for (let tone = 0; tone < 4; tone++) {
+      const c = mixRGB(tints[tone], WHITE, 0.35)
+      for (let lvl = 0; lvl < 4; lvl++) {
+        const base = (tone * 4 + lvl) * 2
+        ctx.fillStyle = rgba(c, PIN_LEVELS[lvl])
+        ctx.fill(pins[base])
+        ctx.fill(pins[base + 1])
+      }
+    }
     if (this.ripples.length && t - this.ripples[0].t0 > 3) this.ripples.shift()
 
     this.drawConstellations(ctx, cols[2], born * fade * (1 - col))
@@ -892,10 +1027,20 @@ export class OrganismEngine {
     this.drawFlashes(ctx)
   }
 
+  /** Add a faint star to the pinpoint batch for its tone, brightness and size. */
+  private pin(pins: Path2D[], p: Star, a: number, tone: number, k: number) {
+    const lvl = a < 0.32 ? 0 : a < 0.53 ? 1 : a < 0.77 ? 2 : 3
+    const big = p.s > 0.6 ? 1 : 0
+    const size = (big ? 2.1 : 1.5) * k
+    pins[(tone * 4 + lvl) * 2 + big].rect(p.x - size / 2, p.y - size / 2, size, size)
+  }
+
   /** The luminous core — elongated along the bar for a barred spiral, and
    *  doubled for an interacting pair. */
   private drawCores(ctx: CanvasRenderingContext2D, P: Params, cols: RGB[], cx: number, cy: number, R: number, rot: number, energy: number, fade: number, col: number) {
-    const [ex, , , cm] = P.form
+    const pe = presence(P.form[0])
+    const pc = presence(P.form[3])
+    const inner = 1 - 0.2 * presence(P.form[2])
     const a = fade * (1 - col * 0.6)
     if (a < 0.01 || R < 3) return
     const core = (x: number, y: number, r: number, k: number, stretch: number, angle: number) => {
@@ -914,13 +1059,13 @@ export class OrganismEngine {
       ctx.fillRect(-r, -r, r * 2, r * 2)
       ctx.restore()
     }
-    core(cx, cy, R * 0.42, 1 - cm * 0.7, 1 + ex * 1.1, rot + P.tilt)
-    if (cm > 0.01) {
-      const axis = P.tilt + rot * 0.35
+    core(cx, cy, R * 0.42 * inner, 1 - pc * 0.7, 1 + pe * (1.1 + 0.5 * pc), rot + P.tilt)
+    if (pc > 0.01) {
+      const axis = P.tilt + rot
       const sp: Point = { x: 0, y: 0 }
       for (const side of [-1, 1]) {
-        this.project(0.44 * side * Math.cos(axis), 0.44 * side * Math.sin(axis), cx, cy, R, sp)
-        core(sp.x, sp.y, R * 0.26, cm, 1, 0)
+        this.project(0.44 * inner * side * Math.cos(axis), 0.44 * inner * side * Math.sin(axis), cx, cy, R, sp)
+        core(sp.x, sp.y, R * 0.24 * inner, pc, 1, 0)
       }
     }
   }

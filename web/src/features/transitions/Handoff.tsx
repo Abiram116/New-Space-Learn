@@ -35,6 +35,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
+import { useAuth } from '../../auth/AuthProvider'
 import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { lampGradient, MOTES, TABLE_IMAGE, TABLE_MASK, TABLE_SIZE, VIGNETTE } from '../../lib/room'
@@ -285,8 +286,29 @@ export async function runHandoffSequence({
   }
 }
 
+/** An account this young has certainly not been through the intake. */
+const NEW_ACCOUNT_MS = 15 * 60 * 1000
+
+/**
+ * Warm the intake's chunk (and the gsap it shares with the landing page)
+ * while a sign-up's threshold cover plays, so `/welcome-aboard` is already in
+ * the cache when the route asks for it. Dynamic, so nothing here joins the
+ * entry bundle; idle-scheduled, so it never competes with the cover.
+ */
+function prefetchIntake() {
+  const go = () => void import('../onboarding/Onboarding').catch(() => {})
+  const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback
+  if (idle) idle(go, { timeout: 600 })
+  else window.setTimeout(go, 200)
+}
+
 export function HandoffProvider({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion()
+  const { user } = useAuth()
+  const userRef = useRef(user)
+  useLayoutEffect(() => {
+    userRef.current = user
+  })
   const [state, setState] = useState<{ variant: HandoffVariant; phase: Phase; options?: HandoffOptions } | null>(
     null,
   )
@@ -299,6 +321,16 @@ export function HandoffProvider({ children }: { children: ReactNode }) {
     async (variant: HandoffVariant, work: () => void | Promise<void>, options?: HandoffOptions) => {
       if (busy.current) return
       busy.current = true
+      if (variant === 'threshold') {
+        // Only a new account is heading for the intake. The session can land
+        // a beat after the sign-in resolves, so look again a moment later —
+        // still well inside the cover. Unknown (no user yet) counts as new:
+        // that is the sign-up path.
+        window.setTimeout(() => {
+          const created = Date.parse(userRef.current?.created_at ?? '')
+          if (!userRef.current || !Number.isFinite(created) || Date.now() - created < NEW_ACCOUNT_MS) prefetchIntake()
+        }, 350)
+      }
       try {
         await runHandoffSequence({
           inMs: reduced ? REDUCED_IN_MS : IN_MS[variant],

@@ -10,14 +10,45 @@ import {
   home,
   lerpAngle,
   lerpParams,
+  membership,
   legend,
   paramsFor,
+  shares,
+  structureHash,
   spinRate,
   type Home,
   type Mote,
   type Params,
 } from './fingerprint'
 import { EMPTY_ANSWERS, STEPS, type Answers, type ChoiceStep } from './steps'
+
+/**
+ * The largest single move a star makes while `A` interpolates to `B` in `n`
+ * equal steps. For a continuous path this shrinks in proportion to `n`; a
+ * jump stays the same size however fine the sweep — which is how the tests
+ * below tell a steep-but-smooth change from a pop.
+ */
+function worstStep(A: Params, B: Params, m: Mote, n: number, t = 2, rot?: number): number {
+  const o = (): Home => ({ x: 0, y: 0, alpha: 1, tone: 0, stream: -1, size: 1 })
+  let prev = home(A, m, t, o(), rot)
+  let worst = 0
+  for (let i = 1; i <= n; i++) {
+    const h = home(lerpParams(A, B, i / n), m, t, o(), rot)
+    worst = Math.max(worst, Math.hypot(h.x - prev.x, h.y - prev.y))
+    prev = h
+  }
+  return worst
+}
+/** Continuous: refining the sweep 8× shrinks the worst step ~8×. (A wide
+ *  ratio, so a mere kink — where a style's presence saturates — straddled by
+ *  the coarse sweep cannot read as a jump.) */
+function expectContinuous(A: Params, B: Params, m: Mote, rot?: number) {
+  const coarse = worstStep(A, B, m, 150, 2, rot)
+  const fine = worstStep(A, B, m, 1200, 2, rot)
+  // Steps under 0.002 galaxy units are under a pixel on any screen — below
+  // that, a ratio only measures rounding, not a jump.
+  expect(fine).toBeLessThanOrEqual(Math.max(coarse * 0.35, 0.002))
+}
 
 /**
  * The organism makes two promises. It is a function of the answers — same
@@ -158,6 +189,16 @@ describe('interpolation', () => {
 
 describe('the field', () => {
   const mote: Mote = { a: 1.2, l: 0.63, j: 0.4, k: 0.3, o: 0.5, ph: 0.2, s: 0.5 }
+  // A spread of stars: every structure hash band, arm and disc, core to rim.
+  const motes: Mote[] = Array.from({ length: 14 }, (_, i) => ({
+    a: i * 0.9,
+    l: ((i * 0.37) % 1) * 0.95 + 0.03,
+    j: (i * 0.61) % 1,
+    k: (i * 0.29 + 0.05) % 1,
+    o: (i * 0.53) % 1,
+    ph: (i * 0.17) % 1,
+    s: 0.5,
+  }))
   const out = (): Home => ({ x: 0, y: 0, alpha: 1, tone: 0, stream: -1, size: 1 })
 
   it('puts a particle in the same place for the same inputs', () => {
@@ -166,19 +207,12 @@ describe('the field', () => {
   })
 
   it('never jumps while parameters interpolate', () => {
-    // Sweep from nothing answered to everything answered in small steps:
-    // each step may only move a particle a little. A swap would show as one
-    // large step.
+    // Sweep from nothing answered to everything answered in fine steps:
+    // each step may only move a star a little. A swap would show as one
+    // large step however fine the sweep.
     const A = paramsFor(EMPTY_ANSWERS)
     const B = paramsFor(FULL)
-    for (const m of [mote, { ...mote, o: 0.05 }, { ...mote, o: 0.97 }, { ...mote, k: 0.8, l: 0.1 }, { ...mote, ph: 0.9, k: 0.6 }]) {
-      let prev = home(A, m, 2, out())
-      for (let i = 1; i <= 200; i++) {
-        const h = home(lerpParams(A, B, i / 200), m, 2, out())
-        expect(Math.hypot(h.x - prev.x, h.y - prev.y)).toBeLessThan(0.08)
-        prev = h
-      }
-    }
+    for (const m of motes) expectContinuous(A, B, m)
   })
 
   it('stays within the organism’s reach', () => {
@@ -207,6 +241,95 @@ describe('the field', () => {
       expect(Math.abs(band(l, 2.999, 0.8) - band(l, 3, 0.8))).toBeLessThan(0.01)
       expect(band(l, 0, 0.8)).toBe(l)
     }
+  })
+})
+
+describe('multi-select hybrids', () => {
+  const styles = values('style')
+  const answersWith = (ix: number[]): Answers => ({ ...FULL, styles: ix.map((i) => styles[i]) })
+  const sets: number[][] = [[0], [1], [2], [3], [0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3], [0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]
+  const out = (): Home => ({ x: 0, y: 0, alpha: 1, tone: 0, stream: -1, size: 1 })
+  const star = (i: number): Mote => ({
+    a: i * 1.7,
+    l: ((i * 0.618) % 1) * 0.95 + 0.03,
+    j: (i * 0.31) % 1,
+    k: (i * 0.77) % 1,
+    o: 0.5,
+    ph: (i * 0.41) % 1,
+    s: 0.5,
+  })
+  const at = (P: ReturnType<typeof paramsFor>, m: Mote) => home(P, m, 3, out(), 1.1)
+
+  it('gives every star exactly one home: memberships are non-negative and sum to 1', () => {
+    for (const set of sets) {
+      const sh = shares(paramsFor(answersWith(set)))
+      expect(sh.reduce((a, b) => a + b)).toBeCloseTo(1, 9)
+      for (let h = 0; h < 1; h += 0.013) {
+        const w = membership(sh, h, [0, 0, 0, 0, 0])
+        expect(w.every((v) => v >= -1e-12)).toBe(true)
+        expect(w.reduce((a, b) => a + b)).toBeCloseTo(1, 9)
+      }
+    }
+  })
+
+  it('is the same hybrid whatever order the styles were picked in', () => {
+    for (const set of sets) {
+      const a = paramsFor(answersWith(set))
+      const b = paramsFor(answersWith([...set].reverse()))
+      for (let i = 0; i < 40; i++) expect(at(a, star(i))).toEqual(at(b, star(i)))
+    }
+  })
+
+  it('toggling any style on or off drifts stars across — no jump, no reshuffle', () => {
+    // Every 1-, 2- and 3-style selection, with every style toggled.
+    for (const set of sets) {
+      for (let o = 0; o < 4; o++) {
+        const next = set.includes(o) ? set.filter((x) => x !== o) : [...set, o].sort()
+        const A = paramsFor(answersWith(set))
+        const B = paramsFor(answersWith(next))
+        for (let i = 0; i < 6; i++) expectContinuous(A, B, star(i * 11 + o), 1.1)
+      }
+    }
+  }, 30_000)
+
+  it('never changes how many stars there are — a style is a shape, not a density', () => {
+    const d = new Set(sets.map((set) => paramsFor(answersWith(set)).density))
+    expect(d.size).toBe(1)
+  })
+
+  it('frames a spiral with its ring: ring stars at the rim, the spiral drawn inside', () => {
+    const P = paramsFor(answersWith([0, 2]))
+    const sh = shares(P)
+    const ring: number[] = []
+    const inner: number[] = []
+    for (let i = 0; i < 600; i++) {
+      const m = star(i)
+      const w = membership(sh, structureHash(m), [0, 0, 0, 0, 0])
+      const h = at(P, m)
+      if (w[2] > 0.999) ring.push(Math.hypot(h.x, h.y))
+      if (w[0] > 0.999) inner.push(Math.hypot(h.x, h.y))
+    }
+    expect(Math.min(...ring)).toBeGreaterThan(0.8)
+    expect(inner.filter((r) => r > 0.9).length / inner.length).toBeLessThan(0.05)
+    // A frame, not a rival: the ring takes the smaller share.
+    expect(sh[2]).toBeLessThan(sh[0])
+  })
+
+  it('lets a binary pair share the spiral: the arms begin at the two cores', () => {
+    // With a binary present the bar reaches its cores and the arms start there.
+    const P = paramsFor(answersWith([0, 3]))
+    const alone = paramsFor(answersWith([0]))
+    const reach = (Q: typeof P) => {
+      let r = 0
+      for (let i = 0; i < 400; i++) {
+        const m = { ...star(i), l: 0.1 }
+        const w = membership(shares(Q), structureHash(m), [0, 0, 0, 0, 0])
+        if (w[0] > 0.999) r = Math.max(r, Math.hypot(at(Q, m).x, at(Q, m).y))
+      }
+      return r
+    }
+    expect(reach(P)).toBeGreaterThan(reach(alone))
+    expect(reach(P)).toBeGreaterThan(0.4)
   })
 })
 

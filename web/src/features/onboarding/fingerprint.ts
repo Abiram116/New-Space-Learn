@@ -345,19 +345,87 @@ export type Home = {
  *  integrated one. The engine integrates its own so tempo can ease. */
 export const patternAngle = (P: Params, t: number) => t * P.tempo * 0.35
 
+/** How present a morphology is: 0 absent, 1 chosen. A chosen style's weight
+ *  is 1/n, so this saturates for any selection yet still eases in and out
+ *  continuously while the weights interpolate. */
+export const presence = (w: number) => clamp01(w * 4)
+
+/**
+ * Each morphology's share of the stars, in the order [barred spiral, grand
+ * spiral, rings, binary, unformed nebula]. Sums to 1.
+ *
+ * Shares are what make a hybrid read as intentional rather than averaged:
+ * each star belongs to *one* structure (see `membership`), and structures that
+ * frame others — a ring around a spiral, a pair of cores that spiral arms
+ * grow from — take a smaller share, so they read as the frame, not a rival.
+ */
+export function shares(P: Params): number[] {
+  const [pe, pf, pd, pc] = P.form.map(presence)
+  const spiral = Math.max(pe, pf)
+  const raw = [
+    pe,
+    pf,
+    pd * (1 - 0.55 * Math.max(spiral, pc)),
+    pc * (1 - 0.25 * spiral),
+    Math.max(0, 1 - Math.max(pe, pf, pd, pc)),
+  ]
+  const sum = raw[0] + raw[1] + raw[2] + raw[3] + raw[4] || 1
+  return raw.map((v) => v / sum)
+}
+
+/** Width of the soft edge between two structures' bands of stars. */
+const EDGE = 0.06
+const ramp = (x: number) => clamp01(x / EDGE + 0.5)
+
+/**
+ * A star's membership in each structure, from its fixed hash `h`: the shares
+ * are laid end to end along [0, 1) and the star belongs to whichever band it
+ * falls in, blending only across a narrow soft edge. The weights always sum
+ * to exactly 1, and they move continuously as the shares do — so toggling a
+ * style moves only the stars whose band edge passes over them, and each of
+ * those drifts across rather than jumping. No reshuffle, no density pop.
+ */
+export function membership(sh: number[], h: number, out: number[]): number[] {
+  let c = 0
+  const n = sh.length
+  for (let i = 0; i < n; i++) {
+    const a = c
+    c += sh[i]
+    out[i] = (i === 0 ? 1 : ramp(h - a)) - (i === n - 1 ? 0 : ramp(h - c))
+  }
+  return out
+}
+
+/** A star's structure hash — fixed for life, independent of which arm it is
+ *  on and of what it may be recruited into. */
+export const structureHash = (m: Mote) => (m.k * 5.713 + m.ph * 2.917 + m.j * 0.41) % 1
+
+const W_ARM = 2.9
+const scratch = [0, 0, 0, 0, 0]
+
 /**
  * Where a star is, in galaxy units (radius 1, centred on 0), at time `t`.
  * `rot` is the arm pattern's rotation. Writes into `out` rather than
- * allocating: this runs for every star, every frame.
+ * allocating: this runs for every star, every frame. `sh` is `shares(P)`,
+ * passed in so a caller drawing thousands of stars computes it once.
  *
- * Every morphology proposes a position and they are blended by weight, so a
- * change of style is a galaxy re-forming, never a swap. Arm stars ride the
- * rigidly-turning arm pattern (a density wave, as in a real spiral); disc
- * and ring stars orbit at their own speed, inner faster than outer.
+ * Each star belongs to one structure (see `membership`), and each structure
+ * adapts to the others present, so hybrids compose legibly:
+ *   - rings + anything → the rings move out to become a ring *around* it;
+ *   - a spiral + rings → the spiral draws in to sit inside the ring;
+ *   - bar + binary → the bar stretches to join the two cores;
+ *   - a spiral + binary → the arms start *from* the two cores, so the pair
+ *     shares one set of arms;
+ *   - both spirals → crisp arms inside softer, wider arms along the same
+ *     curve, like dust lanes around a bright spine.
+ * Arm stars ride the rigidly turning arm pattern (a density wave, as in a
+ * real spiral); disc and ring stars orbit at their own speed.
  */
-export function home(P: Params, m: Mote, t: number, out: Home, rot = patternAngle(P, t)): Home {
-  const [ex, fl, df, cm] = P.form
-  const unformed = Math.max(0, 1 - ex - fl - df - cm)
+export function home(P: Params, m: Mote, t: number, out: Home, rot = patternAngle(P, t), sh = shares(P)): Home {
+  const pe = presence(P.form[0])
+  const pf = presence(P.form[1])
+  const pd = presence(P.form[2])
+  const pc = presence(P.form[3])
   const arms = 2 + Math.max(0, P.layers - 2) * 0.5
   const rings = P.layers >= 2 ? P.layers : 3 - P.layers / 2
   const tight = 0.35 + 0.65 * P.crisp
@@ -366,69 +434,82 @@ export function home(P: Params, m: Mote, t: number, out: Home, rot = patternAngl
   const sc = m.j - 0.5
   const dc = Math.cos(m.a)
   const ds = Math.sin(m.a)
+  // Everything inside a ring draws in to leave room for it.
+  const inner = 1 - 0.2 * pd
+  // Arms begin at the bar's ends — or, with a binary, at its two cores.
+  const r0 = 0.3 + 0.14 * pc
+  const axis = rot + P.tilt
+  const w = membership(sh, structureHash(m), scratch)
   let x = 0
   let y = 0
 
-  if (unformed > 0) {
+  if (w[4] > 0) {
     // A nebula not yet shaped: a soft, lumpy cloud of stars.
     const rr = r * (0.84 + 0.16 * Math.sin(3 * m.a + m.ph * TAU))
-    x += unformed * rr * dc
-    y += unformed * rr * ds
+    x += w[4] * rr * dc
+    y += w[4] * rr * ds
   }
-  if (ex > 0) {
+  if (w[0] > 0) {
     // Barred spiral: a bar through the core, crisp arms from its ends.
     let px: number
     let py: number
     if (m.l < 0.22) {
-      const u = (m.k * 2 - 1) * 0.3
+      const u = (m.k * 2 - 1) * r0 * inner
       const v = sc * 0.07
-      const b = rot + P.tilt
-      px = u * Math.cos(b) - v * Math.sin(b)
-      py = u * Math.sin(b) + v * Math.cos(b)
+      px = u * Math.cos(axis) - v * Math.sin(axis)
+      py = u * Math.sin(axis) + v * Math.cos(axis)
     } else if (onArm) {
-      const th = rot + P.tilt + armAngle(m.k, arms) + 2.1 * Math.log(r / 0.26) + sc * (0.5 - 0.38 * tight)
-      const rr = r * (1 + sc * 0.05)
+      const ra = r0 + (1 - r0) * ((m.l - 0.22) / 0.78)
+      const th = axis + armAngle(m.k, arms) + W_ARM * Math.log(ra / r0) + sc * (0.5 - 0.38 * tight)
+      const rr = ra * inner * (1 + sc * 0.05)
       px = rr * Math.cos(th)
       py = rr * Math.sin(th)
     } else {
-      px = r * dc
-      py = r * ds
+      px = r * inner * dc
+      py = r * inner * ds
     }
-    x += ex * px
-    y += ex * py
+    x += w[0] * px
+    y += w[0] * py
   }
-  if (fl > 0) {
+  if (w[1] > 0) {
     // Grand-design spiral: soft, wide, sweeping arms in a cloud of light.
     let px: number
     let py: number
     if (onArm) {
-      const th = rot + P.tilt + armAngle(m.k, arms) + 2.7 * Math.log(r / 0.1) + sc * (1 - 0.55 * tight)
-      const rr = r * (1 + sc * 0.14)
+      const ra = r0 * 0.8 + (1 - r0 * 0.8) * m.l
+      const th = axis + armAngle(m.k, arms) + W_ARM * Math.log(ra / (r0 * 0.8)) + sc * (1 - 0.55 * tight)
+      const rr = ra * inner * (1 + sc * 0.14)
       px = rr * Math.cos(th)
       py = rr * Math.sin(th)
     } else {
-      px = r * 1.04 * dc
-      py = r * 1.04 * ds
+      px = r * 1.04 * inner * dc
+      py = r * 1.04 * inner * ds
     }
-    x += fl * px
-    y += fl * py
+    x += w[1] * px
+    y += w[1] * py
   }
-  if (df > 0) {
-    // Ring galaxy: clean concentric rings, each turning at its own speed.
-    const rr = 0.1 + 0.9 * Math.pow(band(m.l, rings, 0.94), P.gamma) + sc * 0.016
-    x += df * rr * dc
-    y += df * rr * ds
+  if (w[2] > 0) {
+    // Rings: clean concentric rings, each turning at its own speed — or,
+    // around another structure, one or two rings framing it at the rim.
+    const alone = 0.1 + 0.9 * Math.pow(band(m.l, rings, 0.94), P.gamma)
+    // Framing: one crisp ring at the rim — two once depth asks for many.
+    const around = 0.88 + 0.16 * band(m.l, 1 + clamp01((rings - 4) / 2), 0.985)
+    const framed = Math.max(pe, pf, pc)
+    const rr = alone + (around - alone) * framed + sc * (0.016 - 0.006 * framed)
+    x += w[2] * rr * dc
+    y += w[2] * rr * ds
   }
-  if (cm > 0) {
-    // An interacting pair: two cores circling each other, each with arms.
+  if (w[3] > 0) {
+    // An interacting pair: two cores circling each other. With a spiral
+    // they are compact, and the spiral's arms grow out of them.
     const side = m.k < 0.5 ? -1 : 1
     const sub = (m.k * 2) % 1
-    const axis = P.tilt + rot * 0.35
-    const rs = 0.03 + 0.44 * m.l
-    let th = onArm ? rot * 1.4 + armAngle(sub, 2) + 2.4 * Math.log(rs / 0.05) + sc * 0.55 : m.a
+    const rs = (0.03 + 0.4 * m.l * (1 - 0.4 * Math.max(pe, pf))) * inner
+    let th = onArm ? rot * 1.4 + armAngle(sub, 2) + 2.4 * Math.log(Math.max(rs, 0.02) / 0.05) + sc * 0.55 : m.a
     if (side < 0) th = -th + Math.PI
-    x += cm * (0.44 * side * Math.cos(axis) + rs * Math.cos(th))
-    y += cm * (0.44 * side * Math.sin(axis) + rs * Math.sin(th))
+    const d = 0.44 * inner
+    x += w[3] * (d * side * Math.cos(axis) + rs * Math.cos(th))
+    y += w[3] * (d * side * Math.sin(axis) + rs * Math.sin(th))
   }
 
   // A little drift, so no star sits exactly on its path.
