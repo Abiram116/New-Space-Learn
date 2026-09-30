@@ -16,6 +16,7 @@ from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSu
 from ..services import activity, personalization, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import extract_title_line, get_llm, loads_lenient
+from ..services.quiz_shuffle import balance_answer_positions
 from ..services.ratelimit import consume_llm_quota
 from ..services.student_model import difficulty_mix
 from ..services.voice import QUIZ_AGENT_VOICE
@@ -223,7 +224,8 @@ async def generate_quiz(
                 raw_parts.append(delta)
             raw = "".join(raw_parts).strip()
             generated_title = extract_title_line(raw)
-            questions = _safe_parse_questions(raw, want=body.count)
+            # The model puts the right answer first far too often; spread it.
+            questions = balance_answer_positions(_safe_parse_questions(raw, want=body.count))
         except ApiError:
             # Already a friendly, typed error (rate limit, upstream down) — let
             # it surface so the user knows to retry rather than being handed
