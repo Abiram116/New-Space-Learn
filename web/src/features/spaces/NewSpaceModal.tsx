@@ -54,7 +54,7 @@ export function NewSpaceModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="New space"
+      title="New subject"
       width="md"
       footer={
         <ModalFooter>
@@ -65,7 +65,7 @@ export function NewSpaceModal({
               button change width under the cursor. `aria-busy` carries the
               state instead. */}
           <Button type="submit" form="new-space-form" disabled={busy} aria-busy={busy} className="min-w-36">
-            {busy ? 'Creating…' : 'Create space'}
+            {busy ? 'Creating…' : 'Create subject'}
           </Button>
         </ModalFooter>
       }
@@ -103,7 +103,7 @@ export function NewSpaceModal({
                 aria-pressed={tone === t}
                 onClick={() => setTone(t)}
                 className={cn(
-                  'flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors',
+                  'flex h-10 w-10 max-md:h-11 max-md:w-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] transition-colors',
                   tone === t ? 'border-ink' : 'border-line hover:border-line-dash',
                 )}
               >

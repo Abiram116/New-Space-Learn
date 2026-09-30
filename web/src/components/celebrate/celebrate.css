@@ -133,6 +133,19 @@
   font-weight: 600;
   line-height: 1.3;
 }
+/* A bot reacting beside the line: it stands in the slip's own height (the
+   negative margins) so a slip with a character is barely taller than one
+   with the tone dot. */
+.sl-cel-line--bot {
+  padding: 5px 16px 5px 8px;
+}
+.sl-cel-bot {
+  display: grid;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin: -6px 0 -6px -2px;
+}
 .sl-cel-line i {
   flex: none;
   width: 8px;

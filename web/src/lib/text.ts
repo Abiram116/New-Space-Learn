@@ -11,6 +11,7 @@ export function stripMarkdown(input: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1') // links → their text
     .replace(/^\s{0,3}#{1,6}\s+/gm, '')     // headings
     .replace(/^\s{0,3}>\s?/gm, '')          // blockquotes
+    .replace(/^\s*(?:[-*+]\s+)?\[([ xX])\]\s+/gm, (_m, c: string) => (c === ' ' ? '☐ ' : '☑ ')) // task markers
     .replace(/^\s*[-*+]\s+/gm, '')          // bullets
     .replace(/^\s*\d+\.\s+/gm, '')          // ordered list markers
     .replace(/(\*\*|__)(.*?)\1/g, '$2')     // bold

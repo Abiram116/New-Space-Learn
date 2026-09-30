@@ -38,6 +38,9 @@ export type AgentRun = {
   title: string
   /** Shown on success: "8 cards ready". */
   doneText?: string
+  /** How many items the run actually made (cards, questions), when known —
+   *  the only number the agent's success line may say. */
+  count?: number
   href?: string
   error?: string
 }
@@ -46,7 +49,7 @@ export type AgentRunInput = { topic?: string; instructions?: string }
 
 type Action =
   | { type: 'start'; run: AgentRun }
-  | { type: 'done'; id: number; doneText: string; href: string }
+  | { type: 'done'; id: number; doneText: string; href: string; count?: number }
   | { type: 'fail'; id: number; error: string }
   | { type: 'restart'; id: number; startedAt: number }
   | { type: 'dismiss'; id: number }
@@ -60,7 +63,7 @@ export function agentRunsReducer(state: AgentRun[], action: Action): AgentRun[] 
     case 'done':
       return state.map((r) =>
         r.id === action.id
-          ? { ...r, status: 'done', doneText: action.doneText, href: action.href, error: undefined }
+          ? { ...r, status: 'done', doneText: action.doneText, href: action.href, count: action.count, error: undefined }
           : r,
       )
     case 'fail':
@@ -117,7 +120,7 @@ const TOPIC_LIMIT: Record<AgentKey, number> = {
   flashcards: LIMITS.cardsTopic,
 }
 
-type Outcome = { doneText: string; href: string }
+type Outcome = { doneText: string; href: string; count?: number }
 
 export function useAgentRuns({
   subspaceId,
@@ -156,7 +159,11 @@ export function useAgentRuns({
           topic: input.topic,
           count: QUIZ_COUNT,
         })
-        return { doneText: 'Quiz ready', href: `${base}/quizzes?q=${quiz.id}` }
+        return {
+          doneText: 'Quiz ready',
+          href: `${base}/quizzes?q=${quiz.id}`,
+          count: Array.isArray(quiz.questions) ? quiz.questions.length : undefined,
+        }
       }
       if (agent === 'notes') {
         const note = await generateNote(subspaceId, {
@@ -175,6 +182,7 @@ export function useAgentRuns({
       })
       return {
         doneText: `${cards.length} card${cards.length === 1 ? '' : 's'} ready`,
+        count: cards.length,
         // Land on the deck itself, as notes and quizzes land on what they wrote.
         href: cards[0] ? `${base}/flashcards?deck=${cards[0].deck_id}` : `${base}/flashcards`,
       }

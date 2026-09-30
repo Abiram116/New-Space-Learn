@@ -323,7 +323,7 @@ export function QuizResults({
                     aria-controls="quiz-review-list"
                     onClick={() => setFilter(key)}
                     className={cn(
-                      'stage-label inline-flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-1.5 font-semibold',
+                      'stage-label inline-flex cursor-pointer items-center gap-2 rounded-lg px-3.5 py-1.5 font-semibold max-md:min-h-11',
                       't-control duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300',
                       filter === key ? 'bg-raised text-ink shadow-[inset_0_1px_0_rgba(255,237,220,0.06)]' : 'text-muted hover:text-ink',
                     )}

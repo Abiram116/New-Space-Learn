@@ -99,9 +99,22 @@ describe('the top bar', () => {
     expect(phoneBackFor('/settings')).toBe('/profile')
   })
 
-  it('shows the topic switcher except on account pages', () => {
+  it('an open deck is a drill-in with one back arrow', () => {
+    expect(phoneBackFor('/flashcards', '?deck=d1')).toBe('/flashcards')
+    expect(phoneBackFor('/s/a/b/flashcards', '?deck=d1')).toBe('/s/a/b/flashcards')
+    expect(phoneBackFor('/s/a/b/flashcards', '')).toBeNull()
+    expect(phoneTitle('/s/a/b/flashcards', '?deck=d1')).toBe('Deck')
+    expect(phoneTitle('/s/a/b/flashcards')).toBe('Cards')
+  })
+
+  it('shows the topic switcher only where the topic scopes the content', () => {
     expect(showsTopicSwitcher('/home')).toBe(true)
-    expect(showsTopicSwitcher('/s/a/b/notes')).toBe(true)
+    expect(showsTopicSwitcher('/s/a/b')).toBe(true)
+    expect(showsTopicSwitcher('/s/a/b/docs')).toBe(true)
+    expect(showsTopicSwitcher('/s/a/b/notes')).toBe(false)
+    expect(showsTopicSwitcher('/s/a/b/flashcards')).toBe(false)
+    expect(showsTopicSwitcher('/quizzes')).toBe(false)
+    expect(showsTopicSwitcher('/flashcards')).toBe(false)
     expect(showsTopicSwitcher('/profile')).toBe(false)
     expect(showsTopicSwitcher('/settings')).toBe(false)
   })

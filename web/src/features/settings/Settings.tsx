@@ -340,11 +340,6 @@ export function Settings() {
               last
             />
           </div>
-          <p className="text-[13px] leading-relaxed text-faint">
-            Every control on this page does something the moment you change
-            it — there is nothing here waiting on a feature that hasn't
-            shipped.
-          </p>
         </>
       )}
 
@@ -493,7 +488,9 @@ export function Settings() {
               onChange={(v) =>
                 patch('always_show_citations', { always_show_citations: v })
               }
+              last={phone}
             />
+            {!phone && (
             <RowWithToggle
               label="Show the agent bots"
               hint="Nova and the crew: little faces and messages while the AI works. Off gives a plain interface. Saved on this device."
@@ -501,6 +498,7 @@ export function Settings() {
               onChange={setBotsEnabled}
               last
             />
+            )}
           </div>
           {phone && (
             <p className="flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
@@ -915,10 +913,10 @@ function PhoneSettings({
           <button
             type="button"
             onClick={back}
-            className="flex min-h-11 min-w-11 cursor-pointer items-center gap-0.5 rounded-[10px] px-2 text-[15px] font-semibold text-brand active:bg-line-soft"
+            aria-label="Settings"
+            className="t-control grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-ink-2 active:bg-line-soft"
           >
-            <Icon name="arrowLeft" size={16} />
-            Settings
+            <Icon name="arrowLeft" size={21} />
           </button>
           <h1 className="pointer-events-none absolute inset-x-0 text-center text-[16px] font-semibold text-ink">{open}</h1>
         </div>

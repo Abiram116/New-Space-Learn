@@ -45,18 +45,36 @@
  *   `pickLine(situation, agent, facts)` from `lib/botVoice`. Only pass real
  *   facts ({ name, count, score, streak }); lines needing absent facts are skipped.
  *
- * ── Where these belong (not wired yet) ────────────────────────────────────
- *   Agent run progress cards   BotProgress, agent = cards/quiz/notes, 'generating' → 'success' | 'error'
- *   Cold start / OfflineBanner Bot mood 'sleepy' → 'waking' (useBotMood 'asleep'), pickLine('waking'), then 'slow'
- *   Empty states               BotSays stacked + 'emptyCards' | 'emptyQuizzes' | 'emptyNotes' | 'emptyDocs'
- *   Celebrations               'celebrate' / 'cheer' / 'proud' with 'streak' | 'goal' | 'quizGreat' lines
- *   Error states               'oops' + pickLine('error'), next to the retry button
- *   Onboarding / first run     'wave' + 'firstRun'
- *   Today greeting             BotSays inline, 'wave' → idle, pickLine('greeting' | 'welcomeBack', 'tutor', { name })
+ *   `useBotLine(situation, agent, facts, key?)` holds one line steady across
+ *   re-renders (a new one only when the moment changes). `surface: 'phone' |
+ *   'home'` picks that surface's own pool where the base one would be untrue
+ *   there (no chat on a phone; Home is not "this topic").
+ *
+ * ── Loading ───────────────────────────────────────────────────────────────
+ *   `Bot` is light; the drawing (`BotFace` + mascot.css) is its own lazy
+ *   chunk, fetched when the first bot mounts. Until then a size-exact
+ *   `.bot-slot` holds the space. `loadBotFace()` warms it early (onboarding,
+ *   celebrations). Tests preload it in testSetup (jsdom only).
+ *
+ * ── Where they live ───────────────────────────────────────────────────────
+ *   Agent runs (chat)          AgentRunCard: BotProgress 48px, Flip/Pop/Jot, generating → happy | oops
+ *   Connectivity               OfflineBanner: Nova 40px sleepy → waking → happy "back"; offline = oops
+ *                              AsyncState: Nova 56px thinking (slow) / sleepy (stalled) / oops + line by Retry
+ *   Empty lists                EmptyState `bot` prop: agent 72px stacked + 'empty…' line, button under it
+ *                              PhoneDocs: Nova 80px over its own first-person line
+ *   Slow list loads            SlowBot 40–48px above the skeleton, only past SLOW_MS
+ *   Celebrations               celebrate/effects: 40px reactor in the caption slip (logic.reactorFor)
+ *   Greetings                  Home/Today: NovaHello 44px (line) or NovaBeside 52–64px (brief already greets)
+ *                              WaitingNova 40px beside the skeleton's SlowCaption
+ *   First run                  FirstRun (desktop Home) and onboarding Ending: BotSays 56px 'firstRun';
+ *                              PhoneOnboarding finale: Nova 72px wave
+ *   Never                      on the quiz/review screens while the student is answering
  */
-export { Bot, type BotProps } from './Bot'
+export { Bot, loadBotFace, type BotProps } from './Bot'
 export { BotSays, type BotSaysProps } from './BotSays'
 export { BotProgress, formatElapsed, type BotProgressProps } from './BotProgress'
-export { useBotMood, SITUATION_MOOD, type BotSituation, type BotMoodOptions } from './useBotMood'
+export { SlowBot } from './SlowBot'
+export { useBotLine } from './useBotLine'
+export { useArrivalMood, useBotMood, SITUATION_MOOD, type BotSituation, type BotMoodOptions } from './useBotMood'
 export { AGENTS, AGENT_IDS, BOT_NAME, type AgentId, type AgentMeta } from './agents'
 export { BOT_MOODS, POSES, type BotMood } from './moods'

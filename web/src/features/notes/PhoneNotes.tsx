@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { cn } from '../../lib/cn'
 import { toneBar } from '../../lib/tone'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
@@ -132,6 +133,7 @@ export function PhoneNotes({
 
         {loading && (
           <div className="flex flex-col gap-px" aria-busy>
+            <SlowBot pending agent="notes" className="px-4 pb-3" />
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-[76px] rounded-none" />
             ))}
@@ -152,6 +154,7 @@ export function PhoneNotes({
             <EmptyState
               icon="note"
               title="No notes yet"
+              bot={{ agent: 'notes', say: 'emptyNotes', surface: 'phone' }}
               description="Start a blank one, or have the AI write one from what's indexed here."
               action={
                 <div className="flex w-full flex-col gap-2">

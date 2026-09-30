@@ -44,7 +44,7 @@ function Hub({ space, subspace, base }: { space: Space; subspace: Subspace; base
             <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', toneDot[space.tone])} aria-hidden />
             <span className="setcode-strong truncate">{space.name}</span>
           </p>
-          <h2 className="nameplate mt-3 break-words text-[32px] leading-[0.95] text-ink [text-wrap:balance]">
+          <h2 className="nameplate mt-3 text-[clamp(22px,7.4vw,32px)] leading-[0.95] text-ink [hyphens:none] [overflow-wrap:normal] [text-wrap:balance]">
             {subspace.name}
           </h2>
         </header>

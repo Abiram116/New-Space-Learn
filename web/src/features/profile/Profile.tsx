@@ -178,7 +178,7 @@ export function Profile() {
                   }}
                   aria-label="Rename yourself"
                   title="Rename yourself"
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+                  className="grid h-10 w-10 max-md:h-11 max-md:w-11 shrink-0 place-items-center rounded-[10px] text-muted transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
                 >
                   <Icon name="pencil" size={16} />
                 </button>

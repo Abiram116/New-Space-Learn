@@ -162,7 +162,7 @@ export function PhoneOnboarding() {
         key={step}
         onSubmit={next}
         className={cn(
-          'mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-[max(20px,env(safe-area-inset-bottom))] pt-8 [@media(max-height:500px)]:pt-5',
+          'mx-auto flex w-full max-w-xl flex-1 flex-col px-4 pb-[max(20px,env(safe-area-inset-bottom))] pt-8 [@media(max-height:640px)]:pb-[max(12px,env(safe-area-inset-bottom))] [@media(max-height:640px)]:pt-3 [@media(max-height:500px)]:pt-5',
           !reduced && 'po-in',
         )}
       >
@@ -171,7 +171,7 @@ export function PhoneOnboarding() {
             <h1 ref={headingRef} tabIndex={-1} id="po-ask" className="nameplate text-[clamp(26px,min(8.5vw,9vh),36px)] leading-[1.02] outline-none">
               What should we call you?
             </h1>
-            <p className="mt-2.5 text-[15px] leading-relaxed text-ink-3">It’s how Today will greet you.</p>
+            <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">It’s how Today will greet you.</p>
             <input
               ref={inputRef}
               value={name}
@@ -181,7 +181,7 @@ export function PhoneOnboarding() {
               enterKeyHint="next"
               aria-labelledby="po-ask"
               placeholder="Your name"
-              className="mt-7 w-full border-0 border-b border-line bg-transparent pb-2.5 text-[22px] font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-faint focus:border-brand/70"
+              className="mt-7 min-h-12 w-full border-0 border-b border-line bg-transparent pb-2 text-[22px] font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-faint focus:border-brand/70"
             />
           </>
         )}
@@ -191,10 +191,10 @@ export function PhoneOnboarding() {
             <h1 ref={headingRef} tabIndex={-1} id="po-ask" className="nameplate text-[clamp(26px,min(8.5vw,9vh),36px)] leading-[1.02] outline-none">
               How long is a typical session?
             </h1>
-            <p className="mt-2.5 text-[15px] leading-relaxed text-ink-3">
+            <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
               Today sizes your reviews to fit. Change it any time.
             </p>
-            <div role="radiogroup" aria-labelledby="po-ask" className="mt-6 grid gap-2.5 [@media(min-width:600px)_and_(max-height:500px)]:grid-cols-3">
+            <div role="radiogroup" aria-labelledby="po-ask" className="mt-6 [@media(max-height:640px)]:mt-3 grid gap-2.5 [@media(max-height:640px)]:gap-2 [@media(min-width:600px)_and_(max-height:500px)]:grid-cols-3">
               {PHONE_SESSIONS.map((o) => {
                 const on = session === o.value
                 return (
@@ -205,7 +205,7 @@ export function PhoneOnboarding() {
                     aria-checked={on}
                     onClick={() => setSession(o.value)}
                     className={cn(
-                      'flex min-h-16 w-full cursor-pointer items-center gap-3.5 rounded-[14px] border px-4 py-3 text-left transition-[border-color,background-color,transform] duration-150 active:scale-[0.985]',
+                      'flex min-h-16 [@media(max-height:640px)]:min-h-[52px] w-full cursor-pointer items-center gap-3.5 rounded-[14px] border px-4 py-3 [@media(max-height:640px)]:py-2 text-left transition-[border-color,background-color,transform] duration-150 active:scale-[0.985]',
                       on ? 'border-brand/70 bg-brand-soft' : 'border-line bg-raised/70',
                     )}
                   >
@@ -236,7 +236,7 @@ export function PhoneOnboarding() {
             <h1 ref={headingRef} tabIndex={-1} id="po-ask" className="nameplate text-[clamp(26px,min(8.5vw,9vh),36px)] leading-[1.02] outline-none">
               What are you working towards?
             </h1>
-            <p className="mt-2.5 text-[15px] leading-relaxed text-ink-3">
+            <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
               An exam, a course, a job. Optional.
             </p>
             <input
@@ -248,7 +248,7 @@ export function PhoneOnboarding() {
               enterKeyHint="done"
               aria-labelledby="po-ask"
               placeholder="e.g. Biology finals in June"
-              className="mt-7 w-full border-0 border-b border-line bg-transparent pb-2.5 text-[19px] font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-faint focus:border-brand/70"
+              className="mt-7 min-h-12 w-full border-0 border-b border-line bg-transparent pb-2 text-[19px] font-semibold text-ink outline-none transition-colors placeholder:font-normal placeholder:text-faint focus:border-brand/70"
             />
           </>
         )}
@@ -257,7 +257,7 @@ export function PhoneOnboarding() {
             with the keyboard up, a bottom-pinned button is the one thing it
             covers. On the choice step there is no keyboard, so it sinks to
             the thumb zone instead. */}
-        <div className={cn('flex flex-col gap-2 pt-7', step === 1 && 'mt-auto')}>
+        <div className={cn('flex flex-col gap-2 pt-7 [@media(max-height:640px)]:pt-4', step === 1 && 'mt-auto')}>
           <button
             type="submit"
             className="flex min-h-[52px] w-full cursor-pointer items-center justify-center gap-2 rounded-[14px] bg-brand px-5 text-[17px] font-semibold text-[#1a120f] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_3px_0_#a8331d] transition-transform active:translate-y-[2px]"

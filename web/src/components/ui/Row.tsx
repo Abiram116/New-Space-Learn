@@ -122,7 +122,7 @@ export function RowWithNumber({
           // persisted and come back as a broken number input.
           if (Number.isFinite(n)) onChange(n)
         }}
-        className="h-10 w-20 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
+        className="h-10 w-20 max-md:h-11 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
       />
       {suffix && <span className="text-[13px] text-muted">{suffix}</span>}
     </RowShell>

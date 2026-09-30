@@ -32,9 +32,10 @@ vi.mock('../../lib/briefCache', () => ({
   getCachedStats: (...a: unknown[]) => getCachedStats(...a),
 }))
 vi.mock('../spaces/NewSpaceModal', () => ({ NewSpaceModal: () => null }))
-vi.mock('../../auth/AuthProvider', () => ({
-  useAuth: () => ({ user: { id: 'u1', email: 'asha@example.com', user_metadata: { display_name: 'Asha Rao' } } }),
-}))
+vi.mock('../../auth/AuthProvider', () => {
+  const auth = { user: { id: 'u1', email: 'asha@example.com', user_metadata: { display_name: 'Asha Rao' } } }
+  return { useAuth: () => auth, useOptionalAuth: () => auth }
+})
 vi.mock('../../api/quizzes', () => ({ listAllQuizzes: vi.fn().mockResolvedValue([]) }))
 vi.mock('../../api/notes', () => ({ listAllNotes: vi.fn().mockResolvedValue([]) }))
 const updateStudentModel = vi.fn()
@@ -124,7 +125,8 @@ describe('Today, on a phone', () => {
     getCachedStats.mockResolvedValue(stats({ cards_due: 12 }))
     renderHome()
 
-    expect(await screen.findByText(/, Asha\.$/)).toBeInTheDocument()
+    // Nova carries the greeting now — in its own words, but always by name.
+    expect(await screen.findByText(/Asha/, { selector: '.nova-hello .bot-bubble' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { level: 1, name: 'Cells are coming along' })).toBeInTheDocument()
     const action = await screen.findByRole('link', { name: /Review 12 cards/ })
     expect(action).toHaveTextContent('~4 min')

@@ -13,11 +13,15 @@
  * main beat, then goes.
  */
 
+import { loadBotFace } from '../mascot/Bot'
+import { botsEnabledNow } from '../../lib/botPreference'
+import { isMobileNow } from '../../lib/useIsMobile'
 import {
   lineKey,
   localKV,
   pickLine,
   planFor,
+  reactorFor,
   readJSON,
   remember,
   writeJSON,
@@ -48,6 +52,8 @@ let effects: Promise<Effects> | null = null
 
 export function preloadCelebrations(): Promise<Effects> {
   effects ??= import('./effects')
+  // The reacting bot's face rides along, so the first moment isn't missing it.
+  if (botsShownNow()) void loadBotFace().catch(() => {})
   return effects
 }
 
@@ -90,10 +96,15 @@ async function play(occasion: Occasion, options: CelebrateOptions): Promise<void
   }
 
   const fx = await preloadCelebrations()
+  // A bot reacts beside the line (never without one — the bot is the
+  // speaker, not decoration), unless the student has switched them off.
+  const reactor = text && botsShownNow() ? reactorFor(occasion, facts) : null
+  if (reactor) await loadBotFace().catch(() => {})
   const beat = fx.run(plan, {
     origin: centreOf(resolve(options.anchor)),
     bar: boxOf(resolve(options.bar)),
     line: text,
+    bot: reactor,
     reduced: prefersReducedMotion(),
     compact: Boolean(options.compact),
   })
@@ -101,6 +112,11 @@ async function play(occasion: Occasion, options: CelebrateOptions): Promise<void
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
+
+/** The non-React twin of `useBotsShown`: the preference, and not a phone. */
+function botsShownNow(): boolean {
+  return botsEnabledNow() && !isMobileNow()
+}
 
 function resolve(el: ElementLike): Element | null {
   if (!el) return null

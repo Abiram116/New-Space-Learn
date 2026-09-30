@@ -40,13 +40,16 @@ import { useIsMobile } from '../../lib/useIsMobile'
 import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
 import { useSlowState, type SlowPhase } from '../../lib/useSlowState'
 import { toneDot, toneText } from '../../lib/tone'
+import { useOptionalAuth } from '../../auth/AuthProvider'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { StyleIntakeCard, useCachedStudentModel } from '../onboarding/StyleIntakeCard'
 import { deriveChecklist, hideChecklist, isChecklistHidden } from './checklist'
 import { FirstSteps, type StepTarget } from './FirstSteps'
 import { Fortnight } from './Fortnight'
-import { Today } from './Today'
+import { NovaBeside, NovaHello, briefIsGreeting } from './Greeting'
+import { Today, WaitingNova } from './Today'
+import { firstNameOf } from './today'
 import { topicsByRecency } from './today'
 
 /**
@@ -77,6 +80,12 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
   const briefPhase = useSlowState(brief.loading)
   const statsPhase = useSlowState(stats.loading)
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
+  const user = useOptionalAuth()?.user
+  const name = firstNameOf(
+    (user?.user_metadata?.display_name as string | undefined) || user?.email?.split('@')[0],
+  )
+
+  const briefGreets = !brief.loading && briefIsGreeting(brief.data?.headline, name)
 
   const anySpaces = spaces.length > 0
   const entries = activeSubspaces(spaces)
@@ -152,6 +161,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
         <EmptyState
           icon="offline"
           title="Couldn't load your home"
+          bot={{ agent: 'tutor', say: 'error', mood: 'oops' }}
           description={spacesError}
           action={
             <Button onClick={() => void refreshSpaces()}>
@@ -174,6 +184,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
           <FirstRun
+            name={name}
             onCreate={() => setNewSpaceOpen(true)}
             steps={<FirstSteps checklist={checklist} targets={stepTargets} />}
           />
@@ -193,28 +204,45 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
             starts reading as lag. Reduced-motion users get all of it at once,
             handled inside Rise. */}
         <header className="flex flex-col gap-5 pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
-          {brief.loading ? (
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-11 w-2/3 rounded-lg" />
-              <Skeleton className="h-4 w-1/2 rounded" />
-              <SlowCaption phase={briefPhase} onRetry={brief.refresh} />
-            </div>
-          ) : (
-            <div className="flex min-w-0 flex-col gap-2">
-              <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
-                {brief.data?.headline ?? 'Ready when you are'}
-              </h1>
-              <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
-                {brief.data?.body ??
-                  'Add a topic to your space and start asking questions about your own material.'}
-              </p>
-              {/* A failed background refresh keeps whatever headline is
-                  already showing (the effect never clears `local` on
-                  error) — this is the footnote that says so instead of
-                  leaving the stale copy looking current. */}
-              {brief.error && <StaleNotice onRetry={brief.refresh} className="mt-0.5" />}
-            </div>
-          )}
+          {/* Nova says hello above the brief — or, when the headline already
+              greets, just waves beside it. Never two hellos. The hello keeps
+              its place while the brief loads, so it doesn't re-wave (or
+              change its line) when the brief lands. */}
+          <div className="flex min-w-0 flex-col gap-2">
+            {!briefGreets && (
+              <NovaHello name={name} phase={brief.loading ? briefPhase : undefined} size={44} className="mb-1" />
+            )}
+            {brief.loading ? (
+              <div className="flex flex-col gap-3">
+                <Skeleton className="h-11 w-2/3 rounded-lg" />
+                <Skeleton className="h-4 w-1/2 rounded" />
+                <SlowCaption phase={briefPhase} onRetry={brief.refresh} />
+              </div>
+            ) : (
+              <>
+                {briefGreets ? (
+                  <NovaBeside size={64}>
+                    <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
+                      {brief.data?.headline}
+                    </h1>
+                  </NovaBeside>
+                ) : (
+                  <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
+                    {brief.data?.headline ?? 'Ready when you are'}
+                  </h1>
+                )}
+                <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
+                  {brief.data?.body ??
+                    'Add a topic to your space and start asking questions about your own material.'}
+                </p>
+                {/* A failed background refresh keeps whatever headline is
+                    already showing (the effect never clears `local` on
+                    error) — this is the footnote that says so instead of
+                    leaving the stale copy looking current. */}
+                {brief.error && <StaleNotice onRetry={brief.refresh} className="mt-0.5" />}
+              </>
+            )}
+          </div>
 
           {anySubspaces && first && (
             <div className="flex shrink-0 flex-wrap items-center gap-2.5">
@@ -770,7 +798,7 @@ function HomeSkeleton({ phase, onRetry }: { phase: SlowPhase; onRetry: () => voi
         <div className="flex flex-col gap-3 pb-8">
           <Skeleton className="h-11 w-2/3 max-w-md rounded-lg" />
           <Skeleton className="h-4 w-1/2 max-w-sm rounded" />
-          <SlowCaption phase={phase} onRetry={onRetry} className="mt-1" />
+          <WaitingNova phase={phase} onRetry={onRetry} className="mt-1" />
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line pt-7 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (

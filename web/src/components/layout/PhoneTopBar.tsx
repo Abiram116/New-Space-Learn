@@ -24,13 +24,22 @@ export function PhoneTopBar({
   loading: boolean
   onOpenSwitcher: () => void
 }) {
-  const { pathname } = useLocation()
-  const title = phoneTitle(pathname)
-  const back = phoneBackFor(pathname)
+  const { pathname, search } = useLocation()
+  const title = phoneTitle(pathname, search)
+  const back = phoneBackFor(pathname, search)
+
+  const isProfile = pathname.replace(/\/+$/, '') === '/profile'
+  const pill = !isProfile && showsTopicSwitcher(pathname) && Boolean(subspace || loading)
+  // A root screen with nothing to switch: in a short landscape phone the bar
+  // has no job (the tab bar already names the screen), so it steps aside.
+  const bare = !back && !isProfile && !pill
 
   return (
-    <header className="relative z-20 shrink-0 border-b border-line bg-surface pt-[env(safe-area-inset-top)]">
-      <div className="flex h-[52px] items-center gap-2 px-2">
+    <header
+      data-phone-topbar={bare ? 'bare' : ''}
+      className="relative z-20 shrink-0 border-b border-line bg-surface pt-[env(safe-area-inset-top)]"
+    >
+      <div className="phone-topbar-row flex h-[52px] items-center gap-2 px-2">
         {back ? (
           <Link
             to={back}
@@ -43,9 +52,10 @@ export function PhoneTopBar({
           <span className="w-2 shrink-0" aria-hidden />
         )}
 
-        <h1 className="nameplate min-w-0 flex-1 truncate pt-[3px] text-[21px] text-ink">{title}</h1>
+        <h1 className="nameplate shrink-0 whitespace-nowrap pt-[3px] text-[21px] text-ink">{title}</h1>
+        <span className="min-w-0 flex-1" aria-hidden />
 
-        {pathname.replace(/\/+$/, '') === '/profile' ? (
+        {isProfile ? (
           <Link
             to="/settings"
             aria-label="Settings"
@@ -53,14 +63,15 @@ export function PhoneTopBar({
           >
             <Icon name="settings" size={20} />
           </Link>
-        ) : showsTopicSwitcher(pathname) ? (
+        ) : pill ? (
           <button
             type="button"
             onClick={onOpenSwitcher}
             aria-haspopup="dialog"
             aria-label={subspace ? `Topic: ${subspace.name}. Change topic` : 'Choose a topic'}
             className={cn(
-              't-control flex h-10 min-w-0 max-w-[58%] shrink items-center gap-2 rounded-full border border-line bg-raised pl-3 pr-2.5',
+              't-control flex h-11 min-w-0 shrink items-center gap-2 rounded-full border border-line bg-raised pl-3 pr-2.5',
+              back ? 'max-w-[45%]' : 'max-w-[58%]',
               'shadow-[inset_0_1px_0_rgba(255,237,220,0.06)] active:translate-y-px active:bg-line-soft',
             )}
           >

@@ -21,6 +21,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { Stagger } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
@@ -371,6 +372,7 @@ function Inner({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading && (
             <div className="flex flex-col gap-2 p-4">
+              <SlowBot pending agent="notes" size={40} className="mb-2" />
               <Skeleton className="h-16 rounded-lg" />
               <Skeleton className="h-16 rounded-lg" />
               <Skeleton className="h-16 rounded-lg" />
@@ -389,6 +391,7 @@ function Inner({
               <EmptyState
                 icon="note"
                 title="No notes yet"
+                bot={{ agent: 'notes', say: 'emptyNotes' }}
                 description="Start a blank one, or have the AI write one from what's indexed here."
                 action={
                   <div className="flex flex-wrap justify-center gap-2">

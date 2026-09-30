@@ -7,11 +7,13 @@
  * hover.
  */
 
+import { useNavigate } from 'react-router-dom'
 import type { Deck, Tone } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { cn } from '../../lib/cn'
 import { toneBar } from '../../lib/tone'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
@@ -28,6 +30,7 @@ export function PhoneDecks({
   toneOf,
   totalDue,
   subspaceName,
+  addMaterialHref,
   onOpen,
   onReview,
   onDelete,
@@ -44,12 +47,15 @@ export function PhoneDecks({
   toneOf: (deck: Deck) => Tone | undefined
   totalDue: number
   subspaceName: string
+  /** Set when the topic has no sources yet: where "Add material" goes. */
+  addMaterialHref: string | null
   onOpen: (id: string) => void
   onReview: (id: string) => void
   onDelete: (id: string) => void
   onNew: () => void
   onGenerate: () => void
 }) {
+  const navigate = useNavigate()
   const sheet = useRowSheet<Deck>()
   const firstDue = decks.find((d) => d.due > 0)
   const manyDue = decks.filter((d) => d.due > 0).length > 1
@@ -84,6 +90,7 @@ export function PhoneDecks({
 
         {loading && (
           <div className="flex flex-col gap-px" aria-busy>
+            <SlowBot pending agent="cards" className="px-4 pb-3" />
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-16 rounded-none" />
             ))}
@@ -104,15 +111,33 @@ export function PhoneDecks({
             <EmptyState
               icon="deck"
               title="No decks yet"
-              description={`Write cards yourself, or have them drafted from what you've indexed under ${subspaceName}.`}
+              bot={{ agent: 'cards', say: 'emptyCards', surface: 'phone' }}
+              description={
+                addMaterialHref
+                  ? `${subspaceName} has no material yet. Add some and I'll draft cards from it, or write your own.`
+                  : `Write cards yourself, or have them drafted from what you've indexed under ${subspaceName}.`
+              }
               action={
                 <div className="flex w-full flex-col gap-2">
-                  <Button size="xl" onClick={onGenerate}>
-                    <Icon name="sparkle" size={16} /> Generate a deck
-                  </Button>
-                  <Button size="lg" variant="secondary" onClick={onNew}>
-                    Start a deck
-                  </Button>
+                  {addMaterialHref ? (
+                    <>
+                      <Button size="xl" onClick={() => navigate(addMaterialHref)}>
+                        <Icon name="plus" size={16} /> Add material
+                      </Button>
+                      <Button size="lg" variant="secondary" onClick={onNew}>
+                        Start a deck
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="xl" onClick={onGenerate}>
+                        <Icon name="sparkle" size={16} /> Generate a deck
+                      </Button>
+                      <Button size="lg" variant="secondary" onClick={onNew}>
+                        Start a deck
+                      </Button>
+                    </>
+                  )}
                 </div>
               }
             />

@@ -14,9 +14,12 @@
  * animating for nobody.
  */
 
+import { createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { Bot } from '../mascot/Bot'
 import './celebrate.css'
 import { EASE } from './easing'
-import type { Palette, Plan, Variant } from './logic'
+import type { Palette, Plan, ReactorAgent, ReactorMood, Variant } from './logic'
 
 type Pt = { x: number; y: number }
 type Box = { x: number; y: number; w: number; h: number }
@@ -25,6 +28,8 @@ export type RunContext = {
   origin: Pt
   bar: Box | null
   line: string | null
+  /** The agent reacting beside the line, or null for the plain tone dot. */
+  bot?: { agent: ReactorAgent; mood: ReactorMood } | null
   reduced: boolean
   compact: boolean
 }
@@ -502,17 +507,41 @@ function tally(root: HTMLElement, o: Pt, t: { value: number; label: string }, to
 
 /** The copy line: a slip dropping in at the top, stacking under any that's
  *  still showing. */
-function caption(root: HTMLElement, o: Pt, text: string, tone: string, reduced: boolean) {
+function caption(
+  root: HTMLElement,
+  o: Pt,
+  text: string,
+  tone: string,
+  reduced: boolean,
+  bot: RunContext['bot'],
+) {
   const live = document.querySelectorAll('.sl-cel-line').length
-  const el = piece(root, 'sl-cel-line', tone)
-  const dot = document.createElement('i')
+  const el = piece(root, bot ? 'sl-cel-line sl-cel-line--bot' : 'sl-cel-line', tone)
   const span = document.createElement('span')
   span.textContent = text
-  el.append(dot, span)
+  // The bot is a tiny React island inside an imperative piece: mounted with
+  // the slip, unmounted when the slip's animation is done with it.
+  let unmount: (() => void) | null = null
+  if (bot) {
+    const holder = document.createElement('b')
+    holder.className = 'sl-cel-bot'
+    el.append(holder, span)
+    const r = createRoot(holder)
+    r.render(createElement(Bot, { agent: bot.agent, mood: bot.mood, size: 40 }))
+    unmount = () => r.unmount()
+  } else {
+    el.append(document.createElement('i'), span)
+  }
   const x = Math.min(Math.max(o.x, 180), window.innerWidth - 180)
-  const y = 16 + live * 48
+  // On a phone the top of the screen is the title bar and the score itself,
+  // so the slip settles just under the origin instead (kept clear of the
+  // bottom bars); everywhere else it drops in from the top.
+  const phone = window.innerWidth < 768
+  const y = phone
+    ? Math.min(Math.max(o.y + 44, 64) + live * 54, window.innerHeight - 190)
+    : 16 + live * 54
   const at = (dy: number) => `translate(${x}px, ${y + dy}px) translateX(-50%)`
-  return animate(
+  const played = animate(
     el,
     reduced
       ? [
@@ -529,6 +558,10 @@ function caption(root: HTMLElement, o: Pt, text: string, tone: string, reduced: 
         ],
     { duration: 4400 },
   )
+  // Off the render path: the slip has already gone.
+  return played.finally(() => {
+    if (unmount) window.setTimeout(unmount, 0)
+  })
 }
 
 /** Reduced motion: light arriving and leaving, with nothing moving. */
@@ -567,7 +600,7 @@ export function run(plan: Plan, c: RunContext): number {
   const tone = cols[0]
   const { root, track } = stage()
 
-  if (c.line) track(caption(root, c.origin, c.line, tone, c.reduced))
+  if (c.line) track(caption(root, c.origin, c.line, tone, c.reduced, c.bot ?? null))
 
   if (c.reduced) {
     if (plan.main || plan.stamp) track(glow(root, c.origin, tone))

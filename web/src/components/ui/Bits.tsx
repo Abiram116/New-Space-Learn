@@ -85,20 +85,27 @@ export function Toggle({
       aria-label={label}
       onClick={() => onChange(!checked)}
       className={cn(
-        // The ::before widens the touch target to ~44px without changing the
-        // 24px-tall switch the row is drawn around.
-        'relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 cursor-pointer before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[""]',
-        checked ? 'bg-brand' : 'bg-line',
-        'ring-1 ring-inset',
-        checked ? 'ring-brand-300/50' : 'ring-line-dash/60',
+        // The ::before widens the touch target to ~44px on desktop; on a phone
+        // the button itself is 44px tall with the 24px switch drawn inside.
+        'group relative grid h-6 w-11 shrink-0 cursor-pointer place-items-center max-md:h-11 max-md:w-12 before:absolute before:-inset-x-1 before:-inset-y-2.5 before:content-[""] max-md:before:hidden',
       )}
     >
       <span
+        aria-hidden
         className={cn(
-          'absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.5)] transition-transform duration-200',
-          checked ? 'translate-x-5 bg-[#1a120f]' : 'translate-x-0 bg-ink-3',
+          'relative block h-6 w-11 rounded-full transition-colors duration-200',
+          checked ? 'bg-brand' : 'bg-line',
+          'ring-1 ring-inset',
+          checked ? 'ring-brand-300/50' : 'ring-line-dash/60',
         )}
-      />
+      >
+        <span
+          className={cn(
+            'absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.5)] transition-transform duration-200',
+            checked ? 'translate-x-5 bg-[#1a120f]' : 'translate-x-0 bg-ink-3',
+          )}
+        />
+      </span>
     </button>
   )
 }

@@ -270,86 +270,9 @@
 }
 @keyframes bot-wake-tip { 0%, 48% { opacity: 0.5; transform: scale(0.85); } 64% { opacity: 1; transform: scale(1.3); } 80%, 100% { transform: none; } }
 
-/* Offscreen: nothing ticks. */
-[data-bot-off],
-[data-bot-off] * { animation-play-state: paused !important; }
-
-/* ── Speech & progress ─────────────────────────────────────────────────── */
-.bot-says { display: flex; align-items: center; gap: 12px; }
-.bot-says--stacked { flex-direction: column; text-align: center; gap: 10px; }
-.bot-bubble {
-  position: relative;
-  max-width: 38ch;
-  margin: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--color-line, #3b3028);
-  border-radius: 16px;
-  background: var(--color-raised, #2e2820);
-  color: var(--color-ink, #f5ede4);
-  font-size: 14px;
-  line-height: 1.45;
-  text-wrap: pretty;
-  box-shadow: 0 8px 22px -12px rgb(0 0 0 / 0.7);
-  transform-origin: left center;
-  animation: bot-bubble-in 360ms var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
-}
-.bot-bubble::before {
-  content: '';
-  position: absolute;
-  left: -6px;
-  top: 50%;
-  width: 10px;
-  height: 10px;
-  margin-top: -5px;
-  background: inherit;
-  border: inherit;
-  border-width: 0 0 1px 1px;
-  border-radius: 0 0 0 3px;
-  transform: rotate(45deg);
-}
-.bot-says--stacked .bot-bubble { transform-origin: center top; animation-name: bot-bubble-down; }
-.bot-says--stacked .bot-bubble::before { left: 50%; top: -6px; margin: 0 0 0 -5px; border-width: 1px 0 0 1px; border-radius: 3px 0 0 0; }
-.bot-says-name { display: block; margin-bottom: 1px; font-size: 12px; font-weight: 700; color: var(--bot-name, var(--color-brand-300, #ff8b76)); }
-@keyframes bot-bubble-in { from { opacity: 0; transform: translateX(-8px) scale(0.94); } }
-@keyframes bot-bubble-down { from { opacity: 0; transform: translateY(-8px) scale(0.94); } }
-
-.bot-progress { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.bot-progress-body { display: grid; gap: 6px; flex: 1; min-width: 0; }
-.bot-progress-row { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.bot-progress-line { margin: 0; flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--color-ink, #f5ede4); }
-.bot-progress-time { flex: none; font: 500 12px/1 var(--font-mono, ui-monospace, monospace); color: var(--color-muted, #c4b5aa); font-variant-numeric: tabular-nums; }
-.bot-progress-bar { position: relative; height: 3px; overflow: hidden; border-radius: 99px; background: var(--color-line, #3b3028); }
-.bot-progress-bar > i {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 38%;
-  border-radius: inherit;
-  background: var(--bot-bar, var(--color-brand, #ff5a3c));
-  animation: bot-bar 1.5s var(--ease-in-out-sl, cubic-bezier(0.65, 0, 0.35, 1)) infinite;
-}
-@keyframes bot-bar { from { transform: translateX(-105%); } to { transform: translateX(270%); } }
+/* Offscreen: nothing ticks — see speech.css ([data-bot-off]). */
 
 @media (prefers-reduced-motion: reduce) {
   .bot,
-  .bot *,
-  .bot-bubble,
-  .bot-progress-bar > i { animation: none !important; transition: none !important; }
-  .bot-progress-bar > i { width: 100%; opacity: 0.45; }
-}
-
-/* Bots switched off in Settings: keep the words, drop the character and the
-   speech-bubble chrome so the line reads as ordinary text. */
-.bot-says--plain {
-  gap: 0;
-}
-.bot-says--plain .bot-bubble {
-  background: none;
-  border: 0;
-  box-shadow: none;
-  padding: 0;
-  animation: none;
-}
-.bot-says--plain .bot-bubble::before,
-.bot-says--plain .bot-bubble::after {
-  display: none;
+  .bot * { animation: none !important; transition: none !important; }
 }

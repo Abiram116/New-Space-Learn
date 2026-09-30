@@ -3,7 +3,7 @@
 /** The Settings switch must remove the characters everywhere but keep the words. */
 
 import { act, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { botsEnabledNow, setBotsEnabled } from '../../lib/botPreference'
 import { Bot, BotProgress, BotSays } from '.'
 
@@ -46,5 +46,26 @@ describe('bot preference', () => {
     expect(screen.getByText('Making 8 flashcards…')).toBeTruthy()
     expect(container.querySelector('svg.bot')).toBeNull()
     expect(container.querySelector('.bot-progress-bar')).not.toBeNull()
+  })
+
+  it('never draws on a phone, whatever the preference says', () => {
+    const real = window.matchMedia
+    window.matchMedia = ((q: string) => ({
+      matches: true,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia
+    try {
+      expect(botsEnabledNow()).toBe(true) // preference is untouched
+      const { container } = render(<Bot label="Nova" />)
+      expect(container.querySelector('svg.bot')).toBeNull()
+      const says = render(<BotSays>Welcome back.</BotSays>)
+      expect(says.container.querySelector('.bot-says--plain')).not.toBeNull()
+      expect(screen.getByText('Welcome back.')).toBeTruthy()
+    } finally {
+      window.matchMedia = real
+      vi.restoreAllMocks()
+    }
   })
 })

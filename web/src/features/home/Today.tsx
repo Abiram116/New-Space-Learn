@@ -37,8 +37,10 @@ import { cn } from '../../lib/cn'
 import { subspacePath } from '../../lib/nav'
 import { useAsync, type AsyncResult } from '../../lib/useAsync'
 import { useSlowState, type SlowPhase } from '../../lib/useSlowState'
+import { Bot } from '../../components/mascot/Bot'
 import { useCachedStudentModel } from '../onboarding/StyleIntakeCard'
 import { useSpaces } from '../spaces/SpacesProvider'
+import { NovaBeside, NovaHello, briefIsGreeting } from './Greeting'
 import { appUrl, sendLink, shareMessage } from './share'
 import {
   chooseTodayAction,
@@ -97,6 +99,7 @@ export function Today({
         <EmptyState
           icon="offline"
           title="Couldn't load Today"
+          bot={{ agent: 'tutor', say: 'error', mood: 'oops' }}
           description={error}
           action={
             <Button size="lg" onClick={() => void refresh()}>
@@ -112,7 +115,9 @@ export function Today({
   if (spaces.length === 0 || topics.length === 0) {
     return (
       <Page>
-        <h1 className="nameplate text-[clamp(24px,min(7.2vw,9vh),32px)] leading-[1.04] text-ink">{hello}</h1>
+        <NovaBeside size={52}>
+          <h1 className="nameplate text-[clamp(24px,min(7.2vw,9vh),32px)] leading-[1.04] text-ink">{hello}</h1>
+        </NovaBeside>
         <FirstTopic spaces={spaces} />
         <DesktopNote />
       </Page>
@@ -128,9 +133,10 @@ export function Today({
     <Page>
       <header className="flex flex-col gap-2">
         {/* The brief is usually a greeting already ("Good evening, Abiram");
-            when it is, it is the heading. Otherwise the greeting leads and the
-            brief's headline sits under it — never both saying hello. */}
-        {!briefGreets && <p className="text-[16px] text-ink-3">{hello}</p>}
+            when it is, it is the heading and Nova just waves beside it.
+            Otherwise Nova says hello and the brief's headline sits under it —
+            never both saying hello. */}
+        {!briefGreets && <NovaHello name={name} phase={brief.loading ? briefPhase : undefined} size={44} />}
         {brief.loading ? (
           <div className="flex flex-col gap-2 pt-1">
             <Skeleton className="h-8 w-4/5 rounded-lg" />
@@ -139,9 +145,17 @@ export function Today({
           </div>
         ) : (
           <>
-            <h1 className="nameplate text-[clamp(24px,min(7.2vw,9vh),32px)] leading-[1.04] text-ink">
-              {welcome ? 'Welcome back' : (brief.data?.headline ?? 'Ready when you are')}
-            </h1>
+            {briefGreets ? (
+              <NovaBeside size={52}>
+                <h1 className="nameplate text-[clamp(24px,min(7.2vw,9vh),32px)] leading-[1.04] text-ink">
+                  {brief.data?.headline}
+                </h1>
+              </NovaBeside>
+            ) : (
+              <h1 className="nameplate text-[clamp(24px,min(7.2vw,9vh),32px)] leading-[1.04] text-ink">
+                {welcome ? 'Welcome back' : (brief.data?.headline ?? 'Ready when you are')}
+              </h1>
+            )}
             <p className="text-[16px] leading-relaxed text-ink-3">
               {welcome
                 ? 'Good to see you. No need to clear everything at once — a few minutes today is plenty to get going again.'
@@ -195,13 +209,6 @@ export function Today({
   )
 }
 
-/** Does the brief's headline already greet the student? */
-function briefIsGreeting(headline: string | undefined, name: string): boolean {
-  if (!headline) return false
-  if (/^(good (morning|afternoon|evening|night)|hi|hello|hey|welcome|morning|evening)\b/i.test(headline.trim())) return true
-  return Boolean(name) && headline.toLowerCase().includes(name.toLowerCase())
-}
-
 const ACTION_ICON: Record<TodayAction['kind'], IconName> = {
   review: 'deck',
   suggestion: 'target',
@@ -249,7 +256,7 @@ function PrimaryAction({
       <span className="flex items-end justify-between gap-3">
         <span className="min-w-0">
           <span className="nameplate block text-[clamp(20px,5.8vw,24px)] leading-[1.08]">{label}</span>
-          <span className="mt-1 block truncate text-[14.5px] font-semibold text-[#1a120f]/75">{detail}</span>
+          <span className="mt-1 block text-[14.5px] font-semibold leading-snug text-[#1a120f]/75">{detail}</span>
         </span>
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#1a120f]/12 transition-transform duration-150 group-active:translate-x-0.5">
           <Icon name="arrowRight" size={18} />
@@ -574,11 +581,26 @@ function TodaySkeleton({ phase, onRetry }: { phase: SlowPhase; onRetry: () => vo
         <div className="flex flex-col gap-2.5">
           <Skeleton className="h-9 w-3/4 rounded-lg" />
           <Skeleton className="h-4 w-5/6 rounded" />
-          <SlowCaption phase={phase} onRetry={onRetry} />
+          <WaitingNova phase={phase} onRetry={onRetry} />
         </div>
         <Skeleton className="h-[116px] rounded-[20px]" />
         <Skeleton className="h-[92px] rounded-xl" />
       </div>
     </Page>
+  )
+}
+
+/**
+ * The skeleton's wait, once it is worth naming: Nova thinking (then asleep,
+ * once it has stalled) beside the same caption every screen uses. Nothing
+ * for an ordinary sub-3s load — a character flashing past is noise.
+ */
+export function WaitingNova({ phase, onRetry, className }: { phase: SlowPhase; onRetry: () => void; className?: string }) {
+  if (phase !== 'slow' && phase !== 'stalled') return null
+  return (
+    <div className={cn('flex items-center gap-2.5', className)}>
+      <Bot agent="tutor" mood={phase === 'stalled' ? 'sleepy' : 'thinking'} size={40} />
+      <SlowCaption phase={phase} onRetry={onRetry} />
+    </div>
   )
 }

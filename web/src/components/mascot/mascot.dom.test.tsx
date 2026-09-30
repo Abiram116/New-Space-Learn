@@ -46,9 +46,13 @@ describe('BotSays / BotProgress', () => {
   })
 
   it('shows the line as a status and counts elapsed time', () => {
+    // Frozen clock: under a loaded parallel run a real second can pass
+    // between computing `startedAt` and the first paint (1m 06s).
+    vi.useFakeTimers()
     render(<BotProgress agent="cards" line="Dealing you a fresh deck." startedAt={Date.now() - 65_000} />)
     expect(screen.getByRole('status')).toHaveTextContent('Dealing you a fresh deck.')
     expect(document.querySelector('.bot-progress-time')).toHaveTextContent('1m 05s')
+    vi.useRealTimers()
   })
 
   it('formats elapsed time', () => {

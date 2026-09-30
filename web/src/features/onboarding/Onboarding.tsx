@@ -32,6 +32,10 @@ import { useNavigate } from 'react-router-dom'
 import { updateStudentModel } from '../../api/me'
 import { useAuth } from '../../auth/AuthProvider'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
+import { BotSays } from '../../components/mascot/BotSays'
+import { loadBotFace } from '../../components/mascot/Bot'
+import { useBotLine } from '../../components/mascot/useBotLine'
+import { useArrivalMood } from '../../components/mascot/useBotMood'
 import { DraftingCursor } from '../../components/ui/DraftingCursor'
 import { Icon } from '../../components/ui/Icon'
 import { Logo } from '../../components/ui/Logo'
@@ -123,6 +127,8 @@ function DesktopOnboarding() {
   const reduced = useReducedMotion()
   const reveal = useHandoffReveal()
   const { play } = useHandoff()
+  // Nova's face is needed on the last screen; fetch it while the questions run.
+  useEffect(() => void loadBotFace().catch(() => {}), [])
 
   const initialName = ((user?.user_metadata?.display_name as string | undefined) ?? '').trim()
 
@@ -937,7 +943,12 @@ function Ending({ answers, first, onBack, onFinish }: StepViewProps) {
         </ul>
       )}
 
-      <div data-beat className="mt-[clamp(20px,3.4vh,44px)] flex items-center gap-5">
+      {/* Nova's hello, last thing before the door: one line, then the button. */}
+      <div data-beat className="mt-[clamp(18px,3vh,36px)]">
+        <EndingHello first={first} />
+      </div>
+
+      <div data-beat className="mt-[clamp(14px,2.4vh,28px)] flex items-center gap-5">
         <button type="button" onClick={onFinish} className={PRIMARY}>
           Start studying
           <Icon name="arrowRight" size={14} />
@@ -947,6 +958,16 @@ function Ending({ answers, first, onBack, onFinish }: StepViewProps) {
         </button>
       </div>
     </div>
+  )
+}
+
+function EndingHello({ first }: { first: string }) {
+  const line = useBotLine('firstRun', 'tutor', { name: first })
+  const mood = useArrivalMood('wave', 3200)
+  return (
+    <BotSays agent="tutor" mood={mood} size={56}>
+      {line}
+    </BotSays>
   )
 }
 

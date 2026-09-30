@@ -74,3 +74,17 @@ export function useBotMood(situation: BotSituation, opts: BotMoodOptions = {}): 
 
   return mood
 }
+
+/**
+ * An entrance beat, then rest: `wave` (or whatever `first` is) for `ms`, then
+ * idle. For greetings — the bot says hello once, it doesn't wave all day.
+ */
+export function useArrivalMood(first: BotMood = 'wave', ms = 2600): BotMood {
+  const [mood, setMood] = useState<BotMood>(first)
+  useEffect(() => {
+    setMood(first)
+    const t = window.setTimeout(() => setMood('idle'), ms)
+    return () => window.clearTimeout(t)
+  }, [first, ms])
+  return mood
+}

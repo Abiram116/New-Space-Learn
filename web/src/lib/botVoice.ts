@@ -47,6 +47,14 @@ export interface VoiceFacts {
   streak?: number
   /** Local hour 0–23 for greetings; defaults to the clock. Never printed. */
   hour?: number
+  /** Where the line is shown, when the base pool would say something untrue
+   *  there. A situation with a `<situation>.<surface>` pool uses it INSTEAD
+   *  of the base pool: `phone` has no chat (never promise one), `home` is not
+   *  inside a topic (never say "this topic"). Never printed. */
+  surface?: 'phone' | 'home'
+  /** Prefer lines that say the student's name, when one is given — for a
+   *  greeting that should read as personal, not generic. Never printed. */
+  personal?: boolean
 }
 
 type FactKey = 'name' | 'count' | 'score' | 'streak'
@@ -75,7 +83,8 @@ export const ALLOWED_FACTS: Record<VoiceSituation, readonly FactKey[]> = {
 
 type Pool = Partial<Record<AgentId | 'any', readonly string[]>>
 
-/** Keyed by situation, or `greeting.<daypart>` for time-of-day greetings. */
+/** Keyed by situation, `greeting.<daypart>` for time-of-day greetings, or
+ *  `<situation>.<surface>` for a surface's own wording (replaces the base pool). */
 export const LINES: Record<string, Pool> = {
   greeting: {
     any: ['Hey {name}! Good to see you.', 'Hi {name}. What are we learning today?', 'Hello! Pick a topic and I’m all yours.'],
@@ -83,6 +92,9 @@ export const LINES: Record<string, Pool> = {
     cards: ['Flip here. Got something worth remembering?'],
     quiz: ['Pop here! Want to see what stuck?'],
     notes: ['Jot here. Let’s get the good bits written down.'],
+  },
+  'greeting.home': {
+    any: ['Hey {name}! Good to see you.', 'Hi {name}. What are we learning today?', 'Hello! Ready when you are.'],
   },
   'greeting.morning': {
     any: ['Morning, {name}! Fresh brain, fresh start.', 'Good morning! Coffee optional, curiosity required.'],
@@ -105,7 +117,7 @@ export const LINES: Record<string, Pool> = {
   },
   waking: {
     any: [
-      'Yawn… waking the server up. Just a few seconds.',
+      'Yawn… waking the server up.',
       'One sec, I was napping between stars. Booting up!',
       'Warming up my circuits. Almost there.',
       'Rise and shine, servers! Give me a moment.',
@@ -124,7 +136,7 @@ export const LINES: Record<string, Pool> = {
       'Oops, that one’s on me. Want to try again?',
       'My signal got lost somewhere in orbit. Give it another go?',
       'Something broke on my end, not yours. Try again?',
-      'The server tripped over a cable. Retry when you’re ready.',
+      'That didn’t go through. Retry when you’re ready.',
     ],
   },
   success: {
@@ -175,9 +187,21 @@ export const LINES: Record<string, Pool> = {
     any: ['No quizzes yet. Chat about a topic and it can become one.'],
     quiz: ['No quizzes yet. Chat about a topic and I’ll quiz you on it.'],
   },
+  'emptyCards.phone': {
+    any: ['No cards yet. Generate a deck from your material, or write the first card.'],
+    cards: ['No cards yet. Tap Generate and I’ll deal you a deck from your material.'],
+  },
   emptyNotes: {
     any: ['No notes yet. Any chat can become one.'],
     notes: ['No notes yet. I can write one from any chat.'],
+  },
+  'emptyNotes.phone': {
+    any: ['No notes yet. Start one here, or have one written from your material.'],
+    notes: ['No notes yet. Start one here, or I can write one from your material.'],
+  },
+  'emptyQuizzes.phone': {
+    any: ['No quizzes yet. Generate one from your material.'],
+    quiz: ['No quizzes yet. Tap Generate and I’ll quiz you on your material.'],
   },
   emptyDocs: {
     any: ['No documents yet. Add a PDF and I’ll read it with you.', 'This topic is empty. Upload something and let’s get started.'],
@@ -238,7 +262,8 @@ export function mulberry32(seed: number): () => number {
 }
 
 export function candidates(situation: VoiceSituation, agent: AgentId, facts: VoiceFacts = {}): string[] {
-  const keys: string[] = [situation]
+  const own = facts.surface ? `${situation}.${facts.surface}` : null
+  const keys: string[] = [own && LINES[own] ? own : situation]
   if (situation === 'greeting') keys.push(`greeting.${daypart(facts.hour ?? new Date().getHours())}`)
   const allowed = new Set<string>([...ALLOWED_FACTS[situation], 'bot'])
   const out: string[] = []
@@ -249,6 +274,10 @@ export function candidates(situation: VoiceSituation, agent: AgentId, facts: Voi
       const keysUsed = placeholders(line)
       if (keysUsed.every((p) => allowed.has(p) && has(facts, p))) out.push(line)
     }
+  }
+  if (facts.personal && has(facts, 'name')) {
+    const named = out.filter((l) => placeholders(l).includes('name'))
+    if (named.length > 0) return named
   }
   return out
 }

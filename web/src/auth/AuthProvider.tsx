@@ -176,3 +176,9 @@ export function useAuth(): AuthValue {
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>')
   return ctx
 }
+
+/** The same value, or null outside a provider — for decoration that can do
+ *  without it (a greeting that simply omits the name). */
+export function useOptionalAuth(): AuthValue | null {
+  return useContext(AuthContext)
+}

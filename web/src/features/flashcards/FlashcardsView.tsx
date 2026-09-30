@@ -34,6 +34,7 @@ import { Textarea } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { ProgressBar } from '../../components/ui/Bits'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
@@ -109,6 +110,13 @@ function Inner({
     setParams({}, { replace: true })
     decks.refresh()
   }, [setParams, decks])
+  // On a phone the shell's Back arrow is a plain link that drops `?deck=`;
+  // follow the URL out of a deck so that one control does the whole job.
+  const hasDeckParam = params.has('deck')
+  useEffect(() => {
+    if (!isMobile || hasDeckParam) return
+    setMode((m) => (m.kind === 'deck' ? { kind: 'decks' } : m))
+  }, [isMobile, hasDeckParam])
   const [newDeckOpen, setNewDeckOpen] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
   const [deleteDeckId, setDeleteDeckId] = useState<string | null>(null)
@@ -319,6 +327,11 @@ function Inner({
           toneOf={(d) => (d.subspace_id ? subspaceToSpace.get(d.subspace_id)?.tone : undefined)}
           totalDue={totalDue}
           subspaceName={subspaceName}
+          addMaterialHref={
+            spaces.flatMap((sp) => sp.subspaces).find((sub) => sub.id === subspaceId)?.counts?.docs === 0
+              ? `${base}/docs?add=1`
+              : null
+          }
           onOpen={openDeck}
           onReview={(id) => void beginReview(id)}
           onDelete={setDeleteDeckId}
@@ -374,11 +387,14 @@ function Inner({
         )}
 
         {decks.loading && (
-          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-xl" />
-            ))}
-          </div>
+          <>
+            <SlowBot pending agent="cards" className="mb-4" />
+            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-36 rounded-xl" />
+              ))}
+            </div>
+          </>
         )}
 
         {/* A failed fetch must not read as "you have no decks" — `decks.error`
@@ -400,6 +416,7 @@ function Inner({
             className="w-full max-w-lg"
             icon="deck"
             title="No decks yet"
+            bot={{ agent: 'cards', say: 'emptyCards' }}
             description={`Write cards yourself, or have them drafted from what you've indexed under ${subspaceName}.`}
             action={
               <div className="flex gap-2">
@@ -603,8 +620,6 @@ function DeckDetail({
         <PhoneTitle
           title={deckName}
           sub={list.length > 0 ? `${list.length} card${list.length === 1 ? '' : 's'}` : undefined}
-          onBack={onBack}
-          backLabel="All decks"
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {cards.loading && (

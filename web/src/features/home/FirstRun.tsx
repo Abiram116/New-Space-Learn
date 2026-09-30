@@ -24,6 +24,9 @@
  */
 
 import type { ReactNode } from 'react'
+import { BotSays } from '../../components/mascot/BotSays'
+import { useBotLine } from '../../components/mascot/useBotLine'
+import { useArrivalMood } from '../../components/mascot/useBotMood'
 import { Button } from '../../components/ui/Button'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { useReducedMotion } from '../../components/ui/motion'
@@ -33,8 +36,11 @@ import { useHandoffReveal } from '../transitions/Handoff'
 export function FirstRun({
   onCreate,
   steps,
+  name = '',
 }: {
   onCreate: () => void
+  /** The student's first name, for Nova's hello. */
+  name?: string
   /**
    * The first-run checklist. When given it leads the page, directly under the
    * introduction, and replaces the lone "Create your first subject" button —
@@ -60,8 +66,18 @@ export function FirstRun({
     return { animation: `stepIn 600ms ${n}ms var(--ease-sl) both` }
   }
 
+  const hello = useBotLine('firstRun', 'tutor', { name })
+  const mood = useArrivalMood('wave', 3200)
+
   return (
     <section className="flex flex-col items-center py-4 text-center sm:py-8">
+      {/* Nova introduces itself once, here, in one line — the heading and the
+          checklist below do the explaining. */}
+      <div style={at(0)} className="mb-5 flex justify-center">
+        <BotSays agent="tutor" mood={mood} size={56} className="text-left">
+          {hello}
+        </BotSays>
+      </div>
       <h1
         className="nameplate max-w-3xl text-[clamp(30px,5vw,54px)] leading-[1.02] text-ink"
         style={at(60)}

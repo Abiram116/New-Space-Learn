@@ -976,7 +976,22 @@ export function NoteEditor({
               </div>
             )}
 
-            <EditorContent editor={editor} className="min-h-0" />
+            {phone ? (
+              // A short note is still a whole page: the blank space under the
+              // text is tappable, and tapping it puts the caret at the end.
+              <div
+                className="min-h-[60dvh] flex-1"
+                onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('.ProseMirror a, .ProseMirror img, .ProseMirror button, .ProseMirror input')) {
+                    editor?.chain().focus('end').run()
+                  }
+                }}
+              >
+                <EditorContent editor={editor} className="min-h-[60dvh] [&_.ProseMirror]:min-h-[60dvh]" />
+              </div>
+            ) : (
+              <EditorContent editor={editor} className="min-h-0" />
+            )}
 
             {/* Asking, not guessing. Appears right where you typed /ai, so the
                 interaction reads as one continuous step: press /, pick Ask
@@ -1258,7 +1273,7 @@ function PhoneTitleField({
       placeholder="Untitled note"
       aria-label="Note title"
       enterKeyHint="next"
-      className="nameplate block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-[26px] leading-tight text-ink outline-none placeholder:text-faint"
+      className="nameplate block w-full resize-none overflow-hidden min-h-11 border-0 bg-transparent px-0 py-2.5 text-[26px] leading-tight text-ink outline-none placeholder:text-faint"
     />
   )
 }

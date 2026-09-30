@@ -271,6 +271,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
               className="w-full max-w-lg"
               icon="doc"
               title="No sources yet"
+              bot={{ agent: 'tutor', say: 'emptyDocs' }}
               description="Add a PDF, markdown, plain-text, CSV, or image file. It gets chunked and embedded so answers in this topic can cite pages."
               action={
                 <Button size="lg" onClick={onPick}>

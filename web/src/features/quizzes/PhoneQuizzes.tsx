@@ -4,11 +4,13 @@
  * about taking it lives in the immersive stage (PhoneQuiz.tsx).
  */
 
+import { useNavigate } from 'react-router-dom'
 import type { Quiz, Tone } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { cn } from '../../lib/cn'
 import { toneBar } from '../../lib/tone'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
@@ -24,6 +26,7 @@ export function PhoneQuizzes({
   onSubjectFilter,
   toneOf,
   generating,
+  addMaterialHref,
   onOpen,
   onGenerate,
 }: {
@@ -36,9 +39,12 @@ export function PhoneQuizzes({
   onSubjectFilter: (id: string) => void
   toneOf: (q: Quiz) => Tone | undefined
   generating: boolean
+  /** Set when the topic has no sources yet: where "Add material" goes. */
+  addMaterialHref: string | null
   onOpen: (id: string) => void
   onGenerate: () => void
 }) {
+  const navigate = useNavigate()
   const list = quizzes ?? []
   const empty = !loading && !error && list.length === 0
 
@@ -65,6 +71,7 @@ export function PhoneQuizzes({
 
         {loading && (
           <div className="flex flex-col gap-px" aria-busy>
+            <SlowBot pending agent="quiz" className="px-4 pb-3" />
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-16 rounded-none" />
             ))}
@@ -85,11 +92,22 @@ export function PhoneQuizzes({
             <EmptyState
               icon="quiz"
               title="No quizzes yet"
-              description="Draw questions from what you've indexed in this topic, then find out what actually stuck."
+              bot={{ agent: 'quiz', say: 'emptyQuizzes', surface: 'phone' }}
+              description={
+                addMaterialHref
+                  ? 'This topic has no material yet. Add some and questions get drawn from it.'
+                  : "Draw questions from what you've indexed in this topic, then find out what actually stuck."
+              }
               action={
-                <Button size="xl" onClick={onGenerate} className="w-full">
-                  <Icon name="sparkle" size={16} /> Generate a quiz
-                </Button>
+                addMaterialHref ? (
+                  <Button size="xl" onClick={() => navigate(addMaterialHref)} className="w-full">
+                    <Icon name="plus" size={16} /> Add material
+                  </Button>
+                ) : (
+                  <Button size="xl" onClick={onGenerate} className="w-full">
+                    <Icon name="sparkle" size={16} /> Generate a quiz
+                  </Button>
+                )
               }
             />
           </div>

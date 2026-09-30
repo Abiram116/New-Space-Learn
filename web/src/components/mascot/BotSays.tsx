@@ -2,7 +2,8 @@ import type { CSSProperties, ReactNode } from 'react'
 import { AGENTS, type AgentId } from './agents'
 import { Bot } from './Bot'
 import type { BotMood } from './moods'
-import { useBotsEnabled } from '../../lib/botPreference'
+import { useBotsShown } from '../../lib/botPreference'
+import './speech.css'
 
 export interface BotSaysProps {
   agent?: AgentId
@@ -35,7 +36,7 @@ export function BotSays({
 }: BotSaysProps) {
   const meta = AGENTS[agent]
   const key = lineKey ?? (typeof children === 'string' ? children : undefined)
-  const botsOn = useBotsEnabled()
+  const botsOn = useBotsShown()
   return (
     <div
       className={`bot-says bot-says--${layout}${botsOn ? '' : ' bot-says--plain'}${className ? ` ${className}` : ''}`}

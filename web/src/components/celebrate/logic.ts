@@ -278,6 +278,41 @@ export function planFor(
   }
 }
 
+/* ── The bot who reacts ──────────────────────────────────────────────── */
+
+/** Structural twins of the mascot's types — this file stays import-free. */
+export type ReactorAgent = 'tutor' | 'cards' | 'quiz' | 'notes'
+export type ReactorMood = 'celebrate' | 'cheer' | 'proud' | 'encouraging'
+
+/**
+ * Which agent reacts to a moment, and how. The quiz bot owns quiz results and
+ * scales with the same tier as the effects — a rough score gets
+ * `encouraging`, never a sad face (the misses are the useful part). The
+ * cards bot owns decks and the daily card goal; the tutor owns the streak,
+ * which is about the student, not one list. A combo is a flicker under the
+ * cursor mid-quiz: no character while someone is answering.
+ */
+export function reactorFor(occasion: Occasion, facts: Facts): { agent: ReactorAgent; mood: ReactorMood } | null {
+  switch (occasion) {
+    case 'quiz': {
+      const tier = scoreTier(facts.score ?? 0)
+      const mood: ReactorMood =
+        tier === 'grand' ? 'celebrate' : tier === 'strong' ? 'cheer' : tier === 'light' ? 'proud' : 'encouraging'
+      return { agent: 'quiz', mood }
+    }
+    case 'best':
+      return { agent: 'quiz', mood: 'proud' }
+    case 'deck':
+      return { agent: 'cards', mood: 'celebrate' }
+    case 'goal':
+      return { agent: 'cards', mood: 'cheer' }
+    case 'streak':
+      return { agent: 'tutor', mood: (facts.streak ?? 0) >= 14 ? 'celebrate' : 'cheer' }
+    case 'combo':
+      return null
+  }
+}
+
 /* ── Lines ───────────────────────────────────────────────────────────── */
 
 type Line = (f: Required<Facts>) => string

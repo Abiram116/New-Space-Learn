@@ -1027,4 +1027,27 @@
   [data-phone-shell] button {
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* Small print is still text: keep it at 12px or above on a phone. */
+  .setcode,
+  .setcode-strong {
+    font-size: 12px;
+  }
+}
+
+/* A phone held sideways is ~390px tall: the two bars would eat a third of it.
+   Root screens lose the top bar outright; the rest, and the tab bar, slim down. */
+@media (orientation: landscape) and (max-height: 500px) {
+  [data-phone-topbar='bare'] {
+    display: none;
+  }
+  [data-phone-topbar] .phone-topbar-row {
+    height: 46px;
+  }
+  [data-phone-tabbar] a {
+    min-height: 46px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    gap: 0;
+  }
 }

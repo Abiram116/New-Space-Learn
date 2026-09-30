@@ -13,6 +13,7 @@
  */
 
 import { useSyncExternalStore } from 'react'
+import { useIsMobile } from './useIsMobile'
 
 const KEY = 'sl:bots:v1'
 const listeners = new Set<() => void>()
@@ -49,4 +50,16 @@ function subscribe(onChange: () => void): () => void {
 
 export function useBotsEnabled(): boolean {
   return useSyncExternalStore(subscribe, botsEnabledNow, () => true)
+}
+
+/**
+ * Whether bots actually draw: the student's preference AND not on a phone.
+ * Phones are a quiet revision companion — no characters there (product
+ * decision), whatever the preference says. Components use THIS; the Settings
+ * switch uses `useBotsEnabled` (the preference alone) and is hidden on phones.
+ */
+export function useBotsShown(): boolean {
+  const pref = useBotsEnabled()
+  const phone = useIsMobile()
+  return pref && !phone
 }

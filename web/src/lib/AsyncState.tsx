@@ -22,6 +22,12 @@
  *     screen — `children` still renders — with a small inline notice rather
  *     than a wipe. See `useAsync`'s `validating`/`error` contract.
  *
+ * Nova carries the full-size states: thinking while it's slow, asleep once
+ * it has stalled (the server is napping, not broken), and an "oops" face on a
+ * hard failure with a line beside Retry that takes the blame off the student.
+ * The footnotes (`StaleNotice`, `SlowCaption`) stay text — they sit under a
+ * section that already has its own bot, one character per region.
+ *
  * Built for a screen that renders ONE resource in its own region. Home and
  * Profile interleave several `useAsync` calls into one bespoke, staggered
  * layout that this wrapper doesn't fit, so they call `useSlowState` directly
@@ -32,8 +38,11 @@
 
 import type { ReactNode } from 'react'
 import type { ErrorKind } from '../api/errors'
+import { Bot } from '../components/mascot/Bot'
+import { useBotLine } from '../components/mascot/useBotLine'
 import { Button } from '../components/ui/Button'
 import { Icon, type IconName } from '../components/ui/Icon'
+import { useBotsShown } from './botPreference'
 import { cn } from './cn'
 import { useSlowState, type SlowPhase } from './useSlowState'
 
@@ -112,7 +121,7 @@ export function AsyncState<T>({
   if (phase === 'stalled') {
     return (
       <div className={cn('flex flex-col items-center gap-3 rounded-xl border border-dashed border-line-dash bg-well/40 px-6 py-10 text-center', className)}>
-        <Icon name="clock" size={18} className="text-muted" />
+        <BotOr mood="sleepy" icon={<Icon name="clock" size={18} className="text-muted" />} />
         <div className="max-w-xs">
           <p className="text-[13.5px] font-bold text-ink">Still waking up</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
@@ -130,13 +139,22 @@ export function AsyncState<T>({
   if (phase === 'slow') {
     return (
       <div className={cn('flex flex-col items-center gap-2 px-6 py-10 text-center', className)}>
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-line border-t-brand" aria-hidden />
+        <BotOr
+          mood="thinking"
+          icon={<span className="h-5 w-5 animate-spin rounded-full border-2 border-line border-t-brand" aria-hidden />}
+        />
         <p className="text-[12.5px] text-muted">Waking up the server — this can take a minute.</p>
       </div>
     )
   }
 
   return <>{skeleton}</>
+}
+
+/** Nova in this mood — or, with the bots switched off, the plain glyph the
+ *  state always had. */
+function BotOr({ mood, icon }: { mood: 'thinking' | 'sleepy' | 'oops'; icon: ReactNode }) {
+  return useBotsShown() ? <Bot agent="tutor" mood={mood} size={56} /> : <>{icon}</>
 }
 
 function ErrorCard({
@@ -150,6 +168,8 @@ function ErrorCard({
   onRetry: () => void
   className?: string
 }) {
+  // Said beside Retry: whatever went wrong, it wasn't the student.
+  const line = useBotLine('error', 'tutor', {}, message)
   return (
     <div
       className={cn(
@@ -157,7 +177,7 @@ function ErrorCard({
         className,
       )}
     >
-      <Icon name={KIND_ICON[kind]} size={18} className="text-coral-deep" />
+      <BotOr mood="oops" icon={<Icon name={KIND_ICON[kind]} size={18} className="text-coral-deep" />} />
       <div className="max-w-xs">
         <p className="text-[13.5px] font-bold text-coral-deep">{KIND_TITLE[kind]}</p>
         <p className="mt-1 text-[12.5px] leading-relaxed text-coral-deep/80">{message}</p>
@@ -166,9 +186,12 @@ function ErrorCard({
           (`AuthProvider`) — a Retry button here would just repeat the same
           401 while the redirect it triggered is already in flight. */}
       {kind !== 'auth' && (
-        <Button size="sm" variant="secondary" onClick={onRetry}>
-          <Icon name="refresh" size={13} /> Retry
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+          <Button size="sm" variant="secondary" onClick={onRetry}>
+            <Icon name="refresh" size={13} /> Retry
+          </Button>
+          <p className="max-w-[30ch] text-left text-[12.5px] leading-snug text-coral-deep/80">{line}</p>
+        </div>
       )}
     </div>
   )

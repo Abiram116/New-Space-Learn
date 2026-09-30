@@ -49,9 +49,17 @@ const SECTION_TITLE: Record<string, string> = {
   chat: 'Chat',
 }
 
+/** An open deck (`/flashcards?deck=…`): a drill-in from the Cards tab. */
+function isOpenDeck(path: string, search: string): boolean {
+  if (!new URLSearchParams(search).has('deck')) return false
+  if (path === '/flashcards') return true
+  return topicFromPath(path)?.section === 'flashcards'
+}
+
 /** The top app bar's title for a path. */
-export function phoneTitle(pathname: string): string {
+export function phoneTitle(pathname: string, search = ''): string {
   const path = pathname.replace(/\/+$/, '') || '/'
+  if (isOpenDeck(path, search)) return 'Deck'
   if (path === '/home') return 'Today'
   if (path === '/profile') return 'You'
   if (path === '/settings') return 'Settings'
@@ -73,8 +81,9 @@ export const SHELL_TITLES = new Set(['Cards', 'Quizzes', 'Notes', 'Documents', '
  * Where the top bar's Back goes, or null for a root screen. Tabs are roots;
  * pages you drill into from a tab or the hub go back to it.
  */
-export function phoneBackFor(pathname: string): string | null {
+export function phoneBackFor(pathname: string, search = ''): string | null {
   const path = pathname.replace(/\/+$/, '') || '/'
+  if (isOpenDeck(path, search)) return path
   if (path === '/settings') return '/profile'
   const topic = topicFromPath(path)
   if (topic && (topic.section === 'docs' || topic.section === 'skills' || topic.section === 'chat')) {
@@ -83,10 +92,19 @@ export function phoneBackFor(pathname: string): string | null {
   return null
 }
 
-/** Does the topic switcher belong in the top bar here? Not on account pages. */
+/**
+ * Does the topic switcher belong in the top bar here? Only where the topic
+ * scopes what you see (Today, the hub, Sources, Skills). Not on account pages,
+ * nor on the Cards / Quizzes / Notes lists, which span every topic — a pill
+ * there would change nothing.
+ */
 export function showsTopicSwitcher(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, '') || '/'
-  return path !== '/profile' && path !== '/settings'
+  if (path === '/profile' || path === '/settings') return false
+  if (/^\/(flashcards|quizzes|notes)(\/|$)/.test(path)) return false
+  const topic = topicFromPath(path)
+  if (topic?.section && SECTION_TAB[topic.section]) return false
+  return true
 }
 
 /**

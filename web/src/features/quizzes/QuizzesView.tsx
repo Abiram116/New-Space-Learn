@@ -23,6 +23,7 @@ import { Modal } from '../../components/ui/Modal'
 
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
 import { toneBar } from '../../lib/tone'
@@ -37,12 +38,12 @@ import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
 export function QuizzesView() {
-  const { space, subspace } = useActiveSubspace()
+  const { space, subspace, base } = useActiveSubspace()
   if (!space || !subspace) return <SubspaceMissing />
-  return <Inner subspaceId={subspace.id} />
+  return <Inner subspaceId={subspace.id} base={base} />
 }
 
-function Inner({ subspaceId }: { subspaceId: string }) {
+function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
   const [params, setParams] = useSearchParams()
   const { show, showError } = useToast()
   const isMobile = useIsMobile()
@@ -112,7 +113,8 @@ function Inner({ subspaceId }: { subspaceId: string }) {
             quizId={activeId}
             onBack={back}
             onDone={() => {
-              show('Answers submitted.', 'success')
+              // No toast on a phone: the results screen says it, and the toast
+              // would sit over its Back / Retake bar.
               void quizzes.refresh()
             }}
           />
@@ -170,6 +172,11 @@ function Inner({ subspaceId }: { subspaceId: string }) {
           onSubjectFilter={setSubjectFilter}
           toneOf={(q) => (q.subspace_id ? subspaceToSpace.get(q.subspace_id)?.tone : undefined)}
           generating={generating}
+          addMaterialHref={
+            spaces.flatMap((sp) => sp.subspaces).find((sub) => sub.id === subspaceId)?.counts?.docs === 0
+              ? `${base}/docs?add=1`
+              : null
+          }
           onOpen={startQuiz}
           onGenerate={() => setGenOpen(true)}
         />
@@ -261,10 +268,13 @@ function QuizList({
 }) {
   if (loading) {
     return (
-      <div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
+      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+        <SlowBot pending agent="quiz" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24" />
+          ))}
+        </div>
       </div>
     )
   }
@@ -285,6 +295,7 @@ function QuizList({
           className="w-full max-w-lg"
           icon="quiz"
           title="No quizzes yet"
+          bot={{ agent: 'quiz', say: 'emptyQuizzes' }}
           description="Draw questions from what you've indexed in this topic, then find out what actually stuck."
           action={
             <Button size="lg" onClick={onGenerate}>

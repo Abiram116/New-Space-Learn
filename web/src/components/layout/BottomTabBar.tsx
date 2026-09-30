@@ -39,6 +39,7 @@ export function BottomTabBar({
   return (
     <nav
       aria-label="Main"
+      data-phone-tabbar=""
       className="relative z-20 shrink-0 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="mx-auto grid max-w-xl grid-cols-5">
@@ -66,7 +67,7 @@ export function BottomTabBar({
                     <span
                       aria-hidden
                       className={cn(
-                        'grid h-[26px] w-[26px] place-items-center rounded-full bg-coral-soft text-[10.5px] font-bold text-coral-deep',
+                        'grid h-[26px] w-[26px] place-items-center rounded-full bg-coral-soft text-[12px] font-bold text-coral-deep',
                         isActive && 'ring-2 ring-brand',
                       )}
                     >
@@ -78,7 +79,7 @@ export function BottomTabBar({
                   {tab.badge && (
                     <span
                       aria-hidden
-                      className="absolute -top-1 left-[calc(50%+6px)] min-w-[19px] rounded-full bg-sun px-1 text-center font-mono text-[11px] font-bold leading-[19px] text-[#1a120f] ring-2 ring-surface"
+                      className="absolute -top-1 left-[calc(50%+6px)] min-w-[19px] rounded-full bg-sun px-1 text-center font-mono text-[12px] font-bold leading-[19px] text-[#1a120f] ring-2 ring-surface"
                     >
                       {tab.badge}
                     </span>
