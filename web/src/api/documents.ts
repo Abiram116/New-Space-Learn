@@ -1,4 +1,5 @@
 import { API_URL } from '../lib/env'
+import { notifyProgress } from '../lib/progressEvents'
 import { apiFetch } from './client'
 import { ApiError } from './errors'
 import type { Document } from './types'
@@ -8,8 +9,33 @@ export function setUploadTokenProvider(fn: () => string | null): void {
   tokenProvider = fn
 }
 
-export const listDocuments = (subspaceId: string) =>
-  apiFetch<Document[]>(`/subspaces/${subspaceId}/documents`)
+/**
+ * The last status seen for each document.
+ *
+ * A document becomes searchable in the background, after the upload has
+ * returned, so no write ever reports it: the only sign is a later read showing
+ * `ready` where the last one did not. Noticing that here tells Home its
+ * "material waiting" message has changed, without any screen wiring it up.
+ */
+const seenStatus = new Map<string, string>()
+
+function noteStatuses(docs: Document[]): void {
+  let becameReady = false
+  for (const d of docs) {
+    if (d.status === 'ready') {
+      const before = seenStatus.get(d.id)
+      if (before !== undefined && before !== 'ready') becameReady = true
+    }
+    seenStatus.set(d.id, d.status)
+  }
+  if (becameReady) notifyProgress()
+}
+
+export const listDocuments = async (subspaceId: string) => {
+  const docs = await apiFetch<Document[]>(`/subspaces/${subspaceId}/documents`)
+  noteStatuses(docs)
+  return docs
+}
 
 export const deleteDocument = (id: string) =>
   apiFetch<{ ok: true }>(`/documents/${id}`, { method: 'DELETE' })
@@ -46,7 +72,11 @@ export function uploadDocument(
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          resolve(JSON.parse(xhr.responseText) as Document)
+          const doc = JSON.parse(xhr.responseText) as Document
+          seenStatus.set(doc.id, doc.status)
+          // This bypasses `apiFetch`, so it has to say so itself.
+          notifyProgress()
+          resolve(doc)
         } catch {
           reject(new ApiError('internal_error', 'Unexpected server response.'))
         }

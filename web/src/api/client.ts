@@ -17,6 +17,7 @@
 
 import { invalidate } from '../lib/asyncCache'
 import { API_URL } from '../lib/env'
+import { notifyIfProgress } from '../lib/progressEvents'
 import { ApiError, type ErrorCode } from './errors'
 
 type Init = Omit<RequestInit, 'body'> & {
@@ -178,7 +179,13 @@ export async function apiFetchRaw(path: string, init?: Init): Promise<Response> 
       }
       // Only after a *successful* write: invalidating on a failed request would
       // throw away good data to reflect a change that never happened.
-      if (method !== 'GET') invalidateFor(path)
+      if (method !== 'GET') {
+        invalidateFor(path)
+        // Home's message and stats describe progress, which this write may have
+        // just changed — see `lib/progressEvents`. Told here, for every caller,
+        // so no screen has to remember to.
+        notifyIfProgress(method, path, init?.body)
+      }
       return res
     } catch (e) {
       if (e instanceof ApiError) throw e

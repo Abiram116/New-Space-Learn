@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchRaw } from './client'
+import { notifyProgress } from '../lib/progressEvents'
 import { ApiError } from './errors'
 import type { ChatMessage, Citation } from './types'
 
@@ -72,6 +73,9 @@ export async function* streamChat(
         const raw = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 2)
         const evt = parseSseEvent(raw)
+        // A finished turn counts as studying today (it moves the streak), and
+        // an agent may have made cards, a quiz or a note along the way.
+        if (evt?.type === 'done') notifyProgress()
         if (evt) yield evt
       }
     }

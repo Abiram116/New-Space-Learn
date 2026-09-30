@@ -8,7 +8,18 @@ export const updateSettings = (patch: Partial<Settings>) =>
 
 /** The personal re-entry line on Home. Never throws the page — the backend
  *  falls back to deterministic copy and flags it with `generated: false`. */
-export const getBrief = () => apiFetch<Brief>('/me/brief')
+export const getBrief = () => apiFetch<Brief>(`/me/brief${zoneQuery()}`)
+
+/** The browser's IANA zone, so the backend can say "this evening" and know what
+ *  "later today" means. Omitted when unknown — the copy then just skips it. */
+function zoneQuery(): string {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return zone ? `?tz=${encodeURIComponent(zone)}` : ''
+  } catch {
+    return ''
+  }
+}
 
 /** weak_areas/strong_areas/streak_days are computed server-side from real
  *  quiz/activity data — never editable, never sent back on PATCH. */

@@ -3,7 +3,17 @@
 The one piece of model-written copy in the product, and the one most able to
 embarrass it: a brief that invents a number is worse than no brief. Hence
 the deterministic fallback, the fact-checking of quantities against
-`_brief_facts`, and the markup stripping."""
+`_brief_facts`, and the markup stripping.
+
+Two properties matter more than the wording:
+
+* **Fresh.** The facts are read off the snapshot, so they move the moment the
+  student does something (a card graded, a quiz submitted, a streak kept), and
+  the cache key is a hash of the prompt built from them — so the copy
+  regenerates exactly when the facts change and not otherwise.
+* **Personal, but only with real material.** The name, time of day, goal and
+  learning style are woven in when known and omitted when not; nothing is
+  guessed to fill a gap."""
 
 from __future__ import annotations
 
@@ -12,10 +22,12 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Literal
+from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
+from functools import lru_cache
+from typing import Annotated, Literal
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from ...config import settings as cfg
 from ...deps import CurrentUser, get_current_user
@@ -23,6 +35,7 @@ from ...schemas import BriefOut, BriefSuggestion
 from ...services import personalization, supabase
 from ...services import student_model as student_model_service
 from ...services.llm import get_llm
+from ...services.streaks import compute_streak
 from ...services.student_model import MisconceptionView, Snapshot, TopicView
 from ...services.voice import COMPANION_VOICE
 
@@ -53,13 +66,20 @@ router = APIRouter()
 
 
 @router.get("/me/brief", response_model=BriefOut)
-async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
+async def brief(
+    user: CurrentUser = Depends(get_current_user),
+    tz: Annotated[str | None, Query()] = None,
+) -> BriefOut:
     """One personal line for Home, in the student's own material's terms.
 
     Replaces "Good evening, Abiram" — a greeting tells you nothing you didn't
     already know. This says where you stood and what to play next.
 
-    Runs on the fast model: it is a 40-word answer over facts we already have,
+    `tz` is the browser's IANA zone (or a signed offset in minutes east of UTC).
+    It only decides the time-of-day wording and what "later today" means; an
+    absent or unrecognised value simply drops that wording.
+
+    Runs on the fast model: it is a ~40-word answer over facts we already have,
     and paying 70B latency on every home render would make the app feel slow
     for no gain. Falls back to deterministic copy rather than failing the page,
     with `generated=false` so the UI never implies a model wrote it.
@@ -70,8 +90,10 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     # `subspaces` were fetched twice apiece for one render of Home. Everything
     # below is derived from the snapshot instead.
     snap = await student_model_service.snapshot(user.id)
-    facts = _brief_facts(snap)
     suggestion = await _compute_suggestion(snap)
+    facts = _brief_facts(
+        snap, name=_first_name(getattr(user, "name", None)), tz=tz, suggestion=suggestion
+    )
 
     if not cfg.llm_configured:
         return _fallback_brief(facts, suggestion)
@@ -81,38 +103,50 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     # Home.
     student = personalization.render(snap, "brief")
     student_block = f"{student}\n\n" if student else ""
+    facts_text = _format_facts(facts)
 
     prompt = (
-        "You are greeting a student returning to their study app. "
-        "Write a two-part response, no more than 40 words total.\n\n"
+        "You write the message at the top of a student's study-app home screen. "
+        "Write two lines, no more than 45 words in total.\n\n"
         f"{student_block}"
-        f"Facts:\n{_format_facts(facts)}\n\n"
-        "Line 1 (headline): 3-6 words naming the topic. Sentence case — "
-        "capitalise only the first word and proper nouns. Never Title Case. "
-        "No greeting words.\n"
-        "Line 2 (body): ONE sentence, 18 words maximum, saying what to do "
-        "next and why it's worth doing. The headline already names the topic, "
-        "so do NOT repeat it here — write as if continuing that sentence.\n\n"
-        "Warm, direct, a peer not a coach. No emoji, no markdown, no asterisks, "
-        "no exclamation marks.\n"
-        "Cut anything that could be said about any topic. 'to reinforce your "
-        "understanding' and 'to deepen your knowledge' are filler — say the "
-        "concrete thing instead, or say less.\n"
+        f"Facts:\n{facts_text}\n\n"
+        "Line 1 (headline): at most 8 words. Sentence case — capitalise only "
+        "the first word and proper nouns, never Title Case. No greeting "
+        "words. It should say where they stand, not describe the app.\n"
+        "Line 2 (body): at most 2 short sentences, warm and specific. The "
+        "headline already names the subject, so do NOT repeat it — write as if "
+        "continuing that sentence.\n\n"
+        "Rules:\n"
+        "- Use ONLY the Facts above. Never invent or estimate a number, "
+        "topic, streak, score, date or event. Quote a number only exactly as "
+        "the Facts give it, and say nothing about anything the Facts don't "
+        "mention.\n"
         # Without this the model reliably picks the first fact in the list —
         # the most recent topic — and writes "carry on where you left off",
-        # which is the one thing the student already knows. The facts are
-        # ranked by how unlikely the student is to have noticed them.
-        "Pick the ONE fact a good tutor would lead with. A dropping score "
-        "beats a topic gone quiet, which beats unopened material, which beats "
-        "carrying on with the most recent topic. Never mention more than "
-        "one.\n"
-        "NEVER state a quantity, digit, or number-word. The interface already "
-        "shows the counts next to your text; repeating them risks contradicting "
-        "it. Say 'your backlog', not 'seven cards'.\n"
+        # which is the one thing the student already knows.
+        "- Pick the ONE thing a good tutor would lead with, and mention no more "
+        "than two. A win from today (goal reached, streak extended, new "
+        "personal best) leads if there is one. Otherwise a dropping score, then "
+        "a streak at risk, then a topic gone quiet, then unopened material, "
+        "then carrying on with the most recent topic.\n"
+        "- Celebrate a real win plainly, in one clause. Be honest and gentle "
+        "about a dip: say what happened without alarm and without pretending "
+        "it didn't.\n"
+        "- If a first name is given, you may use it once, in the body, only "
+        "where it reads naturally. If none is given, do not address them by "
+        "name.\n"
+        "- If the time of day is given you may let it colour the wording, but "
+        "never write 'Good morning' or any greeting.\n"
+        "- If a recommended next step is given, it appears as a button "
+        "beneath your text: lead into it, don't repeat its label or reason.\n"
+        "- Warm, direct, a peer not a coach. No emoji, no markdown, no "
+        "exclamation marks, no generic motivation ('keep it up', 'you've got "
+        "this', 'to deepen your understanding'). Say the concrete thing or say "
+        "less.\n"
         "Return exactly two lines separated by a newline. No labels.\n\n"
         "Shape to follow (do NOT reuse these words or any topic from them):\n"
         "<short state-of-play phrase>\n"
-        "<what to do next, naming the topic from the Facts above, and why>"
+        "<one or two sentences: what is true now, and why the next step is worth it>"
     )
 
     # The prompt IS the brief's complete input: every fact, the student block,
@@ -122,10 +156,21 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
     # hash changes, and the next render regenerates. Until then, Home loads
     # without a model round trip at all, and no Groq quota is spent re-writing
     # the same sentence.
+    #
+    # The "don't reuse the last headline" hint is appended AFTER hashing, on
+    # purpose: it is derived from the previous answer, so hashing it would make
+    # every answer invalidate its own cache key and regenerate on every render.
     fingerprint = hashlib.sha256(prompt.encode()).hexdigest()
     if (cached := _brief_cache_get(user.id, fingerprint)) is not None:
         headline, body = cached
         return BriefOut(headline=headline, body=body, generated=True, suggestion=suggestion)
+
+    if previous := _brief_cache_previous_headline(user.id):
+        prompt += (
+            f"\n\nYour previous headline for this student was: '{previous}'. "
+            "Do not open with the same words or the same structure; find a "
+            "different angle on what is true now."
+        )
 
     try:
         parts: list[str] = []
@@ -151,19 +196,21 @@ async def brief(user: CurrentUser = Depends(get_current_user)) -> BriefOut:
         return _fallback_brief(facts, suggestion)
 
     headline = _desentence_case(_strip_markup(lines[0])[:70], facts.get("topic"))
-    body = _strip_markup(" ".join(lines[1:]))[:180]
-    if not headline or not body:
+    body = _limit_sentences(_strip_markup(" ".join(lines[1:])))
+    if not headline or not body or len(headline.split()) > 10:
         return _fallback_brief(facts, suggestion)
 
     # The headline sits in condensed display caps in the UI, but the body does
     # not, and a Title Cased body reads like a press release. Models drift into
     # it regardless of instruction, so normalise rather than re-prompt.
 
-    # The prompt forbids quantities, but a model that ignores it would print a
-    # number contradicting the real count rendered inches away. Cheaper to
-    # verify than to trust: any quantity at all sends us to deterministic copy.
-    if _mentions_quantity(headline) or _mentions_quantity(body):
-        log.info("brief mentioned a quantity; using fallback")
+    # The prompt says to quote numbers only as the Facts give them, but a model
+    # that ignores it would print a figure contradicting the counts rendered
+    # inches away. Cheaper to verify than to trust: any number that isn't in
+    # the facts sends us to deterministic copy.
+    allowed = _numbers_in(f"{facts_text}\n{student_block}")
+    if _invented_quantity(headline, allowed) or _invented_quantity(body, allowed):
+        log.info("brief stated a quantity not in the facts; using fallback")
         return _fallback_brief(facts, suggestion)
 
     # Only a brief that passed every check is cached. A fallback caused by a
@@ -194,6 +241,14 @@ def _brief_cache_get(user_id: str, fingerprint: str) -> tuple[str, str] | None:
     return headline, body
 
 
+def _brief_cache_previous_headline(user_id: str) -> str | None:
+    """The last headline shown to this student, stale or not — what a fresh
+    generation is asked not to echo. Deliberately ignores the TTL: an old
+    headline is still the thing they read last."""
+    entry = _brief_cache.get(user_id)
+    return entry[2] if entry else None
+
+
 def _brief_cache_put(user_id: str, fingerprint: str, headline: str, body: str) -> None:
     if len(_brief_cache) >= _BRIEF_CACHE_MAX and user_id not in _brief_cache:
         # Evict the oldest entry. Insertion order is preserved by dict, and a
@@ -203,17 +258,40 @@ def _brief_cache_put(user_id: str, fingerprint: str, headline: str, body: str) -
     _brief_cache[user_id] = (fingerprint, time.monotonic(), headline, body)
 
 
-_NUMBER_WORDS = frozenset(
-    "one two three four five six seven eight nine ten eleven twelve "
-    "dozen couple few several".split()
-)
+_NUMBER_WORDS: dict[str, int | None] = {
+    "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+    "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    # Vague counts have no digit a fact could vouch for, so they can never
+    # be checked and are treated as invented outright. "one" is left out: it is
+    # a pronoun as often as a count ("the one you missed").
+    "dozen": None, "couple": None, "few": None, "several": None,
+}
+
+
+def _numbers_in(text: str) -> frozenset[str]:
+    return frozenset(re.findall(r"\d+", text))
+
+
+def _invented_quantity(text: str, allowed: frozenset[str]) -> bool:
+    """True when `text` states a number the facts don't contain.
+
+    Digits and number-words both count; "nine-day" is caught by splitting on
+    non-letters. A number that IS in the facts is fine — quoting it exactly is
+    the point of giving it to the model.
+    """
+    if any(n not in allowed for n in re.findall(r"\d+", text)):
+        return True
+    for w in re.split(r"[^a-z]+", text.lower()):
+        if w in _NUMBER_WORDS:
+            value = _NUMBER_WORDS[w]
+            if value is None or str(value) not in allowed:
+                return True
+    return False
 
 
 def _mentions_quantity(text: str) -> bool:
-    if any(ch.isdigit() for ch in text):
-        return True
-    # Split on non-letters so compounds like "nine-day" are caught too.
-    return any(w in _NUMBER_WORDS for w in re.split(r"[^a-z]+", text.lower()) if w)
+    """Any digit or number-word at all. Kept for callers that allow no facts."""
+    return _invented_quantity(text, frozenset())
 
 
 def _desentence_case(text: str, topic: str | None) -> str:
@@ -238,7 +316,234 @@ def _desentence_case(text: str, topic: str | None) -> str:
     return " ".join(out)
 
 
-def _brief_facts(snap: Snapshot) -> dict:
+def _limit_sentences(text: str, max_sentences: int = 2, max_chars: int = 240) -> str:
+    """At most two sentences, never cut mid-word.
+
+    The prompt asks for this, but "two sentences" is exactly the instruction a
+    model stretches. Trimming at a sentence boundary keeps what it did say
+    intact; a hard `[:180]` used to slice the last word in half.
+    """
+    sentences = re.split(r"(?<=[.?])\s+", text.strip())
+    out = " ".join(sentences[:max_sentences]).strip()
+    if len(out) <= max_chars:
+        return out
+    # Too long even so: keep whole sentences that fit, else a word boundary.
+    kept = ""
+    for s in sentences[:max_sentences]:
+        if len(f"{kept} {s}".strip()) > max_chars:
+            break
+        kept = f"{kept} {s}".strip()
+    return kept or out[:max_chars].rsplit(" ", 1)[0].rstrip(",;:") + "."
+
+
+# ── Who and when ───────────────────────────────────────────────────────
+
+_NAME_RE = re.compile(r"^[^\W\d_]+(?:[-'’][^\W\d_]+)*$")
+#: What sign-up forms and OAuth providers fill in when they have no name.
+_PLACEHOLDER_NAMES = frozenset(
+    {"user", "student", "admin", "test", "guest", "anonymous", "null", "none",
+     "undefined", "unknown", "me", "you", "name",
+     # An honorific first is a title, not the name.
+     "dr", "mr", "mrs", "ms", "mx", "prof", "sir", "madam"}
+)
+
+
+def _first_name(raw: str | None) -> str | None:
+    """A first name safe to say out loud, or `None`.
+
+    Being called by the wrong name is worse than not being called anything, so
+    this is strict: one alphabetic word (hyphen/apostrophe allowed), nothing
+    email- or handle-shaped ("abiram116", "a@b.com"), no placeholders. The
+    email's local part is never consulted.
+    """
+    if not raw:
+        return None
+    words = raw.strip().split()
+    if not words:
+        return None
+    token = words[0].strip(",.")
+    if not (2 <= len(token) <= 24) or not _NAME_RE.match(token):
+        return None
+    if token.lower() in _PLACEHOLDER_NAMES:
+        return None
+    # "abiram" and "ABIRAM" are people typing quickly; "McDonald" is a name.
+    return token.title() if token.islower() or token.isupper() else token
+
+
+@lru_cache(maxsize=64)
+def _zone(tz: str | None) -> tzinfo | None:
+    """The client's zone, from an IANA name or signed minutes east of UTC."""
+    if not tz:
+        return None
+    tz = tz.strip()
+    if re.fullmatch(r"[+-]?\d{1,4}", tz):
+        minutes = int(tz)
+        return timezone(timedelta(minutes=minutes)) if abs(minutes) <= 14 * 60 else None
+    if not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
+        return None
+    try:
+        return ZoneInfo(tz)
+    except Exception:  # unknown key, missing tzdata, malformed path
+        return None
+
+
+def _part_of_day(now: datetime, tz: str | None) -> str | None:
+    zone = _zone(tz)
+    if zone is None:
+        return None  # UTC would be wrong for most students; say nothing.
+    hour = now.astimezone(zone).hour
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 17:
+        return "afternoon"
+    if 17 <= hour < 21:
+        return "evening"
+    return "late night"
+
+
+def _end_of_local_day(now: datetime, tz: str | None) -> datetime:
+    zone = _zone(tz) or UTC
+    local = now.astimezone(zone)
+    midnight = (local + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.astimezone(UTC)
+
+
+_MONTHS = {
+    m: i
+    for i, names in enumerate(
+        (
+            ("january", "jan"), ("february", "feb"), ("march", "mar"),
+            ("april", "apr"), ("may",), ("june", "jun"), ("july", "jul"),
+            ("august", "aug"), ("september", "sep", "sept"),
+            ("october", "oct"), ("november", "nov"), ("december", "dec"),
+        ),
+        start=1,
+    )
+    for m in names
+}
+_ISO_DATE = re.compile(r"\b(20\d{2})-(\d{1,2})-(\d{1,2})\b")
+_DAY_MONTH_YEAR = re.compile(
+    r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([A-Za-z]{3,9})\.?,?\s+(20\d{2})\b"
+)
+_MONTH_DAY_YEAR = re.compile(r"\b([A-Za-z]{3,9})\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(20\d{2})\b")
+
+
+def _exam_days_left(text: str, today: date) -> int | None:
+    """Days until the one date named in `text`, or `None` if unsure.
+
+    Only explicit, unambiguous forms with a four-digit year count: ISO
+    (2027-03-12), "12 March 2027", "March 12, 2027". "12/03/2027" is 12 March
+    or 3 December depending on the reader, and a year-less "12 March" could be
+    either of two — both are skipped rather than guessed. Two different dates
+    in one string is also unsure. A date already past is not a countdown.
+    """
+    found: set[date] = set()
+    try:
+        for y, m, d in _ISO_DATE.findall(text):
+            found.add(date(int(y), int(m), int(d)))
+        for d, mon, y in _DAY_MONTH_YEAR.findall(text):
+            if (month := _MONTHS.get(mon.lower())) is not None:
+                found.add(date(int(y), month, int(d)))
+        for mon, d, y in _MONTH_DAY_YEAR.findall(text):
+            if (month := _MONTHS.get(mon.lower())) is not None:
+                found.add(date(int(y), month, int(d)))
+    except ValueError:  # 31 February
+        return None
+    if len(found) != 1:
+        return None
+    left = (found.pop() - today).days
+    return left if 0 <= left <= 730 else None
+
+
+# ── Facts ──────────────────────────────────────────────────────────────
+
+#: A topic's mastery must have moved this many points to be worth mentioning.
+_MIN_MASTERY_MOVE = 5
+#: A latest-quiz result stops being news after this many days.
+_QUIZ_NEWS_DAYS = 3
+
+
+def _parse_day(value: object) -> date | None:
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _streak_state(snap: Snapshot, today: date) -> dict:
+    """Where the streak stands right now: kept today, at risk, broken."""
+    days = {d for row in snap.activity_days if (d := _parse_day(row.get("day"))) is not None}
+    freeze = bool(snap.settings.get("streak_freeze_enabled", True))
+    as_strings = [d.isoformat() for d in days]
+    if today in days:
+        n = snap.streak_days
+        return {"state": "extended" if n >= 2 else "started", "days": n}
+    yesterday = today - timedelta(days=1)
+    if yesterday in days:
+        # `streak_days` reads 0 here without freeze (today has no row yet), so
+        # count the run that ends yesterday instead.
+        run = compute_streak(as_strings, yesterday, freeze=freeze)
+        return {"state": "at_risk" if run >= 2 else "none", "days": run}
+    if days:
+        last = max(days)
+        run = compute_streak(as_strings, last, freeze=freeze)
+        if run >= 2:
+            return {"state": "broken", "days": run}
+    return {"state": "none", "days": 0}
+
+
+def _last_quiz(snap: Snapshot, today: date) -> dict | None:
+    """The latest quiz result and how it compares with the attempt before it
+    on the same quiz. `None` once it's old news."""
+    if not snap.quiz_attempts:
+        return None
+    latest = snap.quiz_attempts[0]
+    at = student_model_service._parse_dt(latest.at)  # noqa: SLF001 — shared parser
+    days_ago = max(0, (today - at.date()).days) if at else 999
+    if days_ago > _QUIZ_NEWS_DAYS:
+        return None
+    prior = [a.score for a in snap.quiz_attempts[1:] if a.quiz_id == latest.quiz_id]
+    topic = next((t.topic for t in snap.topics if t.subspace_id == latest.subspace_id), None)
+    best_before = max(prior) if prior else None
+    return {
+        "topic": topic,
+        "score": latest.score,
+        "prev": prior[0] if prior else None,
+        "delta": latest.score - prior[0] if prior else None,
+        "best_before": best_before,
+        "is_pb": best_before is not None and latest.score > best_before,
+        "days_ago": days_ago,
+    }
+
+
+def _biggest_mastery_change(snap: Snapshot) -> dict | None:
+    moved = [
+        t for t in snap.topics
+        if t.mastery_delta is not None and abs(t.mastery_delta) >= _MIN_MASTERY_MOVE
+    ]
+    if not moved:
+        return None
+    top = max(moved, key=lambda t: abs(t.mastery_delta or 0))
+    return {"topic": top.topic, "delta": top.mastery_delta}
+
+
+def _last_active(snap: Snapshot, now: datetime) -> str:
+    if snap.last_activity_at and 0 <= (now - snap.last_activity_at).total_seconds() <= 20 * 60:
+        return "just now"
+    away = snap.days_away
+    if away == 0:
+        return "earlier today" if snap.activity_days else "never"
+    return "yesterday" if away == 1 else f"{away} days ago"
+
+
+def _brief_facts(
+    snap: Snapshot,
+    *,
+    name: str | None = None,
+    tz: str | None = None,
+    suggestion: BriefSuggestion | None = None,
+    now: datetime | None = None,
+) -> dict:
     """The facts the copy is allowed to draw on, read off the snapshot.
 
     Wider than it was. The brief used to see the three most recently touched
@@ -246,9 +551,30 @@ def _brief_facts(snap: Snapshot) -> dict:
     "carry on with the thing you were already doing" — the one observation the
     student does not need a tutor for. It can now see a score that is sliding,
     a topic that has gone quiet, material sitting unopened, and a whole subject
-    that lost this week to another one.
+    that lost this week to another one — and, since these are what change from
+    minute to minute, today's progress against the goal, the state of the
+    streak, the latest quiz against the one before it, and what moved.
+
+    Everything here is arithmetic over rows the snapshot already holds; nothing
+    reads the database. All of it feeds the prompt, so all of it feeds the
+    cache key: a fact that changes is a brief that regenerates.
     """
+    now = now or datetime.now(UTC)
+    today = date.today()
     recent = snap.most_recent
+
+    today_row = next(
+        (r for r in snap.activity_days if _parse_day(r.get("day")) == today), {}
+    )
+    cards_today = int(today_row.get("cards_reviewed") or 0)
+    goal = int(snap.settings.get("daily_goal") or 20)
+
+    later_cutoff = _end_of_local_day(now, tz)
+    due_later = sum(1 for d in snap.upcoming_due if d <= later_cutoff)
+
+    explicit = snap.settings.get("student_model") or {}
+    exam_text = " ".join(str(explicit.get("exam_context") or "").split())[:140]
+
     return {
         "topic": recent.topic if recent else None,
         "subject": recent.subject if recent else None,
@@ -259,6 +585,29 @@ def _brief_facts(snap: Snapshot) -> dict:
         "cold": [(t.topic, t.days_since_activity) for t in snap.cold[:2]],
         "untouched": [t.topic for t in snap.untouched[:2]],
         "neglected_subjects": snap.neglected_subjects[:2],
+        # Personal
+        "name": name,
+        "part_of_day": _part_of_day(now, tz),
+        "exam": exam_text or None,
+        "exam_days_left": _exam_days_left(exam_text, today) if exam_text else None,
+        "learning_style": str(explicit.get("learning_style") or "").strip()[:80] or None,
+        "teaching_preference": str(explicit.get("teaching_preference") or "").strip()[:140]
+        or None,
+        # Minute-to-minute progress
+        "cards_today": cards_today,
+        "daily_goal": goal,
+        "quizzes_today": int(today_row.get("quizzes_taken") or 0),
+        "streak": _streak_state(snap, today),
+        "last_quiz": _last_quiz(snap, today),
+        "mastery_change": _biggest_mastery_change(snap),
+        "dipping_concepts": [(c.label, c.trend) for c in snap.falling_concepts[:1]],
+        "slipping": [s.label for s in snap.slipping[:2]],
+        "cards_due_later_today": due_later,
+        "last_active": _last_active(snap, now),
+        "docs_ready": snap.docs_ready,
+        # The decision engine's own words for why it's pointing where it is.
+        "next_step": suggestion.label if suggestion else None,
+        "reason": suggestion.reason if suggestion else None,
     }
 
 
@@ -266,13 +615,72 @@ def _format_facts(f: dict) -> str:
     lines = [
         f"- Most recent topic: {f['topic'] or 'none yet'}"
         + (f" (subject: {f['subject']})" if f["subject"] else ""),
-        f"- Cards due for review: {f['cards_due']}",
+        f"- Cards due for review now: {f['cards_due']}",
         f"- Days since last study session: {f['days_away']}",
     ]
     # Everything below is the difference between a greeting and a tutor. Each
     # line is omitted entirely when there's nothing to say, rather than being
     # rendered as "none" — a list of absences reads as noise and invites the
     # model to write about them.
+    if f.get("name"):
+        lines.append(f"- Their first name: {f['name']}")
+    if f.get("part_of_day"):
+        lines.append(f"- Time of day for them right now: {f['part_of_day']}")
+    if f.get("last_active"):
+        lines.append(f"- Last studied: {f['last_active']}")
+
+    cards_today, goal = f.get("cards_today", 0), f.get("daily_goal") or 0
+    if goal and (f["has_history"] or cards_today):
+        state = "goal reached" if cards_today >= goal else "goal not reached yet"
+        lines.append(f"- Today: {cards_today} cards reviewed against a daily goal of {goal} ({state})")
+    if f.get("quizzes_today"):
+        lines.append(f"- Quizzes taken today: {f['quizzes_today']}")
+    if f.get("cards_due_later_today"):
+        lines.append(f"- Further cards coming due later today: {f['cards_due_later_today']}")
+
+    streak = f.get("streak") or {}
+    n = streak.get("days", 0)
+    match streak.get("state"):
+        case "extended":
+            lines.append(f"- Streak: extended today, now {n} days in a row")
+        case "started":
+            lines.append("- Streak: they studied today, starting a new one")
+        case "at_risk":
+            lines.append(
+                f"- Streak: {n} days in a row, but nothing logged yet today — "
+                "studying today keeps it alive"
+            )
+        case "broken":
+            lines.append(f"- Streak: their {n}-day streak ended; nothing logged recently")
+
+    if lq := f.get("last_quiz"):
+        when = "today" if lq["days_ago"] == 0 else (
+            "yesterday" if lq["days_ago"] == 1 else f"{lq['days_ago']} days ago"
+        )
+        text = f"- Latest quiz ({when})" + (f" on '{lq['topic']}'" if lq["topic"] else "")
+        text += f": scored {lq['score']}%"
+        if lq["delta"] is not None:
+            move = "up" if lq["delta"] > 0 else "down" if lq["delta"] < 0 else "level"
+            text += (
+                f", {move} {abs(lq['delta'])} points on the previous attempt ({lq['prev']}%)"
+                if lq["delta"]
+                else f", level with the previous attempt ({lq['prev']}%)"
+            )
+        if lq["is_pb"]:
+            text += f"; a new personal best (previous best {lq['best_before']}%)"
+        lines.append(text)
+
+    if mc := f.get("mastery_change"):
+        direction = "improved" if mc["delta"] > 0 else "dropped"
+        lines.append(
+            f"- Biggest recent shift: mastery in '{mc['topic']}' {direction} "
+            f"{abs(mc['delta'])} points over the last 3 days"
+        )
+    for label, trend in f.get("dipping_concepts") or []:
+        lines.append(f"- The concept '{label}' is getting harder for them (down {abs(trend)} points)")
+    for label in f.get("slipping") or []:
+        lines.append(f"- '{label}' was solid a few weeks ago and has been slipping")
+
     for topic, trend in f["falling"]:
         lines.append(f"- Quiz scores are DROPPING in '{topic}' (down {abs(trend)} points)")
     for topic, days in f["cold"]:
@@ -281,8 +689,27 @@ def _format_facts(f: dict) -> str:
         lines.append(f"- '{topic}' has material uploaded that has never been used")
     for subject in f["neglected_subjects"]:
         lines.append(f"- The subject '{subject}' got no attention this week while others did")
+    if f.get("docs_ready"):
+        lines.append(f"- Documents processed and ready to study from: {f['docs_ready']}")
+
+    if f.get("exam"):
+        left = f.get("exam_days_left")
+        when = (
+            " (that date is today)" if left == 0
+            else f" ({left} days from today)" if left is not None
+            else ""
+        )
+        lines.append(f"- Their stated goal: '{f['exam']}'{when}")
+    if f.get("learning_style"):
+        lines.append(f"- How they say they learn: {f['learning_style']}")
+    if f.get("teaching_preference"):
+        lines.append(f"- How they like things explained: {f['teaching_preference']}")
+
     if not f["has_history"]:
         lines.append("- This is their first session; nothing studied yet.")
+    if f.get("next_step"):
+        why = f" — because: {f['reason']}" if f.get("reason") else ""
+        lines.append(f"- Recommended next step (button shown beneath your text): '{f['next_step']}'{why}")
     return "\n".join(lines)
 
 
@@ -290,68 +717,121 @@ def _fallback_brief(f: dict, suggestion: BriefSuggestion | None) -> BriefOut:
     """Deterministic copy. Still specific — just not model-written.
 
     Ordered the same way the prompt is told to rank things, so the page says
-    something comparably useful whether or not the model was reachable. The
-    fallback is not a degraded mode anyone should be able to spot from the
-    content alone.
+    something comparably useful whether or not the model was reachable: a win
+    from today first, then a dip, then a streak on the line, then the older
+    things that need attention. The fallback is not a degraded mode anyone
+    should be able to spot from the content alone.
+
+    The suggestion's own reason is deliberately NOT repeated here: Home already
+    prints it beneath the button, and saying it twice is worse than once.
     """
     topic, due, away = f["topic"], f["cards_due"], f["days_away"]
+    name = f.get("name")
+    addr = f", {name}" if name else ""
+    cards_today, goal = f.get("cards_today", 0), f.get("daily_goal") or 0
+    streak = f.get("streak") or {}
+    n = streak.get("days", 0)
+    lq = f.get("last_quiz")
+
+    def out(headline: str, body: str) -> BriefOut:
+        return BriefOut(headline=headline, body=body, generated=False, suggestion=suggestion)
 
     if not f["has_history"] and not topic:
-        return BriefOut(
-            headline="Nothing here yet",
-            body="Make a space for a subject you're studying, then drop in a PDF and ask it anything.",
-            generated=False,
-            suggestion=suggestion,
+        return out(
+            f"Welcome{addr}" if name else "Nothing here yet",
+            "Make a space for a subject you're studying, then drop in a PDF and ask it anything.",
         )
+
+    # A win from today.
+    if lq and lq["days_ago"] <= 1 and lq["is_pb"]:
+        where = f" on {_short(lq['topic'], 40)}" if lq["topic"] else ""
+        return out(
+            "New personal best",
+            f"{lq['score']}%{where}, past your previous best of {lq['best_before']}%.",
+        )
+    if goal and cards_today >= goal:
+        extra = f" That makes day {n} of your streak." if streak.get("state") == "extended" else ""
+        return out(
+            "Daily goal done",
+            f"{cards_today} cards reviewed today{addr}, past the {goal} you set.{extra}",
+        )
+    if lq and lq["days_ago"] <= 1 and (lq["delta"] or 0) >= 10 and lq["topic"]:
+        return out(
+            f"{_short(lq['topic'], 28)} is climbing",
+            f"Your latest quiz came in at {lq['score']}%, {lq['delta']} points up on the attempt before.",
+        )
+    # A dip, said plainly and gently.
+    if lq and lq["days_ago"] <= 1 and (lq["delta"] or 0) <= -10 and lq["topic"]:
+        return out(
+            f"A dip on {_short(lq['topic'], 28)}",
+            f"That quiz scored {lq['score']}%, {abs(lq['delta'])} points under last time. "
+            "One rough attempt happens; it's worth a look while it's fresh.",
+        )
+    if streak.get("state") == "extended":
+        progress = (
+            f" {cards_today} of {goal} cards toward today's goal." if 0 < cards_today < goal else ""
+        )
+        return out(f"Day {n} of your streak", f"You've studied today{addr}.{progress}")
+    if streak.get("state") == "at_risk":
+        waiting = f" {due} cards are waiting." if due > 0 else ""
+        return out(
+            "Keep your streak alive",
+            f"{n} days running{addr}, and nothing logged yet today.{waiting}",
+        )
+
     if f["falling"]:
-        name, trend = f["falling"][0]
-        return BriefOut(
-            headline=f"{name} is slipping",
-            body=f"Your quiz average there has dropped {abs(trend)} points. Worth going back over before it compounds.",
-            generated=False,
-            suggestion=suggestion,
+        name_, trend = f["falling"][0]
+        return out(
+            f"{name_} is slipping",
+            f"Your quiz average there has dropped {abs(trend)} points. Worth going back over before it compounds.",
+        )
+    if f.get("slipping"):
+        return out(
+            f"{_short(f['slipping'][0], 28)} is fading",
+            "It looked solid a while back and hasn't held up lately. A short pass now beats relearning it later.",
         )
     if f["cold"]:
-        name, days = f["cold"][0]
-        return BriefOut(
-            headline=f"{name} has gone quiet",
-            body=f"Nothing on it for {days} days. A short pass now is cheaper than relearning it later.",
-            generated=False,
-            suggestion=suggestion,
+        name_, days = f["cold"][0]
+        return out(
+            f"{name_} has gone quiet",
+            f"Nothing on it for {days} days. A short pass now is cheaper than relearning it later.",
         )
     if f["untouched"]:
-        return BriefOut(
-            headline="Material waiting",
-            body=f"You uploaded to {f['untouched'][0]} and never opened it. Ask it a question and see what's in there.",
-            generated=False,
-            suggestion=suggestion,
+        return out(
+            "Material waiting",
+            f"You uploaded to {f['untouched'][0]} and never opened it. Ask it a question and see what's in there.",
+        )
+    if streak.get("state") == "broken":
+        return out(
+            "Time for a fresh start",
+            f"Your {n}-day streak ended{addr}, but a short session today starts the next one.",
         )
     if due > 0 and topic:
-        return BriefOut(
-            headline=f"{due} card{'s' if due != 1 else ''} waiting",
-            body=f"Clear your {topic} review while it's still fresh, then push into new material.",
-            generated=False,
-            suggestion=suggestion,
+        later = f.get("cards_due_later_today", 0)
+        more = f" {later} more come due later today." if later else ""
+        return out(
+            f"{due} card{'s' if due != 1 else ''} waiting",
+            f"Clear your {topic} review while it's still fresh, then push into new material.{more}",
         )
     if away >= 3 and topic:
-        return BriefOut(
-            headline="Been a few days",
-            body=f"Pick {topic} back up — a short session now costs less than relearning it later.",
-            generated=False,
-            suggestion=suggestion,
+        return out(
+            "Been a few days",
+            f"Pick {topic} back up{addr} — a short session now costs less than relearning it later.",
         )
     if topic:
-        return BriefOut(
-            headline="All caught up",
-            body=f"Nothing due on {topic}. Good time to add material or test yourself on something new.",
-            generated=False,
-            suggestion=suggestion,
+        left = f.get("exam_days_left")
+        goal_line = (
+            f" {left} days to go on {_short(f['exam'], 50)}."
+            if left and f.get("exam")
+            else ""
         )
-    return BriefOut(
-        headline="Ready when you are",
-        body="Add a topic to your space and start asking questions about your own material.",
-        generated=False,
-        suggestion=suggestion,
+        return out(
+            "All caught up",
+            f"Nothing due on {topic}{addr}. Good time to add material or test yourself on something new.{goal_line}",
+        )
+    return out(
+        "Ready when you are",
+        "Add a topic to your space and start asking questions about your own material.",
     )
 
 

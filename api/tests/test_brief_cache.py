@@ -46,7 +46,7 @@ def harness(monkeypatch: pytest.MonkeyPatch):
 
     monkeypatch.setattr(settings, "groq_api_key", "test-key")
     monkeypatch.setattr(brief_module.student_model_service, "snapshot", _snapshot)
-    monkeypatch.setattr(brief_module, "_brief_facts", lambda _snap: dict(facts))
+    monkeypatch.setattr(brief_module, "_brief_facts", lambda _snap, **_kw: dict(facts))
     monkeypatch.setattr(brief_module, "_format_facts", lambda f: repr(sorted(f.items())))
     monkeypatch.setattr(brief_module, "_compute_suggestion", _suggestion)
     monkeypatch.setattr(brief_module.personalization, "render", lambda _snap, _task: "")

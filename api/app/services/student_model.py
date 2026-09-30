@@ -130,6 +130,13 @@ CARD_REVIEW_OUTCOME: dict[int, float] = {1: 0.0, 2: 0.6, 3: 1.0, 4: 1.0}
 #: anyway.
 CARD_REVIEW_WINDOW = 500
 
+#: How far back "what changed lately" looks when working out how much a topic's
+#: mastery moved because of new evidence — the brief's "biggest recent change".
+RECENT_MASTERY_DAYS = 3
+#: Older evidence needed behind a topic before its recent move is reported;
+#: without a baseline every first quiz is a "jump from 50%".
+MASTERY_DELTA_MIN_BASELINE = 3
+
 #: Feedback chips that speak to whether a CONCEPT is understood, not just how
 #: it should be explained. `too_complex` means "I don't get this" (outcome
 #: 0); `too_simple` means "I already know this" (outcome 1). Every other
@@ -272,6 +279,18 @@ class ConceptView:
         return len(self.subspace_ids) > 1
 
 
+class QuizAttempt(NamedTuple):
+    """One submitted quiz, reduced to what "your latest result" needs — kept
+    on the snapshot so the brief can say how the last attempt compared with the
+    one before it without another read. `subspace_id` is empty when the quiz
+    has since fallen out of the window (its topic is then unknowable)."""
+
+    quiz_id: str
+    subspace_id: str
+    score: int
+    at: str
+
+
 @dataclass(frozen=True)
 class MisconceptionView:
     """One recurring mix-up, folded from `QuizQuestion.misconceptions` ×
@@ -329,6 +348,10 @@ class TopicView:
     #: Was strong three-plus weeks ago and has since dropped or gone quiet —
     #: task 5. Set at fold time; see `ConceptView.is_slipping`.
     is_slipping: bool = False
+    #: Points this topic's mastery moved because of evidence from the last
+    #: `RECENT_MASTERY_DAYS` days (positive = improved). `None` without
+    #: recent evidence or without enough older evidence to measure against.
+    mastery_delta: int | None = None
 
     @property
     def is_weak(self) -> bool:
@@ -427,6 +450,18 @@ class Snapshot:
     #: flat per-occurrence event list, which isn't reconstructable from
     #: `topics`/`concepts` afterward (each topic only keeps ITS OWN top 3).
     top_misconceptions: tuple[MisconceptionView, ...] = ()
+    #: Submitted quizzes, NEWEST first (the same 200-result window the topic
+    #: averages come from). Lets the brief compare the latest attempt with the
+    #: previous one on the same quiz and know a personal best.
+    quiz_attempts: tuple[QuizAttempt, ...] = ()
+    #: Flashcards not yet due but coming due within the next 24 hours — the
+    #: brief's "due later today". Already-due cards are `cards_due_total`.
+    upcoming_due: tuple[datetime, ...] = ()
+    #: Documents that finished processing, across every topic.
+    docs_ready: int = 0
+    #: The most recent `subspaces.last_activity_at`, to the second, where
+    #: `days_away` only knows the date. `None` when nothing has been touched.
+    last_activity_at: datetime | None = None
 
     # ── Concept views ─────────────────────────────────────────────────
 
@@ -945,8 +980,18 @@ async def snapshot(user_id: str) -> Snapshot:
     # buy nothing.
     scores: dict[str, list[int]] = {}
     question_events: list[_QuestionEvent] = []
+    attempts_oldest_first: list[QuizAttempt] = []
     for r in sorted(results, key=lambda r: str(r.get("submitted_at") or "")):
         quiz = quiz_by_id.get(r.get("quiz_id"))
+        if isinstance(r.get("score"), int | float):
+            attempts_oldest_first.append(
+                QuizAttempt(
+                    quiz_id=str(r.get("quiz_id") or ""),
+                    subspace_id=str((quiz or {}).get("subspace_id") or ""),
+                    score=int(r["score"]),
+                    at=str(r.get("submitted_at") or ""),
+                )
+            )
         if not quiz:
             # Older than the quiz window, or a quiz since deleted. The score is
             # unattributable without it, so it is skipped rather than guessed.
@@ -1004,13 +1049,20 @@ async def snapshot(user_id: str) -> Snapshot:
 
     cards_due: dict[str, int] = {}
     cards_total: dict[str, int] = {}
+    upcoming_due: list[datetime] = []
+    horizon = now + timedelta(hours=24)
     for c in cards:
         subspace_id = deck_subspace.get(c.get("deck_id"))
         if not subspace_id:
             continue
         cards_total[subspace_id] = cards_total.get(subspace_id, 0) + 1
-        if _due(c.get("due_at"), now):
+        due_dt = _parse_dt(c.get("due_at"))
+        if due_dt is None:
+            continue
+        if due_dt <= now:
             cards_due[subspace_id] = cards_due.get(subspace_id, 0) + 1
+        elif due_dt <= horizon:
+            upcoming_due.append(due_dt)
 
     note_counts: dict[str, int] = {}
     for n in notes:
@@ -1023,6 +1075,7 @@ async def snapshot(user_id: str) -> Snapshot:
         subspace_id = d.get("subspace_id")
         if subspace_id and d.get("status") == "ready":
             doc_counts[subspace_id] = doc_counts.get(subspace_id, 0) + 1
+    docs_ready = sum(doc_counts.values())
 
     topics: list[TopicView] = []
     for s in subspace_rows:
@@ -1052,6 +1105,7 @@ async def snapshot(user_id: str) -> Snapshot:
         apply_evidence = [
             (1.0 if e.correct else 0.0, e.at) for e in topic_events if e.kind == "apply"
         ]
+        mastery_delta = _recent_mastery_delta(raw_evidence, mastery, today)
         recall_mastery, recall_n = _mastery_from_evidence(_weighted(recall_evidence, today))
         application_mastery, application_n = _mastery_from_evidence(
             _weighted(apply_evidence, today)
@@ -1083,6 +1137,7 @@ async def snapshot(user_id: str) -> Snapshot:
                     application_mastery if application_n >= RECALL_SPLIT_MIN_N else None
                 ),
                 is_slipping=_is_slipping(raw_evidence, today, mastery, days_since_activity),
+                mastery_delta=mastery_delta,
             )
         )
 
@@ -1131,6 +1186,13 @@ async def snapshot(user_id: str) -> Snapshot:
         prereq_edges={c: tuple(sorted(ps)) for c, ps in prereq_edges.items()},
         concept_labels=concept_labels,
         top_misconceptions=tuple(_top_misconceptions(overall_misconception_events, today)),
+        quiz_attempts=tuple(reversed(attempts_oldest_first)),
+        upcoming_due=tuple(sorted(upcoming_due)),
+        docs_ready=docs_ready,
+        last_activity_at=max(
+            filter(None, (_parse_dt(s.get("last_activity_at")) for s in subspace_rows)),
+            default=None,
+        ),
     )
 
 
@@ -1543,6 +1605,32 @@ def _mastery_from_evidence(evidence: list[tuple[float, float]]) -> tuple[int, fl
     alpha = 1.0 + wo_sum
     beta = 1.0 + (w_sum - wo_sum)
     return round(100 * alpha / (alpha + beta)), w_sum
+
+
+def _recent_mastery_delta(
+    evidence: list[tuple[float, str]], current: int, today: date
+) -> int | None:
+    """How far new evidence moved this topic's mastery: today's score minus the
+    score computed from only the evidence older than `RECENT_MASTERY_DAYS`.
+
+    Both sides use today's recency weights, so the difference is attributable to
+    the new answers alone rather than to old ones ageing. `None` unless there
+    is BOTH something recent and a real baseline behind it.
+    """
+    older: list[tuple[float, float]] = []
+    recent = 0
+    for outcome, at in evidence:
+        days = _days_since(at, today)
+        if days is None:
+            continue  # unparsable: contributes nothing, as in `_evidence_weight`
+        if days <= RECENT_MASTERY_DAYS:
+            recent += 1
+        else:
+            older.append((outcome, 0.5 ** (days / MASTERY_HALF_LIFE_DAYS)))
+    if not recent or len(older) < MASTERY_DELTA_MIN_BASELINE:
+        return None
+    before, _ = _mastery_from_evidence(older)
+    return current - before
 
 
 def _trend(attempts: list[int]) -> int | None:
