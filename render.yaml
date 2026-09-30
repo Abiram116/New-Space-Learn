@@ -14,7 +14,10 @@ services:
     # spin-down). It also runs one real inference, so a bad download fails the
     # BUILD rather than the first student's upload.
     buildCommand: pip install uv && uv sync --frozen && uv run python scripts/prefetch_model.py
-    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    # --no-sync: the build already installed everything. Plain `uv run` re-checks
+    # and rebuilds the project on EVERY start (measured ~6s in the first deploy),
+    # and a cold start is the worst latency in the product.
+    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
