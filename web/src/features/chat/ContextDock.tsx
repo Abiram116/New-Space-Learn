@@ -28,7 +28,28 @@ import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
 import { SourceItem } from '../docs/SourceItem'
-import { AGENT_ICON, AGENT_LABELS, AGENT_RESULT, AGENT_TONE, type AgentKey } from './agents'
+import {
+  AGENT_BUSY_LABELS,
+  AGENT_ICON,
+  AGENT_LABELS,
+  AGENT_RESULT,
+  AGENT_TONE,
+  type AgentKey,
+} from './agents'
+
+/** Which agents have a request in flight; absent means none do. */
+export type AgentBusy = Partial<Record<AgentKey, boolean>>
+
+/** A small ring, same construction as the page spinner. */
+function Spinner({ size = 12 }: { size?: number }) {
+  return (
+    <span
+      aria-hidden
+      style={{ width: size, height: size }}
+      className="inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none motion-reduce:border-t-current motion-reduce:opacity-60"
+    />
+  )
+}
 
 const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
 
@@ -100,7 +121,13 @@ export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; bas
  * `/notes` `/quiz` `/flashcards` shortcuts already use — no new action logic,
  * only a second surface for the existing one.
  */
-export function ActiveAgentsStrip({ onRunAgent }: { onRunAgent: (agent: AgentKey) => void }) {
+export function ActiveAgentsStrip({
+  onRunAgent,
+  busy = {},
+}: {
+  onRunAgent: (agent: AgentKey) => void
+  busy?: AgentBusy
+}) {
   return (
     <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
       <span className="setcode shrink-0">Make something</span>
@@ -109,15 +136,17 @@ export function ActiveAgentsStrip({ onRunAgent }: { onRunAgent: (agent: AgentKey
           key={key}
           type="button"
           onClick={() => onRunAgent(key)}
+          disabled={busy[key]}
+          aria-busy={busy[key] || undefined}
           className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold transition-colors cursor-pointer',
+            'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold transition-colors cursor-pointer',
             toneSoft[AGENT_TONE[key]],
             toneText[AGENT_TONE[key]],
-            'hover:brightness-95',
+            'hover:brightness-95 disabled:cursor-progress disabled:hover:brightness-100',
           )}
         >
-          <Icon name={AGENT_ICON[key]} size={12} />
-          {AGENT_LABELS[key]}
+          {busy[key] ? <Spinner /> : <Icon name={AGENT_ICON[key]} size={12} />}
+          {busy[key] ? AGENT_BUSY_LABELS[key] : AGENT_LABELS[key]}
         </button>
       ))}
     </div>
@@ -128,12 +157,14 @@ export function ContextDock({
   subspaceId,
   base,
   onRunAgent,
+  busy = {},
   panel,
   onClosePanel,
 }: {
   subspaceId: string
   base: string
   onRunAgent: (agent: AgentKey) => void
+  busy?: AgentBusy
   /** Which workspace panel is open, or null for the overview. */
   panel: DockPanel
   onClosePanel: () => void
@@ -286,7 +317,12 @@ export function ContextDock({
               key={key}
               type="button"
               onClick={() => onRunAgent(key)}
-              className="group flex items-start gap-2.5 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors hover:border-brand/40 cursor-pointer"
+              disabled={busy[key]}
+              aria-busy={busy[key] || undefined}
+              className={cn(
+                'group flex items-start gap-2.5 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors hover:border-brand/40 cursor-pointer',
+                'disabled:cursor-progress disabled:border-brand/40 disabled:hover:border-brand/40',
+              )}
             >
               <span
                 className={cn(
@@ -295,17 +331,19 @@ export function ContextDock({
                   toneText[AGENT_TONE[key]],
                 )}
               >
-                <Icon3D name={AGENT_ICON[key]} size={15} />
+                {busy[key] ? <Spinner size={14} /> : <Icon3D name={AGENT_ICON[key]} size={15} />}
               </span>
               <span className="min-w-0">
                 <span className="flex items-center gap-1 text-[12.5px] font-bold text-ink">
-                  {AGENT_LABELS[key]}
-                  <Icon
-                    name="agent"
-                    size={11}
-                    filled
-                    className="text-faint transition-colors group-hover:text-brand"
-                  />
+                  {busy[key] ? AGENT_BUSY_LABELS[key] : AGENT_LABELS[key]}
+                  {!busy[key] && (
+                    <Icon
+                      name="agent"
+                      size={11}
+                      filled
+                      className="text-faint transition-colors group-hover:text-brand"
+                    />
+                  )}
                 </span>
                 <span className="mt-0.5 block text-[11px] leading-snug text-muted">
                   {AGENT_RESULT[key]}

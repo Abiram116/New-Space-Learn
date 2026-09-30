@@ -126,3 +126,44 @@ describe('citations are actually clickable, not just styled to look like it', ()
     expect(screen.queryByRole('link', { name: /Attention Is All You Need/ })).not.toBeInTheDocument()
   })
 })
+
+describe('reply typography and streaming', () => {
+  const wrap = (node: React.ReactNode) => (
+    <MemoryRouter>
+      <ToastProvider>{node}</ToastProvider>
+    </MemoryRouter>
+  )
+
+  it('renders replies in the chat-reply prose scope, animated only while streaming', () => {
+    const { container, rerender } = render(
+      wrap(<ChatMessage message={message({ content: '## Heading\n\nBody text.' })} subspaceId="s1" />),
+    )
+    expect(container.querySelector('.chat-reply')).not.toBeNull()
+    expect(container.querySelector('.chat-reply.is-streaming')).toBeNull()
+    expect(container.querySelector('h2')).toHaveTextContent('Heading')
+
+    rerender(wrap(<ChatMessage message={message({ id: 'pending', content: 'Body' })} streaming />))
+    expect(container.querySelector('.chat-reply.is-streaming')).not.toBeNull()
+  })
+
+  it('shows the typing indicator until the first token', () => {
+    render(wrap(<ChatMessage message={message({ id: 'pending', content: '\u2026' })} streaming />))
+    expect(screen.getByRole('status', { name: 'Thinking' })).toBeInTheDocument()
+  })
+
+  it('wraps tables so they scroll instead of squashing', () => {
+    const { container } = render(
+      wrap(<ChatMessage message={message({ content: '| a | b |\n| - | - |\n| 1 | 2 |' })} subspaceId="s1" />),
+    )
+    expect(container.querySelector('.chat-table > table')).not.toBeNull()
+  })
+
+  it('renders LaTeX delimiters without leaking backslashes', async () => {
+    const { container } = render(
+      wrap(<ChatMessage message={message({ content: 'Energy is \\(E = mc^2\\) here.' })} subspaceId="s1" />),
+    )
+    // Placeholder first (raw source), KaTeX once lazily loaded.
+    expect(container.textContent).not.toContain('\\(')
+    await vi.waitFor(() => expect(container.querySelector('.katex')).not.toBeNull())
+  })
+})

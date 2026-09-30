@@ -9,6 +9,7 @@ import { cn } from '../../lib/cn'
 import { AddToNoteButton } from './AddToNote'
 import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
+import './chat.css'
 
 export type MessageFeedback = {
   chips: FeedbackKind[]
@@ -48,6 +49,8 @@ export const ChatMessage = memo(function ChatMessage({
   feedback,
   subspaceId,
   base,
+  streaming = false,
+  instant = false,
 }: {
   message: Message
   feedback?: MessageFeedback
@@ -58,17 +61,24 @@ export const ChatMessage = memo(function ChatMessage({
    *  the same convention NoteEditor's own citation links already use.
    *  Omitted only for the pending bubble, same as `subspaceId`. */
   base?: string
+  /** The live bubble: block-reveal animation on, no entrance lift of its own
+   *  beyond the first mount. */
+  streaming?: boolean
+  /** A reply that was just streamed in this session and is now final. It has
+   *  already been on screen for seconds, so lifting it in again would read as
+   *  the whole answer blinking at the moment it finishes. */
+  instant?: boolean
 }) {
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
     return (
-      <Rise distance={10} className="max-w-[70%] self-end">
+      <Rise distance={10} className="max-w-[85%] self-end sm:max-w-[75%]">
         {/* Tinted, not saturated. A full-brand fill made every question the
             loudest thing on screen — brighter than the answer it was asking
             about, which inverts the hierarchy. `brand-soft` still reads as
             "this one is mine" without shouting it. */}
-        <div className="rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-3.5 py-2.5 text-[14px] leading-relaxed text-ink whitespace-pre-wrap">
+        <div className="rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-4 py-2.5 text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]">
           {message.content}
         </div>
       </Rise>
@@ -77,8 +87,8 @@ export const ChatMessage = memo(function ChatMessage({
 
   const citations = message.citations ?? []
 
-  return (
-    <Rise distance={6}>
+  const body = (
+    <>
     {/* The answer is the page, not an object on it.
         This was a `Leaf` — tinted fill, margin rule down the left, capped at
         88%. A leaf is the right material for a note, where the sheet IS the
@@ -90,9 +100,9 @@ export const ChatMessage = memo(function ChatMessage({
         student's turn is already fully carried by *their* turn being a
         bubble — an answer doesn't need a container to say "not yours" when
         the only other thing on screen is visibly theirs. */}
-    <div className="flex flex-col gap-2.5 text-[14.5px] leading-[1.7] text-ink-2">
+    <div className="flex flex-col gap-3">
       {citations.length > 0 && (
-        <div className="flex items-center gap-2 text-[12px] font-semibold text-muted">
+        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-muted">
           <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
             <Icon name="sparkle" size={11} filled />
           </span>
@@ -103,14 +113,19 @@ export const ChatMessage = memo(function ChatMessage({
       {message.content === '\u2026' ? (
         <Thinking />
       ) : (
-        <MarkdownMessage content={message.content} citations={citations} base={base} />
+        <MarkdownMessage
+          content={message.content}
+          citations={citations}
+          base={base}
+          streaming={streaming}
+        />
       )}
 
       {citations.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {citations.map((c) => {
             const cardClass =
-              'min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-2.5 py-2 text-[11.5px]'
+              'min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-3 py-2 text-[12.5px] leading-snug'
             const inner = (
               <>
                 <div className="flex gap-1.5 font-bold">
@@ -158,8 +173,9 @@ export const ChatMessage = memo(function ChatMessage({
     {feedback && !feedback.messageId.startsWith('srv-') && (
       <FeedbackRow feedback={feedback} content={message.content} />
     )}
-    </Rise>
+    </>
   )
+  return instant ? <div>{body}</div> : <Rise distance={6}>{body}</Rise>
 })
 
 function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content: string }) {
@@ -192,27 +208,16 @@ function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content
  *
  * Three dots rising in sequence — the same beat as a card being dealt, so the
  * wait belongs to this world rather than borrowing a generic chat spinner. It
- * holds a fixed height so the bubble doesn't jump when real text replaces it.
+ * holds the height of one line of reply text so the bubble doesn't jump when
+ * real text replaces it. Keyframes live in chat.css, where reduced motion
+ * turns them into three still dots.
  */
 function Thinking() {
   return (
-    <div className="flex h-5 items-center gap-1.5" role="status" aria-label="Thinking">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full bg-brand"
-          style={{ animation: `thinkPulse 1.15s ${i * 0.16}s ease-in-out infinite` }}
-        />
-      ))}
-      <style>{`
-        @keyframes thinkPulse {
-          0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.85); }
-          40%      { opacity: 1;    transform: translateY(-3px) scale(1); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          [style*="thinkPulse"] { animation: none !important; opacity: 0.7; }
-        }
-      `}</style>
+    <div className="chat-think" role="status" aria-label="Thinking">
+      <span />
+      <span />
+      <span />
     </div>
   )
 }

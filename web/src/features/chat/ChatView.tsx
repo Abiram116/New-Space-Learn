@@ -15,17 +15,16 @@ import { LIMITS } from '../../lib/limits'
 import { useNavigate } from 'react-router-dom'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
 import { listPreferences, sendFeedback, type Preference } from '../../api/feedback'
-import { generateCards } from '../../api/flashcards'
-import { generateNote } from '../../api/notes'
-import { generateQuiz } from '../../api/quizzes'
 import type { ChatMessage as Message, Citation } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageSpinner } from '../../components/ui/PageSpinner'
+import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { AgentRunCard } from './AgentRunCard'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
 import { ActiveAgentsStrip, ActiveSkillStrip, ContextDock } from './ContextDock'
@@ -40,26 +39,14 @@ import {
   type TurnSignal,
 } from './feedbackPolicy'
 import type { AgentKey } from './agents'
-
-/**
- * A slash-command argument, cut to what the endpoint will accept.
- *
- * `/quiz <topic>` takes the rest of the composer line, and the composer is
- * capped at 4000 characters while every `topic` field on the API is capped at
- * 120–140. A `maxLength` cannot help here — the text is one field being read
- * as two — so the clamp belongs at the point the argument is handed to a
- * request. Truncating a topic is lossless in practice: it is a phrase used to
- * steer retrieval, not content that gets stored.
- */
-function clampTopic(value: string | undefined, max: number): string | undefined {
-  const trimmed = value?.trim()
-  return trimmed ? trimmed.slice(0, max) : undefined
-}
+import { StreamingMessage } from './StreamingMessage'
+import { StreamPacer } from './streamPacer'
+import { clampTopic, useAgentRuns } from './useAgentRuns'
 
 export function ChatView() {
   const { space, subspace, base } = useActiveSubspace()
   const navigate = useNavigate()
-  const { show, showError } = useToast()
+  const { showError } = useToast()
 
   if (!space || !subspace) return <SubspaceMissing />
 
@@ -71,7 +58,6 @@ export function ChatView() {
       spaceName={space.name}
       base={base}
       onNavigate={navigate}
-      show={show}
       showError={showError}
     />
   )
@@ -83,13 +69,25 @@ type Inner = {
   spaceName: string
   base: string
   onNavigate: ReturnType<typeof useNavigate>
-  show: (m: string, kind?: 'info' | 'success' | 'error') => void
   showError: (e: unknown) => void
 }
 
-function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showError }: Inner) {
+function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }: Inner) {
   const history = useAsync(() => listMessages(subspaceId), [subspaceId])
-  const [pending, setPending] = useState<{ text: string; citations: Citation[] } | null>(null)
+  /* The live turn. Tokens do NOT flow through React state: they go into
+     `pacer`, which reveals them on requestAnimationFrame, and only
+     `StreamingMessage` subscribes to it. This component re-renders when a turn
+     starts, gains a citation, or ends — not once per frame — so the thread of
+     finished, memoized messages is never touched mid-stream. */
+  const [stream, setStream] = useState<{ pacer: StreamPacer; citations: Citation[]; turn: number } | null>(null)
+  const streamRef = useRef(stream)
+  streamRef.current = stream
+  const turnRef = useRef(0)
+  /* Replies that streamed in this session and are now final. They skip the
+     entrance lift (see ChatMessage's `instant`), since the same text has
+     already been on screen for seconds. */
+  const settledRef = useRef(new Set<string>())
+  const reducedMotion = useReducedMotion()
   const [streaming, setStreaming] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -105,15 +103,15 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
 
   /* Auto-scroll to bottom, without fighting a student who scrolled up mid-
      stream to reread something.
-     `pending` gets a new object on every single streamed token, so this used
-     to run a synchronous `scrollTop = scrollHeight` — a forced layout read
-     and write — once per token, and it did it unconditionally: scrolled up
-     to check an earlier message while the answer kept streaming, and the
-     view yanked you back to the bottom on the very next token. `stickRef`
-     tracks whether the reader is already at the bottom (updated by a passive
-     scroll listener, not read every render), and the scroll itself is
-     coalesced onto one rAF per frame so a burst of tokens between paints only
-     costs one layout write, not one per token. */
+     This used to run a synchronous `scrollTop = scrollHeight` — a forced
+     layout read and write — once per token, unconditionally: scrolled up to
+     check an earlier message while the answer kept streaming, and the view
+     yanked you back to the bottom on the very next token. `stickRef` tracks
+     whether the reader is already at the bottom (updated by a passive scroll
+     listener, not read every render), and the scroll itself is coalesced onto
+     one rAF so several growth notifications between paints cost one layout
+     write. The streaming bubble calls `followBottom` after each revealed
+     frame. */
   const stickRef = useRef(true)
   const scrollRafRef = useRef(0)
 
@@ -128,21 +126,49 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
     return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
-  useEffect(() => {
+  const followBottom = useCallback(() => {
     const el = scrollRef.current
     if (!el || !stickRef.current) return
     cancelAnimationFrame(scrollRafRef.current)
     scrollRafRef.current = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight
     })
-    return () => cancelAnimationFrame(scrollRafRef.current)
-  }, [history.data, pending])
+  }, [])
 
+  useEffect(() => {
+    followBottom()
+    return () => cancelAnimationFrame(scrollRafRef.current)
+  }, [history.data, stream?.turn, followBottom])
+
+  /* Stop keeps what was already written. The partial answer is flushed to the
+     screen instantly and stays as a local message — it was never saved by the
+     server, so it is marked with an `srv-` id (no feedback row, no
+     regenerate-feedback against a row that doesn't exist). */
   const cancel = useCallback(() => {
     abortRef.current?.abort()
+    const live = streamRef.current
+    if (live) {
+      live.pacer.flush()
+      const partial = live.pacer.received.trim()
+      if (partial) {
+        const id = `srv-stopped-${Date.now()}`
+        settledRef.current.add(id)
+        history.setData((prev) => [
+          ...(prev ?? []),
+          {
+            id,
+            role: 'assistant',
+            content: partial,
+            citations: live.citations.length ? live.citations : null,
+            created_at: new Date().toISOString(),
+          },
+        ])
+      }
+      live.pacer.dispose()
+    }
     setStreaming(false)
-    setPending(null)
-  }, [])
+    setStream(null)
+  }, [history])
 
   const send = useCallback(
     async (text: string, opts?: { regenerate?: boolean; images?: string[] }) => {
@@ -168,7 +194,10 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
         // `repeated_regenerate` on an answer nobody has regenerated yet.
         setRegenerations(0)
       }
-      setPending({ text: '', citations: [] })
+      const pacer = new StreamPacer({ instant: reducedMotion })
+      const turn = ++turnRef.current
+      let citations: Citation[] = []
+      setStream({ pacer, citations, turn })
       setStreaming(true)
       const controller = new AbortController()
       abortRef.current = controller
@@ -180,7 +209,16 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
           regenerate,
           opts?.images ?? [],
         )) {
-          handleEvent(evt, setPending, (final, cits, messageId) => {
+          if (evt.type === 'token') {
+            pacer.push(evt.delta)
+          } else if (evt.type === 'citation') {
+            citations = dedupeCitations([...citations, evt.citation])
+            const next = citations
+            setStream((s) => (s && s.pacer === pacer ? { ...s, citations: next } : s))
+          } else if (evt.type === 'done') {
+            const resolved = resolveDone(evt, { text: pacer.received, citations })
+            // The stream is over: show whatever is still queued right now.
+            pacer.flush()
             const assistant: Message = {
               // The REAL row id, not a fabricated one.
               //
@@ -191,25 +229,29 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
               // it: no feedback, no regenerate, no permalink. The fallback is
               // kept for the case where an older backend sends no id, and it is
               // marked so callers can tell a real id from a placeholder.
-              id: messageId ?? `srv-${Date.now()}`,
+              id: evt.messageId ?? `srv-${Date.now()}`,
               role: 'assistant',
-              content: final,
-              citations: cits.length ? cits : null,
+              content: resolved.text,
+              citations: resolved.citations.length ? resolved.citations : null,
               created_at: new Date().toISOString(),
             }
+            settledRef.current.add(assistant.id)
             history.setData((prev) => [...(prev ?? []), assistant])
-            setPending(null)
-          })
+            setStream(null)
+          } else if (evt.type === 'error') {
+            throw new Error(evt.message)
+          }
         }
       } catch (err) {
         if (!controller.signal.aborted) showError(err)
-        setPending(null)
+        setStream((s) => (s && s.pacer === pacer ? null : s))
       } finally {
+        pacer.dispose()
         setStreaming(false)
         abortRef.current = null
       }
     },
-    [subspaceId, history, showError],
+    [subspaceId, history, showError, reducedMotion],
   )
 
   /* The notes agent asks before it writes; the other two don't.
@@ -217,78 +259,50 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
      *keeps and edits*, so its shape is worth a question. A quiz and a deck are
      regenerable in one click if the first attempt isn't useful. */
   const [noteBrief, setNoteBrief] = useState<{ topic?: string } | null>(null)
-  const [writingNote, setWritingNote] = useState(false)
 
-  const writeNote = useCallback(
-    async (input: { topic?: string; instructions?: string }) => {
-      setWritingNote(true)
-      try {
-        const note = await generateNote(subspaceId, input)
-        setNoteBrief(null)
-        show('Note written.', 'success')
-        onNavigate(`${base}/notes?n=${note.id}`)
-      } catch (err) {
-        // The dialog stays open on failure, holding what was typed — a rate
-        // limit or a dropped connection shouldn't cost the student the brief
-        // they just wrote.
-        showError(err)
-      } finally {
-        setWritingNote(false)
-      }
-    },
-    [base, onNavigate, subspaceId, show, showError],
+  /* All three entry points — dock buttons, the mobile strip, and the
+     composer's slash commands — start an agent through this one hook, so they
+     share the busy flag, the in-thread progress card, the success beat before
+     the redirect, and Retry on failure. */
+  const historyRef = useRef(history.data)
+  useEffect(() => {
+    historyRef.current = history.data
+  }, [history.data])
+  // Seed a deck from the last answer when there is one; otherwise the
+  // generator draws on whatever this topic has indexed.
+  const getSourceText = useCallback(
+    () => lastAssistant(historyRef.current ?? [])?.content,
+    [],
   )
+  const agentRuns = useAgentRuns({ subspaceId, base, navigate: onNavigate, getSourceText })
+  const { runs, busy, start: startRun, retry: retryRun, dismiss: dismissRun, open: openRun } = agentRuns
+
+  useEffect(() => {
+    followBottom()
+  }, [runs, followBottom])
 
   const runAgent = useCallback(
-    async (agent: AgentKey, argument?: string) => {
-      try {
-        if (agent === 'quiz') {
-          const quiz = await generateQuiz(subspaceId, {
-            topic: clampTopic(argument, LIMITS.quizTopic),
-            count: 5,
-          })
-          show('Quiz ready.', 'success')
-          onNavigate(`${base}/quizzes?q=${quiz.id}`)
-          return
-        }
-        if (agent === 'notes') {
-          setNoteBrief({ topic: clampTopic(argument, LIMITS.noteTopic) })
-          return
-        }
-        if (agent === 'flashcards') {
-          // Seed from the last answer when there is one; otherwise let the
-          // generator draw on whatever this topic has indexed.
-          //
-          // `topic` here used to default to `firstSentence(summary.content,
-          // 60)` when nothing was typed — a raw excerpt of the assistant's
-          // own reply, "…" included, which is grounding text, not a name.
-          // The backend stores it verbatim as the deck's name when nothing
-          // better is available, which is exactly how decks ended up titled
-          // "We're working on the topic of Transformers…". `source_text`
-          // below already carries that same content as material for the
-          // model to draw on; `topic` only needs to be set when the student
-          // typed one, matching how `quiz`/`notes` build theirs — the
-          // backend now writes a real title itself when this is empty (see
-          // `flashcards.py::_generate_pairs`).
-          const summary = lastAssistant(history.data ?? [])
-          const cards = await generateCards(subspaceId, {
-            topic: clampTopic(argument, LIMITS.cardsTopic),
-            source_text: summary?.content,
-            count: 8,
-          })
-          show(`Wrote ${cards.length} cards.`, 'success')
-          // Land on the deck itself, not the plain grid — Notes and Quiz
-          // generation from chat both already open what they just wrote
-          // (`?n=`/`?q=`); this was the one path that dropped you
-          // somewhere you'd have to go hunting from.
-          onNavigate(cards[0] ? `${base}/flashcards?deck=${cards[0].deck_id}` : `${base}/flashcards`)
-          return
-        }
-      } catch (err) {
-        showError(err)
+    (agent: AgentKey, argument?: string) => {
+      if (agent === 'notes') {
+        setNoteBrief({ topic: clampTopic(argument, LIMITS.noteTopic) })
+        return
       }
+      stickRef.current = true
+      startRun(agent, { topic: argument })
     },
-    [base, history.data, onNavigate, subspaceId, show, showError],
+    [startRun],
+  )
+
+  const writeNote = useCallback(
+    (input: { topic?: string; instructions?: string }) => {
+      // The dialog closes at once and the thread takes over: a progress card,
+      // then a result with a way in. A failure is retried from the card with
+      // the same brief, so nothing typed is lost.
+      setNoteBrief(null)
+      stickRef.current = true
+      startRun('notes', input)
+    },
+    [startRun],
   )
 
   /* Feedback offer state.
@@ -332,7 +346,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
   // request, a dev-only HMR remount mid-stream). Collapse rather than trust
   // every upstream path to be perfectly exactly-once.
   const messages = dedupeAdjacent(history.data ?? [])
-  const isEmpty = !history.loading && messages.length === 0 && !pending
+  const isEmpty = !history.loading && messages.length === 0 && !stream
   const assistantTurns = messages.filter((m) => m.role === 'assistant').length
 
   /* What the student's most recent message signalled, if anything.
@@ -443,6 +457,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
               message={m}
               subspaceId={subspaceId}
               base={base}
+              instant={settledRef.current.has(m.id)}
               // Chips only under the LAST answer, and only when it is complete.
               // Under an older message they'd be asking about something the
               // student has already moved past, and a row of stale controls up
@@ -469,23 +484,30 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
             />
           ))}
 
-          {pending && (
-            <ChatMessage
-              message={{
-                id: 'pending',
-                role: 'assistant',
-                content: pending.text || '…',
-                citations: pending.citations,
-                created_at: new Date().toISOString(),
-              }}
+          {stream && (
+            <StreamingMessage
+              key={stream.turn}
+              pacer={stream.pacer}
+              citations={stream.citations}
               base={base}
+              onGrow={followBottom}
             />
           )}
+
+          {runs.map((run) => (
+            <AgentRunCard
+              key={run.id}
+              run={run}
+              onOpen={(r) => r.href && openRun(r.id, r.href)}
+              onRetry={(r) => retryRun(r.id)}
+              onDismiss={(r) => dismissRun(r.id)}
+            />
+          ))}
           </div>
         </div>
 
         {/* Only below lg, where the dock isn't there to say either of these. */}
-        <ActiveAgentsStrip onRunAgent={runAgent} />
+        <ActiveAgentsStrip onRunAgent={runAgent} busy={busy} />
         <ActiveSkillStrip subspaceId={subspaceId} base={base} />
 
         <Composer
@@ -501,6 +523,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
         subspaceId={subspaceId}
         base={base}
         onRunAgent={runAgent}
+        busy={busy}
         panel={dockPanel}
         onClosePanel={() => setDockPanel(null)}
       />
@@ -508,7 +531,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, show, showE
       <NoteBriefDialog
         open={noteBrief !== null}
         topic={noteBrief?.topic}
-        busy={writingNote}
+        busy={busy.notes}
         onCancel={() => setNoteBrief(null)}
         onGenerate={writeNote}
       />
@@ -544,38 +567,6 @@ export function resolveDone(
   return {
     text: (evt.content ?? prev?.text ?? '').trim() || '(no reply)',
     citations: evt.citations.length ? evt.citations : (prev?.citations ?? []),
-  }
-}
-
-function handleEvent(
-  evt: ChatStreamEvent,
-  setPending: (fn: (prev: { text: string; citations: Citation[] } | null) => { text: string; citations: Citation[] }) => void,
-  onDone: (finalText: string, citations: Citation[], messageId: string | null) => void,
-) {
-  if (evt.type === 'token') {
-    setPending((prev) => ({
-      text: (prev?.text ?? '') + evt.delta,
-      citations: prev?.citations ?? [],
-    }))
-    return
-  }
-  if (evt.type === 'citation') {
-    setPending((prev) => ({
-      text: prev?.text ?? '',
-      citations: dedupeCitations([...(prev?.citations ?? []), evt.citation]),
-    }))
-    return
-  }
-  if (evt.type === 'done') {
-    setPending((prev) => {
-      const resolved = resolveDone(evt, prev)
-      onDone(resolved.text, resolved.citations, evt.messageId)
-      return { text: '', citations: [] }
-    })
-    return
-  }
-  if (evt.type === 'error') {
-    throw new Error(evt.message)
   }
 }
 

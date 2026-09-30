@@ -35,3 +35,17 @@ export const AGENT_TONE: Record<AgentKey, 'brand' | 'sky' | 'sun'> = {
   quiz: 'sky',
   flashcards: 'sun',
 }
+
+/** The button label while that agent is running. */
+export const AGENT_BUSY_LABELS: Record<AgentKey, string> = {
+  notes: 'Writing note…',
+  quiz: 'Making quiz…',
+  flashcards: 'Making cards…',
+}
+
+/** What the student sees the moment they click, and when it is done. */
+export const AGENT_DONE_CTA: Record<AgentKey, string> = {
+  notes: 'Open note',
+  quiz: 'Open quiz',
+  flashcards: 'Open deck',
+}

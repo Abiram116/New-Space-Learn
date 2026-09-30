@@ -42,7 +42,7 @@ export function AddToNoteButton({
         onClick={() => setOpen(true)}
         title="Add to note"
         aria-label="Add to note"
-        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11.5px] text-brand transition-colors cursor-pointer hover:text-brand-deep"
+        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12.5px] text-brand transition-colors cursor-pointer hover:text-brand-deep"
       >
         <Icon name="note" size={12} /> Add to note
       </button>

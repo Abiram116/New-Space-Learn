@@ -93,7 +93,7 @@ export function FeedbackChips({
 
   if (given) {
     return (
-      <div className="flex items-center gap-1.5 pl-4 text-[11.5px] text-muted">
+      <div className="flex items-center gap-1.5 pl-4 text-[12.5px] text-muted">
         <Icon name="check" size={11} className="text-mint-deep" />
         {given === 'useful' ? 'Glad it helped.' : 'Noted — I’ll adjust.'}
         {/* Naming a specific problem ("too long", "need an example") is
@@ -150,11 +150,11 @@ export function FeedbackChips({
           <Icon name="refresh" size={14} />
         </button>
         {invited ? (
-          <span className="ml-1.5 text-[11.5px] text-faint">What was off?</span>
+          <span className="ml-1.5 text-[12.5px] text-faint">What was off?</span>
         ) : (
           showChips &&
           reason !== null && (
-            <span className="ml-1.5 text-[11.5px] text-faint">{REASON_PROMPT[reason]}</span>
+            <span className="ml-1.5 text-[12.5px] text-faint">{REASON_PROMPT[reason]}</span>
           )
         )}
       </div>
@@ -169,7 +169,7 @@ export function FeedbackChips({
                 key={kind}
                 type="button"
                 onClick={() => record(kind)}
-                className="rounded-full border border-line px-2.5 py-1 text-[11.5px] text-ink-3 transition-colors cursor-pointer hover:border-brand/50 hover:bg-brand-soft hover:text-brand-deep"
+                className="rounded-full border border-line px-2.5 py-1 text-[12.5px] text-ink-3 transition-colors cursor-pointer hover:border-brand/50 hover:bg-brand-soft hover:text-brand-deep"
               >
                 {CHIP_LABEL[kind]}
               </button>

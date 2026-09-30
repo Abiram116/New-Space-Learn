@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import ReactMarkdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Citation } from '../../api/types'
 import { cn } from '../../lib/cn'
+import './chat.css'
 
 /**
  * Renders assistant replies as markdown (bold, lists, tables, fenced code
@@ -20,6 +21,7 @@ export function MarkdownMessage({
   content,
   citations = [],
   base,
+  streaming = false,
 }: {
   content: string
   /** Resolves a `[[n]]` marker to the document it cites, so the badge can
@@ -28,21 +30,108 @@ export function MarkdownMessage({
    *  nothing at all. */
   citations?: Citation[]
   base?: string
+  /** True on the live bubble: turns on the block reveal animation. */
+  streaming?: boolean
 }) {
-  const withCiteLinks = content.replace(/\[\[(\d+)\]\]/g, '[$1](#cite-$1)')
+  const { text: withCiteLinks, math } = useMemo(() => extractMath(content), [content])
   const byMarker = useMemo(() => new Map(citations.map((c) => [String(c.marker), c])), [citations])
+  // Stable across frames: a new `components` identity would remount every
+  // link and code block on each streamed frame. Math travels via context for
+  // the same reason.
   const components = useMemo(() => buildComponents(byMarker, base), [byMarker, base])
   const rehypePlugins = useHighlighter(HAS_CODE_FENCE.test(content))
   return (
-    <div className="chat-md">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={rehypePlugins}
-        components={components}
-      >
-        {withCiteLinks}
-      </ReactMarkdown>
-    </div>
+    <MathContext.Provider value={math}>
+      <div className={cn('chat-md chat-reply', streaming && 'is-streaming')}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={rehypePlugins}
+          components={components}
+        >
+          {withCiteLinks.replace(/\[\[(\d+)\]\]/g, '[$1](#cite-$1)')}
+        </ReactMarkdown>
+      </div>
+    </MathContext.Provider>
+  )
+}
+
+/**
+ * LaTeX in a reply. The prompt asks for `\( … \)` inline and `\[ … \]`
+ * display — the same delimiters the note editor already renders — but
+ * markdown would eat those backslashes, so each span is swapped for a
+ * placeholder link (`#math-<i>`) before parsing and drawn as KaTeX by the
+ * `a` renderer. Fenced code and inline code are left alone.
+ */
+type MathPart = { latex: string; display: boolean }
+
+const MATH_OR_CODE = /(```[\s\S]*?(?:```|$))|(`[^`\n]*`)|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)/g
+
+export function extractMath(content: string): { text: string; math: MathPart[] } {
+  if (!content.includes('\\')) return { text: content, math: [] }
+  const math: MathPart[] = []
+  const text = content.replace(
+    MATH_OR_CODE,
+    (whole, fence?: string, code?: string, block?: string, inline?: string) => {
+      if (fence || code) return whole
+      const latex = (block ?? inline ?? '').trim()
+      if (!latex) return whole
+      math.push({ latex, display: block !== undefined })
+      return `[math](#math-${math.length - 1})`
+    },
+  )
+  return { text, math }
+}
+
+const MathContext = createContext<MathPart[]>([])
+
+let katexMod: typeof import('katex').default | null = null
+let katexLoading: Promise<void> | null = null
+
+/** Fire-and-forget: until it lands the formula shows as its LaTeX source. */
+function useKatex(): typeof import('katex').default | null {
+  const [mod, setMod] = useState(katexMod)
+  useEffect(() => {
+    if (mod) return
+    let live = true
+    katexLoading ??= Promise.all([
+      import('katex/dist/katex.min.css').catch(() => {}),
+      import('katex').then((m) => {
+        katexMod = m.default
+      }),
+    ]).then(() => {})
+    katexLoading.then(
+      () => live && setMod(katexMod),
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [mod])
+  return mod
+}
+
+function MathView({ index }: { index: number }) {
+  const spans = useContext(MathContext)
+  const span = spans[index]
+  const katex = useKatex()
+  const html = useMemo(() => {
+    if (!katex || !span) return null
+    try {
+      return katex.renderToString(span.latex, {
+        displayMode: span.display,
+        throwOnError: false,
+      })
+    } catch {
+      return null
+    }
+  }, [katex, span])
+  if (!span) return null
+  if (html === null) return <code>{span.latex}</code>
+  return (
+    <span
+      className={span.display ? 'chat-math-block' : undefined}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   )
 }
 
@@ -86,11 +175,14 @@ function useHighlighter(needed: boolean): PluggableList {
 function buildComponents(byMarker: Map<string, Citation>, base?: string): Components {
   return {
     a({ href, children, ...props }) {
+      if (href?.startsWith('#math-')) {
+        return <MathView index={Number(href.slice('#math-'.length))} />
+      }
       if (href?.startsWith('#cite-')) {
         const marker = href.slice('#cite-'.length)
         const citation = byMarker.get(marker)
         const badgeClass =
-          'ml-0.5 rounded-md bg-brand-soft px-1.5 py-px text-[11px] font-bold text-brand-deep'
+          'ml-0.5 rounded-md bg-brand-soft px-1.5 py-px align-baseline text-[12.5px] font-bold leading-none text-brand-deep no-underline'
         // No link when the marker doesn't resolve to a real citation (a
         // model occasionally emits `[[n]]` for an `n` outside the list it
         // was given) or `base` isn't known yet (the streaming bubble) —
@@ -117,6 +209,15 @@ function buildComponents(byMarker: Map<string, Citation>, base?: string): Compon
     pre({ children, ...props }) {
       return <CodeBlock {...props}>{children}</CodeBlock>
     },
+    // Wide tables scroll inside their own frame instead of squashing columns
+    // or pushing the page sideways.
+    table({ children }) {
+      return (
+        <div className="chat-table">
+          <table>{children}</table>
+        </div>
+      )
+    },
   }
 }
 
@@ -139,16 +240,16 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="group relative">
+    <div className="chat-code group relative">
       {lang && (
-        <span className="absolute right-2.5 top-2 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+        <span className="absolute right-3 top-2 text-[11.5px] font-semibold uppercase tracking-wide text-white/40">
           {lang}
         </span>
       )}
       <button
         type="button"
         onClick={copy}
-        className="absolute right-2.5 bottom-2 rounded-md bg-white/10 px-2 py-1 text-[10.5px] font-semibold text-white/70 opacity-0 transition-opacity hover:bg-white/20 hover:text-white group-hover:opacity-100"
+        className="absolute right-2.5 bottom-2 cursor-pointer rounded-md bg-white/10 px-2.5 py-1 text-[12.5px] font-semibold text-white/70 opacity-0 transition-opacity hover:bg-white/20 hover:text-white focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
       >
         {copied ? 'Copied' : 'Copy'}
       </button>

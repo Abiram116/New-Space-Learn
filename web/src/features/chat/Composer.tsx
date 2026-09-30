@@ -5,6 +5,7 @@ import type { AgentKey } from './agents'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
 import { useAssessment } from '../../lib/assessment'
+import './chat.css'
 
 /**
  * Typed shortcuts. Recognised, not advertised here.
@@ -63,7 +64,7 @@ export function Composer({
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(160, el.scrollHeight)}px`
+    el.style.height = `${Math.min(180, el.scrollHeight)}px`
   }, [value])
 
   const submit = () => {
@@ -175,7 +176,7 @@ export function Composer({
                 : placeholder
             }
             disabled={disabled || assessing}
-            className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[14px] leading-relaxed text-ink outline-none placeholder:text-faint disabled:opacity-60"
+            className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[16px] leading-[1.5] text-ink outline-none placeholder:text-faint disabled:opacity-60"
           />
 
           {/* Paste is the fast path; this is the discoverable one. Nobody
@@ -247,7 +248,7 @@ export function Composer({
             product's whole claim is that answers are grounded in the
             student's own material — which makes being honest about the
             failure mode more important here, not less. */}
-        <p className="text-center text-[11px] leading-none text-faint">
+        <p className="text-center text-[12px] leading-none text-faint">
           Answers can be wrong. Check anything that matters against your sources.
         </p>
       </div>
