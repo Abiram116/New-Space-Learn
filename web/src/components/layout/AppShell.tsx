@@ -4,9 +4,11 @@ import { cn } from '../../lib/cn'
 import { PageTransition } from '../ui/motion'
 import { prefetchRouteChunks } from '../../routes/lazyRoutes'
 import { SpacesProvider } from '../../features/spaces/SpacesProvider'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { Sidebar } from './Sidebar'
 import { MobileBar } from './MobileBar'
 import { OfflineBanner } from './OfflineBanner'
+import { PhoneShell } from './PhoneShell'
 
 /**
  * Two layouts, one tree.
@@ -18,7 +20,19 @@ import { OfflineBanner } from './OfflineBanner'
  */
 const COLLAPSE_KEY = 'sl:rail-collapsed'
 
+/**
+ * Phones (see `useIsMobile` — narrow, or a short touch screen held sideways)
+ * get a different product: `PhoneShell`, a revision companion with a bottom
+ * tab bar and no chat. Tablets and desktops get `DesktopShell`, exactly as it
+ * was. The spaces provider sits above the switch so rotating across the line
+ * doesn't refetch the subject list.
+ */
 export function AppShell() {
+  const mobile = useIsMobile()
+  return <SpacesProvider>{mobile ? <PhoneShell /> : <DesktopShell />}</SpacesProvider>
+}
+
+function DesktopShell() {
   const [navOpen, setNavOpen] = useState(false)
   // Persisted: a rail you collapsed should stay collapsed tomorrow.
   const [collapsed, setCollapsed] = useState(
@@ -59,7 +73,7 @@ export function AppShell() {
   }, [navOpen])
 
   return (
-    <SpacesProvider>
+    <>
       <div className="flex h-full flex-col bg-canvas">
         <OfflineBanner />
         <MobileBar onOpenNav={() => setNavOpen(true)} />
@@ -117,7 +131,7 @@ export function AppShell() {
           </main>
         </div>
       </div>
-    </SpacesProvider>
+    </>
   )
 }
 

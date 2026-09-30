@@ -998,3 +998,33 @@
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
+
+/* ── Phone (workstream A: phone shell) ──────────────────────────────────
+   Phone-only rules. The media query is `MOBILE_QUERY` from
+   `lib/useIsMobile.ts` verbatim — the one definition of "phone"; change
+   them together. Nothing here applies at tablet or desktop sizes.
+
+   - `viewport-fit=cover` (index.html) lets the page reach the screen edges
+     so the tab bar can sit on the home indicator; in return, content is kept
+     clear of a landscape notch here, once, for every screen.
+   - iOS zooms the page into any focused field under 16px and never zooms
+     back out. Every field on a phone is 16px, whatever its utility says.
+     Unlayered, so it outranks Tailwind's utility layer.
+   ──────────────────────────────────────────────────────────────────────── */
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
+  #root {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+
+  [data-phone-shell] a,
+  [data-phone-shell] button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

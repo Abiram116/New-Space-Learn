@@ -24,6 +24,8 @@ import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { ChatOnDesktop } from '../mobile/ChatOnDesktop'
+import { useIsMobile } from '../../lib/useIsMobile'
 import { AgentRunCard } from './AgentRunCard'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
@@ -47,7 +49,11 @@ export function ChatView() {
   const { space, subspace, base } = useActiveSubspace()
   const navigate = useNavigate()
   const { showError } = useToast()
+  // Phones have no chat. The routes already send phones elsewhere (see
+  // routes/TopicRoutes); this is the backstop if anything mounts chat anyway.
+  const mobile = useIsMobile()
 
+  if (mobile) return <ChatOnDesktop />
   if (!space || !subspace) return <SubspaceMissing />
 
   return (

@@ -9,7 +9,6 @@ import {
   ResetPassword,
   SignIn,
   SignUp,
-  ChatView,
   DocsView,
   FlashcardsView,
   Landing,
@@ -18,10 +17,10 @@ import {
   Profile,
   QuizzesView,
   Settings,
-  SkillsView,
 } from './routes/lazyRoutes'
 import { NotFound } from './routes/NotFound'
 import { RootRoute } from './routes/RootRoute'
+import { AccountWideRoute, ChatAliasRoute, SkillsRoute, TopicIndexRoute } from './routes/TopicRoutes'
 
 export default function App() {
   return (
@@ -118,6 +117,12 @@ export default function App() {
             </Lazy>
           }
         />
+        {/* The account-wide lists without a topic in the URL (the phone's
+            tabs, bookmarks). They forward into the current topic — see
+            routes/TopicRoutes. */}
+        <Route path="/flashcards" element={<AccountWideRoute section="flashcards" />} />
+        <Route path="/quizzes" element={<AccountWideRoute section="quizzes" />} />
+        <Route path="/notes" element={<AccountWideRoute section="notes" />} />
         {/* The `/s/` prefix is REQUIRED and must match `subspacePath()` in
             `lib/nav.ts`, which is the only place subspace URLs are built.
 
@@ -128,14 +133,9 @@ export default function App() {
             topic, note, deck and quiz fell through to the 404 catch-all.
             Change these two together or not at all. */}
         <Route path="/s/:spaceId/:subspaceId">
-          <Route
-            index
-            element={
-              <Lazy>
-                <ChatView />
-              </Lazy>
-            }
-          />
+          {/* Chat on desktop; the topic hub on phones, which have no chat. */}
+          <Route index element={<TopicIndexRoute />} />
+          <Route path="chat" element={<ChatAliasRoute />} />
           <Route
             path="docs"
             element={
@@ -168,14 +168,7 @@ export default function App() {
               </Lazy>
             }
           />
-          <Route
-            path="skills"
-            element={
-              <Lazy>
-                <SkillsView />
-              </Lazy>
-            }
-          />
+          <Route path="skills" element={<SkillsRoute />} />
         </Route>
       </Route>
 

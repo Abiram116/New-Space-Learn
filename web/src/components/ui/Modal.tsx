@@ -9,6 +9,8 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { BottomSheet } from './BottomSheet'
 import { Icon } from './Icon'
 
 // `tabindex="-1"` opts a control out of the trap — the header's × uses it, so
@@ -16,14 +18,7 @@ import { Icon } from './Icon'
 const FOCUSABLE =
   'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function Modal({
-  open,
-  onClose,
-  title,
-  children,
-  footer,
-  width = 'md',
-}: {
+type ModalProps = {
   open: boolean
   onClose: () => void
   title?: string
@@ -35,7 +30,36 @@ export function Modal({
    */
   footer?: ReactNode
   width?: 'sm' | 'md' | 'lg'
-}) {
+}
+
+/**
+ * On a phone every modal is a bottom sheet — same props, no call-site
+ * changes: it rises from the thumb end of the screen, can be swiped away, and
+ * keeps its footer above the home indicator. `width="sm"` (confirmations)
+ * becomes a compact sheet. Everywhere else it is the centred dialog below,
+ * unchanged.
+ */
+export function Modal(props: ModalProps) {
+  const mobile = useIsMobile()
+  if (mobile) {
+    const { open, onClose, title, children, footer, width } = props
+    return (
+      <BottomSheet open={open} onClose={onClose} title={title} footer={footer} compact={width === 'sm'}>
+        {children}
+      </BottomSheet>
+    )
+  }
+  return <CenteredModal {...props} />
+}
+
+function CenteredModal({
+  open,
+  onClose,
+  title,
+  children,
+  footer,
+  width = 'md',
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
+import { useIsMobile } from '../../lib/useIsMobile'
+import { SHELL_TITLES } from '../../features/mobile/phoneNav'
 
 /**
  * Header rendered inside every subspace route. Shows the space > subspace
@@ -16,13 +18,7 @@ import { useActiveSubspace } from '../../lib/nav'
 /** The tab keys, so callers can intercept by name rather than by URL. */
 export type SubspaceTab = 'chat' | 'docs' | 'notes' | 'quizzes' | 'flashcards'
 
-export function SubspaceHeader({
-  title,
-  actions,
-  onSelectTab,
-  activeTab,
-  tabs: showTabs = true,
-}: {
+type SubspaceHeaderProps = {
   title?: string
   actions?: ReactNode
   /**
@@ -48,7 +44,43 @@ export function SubspaceHeader({
    * needs setting where a screen is no longer topic-scoped.
    */
   tabs?: boolean
-}) {
+}
+
+/**
+ * On a phone the shell's top bar already names the page and the topic, and
+ * the bottom tab bar is the navigation — so this collapses to the screen's
+ * own title (only when it adds something, e.g. a deck's name) and its
+ * actions. No breadcrumb, and no tab strip: that strip is where the Chat tab
+ * lives, and phones have no chat.
+ */
+export function SubspaceHeader(props: SubspaceHeaderProps) {
+  const mobile = useIsMobile()
+  if (mobile) return <PhoneSubspaceHeader title={props.title} actions={props.actions} />
+  return <DesktopSubspaceHeader {...props} />
+}
+
+function PhoneSubspaceHeader({ title, actions }: { title?: string; actions?: ReactNode }) {
+  const showTitle = Boolean(title) && !SHELL_TITLES.has(title!)
+  if (!showTitle && !actions) return null
+  return (
+    <header className="flex min-h-[56px] shrink-0 items-center gap-3 border-b border-line-soft px-4 py-2">
+      {showTitle && (
+        <h2 className="min-w-0 flex-1 truncate font-display text-[18px] font-semibold leading-snug text-ink">{title}</h2>
+      )}
+      {actions ? (
+        <div className={cn('flex min-w-0 shrink-0 items-center gap-2', !showTitle && 'ml-auto')}>{actions}</div>
+      ) : null}
+    </header>
+  )
+}
+
+function DesktopSubspaceHeader({
+  title,
+  actions,
+  onSelectTab,
+  activeTab,
+  tabs: showTabs = true,
+}: SubspaceHeaderProps) {
   const { space, subspace, base } = useActiveSubspace()
 
   const spaceName = space?.name ?? 'Space'

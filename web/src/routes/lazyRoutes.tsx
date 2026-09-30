@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import { FirstPaintFallback } from '../components/ui/FirstPaint'
+import { isMobileNow } from '../lib/useIsMobile'
 
 /**
  * The heaviest routes, split out of the initial bundle.
@@ -74,6 +75,15 @@ export const SkillsView = lazy(() =>
   import('../features/skills/SkillsView').then((m) => ({ default: m.SkillsView })),
 )
 
+/* Phone-only screens. Split so desktop never downloads them, and phones get
+   them without chat's markdown stack. */
+export const TopicHub = lazy(() =>
+  import('../features/mobile/TopicHub').then((m) => ({ default: m.TopicHub })),
+)
+export const ChatOnDesktop = lazy(() =>
+  import('../features/mobile/ChatOnDesktop').then((m) => ({ default: m.ChatOnDesktop })),
+)
+
 export function Lazy({ children }: { children: ReactNode }) {
   return <Suspense fallback={<FirstPaintFallback />}>{children}</Suspense>
 }
@@ -122,9 +132,15 @@ export function prefetchRouteChunks(): void {
     void import('../features/flashcards/FlashcardsView')
     void import('../features/quizzes/QuizzesView')
     void import('../features/notes/NotesView')
-    // Chat is the index route of every subspace — the single most likely
-    // click from Home — so it is warmed first among the newly-split chunks.
-    void import('../features/chat/ChatView')
+    // Phones have no chat (see features/mobile), so they warm the topic hub
+    // that stands in the same spot instead of chat's markdown stack.
+    if (isMobileNow()) {
+      void import('../features/mobile/TopicHub')
+    } else {
+      // Chat is the index route of every subspace — the single most likely
+      // click from Home — so it is warmed first among the newly-split chunks.
+      void import('../features/chat/ChatView')
+    }
     void import('../features/docs/DocsView')
   }
   const idle = (window as IdleWindow).requestIdleCallback
