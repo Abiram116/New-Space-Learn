@@ -285,6 +285,12 @@ function QuizList({
                   month: 'short',
                 })}
               </span>
+              {/* Only once the quiz has been taken — best of all attempts. */}
+              {q.best_score != null && (
+                <span className="setcode ml-auto shrink-0 tabular-nums text-mint-deep">
+                  Best {q.best_score}%
+                </span>
+              )}
             </div>
           </Card>
         </button>

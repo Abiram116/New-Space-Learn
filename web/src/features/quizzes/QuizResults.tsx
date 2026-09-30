@@ -20,7 +20,7 @@ import { Icon } from '../../components/ui/Icon'
 import { Ledger } from '../../components/ui/Surface'
 import { CountUp, Stagger } from '../../components/ui/motion'
 import { celebrateQuiz, useAmbience } from '../../components/celebrate'
-import { scoreTier } from '../../components/celebrate/logic'
+import { bestVerdict, scoreTier } from '../../components/celebrate/logic'
 import { cn } from '../../lib/cn'
 import { formatClock } from './QuizRunner'
 
@@ -50,6 +50,8 @@ export function QuizResults({
     [quiz.questions, answers],
   )
   const right = quiz.questions.length - missed.length
+  // Server-computed per-quiz history: nothing to say on a first attempt.
+  const verdict = bestVerdict(result.previous_best, result.score, result.attempts)
 
   // The finish, tiered by the real score: fireworks for a perfect sheet,
   // something smaller down to 60%, and below that no fireworks at all — an
@@ -63,10 +65,15 @@ export function QuizResults({
     ambience.progress(1)
     if (tier !== 'none') ambience.pulse(tier === 'grand' ? 'bright' : 'good')
     celebrateQuiz(
-      { quizId: quiz.id, score: result.score, right, total: quiz.questions.length },
+      {
+        score: result.score,
+        right,
+        total: quiz.questions.length,
+        previousBest: result.previous_best,
+      },
       { anchor: scoreRef, compact },
     )
-  }, [result, quiz.id, quiz.questions.length, right, compact, ambience])
+  }, [result, quiz.questions.length, right, compact, ambience])
 
   /** Concepts to revise, worst first — the actionable output of a quiz. */
   const weakConcepts = useMemo(() => {
@@ -108,6 +115,24 @@ export function QuizResults({
           />
           <span className="setcode">%</span>
         </div>
+
+        {/* Directly under the score it qualifies. A new best is a badge; any
+            later attempt gets one quiet line; a first attempt gets nothing. */}
+        {verdict.kind === 'best' && (
+          <div
+            role="status"
+            data-testid="quiz-best-badge"
+            className="inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-2.5 py-1 text-[12px] font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
+          >
+            <Icon name="sparkle" size={12} />
+            New personal best · {verdict.previous}% → {verdict.score}%
+          </div>
+        )}
+        {verdict.kind === 'later' && (
+          <p data-testid="quiz-best-line" className="text-[12px] tabular-nums text-muted">
+            Best: {verdict.best}% · attempt {verdict.attempts}
+          </p>
+        )}
 
         {/* Four figures on one rule, per the design track: a result is a set of
             measurements, not a set of cards. */}

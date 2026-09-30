@@ -95,6 +95,30 @@ export function isPersonalBest(previous: number | null | undefined, score: numbe
   return previous != null && score > previous
 }
 
+/** What a finished quiz says about the student's history with it. */
+export type BestVerdict =
+  | { kind: 'first' }
+  | { kind: 'best'; previous: number; score: number }
+  | { kind: 'later'; best: number; attempts: number }
+
+/**
+ * Personal-best status from the server's per-quiz facts (`previous_best` =
+ * highest EARLIER score, `attempts` = count including this one).
+ *
+ * A best needs an earlier attempt AND a strictly higher score. A first
+ * attempt is never one, and if the server sent nothing usable there is
+ * nothing to say either — `first`.
+ */
+export function bestVerdict(
+  previousBest: number | null | undefined,
+  score: number,
+  attempts: number | null | undefined,
+): BestVerdict {
+  if (previousBest == null) return { kind: 'first' }
+  if (isPersonalBest(previousBest, score)) return { kind: 'best', previous: previousBest, score }
+  return { kind: 'later', best: previousBest, attempts: Math.max(2, attempts ?? 2) }
+}
+
 /* ── Rotation ────────────────────────────────────────────────────────── */
 
 /**
@@ -213,7 +237,8 @@ export function planFor(
       return {
         ...base,
         main: pick(POOLS.best),
-        stamp: { big: 'New best', small: `${facts.previous ?? 0}% → ${facts.score ?? 0}%` },
+        // No stamp: the result screen carries an inline badge beside the
+        // score, and a second label landing over it read as clutter.
         scale: 0.8 * k,
         palette: 'streak',
       }

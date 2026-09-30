@@ -118,6 +118,20 @@ describe('Quizzes is a global library', () => {
     expect(screen.getByText('DL quiz')).toBeInTheDocument()
   })
 
+  it("shows each quiz's best score, and nothing for one not yet taken", async () => {
+    listAllQuizzes.mockResolvedValue([
+      quiz({ id: 'taken', topic: 'Taken quiz', best_score: 80, attempts: 3 }),
+      quiz({ id: 'fresh', topic: 'Fresh quiz', best_score: null, attempts: 0 }),
+      quiz({ id: 'zero', topic: 'Zero quiz', best_score: 0, attempts: 1 }),
+    ])
+    renderView()
+
+    await waitFor(() => expect(screen.getByText('Fresh quiz')).toBeInTheDocument())
+    expect(screen.getByText('Best 80%')).toBeInTheDocument()
+    expect(screen.getByText('Best 0%')).toBeInTheDocument()
+    expect(screen.getAllByText(/^Best \d+%$/)).toHaveLength(2)
+  })
+
   it('hides the subject filter when everything belongs to one subject', async () => {
     listAllQuizzes.mockResolvedValue([quiz({ id: 'q1' }), quiz({ id: 'q2', topic: 'Second quiz' })])
     renderView()

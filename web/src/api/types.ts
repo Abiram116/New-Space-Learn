@@ -133,12 +133,22 @@ export type Quiz = {
   subspace_id?: string | null
   subspace_name?: string | null
   subject_name?: string | null
+  /** Best score over the user's attempts at this quiz; null before the first. */
+  best_score?: number | null
+  /** How many times the user has taken it. */
+  attempts?: number
 }
 
 export type QuizResult = {
   score: number
   correct: boolean[]
   duration_seconds?: number | null
+  /** Highest score over EARLIER attempts at this quiz; null on a first
+   *  attempt. Computed server-side, so it is per quiz and the same on every
+   *  device. */
+  previous_best?: number | null
+  /** Attempts at this quiz, including this one. */
+  attempts?: number
 }
 
 export type MemoryScope = 'session' | 'topic' | 'all'

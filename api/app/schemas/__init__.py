@@ -354,6 +354,10 @@ class QuizOut(BaseModel):
     subspace_id: str | None = None
     subspace_name: str | None = None
     subject_name: str | None = None
+    #: Best score over this user's attempts at this quiz, and how many there
+    #: have been. `None` / 0 until the first attempt.
+    best_score: int | None = None
+    attempts: int = 0
 
 
 class QuizGenerate(BaseModel):
@@ -372,6 +376,13 @@ class QuizResultOut(BaseModel):
     score: int
     correct: list[bool]
     duration_seconds: int | None = None
+    #: Highest score over this user's EARLIER attempts at this quiz — `None`
+    #: on a first attempt. A personal best is `previous_best is not None and
+    #: score > previous_best`; computing it here keeps it per-quiz and
+    #: identical on every device.
+    previous_best: int | None = None
+    #: Attempts at this quiz including this one.
+    attempts: int = 1
 
 
 # ── Skills ─────────────────────────────────────────────────────────────

@@ -30,15 +30,16 @@ async def list_quizzes(
 ) -> list[QuizOut]:
     # Guard and read run together — see the note in notes.list_notes for why
     # that's safe (the read is already user-scoped) and what it saves.
-    _, rows = await asyncio.gather(
+    _, rows, results = await asyncio.gather(
         assert_subspace(user.id, subspace_id),
         supabase.db_select(
             "quizzes",
             filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
             order="created_at.desc",
         ),
+        _attempt_scores(user.id),
     )
-    return [_to_quiz(r) for r in rows]
+    return [_to_quiz(r, results) for r in rows]
 
 
 @router.get("/quizzes", response_model=list[QuizOut])
@@ -52,7 +53,7 @@ async def list_all_quizzes(
     filter IS `user_id`, applied server-side. `test_guard_coverage.py`
     accepts this shape explicitly.
     """
-    quizzes, subspaces, subjects = await asyncio.gather(
+    quizzes, subspaces, subjects, results = await asyncio.gather(
         supabase.db_select(
             "quizzes",
             filters={"user_id": f"eq.{user.id}"},
@@ -63,6 +64,7 @@ async def list_all_quizzes(
             "subspaces", filters={"user_id": f"eq.{user.id}"}, select="id,subject_id,name"
         ),
         supabase.db_select("subjects", filters={"user_id": f"eq.{user.id}"}, select="id,name"),
+        _attempt_scores(user.id),
     )
     subject_name = {s["id"]: s.get("name") for s in subjects}
     place = {
@@ -71,7 +73,7 @@ async def list_all_quizzes(
     }
     out: list[QuizOut] = []
     for row in quizzes:
-        quiz = _to_quiz(row)
+        quiz = _to_quiz(row, results)
         sub_name, subj_name = place.get(row.get("subspace_id"), (None, None))
         out.append(
             quiz.model_copy(
@@ -89,14 +91,17 @@ async def list_all_quizzes(
 async def get_quiz(
     quiz_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> QuizOut:
-    rows = await supabase.db_select(
-        "quizzes",
-        filters={"user_id": f"eq.{user.id}", "id": f"eq.{quiz_id}"},
-        limit=1,
+    rows, results = await asyncio.gather(
+        supabase.db_select(
+            "quizzes",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{quiz_id}"},
+            limit=1,
+        ),
+        _attempt_scores(user.id, quiz_id),
     )
     if not rows:
         raise NotFound("Quiz not found.")
-    return _to_quiz(rows[0])
+    return _to_quiz(rows[0], results)
 
 
 @router.post(
@@ -262,10 +267,15 @@ async def submit_quiz(
     body: QuizSubmit,
     user: CurrentUser = Depends(get_current_user),
 ) -> QuizResultOut:
-    rows = await supabase.db_select(
-        "quizzes",
-        filters={"user_id": f"eq.{user.id}", "id": f"eq.{quiz_id}"},
-        limit=1,
+    # The quiz and the earlier scores are independent reads — gathered so the
+    # personal-best comparison costs no extra round trip.
+    rows, prior = await asyncio.gather(
+        supabase.db_select(
+            "quizzes",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{quiz_id}"},
+            limit=1,
+        ),
+        _attempt_scores(user.id, quiz_id),
     )
     if not rows:
         raise NotFound("Quiz not found.")
@@ -277,6 +287,10 @@ async def submit_quiz(
 
     correct = [int(a) == int(q.get("answer_index", -1)) for a, q in zip(body.answers, questions, strict=False)]
     score = round(100 * sum(correct) / len(correct)) if correct else 0
+
+    # Read before the insert below, so these are strictly EARLIER attempts.
+    earlier = [r["score"] for r in prior.get(quiz_id, []) if r.get("score") is not None]
+    previous_best = max(earlier) if earlier else None
 
     await supabase.db_insert(
         "quiz_results",
@@ -298,15 +312,49 @@ async def submit_quiz(
     if quiz.get("subspace_id"):
         await activity.touch_subspace(quiz["subspace_id"])
     return QuizResultOut(
-        score=score, correct=correct, duration_seconds=body.duration_seconds
+        score=score,
+        correct=correct,
+        duration_seconds=body.duration_seconds,
+        previous_best=previous_best,
+        attempts=len(earlier) + 1,
     )
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
-def _to_quiz(row: dict) -> QuizOut:
+#: Bound on the score rows read per request. Newest first, so a very long
+#: history drops its oldest attempts rather than the recent ones.
+_MAX_SCORE_ROWS = 2000
+
+
+async def _attempt_scores(user_id: str, quiz_id: str | None = None) -> dict[str, list[dict]]:
+    """This user's scores grouped by quiz id — one narrow, bounded select.
+
+    Two columns, no answers payload; rides along in the gather with the read
+    it decorates, so it adds no latency.
+    """
+    filters = {"user_id": f"eq.{user_id}"}
+    if quiz_id:
+        filters["quiz_id"] = f"eq.{quiz_id}"
+    rows = await supabase.db_select(
+        "quiz_results",
+        filters=filters,
+        select="quiz_id,score",
+        order="submitted_at.desc",
+        limit=_MAX_SCORE_ROWS,
+    )
+    grouped: dict[str, list[dict]] = {}
+    for r in rows:
+        grouped.setdefault(str(r.get("quiz_id")), []).append(r)
+    return grouped
+
+
+def _to_quiz(row: dict, results: dict[str, list[dict]] | None = None) -> QuizOut:
+    scores = [r["score"] for r in (results or {}).get(str(row["id"]), []) if r.get("score") is not None]
     return QuizOut(
+        best_score=max(scores) if scores else None,
+        attempts=len(scores),
         id=row["id"],
         topic=row.get("topic"),
         questions=[QuizQuestion(**q) for q in (row.get("questions") or [])],

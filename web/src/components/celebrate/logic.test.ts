@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  bestVerdict,
   crossedGoal,
   dayKey,
   isPersonalBest,
@@ -167,6 +168,26 @@ describe('goal, streak, personal best', () => {
     expect(isPersonalBest(null, 100)).toBe(false)
     expect(isPersonalBest(60, 80)).toBe(true)
     expect(isPersonalBest(80, 80)).toBe(false)
+    expect(isPersonalBest(80, 60)).toBe(false)
+    // 0 is a real earlier score, not "no attempt".
+    expect(isPersonalBest(0, 20)).toBe(true)
+    expect(isPersonalBest(undefined, 100)).toBe(false)
+  })
+
+  it('bestVerdict: first / new best / later, from the server facts', () => {
+    expect(bestVerdict(null, 100, 1)).toEqual({ kind: 'first' })
+    expect(bestVerdict(undefined, 100, undefined)).toEqual({ kind: 'first' })
+    expect(bestVerdict(60, 80, 2)).toEqual({ kind: 'best', previous: 60, score: 80 })
+    expect(bestVerdict(0, 20, 2)).toEqual({ kind: 'best', previous: 0, score: 20 })
+    // Equal and lower keep the standing best and the attempt count.
+    expect(bestVerdict(80, 80, 3)).toEqual({ kind: 'later', best: 80, attempts: 3 })
+    expect(bestVerdict(80, 40, 4)).toEqual({ kind: 'later', best: 80, attempts: 4 })
+  })
+
+  it('a personal best plays a small moment with no stamp of its own', () => {
+    const plan = planFor('best', { score: 80, previous: 60 }, [])
+    expect(plan.stamp).toBeNull()
+    expect(plan.main).not.toBeNull()
   })
 })
 

@@ -1,6 +1,7 @@
 /**
  * The study moments that depend on more than the screen in front of you:
- * the daily card goal, the streak, a personal best.
+ * the daily card goal, the streak, a personal best (the last comes from the
+ * server, per quiz — nothing about it is stored on the device).
  *
  * Today's count starts from the server's `cards_reviewed_today` (reviews on
  * any device) when the session opens, then ticks locally per grade (the same
@@ -27,7 +28,6 @@ import {
 type Where = Omit<CelebrateOptions, 'facts'>
 
 const CARDS_TODAY = 'sl:cards-today:v1'
-const QUIZ_BEST = 'sl:quiz-best:v1'
 
 let baseline: { streak: number; goal: number } | null = null
 let streakPending = false
@@ -98,33 +98,22 @@ export async function checkStreak(where: Where): Promise<void> {
   }
 }
 
-/** Record a score; returns the best that stood before it (null on a first try). */
-export function recordQuizScore(quizId: string, score: number): number | null {
-  const kv = localKV()
-  const bests = readJSON<Record<string, number>>(kv, QUIZ_BEST, {})
-  const previous = typeof bests[quizId] === 'number' ? bests[quizId] : null
-  if (previous == null || score > previous) {
-    bests[quizId] = score
-    // Bounded: the oldest entries go first (insertion order).
-    const keys = Object.keys(bests)
-    for (const k of keys.slice(0, Math.max(0, keys.length - 300))) delete bests[k]
-    writeJSON(kv, QUIZ_BEST, bests)
-  }
-  return previous
-}
-
-/** The finish of a quiz: the tiered moment, then a personal best if it was one. */
+/**
+ * The finish of a quiz: the tiered moment, then a personal best if it was one.
+ *
+ * `previousBest` is the server's highest EARLIER score for this quiz (null on
+ * a first attempt), so a best is per quiz, per user, on any device.
+ */
 export function celebrateQuiz(
-  q: { quizId: string; score: number; right: number; total: number },
+  q: { score: number; right: number; total: number; previousBest?: number | null },
   where: Where,
 ): void {
-  const previous = recordQuizScore(q.quizId, q.score)
-  const best = isPersonalBest(previous, q.score)
+  const best = isPersonalBest(q.previousBest, q.score)
   // A low score that still beat the last one is the better story to tell —
   // "you improved" rather than "keep going" — so it replaces the quiet line.
   if (!(best && scoreTier(q.score) === 'none')) {
     celebrate('quiz', { ...where, facts: { score: q.score, right: q.right, total: q.total } })
   }
-  if (best) celebrate('best', { ...where, facts: { score: q.score, previous: previous ?? 0 } })
+  if (best) celebrate('best', { ...where, facts: { score: q.score, previous: q.previousBest ?? 0 } })
   void checkStreak(where)
 }
