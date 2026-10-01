@@ -41,15 +41,43 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Is this text something a person can be shown?
+ *
+ * Errors reach the screen from many sources — our server, the database behind
+ * it, the browser, the auth service — and not all of them write for people. The
+ * unreadable ones have recognisable shapes: a stringified object (`{}`,
+ * `[object Object]`), a class name, "Failed to fetch", a half-parsed JSON error,
+ * a SQL constraint name. Those are never shown; the code's own sentence is.
+ */
+export function isReadable(message: string | null | undefined): boolean {
+  const text = (message ?? '').trim()
+  if (!text || text.length > 240) return false
+  if (/^[[{]/.test(text)) return false
+  if (/\[object \w+\]|\bundefined\b|\bNaN\b|\bnull\b/.test(text)) return false
+  if (/^(TypeError|ReferenceError|SyntaxError|RangeError|Error:|Auth\w*Error|Postgrest\w*Error)/.test(text)) return false
+  if (/failed to fetch|networkerror|load failed|fetch failed|unexpected token|not valid json|econn|etimedout|\bat .*:\d+:\d+\)?$/i.test(text)) return false
+  if (/\b(sql|postgres|postgrest|pgrst|constraint|duplicate key|violates)\b/i.test(text)) return false
+  return true
+}
+
+/** The browser's own "the network failed" wording, for errors that never became an ApiError. */
+const NETWORK_WORDS = /failed to fetch|networkerror|load failed|fetch failed|network request failed/i
+
 /** Map a code to a short, user-facing sentence. Kept in one place. */
 export function friendlyMessage(err: unknown): string {
   if (err instanceof ApiError) {
-    // If the server gave us a specific message, prefer it — it's usually
-    // more informative than the generic mapping below.
-    if (err.message && !isGenericMessage(err.message)) return err.message
+    // The server's own sentence is usually more specific than the generic
+    // mapping below — when it is something a person can read.
+    if (isReadable(err.message) && !isGenericMessage(err.message)) return err.message
     return DEFAULTS[err.code] ?? DEFAULTS.unknown
   }
-  if (err instanceof Error && err.message) return err.message
+  if (err instanceof Error) {
+    if (NETWORK_WORDS.test(err.message)) return DEFAULTS.network
+    // A thrown Error is sometimes written for the screen on purpose ("report.pdf
+    // is over 4MB"); anything that is not is replaced rather than shown.
+    if (isReadable(err.message) && !isGenericMessage(err.message)) return err.message
+  }
   return DEFAULTS.unknown
 }
 

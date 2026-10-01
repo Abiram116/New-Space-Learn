@@ -15,6 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, apiFetchRaw, setUnauthorizedHandler } from './client'
+import { type ApiError, friendlyMessage } from './errors'
 import { clearCache, readCache, writeCache } from '../lib/asyncCache'
 
 const ok = (body: unknown = {}) =>
@@ -39,6 +40,18 @@ beforeEach(() => {
 afterEach(() => {
   setUnauthorizedHandler(null)
   vi.unstubAllGlobals()
+})
+
+describe('a failure with no explanation from our server', () => {
+  it('gets the status\'s own sentence, not "Request failed (502)"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>Bad gateway</html>', { status: 502, headers: { 'content-type': 'text/html' } })),
+    )
+    const err = (await apiFetch('/spaces', { method: 'POST' }).catch((e) => e)) as ApiError
+    expect(err.code).toBe('upstream_unavailable')
+    expect(friendlyMessage(err)).toBe('A service we depend on is offline. Try again shortly.')
+  })
 })
 
 describe('unauthorized reporting', () => {

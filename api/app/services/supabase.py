@@ -22,7 +22,14 @@ import httpx
 from jose import JWTError, jwt
 
 from ..config import settings
-from ..errors import NotConfigured, Unauthorized, UpstreamUnavailable
+from ..errors import (
+    Forbidden,
+    NotConfigured,
+    NotFound,
+    Unauthorized,
+    UpstreamUnavailable,
+    ValidationFailed,
+)
 
 log = logging.getLogger("space_learn.supabase")
 
@@ -404,9 +411,31 @@ def _raise_if_bad(r: httpx.Response) -> None:
         body = r.json()
     except Exception:
         body = {"message": r.text[:200]}
+    if not isinstance(body, dict):
+        body = {"message": str(body)[:200]}
+    # The full body goes to the log. What the person sees is chosen below and
+    # never contains the database's own wording (table names, constraint names,
+    # "duplicate key value violates ...").
     log.warning("supabase %s %s → %s", r.request.method, r.request.url.path, body)
     if r.status_code == 401:
-        raise Unauthorized("Backend credentials are invalid.")
+        # OUR credentials were refused — a server setup problem, not the
+        # student's session. Raising Unauthorized here would sign them out of the
+        # app for something they cannot fix.
+        raise UpstreamUnavailable("The service isn't set up correctly right now. Please try again later.")
     if r.status_code >= 500:
         raise UpstreamUnavailable("Database is unavailable right now.")
-    raise UpstreamUnavailable(str(body.get("message", "Request failed.")))
+
+    code = str(body.get("code") or "")
+    if code == "23505":  # unique violation
+        raise ValidationFailed("That already exists.")
+    if code == "23503":  # foreign key: the thing it points at is gone
+        raise ValidationFailed("That item no longer exists.")
+    if code in {"23502", "23514", "22001", "22003"}:  # null / check / too long / out of range
+        raise ValidationFailed("Some of that input isn't allowed.")
+    if code in {"22P02", "PGRST116"}:  # malformed id / no matching row
+        raise NotFound("We couldn't find that.")
+    if code == "42501" or r.status_code == 403:
+        raise Forbidden("You don't have access to that.")
+    if r.status_code == 404:
+        raise NotFound("We couldn't find that.")
+    raise UpstreamUnavailable("We couldn't save that just now. Please try again.")

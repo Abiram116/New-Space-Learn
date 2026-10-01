@@ -233,7 +233,10 @@ async function parseError(res: Response): Promise<ApiError> {
   const status = res.status
   const contentType = res.headers.get('content-type') ?? ''
   let code: ErrorCode = 'unknown'
-  let message = `Request failed (${status}).`
+  // Empty unless the server sent its own sentence: `friendlyMessage` then uses the
+  // sentence for the status. A host's HTML error page or a bare 502 used to come
+  // through as "Request failed (502).".
+  let message = ''
   let detail: unknown
   if (contentType.includes('application/json')) {
     try {

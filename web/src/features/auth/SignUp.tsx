@@ -121,7 +121,8 @@ export function SignUp() {
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border-[1.5px] border-brand-200 bg-brand-tint px-4 py-3.5 text-sm text-ink-2">
             Open the email from Space Learn and follow the link — it'll bring
-            you straight back here, signed in.
+            you straight back here, signed in. It can take a minute, and it
+            sometimes lands in spam or promotions.
           </div>
           <Button type="button" variant="outline3d" size="lg" disabled={resendBusy} onClick={resend}>
             {resendBusy ? 'Sending…' : "Didn't get it? Resend"}
