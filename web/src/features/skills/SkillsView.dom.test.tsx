@@ -19,7 +19,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
-import type { Skill, Space, Subspace } from '../../api/types'
+import type { Skill } from '../../api/types'
 
 // jsdom has no layout engine and doesn't implement matchMedia — SkillsView's
 // `useIsWide` (which branches the editor between a side panel and a modal)
@@ -35,19 +35,6 @@ window.matchMedia ??= ((query: string) => ({
   removeEventListener: () => {},
   dispatchEvent: () => false,
 })) as unknown as typeof window.matchMedia
-
-const SUBSPACE: Subspace = {
-  id: 'subspace-1',
-  subject_id: 'space-1',
-  name: 'Attention',
-  last_activity_at: null,
-  counts: {},
-}
-const SPACE: Space = { id: 'space-1', name: 'CS', tone: 'brand', pinned: false, subspaces: [] }
-
-vi.mock('../../lib/nav', () => ({
-  useActiveSubspace: () => ({ space: SPACE, subspace: SUBSPACE, base: '/spaces/space-1/subspace-1' }),
-}))
 
 function skill(overrides: Partial<Skill> = {}): Skill {
   return {
@@ -76,9 +63,12 @@ const LIBRARY = skill({
 
 const listSkills = vi.fn()
 const listLibrarySkills = vi.fn()
+// The page header reads the topic list, which this page doesn't otherwise use.
+vi.mock('../spaces/SpacesProvider', () => ({
+  useSpaces: () => ({ spaces: [], loading: false }),
+}))
+
 const listActiveSkills = vi.fn()
-const activateSkill = vi.fn()
-const deactivateSkill = vi.fn()
 const createSkill = vi.fn()
 const updateSkill = vi.fn()
 const deleteSkill = vi.fn()
@@ -87,8 +77,6 @@ vi.mock('../../api/skills', () => ({
   listSkills: (...args: unknown[]) => listSkills(...args),
   listLibrarySkills: (...args: unknown[]) => listLibrarySkills(...args),
   listActiveSkills: (...args: unknown[]) => listActiveSkills(...args),
-  activateSkill: (...args: unknown[]) => activateSkill(...args),
-  deactivateSkill: (...args: unknown[]) => deactivateSkill(...args),
   createSkill: (...args: unknown[]) => createSkill(...args),
   updateSkill: (...args: unknown[]) => updateSkill(...args),
   deleteSkill: (...args: unknown[]) => deleteSkill(...args),
@@ -98,7 +86,7 @@ import { SkillsView } from './SkillsView'
 
 function renderView() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={['/skills']}>
       <ToastProvider>
         <SkillsView />
       </ToastProvider>
@@ -115,48 +103,6 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
-})
-
-describe('activating a skill', () => {
-  it('calls activateSkill for this subspace and shows the switch on', async () => {
-    const user = userEvent.setup()
-    renderView()
-    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-
-    await user.click(toggle)
-
-    await waitFor(() => expect(activateSkill).toHaveBeenCalledWith('subspace-1', 'skill-1'))
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-  })
-
-  it('rolls the switch back off when the server call fails', async () => {
-    // The toggle flips immediately (optimistic) before the request resolves.
-    // A rejected request must not leave the switch showing "on" for a skill
-    // that was never actually activated on the server.
-    activateSkill.mockRejectedValue(new Error('network error'))
-    const user = userEvent.setup()
-    renderView()
-    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
-
-    await user.click(toggle)
-
-    await waitFor(() => expect(activateSkill).toHaveBeenCalled())
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
-  })
-
-  it('calls deactivateSkill when switching an already-active skill off', async () => {
-    listActiveSkills.mockResolvedValue([OWN])
-    const user = userEvent.setup()
-    renderView()
-    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
-
-    await user.click(toggle)
-
-    await waitFor(() => expect(deactivateSkill).toHaveBeenCalledWith('subspace-1', 'skill-1'))
-    expect(toggle).toHaveAttribute('aria-checked', 'false')
-  })
 })
 
 describe('the library grid is grouped into shelves', () => {
@@ -188,30 +134,6 @@ describe('the library grid is grouped into shelves', () => {
     for (const label of ['Learning', 'Exam', 'Technical', 'Research']) {
       expect(screen.queryByText(label)).not.toBeInTheDocument()
     }
-  })
-})
-
-describe('active vs inactive cards in "Active in this space"', () => {
-  // Regression: this section renders every owned skill, not only active
-  // ones — the switch was the only signal telling them apart. An active
-  // card now gets a coloured left edge in the skill's own tone; an inactive
-  // one stays plain, so the state reads without parsing the switch first.
-  it('gives an active skill a coloured accent the inactive one does not have', async () => {
-    listActiveSkills.mockResolvedValue([OWN])
-    renderView()
-
-    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
-    const card = toggle.closest('[class*="cardstock"]') as HTMLElement
-    expect(card.style.borderLeftColor).not.toBe('')
-  })
-
-  it('leaves an inactive skill without the accent colour', async () => {
-    listActiveSkills.mockResolvedValue([])
-    renderView()
-
-    const toggle = await screen.findByRole('switch', { name: 'Enable Socratic Tutor' })
-    const card = toggle.closest('[class*="cardstock"]') as HTMLElement
-    expect(card.style.borderLeftColor).toBe('')
   })
 })
 
@@ -276,12 +198,8 @@ describe('adding a library skill', () => {
         }),
       ),
     )
-    // The clone lands in "own" as its own editable skill — a second
-    // "Enable Exam Cram" switch, distinct from the library card (which has
-    // no switch of its own).
-    await waitFor(() =>
-      expect(screen.getByRole('switch', { name: 'Enable Exam Cram' })).toBeInTheDocument(),
-    )
+    // The clone lands in "own" as its own editable skill: "Added" replaces the button.
+    await screen.findByText('Added')
   })
 })
 
@@ -306,5 +224,34 @@ describe('a library skill already added once', () => {
     await screen.findByText('Added')
 
     expect(createSkill).not.toHaveBeenCalled()
+  })
+})
+
+describe('the account-wide Skills page', () => {
+  it('lists the skills you own, with no on/off switch and no topic picker', async () => {
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByText('Switching on for')).toBeNull()
+    expect(listActiveSkills).not.toHaveBeenCalled()
+  })
+
+  it('has one way to start a new skill, not two', async () => {
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    expect(screen.getAllByRole('button', { name: /New skill|Write your own skill|Write a skill/ })).toHaveLength(1)
+  })
+
+  it('works without any topic existing, since nothing here belongs to one', async () => {
+    renderView()
+    expect(await screen.findByText('Socratic Tutor')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New skill' })).toBeInTheDocument()
+  })
+
+  it('reads exactly two lists, once: your skills and the library', async () => {
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    expect(listSkills).toHaveBeenCalledTimes(1)
+    expect(listLibrarySkills).toHaveBeenCalledTimes(1)
   })
 })

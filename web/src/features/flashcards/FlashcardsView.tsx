@@ -37,13 +37,14 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { useActiveSubspace } from '../../lib/nav'
+import { isUuid, useSlugParam } from '../../lib/useSlugParam'
+import { useTopicScope } from '../../lib/useTopicScope'
 import { estimateRetention } from '../../lib/retention'
 import { stripMarkdown } from '../../lib/text'
 import { toneBar } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { useSpaces } from '../spaces/SpacesProvider'
-import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
 import { ActionSheet, ListRow, PhoneTitle, useRowSheet } from '../quizzes/phoneKit'
@@ -53,9 +54,12 @@ import { Summary } from './Summary'
 import { GenerateModal, NewDeckModal } from './modals'
 import type { Mode } from './model'
 
+/** A deck is named by its name; `?deck=` shows that, not the id. */
+const deckName = (d: { name: string }) => d.name
+
 export function FlashcardsView() {
-  const { space, subspace, base } = useActiveSubspace()
-  if (!space || !subspace) return <SubspaceMissing />
+  const { space, subspace, base, isGlobal } = useTopicScope()
+  if (!space || !subspace) return <TopicScopeFallback isGlobal={isGlobal} section="flashcards" />
   return (
     <Inner
       key={subspace.id}
@@ -94,16 +98,25 @@ function Inner({
   // no URL of its own: a refresh while reviewing or browsing one deck's
   // cards silently bounced back to the grid, losing the place you were in.
   const [params, setParams] = useSearchParams()
+  const deckParam = useSlugParam('deck', decks.data, deckName, 'deck', !decks.validating)
+  const slugForDeck = deckParam.slugFor
   const [mode, setMode] = useState<Mode>(() => {
+    // An id opens straight away; a readable name waits for the deck list (below).
     const deckId = params.get('deck')
-    return deckId ? { kind: 'deck', deckId } : { kind: 'decks' }
+    return deckId && isUuid(deckId) ? { kind: 'deck', deckId } : { kind: 'decks' }
   })
+  // Once the list says which deck a readable `?deck=` means, open it. Only from
+  // the grid: a deck already open (or in review) must not be pulled out from under you.
+  useEffect(() => {
+    const id = deckParam.id
+    if (id) setMode((m) => (m.kind === 'decks' ? { kind: 'deck', deckId: id } : m))
+  }, [deckParam.id])
   const openDeck = useCallback(
     (deckId: string) => {
       setMode({ kind: 'deck', deckId })
-      setParams({ deck: deckId }, { replace: true })
+      setParams({ deck: slugForDeck(deckId) }, { replace: true })
     },
-    [setParams],
+    [setParams, slugForDeck],
   )
   const backToDecks = useCallback(() => {
     setMode({ kind: 'decks' })

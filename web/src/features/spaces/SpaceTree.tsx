@@ -9,11 +9,11 @@ import { toneDot, toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
-import { subspacePath } from '../../lib/nav'
+import { resolveTopicSegments, subspacePath } from '../../lib/nav'
 import { useSpaces } from './SpacesProvider'
 
 export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { spaceId, subspaceId } = useParams()
+  const params = useParams()
   const {
     spaces,
     addSubspace,
@@ -25,6 +25,11 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   } = useSpaces()
   const { show } = useToast()
   const navigate = useNavigate()
+  // The URL carries readable slugs (or, on an old link, ids); everything below
+  // compares against ids, so resolve once here.
+  const active = resolveTopicSegments(spaces, params.spaceId, params.subspaceId)
+  const spaceId = active.space?.id
+  const subspaceId = active.subspace?.id
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [addingIn, setAddingIn] = useState<string | null>(null)
@@ -66,7 +71,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       setAddingIn(null)
       setNewTopic('')
       const parent = spaces.find((s) => s.id === spaceId)
-      navigate(parent ? subspacePath(parent, created) : `/s/${spaceId}/${created.id}`)
+      navigate(parent ? subspacePath(parent, created) : `/${spaceId}/${created.id}`)
     } catch (e) {
       show(friendlyMessage(e), 'error')
     }
@@ -122,7 +127,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
     try {
       await deleteSubspace(id)
       if (subspaceId === id) {
-        // There is no route for a bare `/s/:spaceId` — only `/s/:spaceId/:subspaceId`
+        // There is no route for a bare `/:spaceId` — only `/:spaceId/:subspaceId`
         // — so sending the user there after deleting the topic they were looking at
         // dropped them straight onto NotFound. Land on a sibling topic when the
         // subject still has one, otherwise Home.

@@ -29,6 +29,7 @@ import type { Space, Subspace, Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { clearBriefCache } from '../../lib/briefCache'
+import { withSlugs } from '../../lib/slug'
 
 type Ctx = {
   spaces: Space[]
@@ -59,7 +60,10 @@ export function SpacesProvider({ children }: { children: ReactNode }) {
   // The user id only changes on an actual sign-in/sign-out, which is the
   // only time this provider has any reason to refetch.
   const userId = session?.user?.id ?? null
-  const [spaces, setSpaces] = useState<Space[]>([])
+  const [rawSpaces, setSpaces] = useState<Space[]>([])
+  // Readable URL slugs are derived, never stored, so they are recomputed only
+  // when the list itself changes — see `lib/slug.ts`.
+  const spaces = useMemo(() => withSlugs(rawSpaces), [rawSpaces])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const generation = useRef(0)

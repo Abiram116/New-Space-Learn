@@ -21,7 +21,10 @@
  */
 
 import { Link } from 'react-router-dom'
+import type { Document } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
+import { Skeleton } from '../../components/ui/Skeleton'
+import { SourceItem } from '../docs/SourceItem'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import type { AgentKey } from './agents'
 import { CardsPanel } from './panels/CardsPanel'
@@ -35,13 +38,20 @@ export function DockPanelBody({
   subspaceId,
   base,
   onRunAgent,
+  docs,
+  docsLoading = false,
 }: {
   panel: NonNullable<DockPanel>
   subspaceId: string
   base: string
   onRunAgent: (agent: AgentKey, argument?: string) => void
+  /** The topic's sources, already loaded by the dock's overview — passed down
+   *  rather than fetched again, so opening this panel costs no request. */
+  docs?: Document[]
+  docsLoading?: boolean
 }) {
-  if (panel === 'docs') return <DocsPanel subspaceId={subspaceId} base={base} />
+  if (panel === 'docs')
+    return <DocsPanel subspaceId={subspaceId} base={base} docs={docs ?? []} loading={docsLoading} />
   if (panel === 'notes')
     return <NotesPanel subspaceId={subspaceId} base={base} onRunAgent={onRunAgent} />
   if (panel === 'quizzes') return <QuizzesPanel subspaceId={subspaceId} base={base} />
@@ -50,13 +60,55 @@ export function DockPanelBody({
 
 /* ── Docs ────────────────────────────────────────────────────────────── */
 
-function DocsPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
+/** How many sources the panel shows before pointing at the full page. */
+const SOURCES_SHOWN = 3
+
+function DocsPanel({
+  subspaceId,
+  base,
+  docs,
+  loading,
+}: {
+  subspaceId: string
+  base: string
+  docs: Document[]
+  loading: boolean
+}) {
+  const shown = docs.slice(0, SOURCES_SHOWN)
+  const hidden = docs.length - shown.length
+
   return (
     <div className="flex flex-1 flex-col gap-5">
-      <p className="text-[12px] leading-relaxed text-muted">
-        Anything here is searched when you ask a question, and answers cite the
-        page they came from.
-      </p>
+      <section className="flex flex-col gap-2">
+        <span className="setcode">{docs.length > 0 ? `Sources · ${docs.length}` : 'Sources'}</span>
+        {loading && docs.length === 0 ? (
+          <div className="flex flex-col gap-2">
+            {[0, 1].map((i) => (
+              <Skeleton key={i} className="h-12 rounded-[10px]" />
+            ))}
+          </div>
+        ) : docs.length === 0 ? (
+          <p className="rounded-[10px] border border-dashed border-line px-2.5 py-3.5 text-center text-[11.5px] leading-snug text-muted">
+            Nothing here yet. Add a PDF or some notes on the full page.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {shown.map((doc) => (
+              <SourceItem key={doc.id} doc={doc} />
+            ))}
+            {hidden > 0 && (
+              <p className="px-1 text-[11.5px] text-faint">
+                and {hidden} more. They&rsquo;re searched too.
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-[11.5px] leading-snug text-faint">
+          Anything here is searched when you ask a question, and answers cite the
+          page they came from.
+        </p>
+      </section>
+
       <section className="flex flex-col gap-2">
         <span className="setcode">Related topics</span>
         <RelatedTopics subspaceId={subspaceId} layout="stack" />
@@ -65,7 +117,9 @@ function DocsPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
           material — they never replace this topic’s own.
         </p>
       </section>
-      <FullPageLink to={`${base}/docs`}>Manage all sources</FullPageLink>
+      <FullPageLink to={`${base}/docs`}>
+        {hidden > 0 ? `See all ${docs.length} sources` : 'Manage sources'}
+      </FullPageLink>
     </div>
   )
 }

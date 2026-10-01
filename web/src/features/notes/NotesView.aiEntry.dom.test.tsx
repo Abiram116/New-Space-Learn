@@ -47,6 +47,13 @@ vi.mock('../../lib/nav', () => ({
   }),
 }))
 
+// The views read their topic through `useTopicScope`; here that is simply the
+// topic this file's `lib/nav` mock already provides.
+vi.mock('../../lib/useTopicScope', async () => {
+  const nav = await import('../../lib/nav')
+  return { useTopicScope: () => ({ ...nav.useActiveSubspace(), isGlobal: false }) }
+})
+
 // NotesView reads the sidebar's already-loaded space list to resolve each
 // note's subject/tone — mocked the same way `useActiveSubspace` is, rather
 // than mounting a real `SpacesProvider` and its own fetch for a test that

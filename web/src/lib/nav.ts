@@ -3,29 +3,55 @@ import type { Space, Subspace } from '../api/types'
 import { useSpaces } from '../features/spaces/SpacesProvider'
 
 /**
- * Subspace routing. Ids only.
+ * Subspace routing.
  *
- * Slug-based URLs were attempted and removed. The remains are worth a line so
- * nobody re-adds them casually: the migration put a NOT NULL `slug` column on
- * `subjects` and `subspaces`, which broke every insert until the API supplied
- * one, and the matching route change dropped the `/s/` prefix while every link
- * still emitted it — so nothing matched and the whole app 404'd. Two moving
- * parts, both able to break the product on their own.
+ * URLs read `/<subject>/<topic>/notes`. Each segment is a slug derived from
+ * the name (`lib/slug.ts`) and an id is accepted anywhere a slug is, so
+ * bookmarks from before slugs existed and routes the server builds
+ * (`BriefSuggestion.route`, which still says `/s/<id>/<id>`) still land —
+ * `routes/TopicCanonical` then rewrites them to the readable form. The old
+ * `/s/` prefix is only kept as an address that forwards.
  *
- * If readable URLs are wanted later, they need doing as one deliberate piece
- * of work: column + backfill + insert path + route + link builder, together.
- * `subspacePath` below is the single place URLs are built, which is where that
- * change belongs.
+ * Slugs live only in the browser. An earlier attempt stored them in the
+ * database and broke every insert until the API supplied one, and dropped the
+ * `/s/` prefix from the route while links still emitted it, so the whole app
+ * 404'd. `subspacePath` below is the single place URLs are built.
  */
 
-/** The canonical route for a subspace. MUST stay in step with the `/s/`
- *  route pattern in `App.tsx`. */
+/** The canonical route for a subspace. MUST stay in step with the
+ *  `/:spaceId/:subspaceId` route pattern in `App.tsx`; the first segment can't
+ *  be a word in `RESERVED_ROOTS` (see `lib/slug.ts`). */
 export function subspacePath(space: Space, subspace: Subspace): string {
-  return `/s/${space.id}/${subspace.id}`
+  return `/${space.slug ?? space.id}/${subspace.slug ?? subspace.id}`
 }
 
 /**
- * Resolves the URL's `:spaceId/:subspaceId` against the live space list.
+ * Finds the subject and topic a URL's two segments name. Each segment may be a
+ * slug or an id; ids win, so a name that happens to look like an id can never
+ * shadow the real one. The topic is only looked for inside the subject it was
+ * written under, because topic slugs are only unique within their subject.
+ */
+export function resolveTopicSegments(
+  spaces: Space[],
+  spaceSegment: string | undefined,
+  subspaceSegment: string | undefined,
+): { space: Space | null; subspace: Subspace | null } {
+  if (!spaceSegment) return { space: null, subspace: null }
+  const space =
+    spaces.find((s) => s.id === spaceSegment) ??
+    spaces.find((s) => s.slug === spaceSegment) ??
+    null
+  if (!space || !subspaceSegment) return { space, subspace: null }
+  const subspace =
+    space.subspaces.find((s) => s.id === subspaceSegment) ??
+    space.subspaces.find((s) => s.slug === subspaceSegment) ??
+    null
+  return { space, subspace }
+}
+
+/**
+ * Resolves the URL's `:spaceId/:subspaceId` (slugs or ids) against the live
+ * space list.
  *
  * Returns null when either doesn't exist so views can render "not found"
  * rather than crashing on undefined access. `base` is a convenience URL
@@ -38,8 +64,7 @@ export function useActiveSubspace(): {
 } {
   const { spaceId, subspaceId } = useParams()
   const { spaces } = useSpaces()
-  const space = spaces.find((s) => s.id === spaceId) ?? null
-  const subspace = space?.subspaces.find((s) => s.id === subspaceId) ?? null
+  const { space, subspace } = resolveTopicSegments(spaces, spaceId, subspaceId)
   const base = space && subspace ? subspacePath(space, subspace) : '/'
   return { space, subspace, base }
 }

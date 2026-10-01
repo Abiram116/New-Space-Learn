@@ -6,7 +6,7 @@
  * copy to keep typing snappy.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { labelFor, notePreview, provenanceLabel, relativeTime, type Filter } from './format'
 import { NoteEditor } from './NoteEditor'
@@ -25,18 +25,22 @@ import { SlowBot } from '../../components/mascot/SlowBot'
 import { Stagger } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { useActiveSubspace } from '../../lib/nav'
+import { isUuid, useSlugParam } from '../../lib/useSlugParam'
+import { useTopicScope } from '../../lib/useTopicScope'
 import { toneBar } from '../../lib/tone'
 import { NoteBriefDialog } from '../chat/NoteBriefDialog'
 import { isMobileNow, useIsMobile } from '../../lib/useIsMobile'
 import { PhoneNotes } from './PhoneNotes'
-import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
 import { useSpaces } from '../spaces/SpacesProvider'
 
 
+/** A note is named by its title; `?n=` shows that, not the id. */
+const noteName = (n: { title: string }) => n.title
+
 export function NotesView() {
-  const { space, subspace, base } = useActiveSubspace()
-  if (!space || !subspace) return <SubspaceMissing />
+  const { space, subspace, base, isGlobal } = useTopicScope()
+  if (!space || !subspace) return <TopicScopeFallback isGlobal={isGlobal} section="notes" />
   return <Inner subspaceId={subspace.id} base={base} />
 }
 
@@ -49,12 +53,19 @@ function Inner({
   base: string
 }) {
   const [params, setParams] = useSearchParams()
+  // Whether the address already names a note. If it does, don't open the first
+  // one while we wait to find out which: mounting the editor for the wrong note
+  // only to swap it a frame later is the single most expensive thing on this page.
+  const openedByLink = useRef(params.has('n'))
   const { show, showError } = useToast()
   const { spaces } = useSpaces()
   const isMobile = useIsMobile()
   const [notes, setNotes] = useState<Note[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(params.get('n'))
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const n = params.get('n')
+    return n && isUuid(n) ? n : null
+  })
   const [filter, setFilter] = useState<Filter>('all')
   /** 'all' or a subject id — a subject rather than a name, so two subjects
    *  that happen to share a name still filter independently. */
@@ -83,7 +94,7 @@ function Inner({
       setError(null)
       // On a phone the list IS the landing screen — auto-opening the first
       // note would skip it and drop you into an editor you never asked for.
-      setSelectedId((cur) => cur ?? (isMobileNow() ? null : (data[0]?.id ?? null)))
+      setSelectedId((cur) => cur ?? (isMobileNow() || openedByLink.current ? null : (data[0]?.id ?? null)))
     } catch (err) {
       setError(friendlyMessage(err))
     }
@@ -126,6 +137,30 @@ function Inner({
 
   const current = notes?.find((n) => n.id === selectedId) ?? null
 
+  // `?n=` is a name or an id (see `useSlugParam`). Once it names a note, open it.
+  const noteParam = useSlugParam('n', notes, noteName, 'note')
+  const slugForNote = noteParam.slugFor
+  useEffect(() => {
+    if (noteParam.id) setSelectedId(noteParam.id)
+  }, [noteParam.id])
+  // A link to a note that no longer exists falls back to the usual first note.
+  useEffect(() => {
+    if (noteParam.missing && !isMobileNow()) setSelectedId((cur) => cur ?? notes?.[0]?.id ?? null)
+  }, [noteParam.missing, notes])
+
+  /* The topic the OPEN note belongs to — not the topic this screen would create
+     a new note in. The list spans every subject, so the two differ whenever you
+     open a note from elsewhere. Two things depend on getting it right: `/ai`
+     retrieves from the note's own material, and the source line it appends
+     links to that material's Docs page.
+
+     The link is written into the note's markdown and kept forever, so it is
+     built from ids (which redirect to the current readable address) rather than
+     slugs, which change when a subject or topic is renamed. */
+  const noteTopicId = current?.subspace_id ?? subspaceId
+  const noteSpace = subspaceToSpace.get(noteTopicId)
+  const noteBase = noteSpace ? `/s/${noteSpace.id}/${noteTopicId}` : base
+
   /* Shown once there's more than one note to tell apart — even an all-AI or
    * all-mine topic still benefits from seeing "Mine 0" rather than the row
    * vanishing outright, which read as a bug rather than "none yet". */
@@ -137,9 +172,9 @@ function Inner({
   const select = useCallback(
     (id: string | null) => {
       setSelectedId(id)
-      setParams(id ? { n: id } : {}, { replace: true })
+      setParams(id ? { n: slugForNote(id) } : {}, { replace: true })
     },
-    [setParams],
+    [setParams, slugForNote],
   )
 
   const newBlank = async () => {
@@ -228,8 +263,8 @@ function Inner({
           <NoteEditor
             key={current.id}
             note={current}
-            subspaceId={subspaceId}
-            base={base}
+            subspaceId={noteTopicId}
+            base={noteBase}
             onPatch={(patch) => applyPatch(current.id, patch)}
             onDelete={() => setConfirmDelete(current.id)}
             onBack={() => select(null)}
@@ -532,8 +567,8 @@ function Inner({
         <NoteEditor
           key={current.id}
           note={current}
-          subspaceId={subspaceId}
-          base={base}
+          subspaceId={noteTopicId}
+          base={noteBase}
           onPatch={(patch) => applyPatch(current.id, patch)}
           onDelete={() => setConfirmDelete(current.id)}
           onBack={() => select(null)}

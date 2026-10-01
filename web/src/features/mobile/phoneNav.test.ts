@@ -95,7 +95,7 @@ describe('the top bar', () => {
     expect(phoneBackFor('/home')).toBeNull()
     expect(phoneBackFor('/s/a/b/flashcards')).toBeNull()
     expect(phoneBackFor('/s/a/b')).toBeNull()
-    expect(phoneBackFor('/s/a/b/docs')).toBe('/s/a/b')
+    expect(phoneBackFor('/s/a/b/docs')).toBe('/a/b')
     expect(phoneBackFor('/settings')).toBe('/profile')
   })
 
@@ -130,6 +130,16 @@ describe('the top bar', () => {
   it('parses topic URLs', () => {
     expect(topicFromPath('/s/a/b')).toEqual({ spaceId: 'a', subspaceId: 'b', section: null })
     expect(topicFromPath('/s/a/b/notes')).toEqual({ spaceId: 'a', subspaceId: 'b', section: 'notes' })
+    // The current address has no prefix; the old one is still understood.
+    expect(topicFromPath('/fsd/transformer')).toEqual({ spaceId: 'fsd', subspaceId: 'transformer', section: null })
+    expect(topicFromPath('/fsd/transformer/quizzes')).toEqual({
+      spaceId: 'fsd',
+      subspaceId: 'transformer',
+      section: 'quizzes',
+    })
+    // A page of its own is not a topic, however many segments it has.
+    expect(topicFromPath('/auth/callback')).toBeNull()
+    expect(topicFromPath('/s/only-one')).toBeNull()
     expect(topicFromPath('/home')).toBeNull()
   })
 })

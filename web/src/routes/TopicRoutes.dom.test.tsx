@@ -43,7 +43,18 @@ vi.mock('../api/flashcards', () => ({ listAllDecks: vi.fn(async () => DECKS) }))
 vi.mock('../features/chat/ChatView', () => ({ ChatView: () => <div>desktop chat</div> }))
 vi.mock('../features/skills/SkillsView', () => ({ SkillsView: () => <div>desktop skills</div> }))
 
-import { AccountWideRoute, ChatAliasRoute, SkillsRoute, TopicIndexRoute } from './TopicRoutes'
+import { useTopicScope } from '../lib/useTopicScope'
+import { ChatAliasRoute, SkillsRoute, TopicIndexRoute } from './TopicRoutes'
+
+/** Stands in for Notes / Cards / Quizzes: shows which topic the screen would work in. */
+function ScopeProbe() {
+  const { subspace, base, isGlobal } = useTopicScope()
+  return (
+    <div>
+      {isGlobal ? 'global' : 'in-topic'} · {subspace?.name ?? 'no topic'} · {base}
+    </div>
+  )
+}
 
 function setViewport(phone: boolean) {
   window.matchMedia = ((query: string) => ({
@@ -63,12 +74,12 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <ToastProvider>
         <Routes>
-          <Route path="/flashcards" element={<AccountWideRoute section="flashcards" />} />
-          <Route path="/s/:spaceId/:subspaceId">
+          <Route path="/flashcards" element={<ScopeProbe />} />
+          <Route path="/:spaceId/:subspaceId">
             <Route index element={<TopicIndexRoute />} />
             <Route path="chat" element={<ChatAliasRoute />} />
             <Route path="skills" element={<SkillsRoute />} />
-            <Route path="flashcards" element={<div>cards page</div>} />
+            <Route path="flashcards" element={<ScopeProbe />} />
           </Route>
         </Routes>
       </ToastProvider>
@@ -86,35 +97,35 @@ afterEach(() => {
 describe('on a phone', () => {
   it('opens the topic hub, not chat, at the topic root', async () => {
     setViewport(true)
-    renderAt('/s/sp/sub')
+    renderAt('/sp/sub')
     expect(await screen.findByRole('heading', { name: 'Markov decision processes' })).toBeInTheDocument()
     expect(screen.queryByText('desktop chat')).toBeNull()
 
     // Due cards come from this topic's decks only, and open the one deck with any.
     const review = await screen.findByTestId('review-due')
     expect(review).toHaveTextContent('Review 3 due cards')
-    expect(review).toHaveAttribute('href', '/s/sp/sub/flashcards?deck=d1')
+    expect(review).toHaveAttribute('href', '/sp/sub/flashcards?deck=d1')
 
     for (const [label, href, count] of [
-      ['Cards', '/s/sp/sub/flashcards', '12'],
-      ['Quizzes', '/s/sp/sub/quizzes', '2'],
-      ['Notes', '/s/sp/sub/notes', '5'],
-      ['Sources', '/s/sp/sub/docs', '3'],
+      ['Cards', '/sp/sub/flashcards', '12'],
+      ['Quizzes', '/sp/sub/quizzes', '2'],
+      ['Notes', '/sp/sub/notes', '5'],
+      ['Sources', '/sp/sub/docs', '3'],
     ]) {
       const row = screen.getByRole('link', { name: new RegExp(`^${label}`) })
       expect(row).toHaveAttribute('href', href)
       expect(row).toHaveTextContent(count)
     }
-    expect(screen.getByRole('link', { name: /Add material/ })).toHaveAttribute('href', '/s/sp/sub/docs')
+    expect(screen.getByRole('link', { name: /Add material/ })).toHaveAttribute('href', '/sp/sub/docs')
   })
 
   it('explains that chat is on desktop at a chat address, with ways to revise instead', async () => {
     setViewport(true)
-    renderAt('/s/sp/sub/chat')
+    renderAt('/sp/sub/chat')
     expect(await screen.findByRole('heading', { name: 'Chat is on the big screen' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Cards' })).toHaveAttribute('href', '/s/sp/sub/flashcards')
-    expect(screen.getByRole('link', { name: 'Quizzes' })).toHaveAttribute('href', '/s/sp/sub/quizzes')
-    expect(screen.getByRole('link', { name: 'Notes' })).toHaveAttribute('href', '/s/sp/sub/notes')
+    expect(screen.getByRole('link', { name: 'Cards' })).toHaveAttribute('href', '/sp/sub/flashcards')
+    expect(screen.getByRole('link', { name: 'Quizzes' })).toHaveAttribute('href', '/sp/sub/quizzes')
+    expect(screen.getByRole('link', { name: 'Notes' })).toHaveAttribute('href', '/sp/sub/notes')
     expect(screen.queryByText('desktop chat')).toBeNull()
   })
 
@@ -122,15 +133,15 @@ describe('on a phone', () => {
     setViewport(true)
     const writeText = vi.fn(async () => {})
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-    renderAt('/s/sp/sub/chat')
+    renderAt('/sp/sub/chat')
     fireEvent.click(await screen.findByRole('button', { name: /Send myself the link/ }))
     expect(await screen.findByText(/Link copied/)).toBeInTheDocument()
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/s/sp/sub`)
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/sp/sub`)
   })
 
   it('treats Skills as part of chat', async () => {
     setViewport(true)
-    renderAt('/s/sp/sub/skills')
+    renderAt('/sp/sub/skills')
     expect(await screen.findByRole('heading', { name: 'Skills live with chat' })).toBeInTheDocument()
     expect(screen.queryByText('desktop skills')).toBeNull()
   })
@@ -139,27 +150,37 @@ describe('on a phone', () => {
 describe('on desktop (unchanged)', () => {
   it('keeps chat at the topic root', async () => {
     setViewport(false)
-    renderAt('/s/sp/sub')
+    renderAt('/sp/sub')
     expect(await screen.findByText('desktop chat')).toBeInTheDocument()
   })
 
   it('forwards the explicit chat address to it', async () => {
     setViewport(false)
-    renderAt('/s/sp/sub/chat')
+    renderAt('/sp/sub/chat')
     expect(await screen.findByText('desktop chat')).toBeInTheDocument()
   })
 
   it('keeps Skills', async () => {
     setViewport(false)
-    renderAt('/s/sp/sub/skills')
+    renderAt('/sp/sub/skills')
     expect(await screen.findByText('desktop skills')).toBeInTheDocument()
   })
 })
 
 describe('account-wide list URLs', () => {
-  it('forward into the current topic', async () => {
+  it('stay where they are and borrow the current topic for new items', async () => {
     setViewport(true)
     renderAt('/flashcards')
-    expect(await screen.findByText('cards page')).toBeInTheDocument()
+    expect(
+      await screen.findByText('global · Markov decision processes · /sp/sub'),
+    ).toBeInTheDocument()
+  })
+
+  it('use the topic in the address when there is one', async () => {
+    setViewport(false)
+    renderAt('/sp/sub/flashcards')
+    expect(
+      await screen.findByText('in-topic · Markov decision processes · /sp/sub'),
+    ).toBeInTheDocument()
   })
 })

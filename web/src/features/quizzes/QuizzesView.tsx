@@ -25,26 +25,30 @@ import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
-import { useActiveSubspace } from '../../lib/nav'
+import { useSlugParam } from '../../lib/useSlugParam'
+import { useTopicScope } from '../../lib/useTopicScope'
 import { toneBar } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
 import { useSpaces } from '../spaces/SpacesProvider'
-import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
 import { StudyAmbience } from '../../components/celebrate'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizzes } from './PhoneQuizzes'
 import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
+/** A quiz is named by its topic line ("Policy Iteration Basics"); `?q=` shows that, not the id. */
+const quizName = (q: { topic: string | null }) => q.topic
+
 export function QuizzesView() {
-  const { space, subspace, base } = useActiveSubspace()
-  if (!space || !subspace) return <SubspaceMissing />
+  const { space, subspace, base, isGlobal } = useTopicScope()
+  if (!space || !subspace) return <TopicScopeFallback isGlobal={isGlobal} section="quizzes" />
   return <Inner subspaceId={subspace.id} base={base} />
 }
 
 function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const [params, setParams] = useSearchParams()
+  const [, setParams] = useSearchParams()
   const { show, showError } = useToast()
   const isMobile = useIsMobile()
   // Global on purpose — see the identical note on `listAllNotes` in
@@ -65,24 +69,22 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
       ),
     [spaces, quizzes.data, subspaceToSpace],
   )
-  const [activeId, setActiveId] = useState<string | null>(params.get('q'))
   const [generating, setGenerating] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
 
-  useEffect(() => {
-    setActiveId(params.get('q'))
-  }, [params])
+  // The open quiz IS the `?q=` value, read as a name or an id (see `useSlugParam`).
+  const quizParam = useSlugParam('q', quizzes.data, quizName, 'quiz', !quizzes.validating)
+  const activeId = quizParam.id
+  const slugForQuiz = quizParam.slugFor
 
   const startQuiz = useCallback(
     (id: string) => {
-      setActiveId(id)
-      setParams({ q: id }, { replace: true })
+      setParams({ q: slugForQuiz(id) }, { replace: true })
     },
-    [setParams],
+    [setParams, slugForQuiz],
   )
 
   const back = useCallback(() => {
-    setActiveId(null)
     setParams({}, { replace: true })
   }, [setParams])
 
@@ -102,6 +104,9 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
     },
     [quizzes, startQuiz, subspaceId, showError],
   )
+
+  // A readable link needs the list to say which quiz it means; an id doesn't.
+  if (quizParam.pending) return <PageSpinner label="Opening quiz…" />
 
   if (activeId && isMobile) {
     // No page header: the quiz stage brings its own slim top row, and the

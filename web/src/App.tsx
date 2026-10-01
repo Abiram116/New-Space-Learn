@@ -19,8 +19,51 @@ import {
   Settings,
 } from './routes/lazyRoutes'
 import { NotFound } from './routes/NotFound'
+import { TopicCanonical } from './routes/TopicCanonical'
 import { RootRoute } from './routes/RootRoute'
-import { AccountWideRoute, ChatAliasRoute, SkillsRoute, TopicIndexRoute } from './routes/TopicRoutes'
+import { ChatAliasRoute, SkillsRoute, TopicIndexRoute, TopicSkillsRedirect } from './routes/TopicRoutes'
+
+/** The screens inside a topic. Shared by the current address and the old `/s/` one. */
+const topicRoutes = (
+  <>
+    {/* Chat on desktop; the topic hub on phones, which have no chat. */}
+    <Route index element={<TopicIndexRoute />} />
+    <Route path="chat" element={<ChatAliasRoute />} />
+    <Route
+      path="docs"
+      element={
+        <Lazy>
+          <DocsView />
+        </Lazy>
+      }
+    />
+    <Route
+      path="notes"
+      element={
+        <Lazy>
+          <NotesView />
+        </Lazy>
+      }
+    />
+    <Route
+      path="flashcards"
+      element={
+        <Lazy>
+          <FlashcardsView />
+        </Lazy>
+      }
+    />
+    <Route
+      path="quizzes"
+      element={
+        <Lazy>
+          <QuizzesView />
+        </Lazy>
+      }
+    />
+    <Route path="skills" element={<TopicSkillsRedirect />} />
+  </>
+)
 
 export default function App() {
   return (
@@ -117,58 +160,48 @@ export default function App() {
             </Lazy>
           }
         />
-        {/* The account-wide lists without a topic in the URL (the phone's
-            tabs, bookmarks). They forward into the current topic — see
-            routes/TopicRoutes. */}
-        <Route path="/flashcards" element={<AccountWideRoute section="flashcards" />} />
-        <Route path="/quizzes" element={<AccountWideRoute section="quizzes" />} />
-        <Route path="/notes" element={<AccountWideRoute section="notes" />} />
-        {/* The `/s/` prefix is REQUIRED and must match `subspacePath()` in
-            `lib/nav.ts`, which is the only place subspace URLs are built.
-
-            It was briefly dropped so slugs could read
-            `/reinforcement-learning/transformers/notes`. That broke every
-            subspace route: links kept emitting four segments (`/s/a/b/notes`)
-            while the pattern matched three, so nothing matched and every
-            topic, note, deck and quiz fell through to the 404 catch-all.
-            Change these two together or not at all. */}
-        <Route path="/s/:spaceId/:subspaceId">
-          {/* Chat on desktop; the topic hub on phones, which have no chat. */}
-          <Route index element={<TopicIndexRoute />} />
-          <Route path="chat" element={<ChatAliasRoute />} />
-          <Route
-            path="docs"
-            element={
-              <Lazy>
-                <DocsView />
-              </Lazy>
-            }
-          />
-          <Route
-            path="notes"
-            element={
-              <Lazy>
-                <NotesView />
-              </Lazy>
-            }
-          />
-          <Route
-            path="flashcards"
-            element={
-              <Lazy>
-                <FlashcardsView />
-              </Lazy>
-            }
-          />
-          <Route
-            path="quizzes"
-            element={
-              <Lazy>
-                <QuizzesView />
-              </Lazy>
-            }
-          />
-          <Route path="skills" element={<SkillsRoute />} />
+        {/* Notes, Cards and Quizzes list everything the student has, so they
+            live at their own addresses with no topic in them. The topic they
+            create new things in comes from `useTopicScope`. The same screens
+            are also reachable under a topic (`/s/<subject>/<topic>/notes`). */}
+        <Route
+          path="/flashcards"
+          element={
+            <Lazy>
+              <FlashcardsView />
+            </Lazy>
+          }
+        />
+        <Route
+          path="/quizzes"
+          element={
+            <Lazy>
+              <QuizzesView />
+            </Lazy>
+          }
+        />
+        <Route path="/skills" element={<SkillsRoute />} />
+        <Route
+          path="/notes"
+          element={
+            <Lazy>
+              <NotesView />
+            </Lazy>
+          }
+        />
+        {/* A topic's address is `/<subject>/<topic>` — readable slugs, with ids
+            accepted too, and `TopicCanonical` rewriting an id, an old `/s/…`
+            address or a renamed topic to the current slug. It must match
+            `subspacePath()` in `lib/nav.ts`, and a subject can't be named
+            like a page (`RESERVED_ROOTS` in `lib/slug.ts`). Fixed pages win
+            over this pattern, so `/home` and `/auth/callback` still resolve.
+            Keep it at exactly two segments: links elsewhere assume that shape. */}
+        <Route path="/:spaceId/:subspaceId" element={<TopicCanonical />}>
+          {topicRoutes}
+        </Route>
+        {/* The old address: forwards to the one above (TopicCanonical). */}
+        <Route path="/s/:spaceId/:subspaceId" element={<TopicCanonical />}>
+          {topicRoutes}
         </Route>
       </Route>
 

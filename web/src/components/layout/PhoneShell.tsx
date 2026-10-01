@@ -81,7 +81,7 @@ export function PhoneShell() {
         </PageTransition>
       </main>
 
-      {showTabs && <BottomTabBar topicBase={topic.base} dueCount={dueCount} />}
+      {showTabs && <BottomTabBar dueCount={dueCount} />}
 
       <TopicSwitcher
         open={switcherOpen}

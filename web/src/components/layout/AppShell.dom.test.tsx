@@ -142,10 +142,10 @@ describe('AppShell on a phone', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Cards' })).toBeInTheDocument()
   })
 
-  it('points the section tabs at the current topic', () => {
+  it('points the section tabs at the account-wide lists, not at a topic', () => {
     renderAt('/home')
     const nav = screen.getByRole('navigation', { name: 'Main' })
-    expect(within(nav).getByRole('link', { name: 'Quizzes' })).toHaveAttribute('href', '/s/sp/sub/quizzes')
+    expect(within(nav).getByRole('link', { name: 'Quizzes' })).toHaveAttribute('href', '/quizzes')
     expect(within(nav).getByRole('link', { name: 'Today' })).toHaveAttribute('href', '/home')
     expect(within(nav).getByRole('link', { name: 'You' })).toHaveAttribute('href', '/profile')
   })

@@ -26,6 +26,7 @@ import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatOnDesktop } from '../mobile/ChatOnDesktop'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { LG_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { AgentRunCard } from './AgentRunCard'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
@@ -79,6 +80,10 @@ type Inner = {
 }
 
 function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }: Inner) {
+  // The sidebar exists from `lg:` up; below that its two jobs move to strips above
+  // the composer. Mount one set or the other — never both — so a width fetches
+  // only the data it shows.
+  const hasSidebar = useMediaQuery(LG_QUERY)
   const history = useAsync(() => listMessages(subspaceId), [subspaceId])
   /* The live turn. Tokens do NOT flow through React state: they go into
      `pacer`, which reveals them on requestAnimationFrame, and only
@@ -422,10 +427,10 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           activeTab={dockPanel ?? 'chat'}
           onSelectTab={(tab) => {
             // Chat closes whatever is open; the others swap the dock. Only
-            // intercepted on wide screens — below `lg` the dock is not
-            // rendered at all, so these must stay real navigation or the tabs
+            // intercepted where the sidebar exists — below `lg` it is not
+            // mounted at all, so these must stay real navigation or the tabs
             // would silently do nothing on a phone.
-            if (window.innerWidth < 1024) return false
+            if (!hasSidebar) return false
             setDockPanel(tab === 'chat' ? null : tab)
             return true
           }}
@@ -513,8 +518,12 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
         </div>
 
         {/* Only below lg, where the dock isn't there to say either of these. */}
-        <ActiveAgentsStrip onRunAgent={runAgent} busy={busy} />
-        <ActiveSkillStrip subspaceId={subspaceId} base={base} />
+        {!hasSidebar && (
+          <>
+            <ActiveAgentsStrip onRunAgent={runAgent} busy={busy} />
+            <ActiveSkillStrip subspaceId={subspaceId} />
+          </>
+        )}
 
         <Composer
           placeholder={`Ask about ${subspaceName}…`}
@@ -525,14 +534,16 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
         />
       </div>
 
-      <ContextDock
-        subspaceId={subspaceId}
-        base={base}
-        onRunAgent={runAgent}
-        busy={busy}
-        panel={dockPanel}
-        onClosePanel={() => setDockPanel(null)}
-      />
+      {hasSidebar && (
+        <ContextDock
+          subspaceId={subspaceId}
+          base={base}
+          onRunAgent={runAgent}
+          busy={busy}
+          panel={dockPanel}
+          onClosePanel={() => setDockPanel(null)}
+        />
+      )}
 
       <NoteBriefDialog
         open={noteBrief !== null}

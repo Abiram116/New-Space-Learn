@@ -99,7 +99,7 @@ function renderHome() {
       <ToastProvider>
         <Routes>
           <Route path="/home" element={<Home />} />
-          <Route path="/s/:a/:b/docs" element={<p>Docs screen</p>} />
+          <Route path="/:a/:b/docs" element={<p>Docs screen</p>} />
         </Routes>
       </ToastProvider>
     </MemoryRouter>,
@@ -130,7 +130,7 @@ describe('Today, on a phone', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Cells are coming along' })).toBeInTheDocument()
     const action = await screen.findByRole('link', { name: /Review 12 cards/ })
     expect(action).toHaveTextContent('~4 min')
-    expect(action).toHaveAttribute('href', '/s/sp-1/sub-1/flashcards?review=due')
+    expect(action).toHaveAttribute('href', '/sp-1/sub-1/flashcards?review=due')
     // Not the desktop dashboard.
     expect(screen.queryByText('Current streak')).not.toBeInTheDocument()
     expect(screen.queryByText('Coming due')).not.toBeInTheDocument()
@@ -151,7 +151,7 @@ describe('Today, on a phone', () => {
     expect(screen.getByText(/Welcome back/)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Review all 46 instead/ })).toHaveAttribute(
       'href',
-      '/s/sp-1/sub-1/flashcards?review=due',
+      '/sp-1/sub-1/flashcards?review=due',
     )
   })
 
@@ -163,7 +163,7 @@ describe('Today, on a phone', () => {
     renderHome()
 
     const add = await screen.findByRole('link', { name: /Add material/ })
-    expect(add).toHaveAttribute('href', '/s/sp-1/sub-1/docs?add=1')
+    expect(add).toHaveAttribute('href', '/sp-1/sub-1/docs?add=1')
     expect(screen.getByText(/chat tutor and deep note-writing are on a computer/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Send myself the link/ }))
@@ -236,7 +236,7 @@ describe('Home on desktop', () => {
     expect(within(band).getByText('1 of 3 done')).toBeInTheDocument()
     const steps = within(band).getAllByRole('listitem')
     expect(steps[1]).toHaveAttribute('aria-current', 'step')
-    expect(within(steps[1]).getByRole('link', { name: /Make cards/ })).toHaveAttribute('href', '/s/sp-1/sub-1/flashcards')
+    expect(within(steps[1]).getByRole('link', { name: /Make cards/ })).toHaveAttribute('href', '/sp-1/sub-1/flashcards')
     // The dashboard is still there underneath.
     expect(screen.getByText('Current streak')).toBeInTheDocument()
   })
