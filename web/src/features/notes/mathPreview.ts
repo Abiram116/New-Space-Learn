@@ -103,16 +103,38 @@ function findMatches(doc: import('@tiptap/pm/model').Node): MathMatch[] {
   return matches
 }
 
-function renderKatex(latex: string, display: boolean): string {
-  // Before the dynamic import resolves — or if it ever fails — the raw
-  // source is exactly what the old synchronous catch path already fell
-  // back to, so this isn't a new failure mode, just the same one with a
-  // brief extra window at the start of a session.
-  if (!katexMod) return latex
+/** Text made safe to place inside HTML. */
+export function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+/**
+ * The HTML for one formula — ALWAYS safe to assign to `innerHTML`.
+ *
+ * The caller does exactly that (`span.innerHTML = renderKatex(...)`), so every
+ * path out of here has to be HTML-safe, including the two fallbacks. They used
+ * to return the raw formula text: before KaTeX finished loading (the first
+ * formula of every session) or if it threw, `\(<img src=x onerror=…>\)` in a
+ * note went into the page as live markup. A note's text can come from an
+ * uploaded PDF by way of the model, so that is not only the student's own
+ * keystrokes. KaTeX's own output is safe (`trust` is off), and the fallback is
+ * now the formula shown as plain text.
+ */
+export function renderKatex(
+  latex: string,
+  display: boolean,
+  katex: Pick<typeof import('katex').default, 'renderToString'> | null = katexMod,
+): string {
+  if (!katex) return escapeHtml(latex)
   try {
-    return katexMod.renderToString(latex.trim(), { throwOnError: false, displayMode: display })
+    return katex.renderToString(latex.trim(), { throwOnError: false, displayMode: display, trust: false })
   } catch {
-    return latex
+    return escapeHtml(latex)
   }
 }
 

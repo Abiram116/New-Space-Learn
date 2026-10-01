@@ -132,15 +132,21 @@ class NoteOut(BaseModel):
     subject_name: str | None = None
 
 
+# Images live inside a note as data URLs (the editor allows 4MB each), so this is
+# a payload ceiling, not a writing limit. It only stops an unbounded body from
+# being written to the database and re-read on every snapshot.
+NOTE_BODY_MAX = 5_000_000
+
+
 class NoteCreate(BaseModel):
     title: str = Field(min_length=1, max_length=140)
-    body_md: str = ""
+    body_md: str = Field(default="", max_length=NOTE_BODY_MAX)
     origin: Literal["user", "agent", "doc"] = "user"
 
 
 class NoteUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=140)
-    body_md: str | None = None
+    body_md: str | None = Field(default=None, max_length=NOTE_BODY_MAX)
     # Set by the editor on the one PATCH that immediately follows accepting
     # an `/ai` inline suggestion into the note — every other save (ordinary
     # typing) leaves this unset. Never clears `touched_by_user`: a student
@@ -409,7 +415,7 @@ class SkillOut(BaseModel):
 
 class SkillCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    icon: str = "🧠"
+    icon: str = "skill"  # an Icon name in the frontend set, never an emoji
     tone: Tone = "brand"
     description: str | None = None
     instructions: str = Field(min_length=1, max_length=4000)

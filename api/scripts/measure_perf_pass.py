@@ -102,7 +102,7 @@ async def measure_reprocess(n: int = 3) -> list[float]:
     """Real extract->chunk->embed->insert, on an already-uploaded document —
     exercises the exact code path a fresh upload would, without needing to
     upload a new file."""
-    from app.routers.documents import _process_inline
+    from app.services import ingest
 
     docs = await supabase.db_select(
         "documents",
@@ -116,15 +116,9 @@ async def measure_reprocess(n: int = 3) -> list[float]:
     doc = docs[0]
     timings = []
     for _ in range(n):
-        data = bytearray()
-        async for chunk in supabase.storage_download(doc["storage_path"]):
-            data.extend(chunk)
         t0 = time.perf_counter()
-        result = await _process_inline(doc, bytes(data), doc.get("mime_type") or "")
-        dt = (time.perf_counter() - t0) * 1000
-        timings.append(dt)
-        if result.get("status") != "ready":
-            print(f"  WARNING: reprocess did not end 'ready': {result.get('status')}")
+        await ingest._ingest(doc, None, fresh=True)  # includes the storage download
+        timings.append((time.perf_counter() - t0) * 1000)
     _stats(f"Document reprocess (extract+chunk+embed+insert), {doc['name']!r}", timings)
     return timings
 

@@ -392,6 +392,17 @@ async def storage_delete(path: str) -> None:
     _raise_if_bad(r)
 
 
+async def storage_delete_many(paths: list[str]) -> None:
+    """Bulk delete; Storage accepts a list of keys per request."""
+    client = await get_client()
+    bucket = settings.supabase_storage_bucket
+    for i in range(0, len(paths), 100):
+        r = await client.request(
+            "DELETE", f"/storage/v1/object/{bucket}", json={"prefixes": paths[i : i + 100]}
+        )
+        _raise_if_bad(r)
+
+
 async def storage_download(path: str) -> AsyncIterator[bytes]:
     client = await get_client()
     bucket = settings.supabase_storage_bucket

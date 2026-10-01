@@ -9,11 +9,9 @@ and nothing about them looks broken from the outside — the document says
 their embeddings.
 
 Why a script instead of an endpoint: re-embedding a whole corpus is a
-maintenance operation, not a user action. Doing it inline would blow the
-25-second per-request processing budget (`documents.PROCESSING_BUDGET_S`) that
-exists precisely because this free tier has no background workers. A script
-runs unbounded, sequentially, with visible progress and a resumable failure
-mode.
+maintenance operation, not a user action, and it would compete with students'
+uploads for the single ingestion slot. A script runs sequentially with visible
+progress and a resumable failure mode.
 
 Usage, from `api/`:
 
@@ -32,13 +30,12 @@ from pathlib import Path
 # Make `app` importable when run as a plain script from `api/`.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# `_process_inline` is deliberately reused from the endpoint rather than
+# `ingest._ingest` is deliberately reused from the upload path rather than
 # reimplemented here. A second copy of extract → chunk → embed → insert would
 # drift from the real one the first time either changed, and this script exists
 # to make retrieval correct — it must not itself become a source of skew.
 from app.config import settings  # noqa: E402
-from app.routers.documents import _process_inline  # noqa: E402
-from app.services import embeddings, supabase  # noqa: E402
+from app.services import embeddings, ingest, supabase  # noqa: E402
 
 
 async def _fetch_documents(user_id: str | None) -> list[dict]:
@@ -66,7 +63,7 @@ async def main() -> int:
     if not settings.real_embeddings_enabled:
         print(
             "Refusing to run: real embeddings are not enabled.\n"
-            "  USE_STUB_EMBEDDINGS must be false AND EMBEDDING_API_KEY must be set.\n"
+            "  Set USE_STUB_EMBEDDINGS=false (the local BGE model needs no key).\n"
             "Re-embedding with the stub would just rewrite the same meaningless "
             "vectors and report success, which is worse than not running.",
             file=sys.stderr,
@@ -95,19 +92,12 @@ async def main() -> int:
             skipped += 1
             continue
         try:
-            data = bytearray()
-            async for chunk in supabase.storage_download(doc["storage_path"]):
-                data.extend(chunk)
-            # `_process_inline` clears the document's old chunks before writing
-            # new ones, so this is idempotent and safe to re-run after a
-            # partial failure.
-            result = await _process_inline(doc, bytes(data), doc.get("mime_type") or "")
-            if result.get("status") == "ready":
-                print(f"{label} — ok")
-                ok += 1
-            else:
-                print(f"{label} — FAILED ({result.get('error') or result.get('status')})")
-                failed += 1
+            # `fresh=True` clears the document's old chunks before writing new
+            # ones, so this is idempotent and safe to re-run after a partial
+            # failure. The file is streamed from Storage by `_ingest` itself.
+            await ingest._ingest(doc, None, fresh=True)
+            print(f"{label} — ok")
+            ok += 1
         except Exception as e:  # noqa: BLE001 — one bad document must not stop the run
             print(f"{label} — FAILED ({type(e).__name__}: {e})")
             failed += 1
