@@ -108,21 +108,28 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
   about: {
     intro: (
       <P>
-        Space Learn is a study app built around your own material. You bring the PDFs and notes for a
-        subject you&rsquo;re behind on; it answers from them, shows the page each answer came from, and
-        turns what you read into notes, flashcards and quizzes that come back right before you forget.
+        Space Learn turns the material you already have — lecture slides, PDFs, notes, past papers —
+        into a tutor that answers from it, cites the page it used, and helps you remember it until the
+        exam.
       </P>
     ),
     sections: [
       {
         id: 'why',
-        title: 'Why it exists',
+        title: 'Why we built it',
         body: (
-          <P>
-            General chatbots answer from the whole internet, confidently, and you can&rsquo;t tell which
-            part is right for your course. We wanted answers you can check against the material
-            you&rsquo;ll be tested on, and a revision schedule that does the remembering for you.
-          </P>
+          <>
+            <P>
+              Most AI tools answer from the whole internet. The answer sounds sure of itself, but you
+              can&rsquo;t tell whether it matches what your course actually teaches — and in an exam,
+              your course is what counts.
+            </P>
+            <P>
+              So Space Learn answers from what you give it and shows you exactly where each answer came
+              from. You choose in Settings whether it may also draw on general knowledge, or stick strictly
+              to your material.
+            </P>
+          </>
         ),
       },
       {
@@ -131,11 +138,23 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              <>{strong('Upload')} a source to a topic. It is split into passages and indexed.</>,
-              <>{strong('Ask')} a question. The answer is written from the passages that match, with numbered citations.</>,
-              <>{strong('Keep')} what matters as notes, cards or a quiz. Cards are scheduled with FSRS, a spaced-repetition method.</>,
+              <>{strong('Add your material')} to a topic — PDF, CSV, text or a photo of your notes, up to 20 MB each.</>,
+              <>{strong('Ask anything.')} Each answer is written from the passages that match, with numbered citations you can open.</>,
+              <>{strong('Keep what matters')} as a note, a deck of flashcards or a quiz, in one click.</>,
+              <>{strong('Review at the right time.')} Cards come back just before you would forget them (spaced repetition, FSRS).</>,
             ]}
           />
+        ),
+      },
+      {
+        id: 'learns-you',
+        title: 'It learns how you study',
+        body: (
+          <P>
+            Your quiz results, card grades and the feedback you give on answers shape how it explains
+            things and what it asks you next. You can see and reset what it has learned at any time in
+            Settings.
+          </P>
         ),
       },
       {
@@ -143,9 +162,9 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         title: 'Open source',
         body: (
           <P>
-            Space Learn is released under the MIT licence.{' '}
+            The code is public under the MIT licence, so anyone can check how it works.{' '}
             <a href={SOURCE_URL} target="_blank" rel="noopener noreferrer" className={linkCls}>
-              Read the code on GitHub
+              Read it on GitHub
             </a>
             .
           </P>
@@ -153,7 +172,7 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
       },
     ],
     aside: {
-      title: 'The two of us',
+      title: 'Built by',
       body: (
         <div className="grid grid-cols-2 gap-4">
           {TEAM.map((person, i) => (
@@ -168,34 +187,68 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
     meta: FORMAL_META,
     intro: (
       <P>
-        The short version: we keep what you put in so the app can work, we use a small number of
-        services to run it, and we never sell your data or show you ads.
+        Your study material is personal. This page explains, in plain words, what we keep, why, who
+        helps us run the service, and how you stay in control. The short version: we use your data
+        only to run Space Learn for you, we never sell it, and you can delete all of it whenever you
+        want.
       </P>
     ),
     sections: [
       {
-        id: 'what-we-store',
-        title: 'What we store',
+        id: 'what-we-collect',
+        title: 'What we collect',
         body: (
           <List
             items={[
-              <>{strong('Your account')}: email, name, and your profile picture if you sign in with Google.</>,
-              <>{strong('What you create')}: subjects, topics, uploaded files, notes, flashcards, quizzes and chat messages.</>,
-              <>{strong('How you study')}: card grades, quiz scores, daily activity, and the preferences the app learns about how you like answers.</>,
+              <>{strong('Your account')} — your email address and name, plus your profile picture if you sign in with Google.</>,
+              <>{strong('Your material')} — the files you upload and the text we extract from them.</>,
+              <>{strong('What you create')} — subjects, topics, chats, notes, flashcards, quizzes and your answers.</>,
+              <>{strong('How you study')} — card grades, quiz scores, daily activity, settings, and the feedback you give on answers.</>,
+              <>{strong('Technical logs')} — our hosting providers keep standard request logs (such as IP address and time) for security and fixing errors.</>,
             ]}
           />
         ),
       },
       {
-        id: 'processors',
-        title: 'Who processes it',
+        id: 'how-we-use-it',
+        title: 'How we use it',
         body: (
           <List
             items={[
-              <>{strong('Supabase')} stores your account, your data and your files.</>,
-              <>{strong('Groq')} generates answers. Your question and the matching passages from your sources are sent to it for each answer.</>,
-              <>{strong('Vercel')} hosts the website and {strong('Render')} hosts the server.</>,
-              <>{strong('Google')}, only if you choose &ldquo;Continue with Google&rdquo;, to confirm who you are.</>,
+              'To answer your questions from your own material, with citations.',
+              'To build your notes, flashcards and quizzes, and schedule your reviews.',
+              'To adapt explanations and difficulty to how you learn.',
+              'To keep the service secure and fix problems.',
+            ]}
+          />
+        ),
+      },
+      {
+        id: 'ai',
+        title: 'How the AI sees your data',
+        body: (
+          <>
+            <P>
+              PDFs, CSVs and text files are read and indexed on our own server. When you ask a question,
+              we send our AI provider ({strong('Groq')}) only what it needs to answer: your question, the
+              matching passages from your material, recent messages in that chat, and a short summary of
+              your study preferences. Photos and images you upload are sent to it so their text can be
+              read.
+            </P>
+            <P>We do not use your material to train AI models, and we do not share it with other users.</P>
+          </>
+        ),
+      },
+      {
+        id: 'providers',
+        title: 'Services that help us run Space Learn',
+        body: (
+          <List
+            items={[
+              <>{strong('Supabase')} — sign-in, database and file storage.</>,
+              <>{strong('Groq')} — generates answers, notes, cards and quizzes.</>,
+              <>{strong('Vercel')} and {strong('Render')} — host the website and the server.</>,
+              <>{strong('Google')} — only if you choose &ldquo;Continue with Google&rdquo;.</>,
             ]}
           />
         ),
@@ -206,40 +259,66 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              'Sell or rent your data, or share it for advertising.',
-              'Use analytics or ad trackers.',
-              'Show your material to other users.',
+              'Sell, rent or trade your data.',
+              'Show you ads, or share your data for advertising.',
+              'Use analytics or tracking cookies.',
             ]}
           />
         ),
       },
       {
         id: 'browser',
-        title: 'In your browser',
+        title: 'Cookies and your browser',
         body: (
           <P>
-            Your sign-in session is kept in your browser&rsquo;s local storage, with a few display
-            preferences (a collapsed sidebar, dismissed tips). There are no tracking cookies.
+            We don&rsquo;t use tracking cookies. Your browser stores your sign-in session and a few
+            display preferences (like a collapsed sidebar) so the app works as you left it.
           </P>
         ),
       },
       {
-        id: 'deleting',
-        title: 'Deleting things',
+        id: 'control',
+        title: 'Your control',
+        body: (
+          <List
+            items={[
+              'Delete any file, note, deck, quiz, topic or subject whenever you like.',
+              'Reset what the app has learned about your study style in Settings.',
+              <>Delete your account in Settings › Privacy. Everything goes with it, including your uploaded files.</>,
+              <>Ask us for a copy of your data, or for help deleting it, by writing to <Mail />.</>,
+            ]}
+          />
+        ),
+      },
+      {
+        id: 'retention',
+        title: 'How long we keep it',
         body: (
           <P>
-            Deleting a topic, a subject or your whole account deletes what was in it, including the files
-            you uploaded. You can delete your account from Settings › Privacy, or write to <Mail /> and we
-            will do it for you.
+            We keep your data while your account is open. When you delete something it is removed from
+            our live database straight away; copies in our providers&rsquo; routine backups expire on
+            their own schedule.
           </P>
         ),
       },
       {
-        id: 'questions',
-        title: 'Questions',
+        id: 'security',
+        title: 'Security',
         body: (
           <P>
-            Write to <Mail />. If this policy changes, the date and version above change with it.
+            Data is encrypted in transit, every request is checked against your account, and you can
+            only ever see your own material. No system is perfect — if something goes wrong that affects
+            your data, we will tell you.
+          </P>
+        ),
+      },
+      {
+        id: 'changes',
+        title: 'Changes to this policy',
+        body: (
+          <P>
+            If we change how we handle your data, we will update this page, its date and its version,
+            and make significant changes clear in the app. Questions? Write to <Mail />.
           </P>
         ),
       },
@@ -248,26 +327,58 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
 
   terms: {
     meta: FORMAL_META,
-    intro: <P>By using Space Learn you agree to these terms.</P>,
+    intro: (
+      <P>
+        These terms are the agreement between you and us when you use Space Learn. We have kept them
+        short and plain. By creating an account or using the service, you agree to them.
+      </P>
+    ),
     sections: [
       {
-        id: 'your-material',
-        title: 'Your material',
+        id: 'who-can-use',
+        title: 'Who can use Space Learn',
         body: (
           <P>
-            What you upload and write stays yours. You give us permission to store and process it only to
-            run the app for you. Only upload material you have the right to use.
+            You need to be at least 13 years old. If you are under 18, make sure a parent or guardian is
+            happy for you to use it. Keep your account details safe — you are responsible for what
+            happens on your account.
           </P>
         ),
       },
       {
+        id: 'your-content',
+        title: 'Your content stays yours',
+        body: (
+          <>
+            <P>
+              You own everything you upload and create. You give us permission to store and process it
+              only to run Space Learn for you — nothing else.
+            </P>
+            <P>
+              Only upload material you have the right to use, such as your own notes or course material
+              you&rsquo;re allowed to study from.
+            </P>
+          </>
+        ),
+      },
+      {
         id: 'ai',
-        title: 'AI answers can be wrong',
+        title: 'AI can make mistakes',
         body: (
           <P>
-            Answers, notes, cards and quizzes are generated by a language model. They cite your sources so
-            you can check them, but they can still be wrong or incomplete. Check anything that matters
-            against your material before you rely on it.
+            Answers, notes, flashcards and quizzes are generated by AI. They cite your sources so you can
+            check them, but they can still be wrong or incomplete. Always check anything important
+            against your material — Space Learn is a study aid, not a replacement for your course.
+          </P>
+        ),
+      },
+      {
+        id: 'honest-study',
+        title: 'Study honestly',
+        body: (
+          <P>
+            Use Space Learn to learn, not to cheat. Follow your school&rsquo;s or university&rsquo;s
+            rules on AI and academic integrity — submitting AI-written work as your own may break them.
           </P>
         ),
       },
@@ -277,9 +388,10 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              "Don't use Space Learn to break the law or someone else's rights.",
-              "Don't try to break, overload or get around the service's limits.",
-              "Don't use it to access anyone else's data.",
+              "Don't use the service for anything illegal or harmful.",
+              "Don't upload content that infringes someone else's rights.",
+              "Don't try to break, overload or get around the service's limits or security.",
+              "Don't try to access anyone else's account or data.",
             ]}
           />
         ),
@@ -289,23 +401,41 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         title: 'The service',
         body: (
           <P>
-            Space Learn runs on free and low-cost infrastructure and is provided as is, without guarantees
-            of availability. Limits on uploads and usage may change. We may suspend accounts that break
+            Space Learn is free and runs on modest infrastructure, so it is provided as it is, without
+            guarantees that it will always be available or error-free. Upload sizes and usage limits
+            apply and may change. We may change or stop features, and we may suspend accounts that break
             these terms.
           </P>
         ),
       },
       {
-        id: 'code',
-        title: 'The code',
-        body: <P>The source code is released under the MIT licence. These terms cover the hosted service.</P>,
+        id: 'liability',
+        title: 'Liability',
+        body: (
+          <P>
+            To the extent the law allows, we are not liable for indirect losses, or for decisions you
+            make based on the service&rsquo;s output — including exam results.
+          </P>
+        ),
+      },
+      {
+        id: 'ending',
+        title: 'Ending your account',
+        body: (
+          <P>
+            You can stop using Space Learn and delete your account at any time from Settings. If we ever
+            shut the service down, we will give notice and time to save what you need.
+          </P>
+        ),
       },
       {
         id: 'changes',
-        title: 'Changes',
+        title: 'Changes and contact',
         body: (
           <P>
-            If these terms change, the date and version above change with them. Questions go to <Mail />.
+            If these terms change, we will update this page and its date, and make significant changes
+            clear in the app. Continuing to use Space Learn means you accept the updated terms. These
+            terms are governed by the laws of India. Questions? Write to <Mail />.
           </P>
         ),
       },
@@ -313,7 +443,12 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
   },
 
   contact: {
-    intro: <P>Space Learn is built by two people. Write to either of us — whoever sees it first replies.</P>,
+    intro: (
+      <P>
+        Space Learn is built by two people. Write to either of us about anything — a question, a
+        problem, an idea or your data. We read everything and reply as soon as we can.
+      </P>
+    ),
     sections: [
       {
         id: 'email',
@@ -328,12 +463,22 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         ),
       },
       {
-        id: 'help-us-help',
-        title: 'Help us help you',
+        id: 'bugs',
+        title: 'Reporting a problem',
         body: (
           <P>
-            For something about your data or your account, say which email you sign in with. For a bug, a
-            screenshot and what you clicked just before it help most.
+            Tell us what you were doing, what you expected and what happened instead. A screenshot helps
+            a lot.
+          </P>
+        ),
+      },
+      {
+        id: 'account',
+        title: 'About your account or data',
+        body: (
+          <P>
+            Write from the email you sign in with, so we can find your account. We will never ask for
+            your password.
           </P>
         ),
       },
@@ -343,20 +488,35 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
   feedback: {
     intro: (
       <P>
-        What worked, what got in the way, what you wished it did. Every message is read by both of us.
+        Space Learn gets better because of what students tell us. What helped? What got in the way?
+        What do you wish it did? Both of us read every message.
       </P>
     ),
     sections: [
       {
         id: 'send',
-        title: FEEDBACK_FORM_URL ? 'The form' : 'By email',
+        title: FEEDBACK_FORM_URL ? 'Share your feedback' : 'Send us a note',
+        wide: true,
         body: FEEDBACK_FORM_URL ? (
           <ActionRow href={FEEDBACK_FORM_URL} label="Open the feedback form" hint="Two minutes" external />
         ) : (
           <ActionRow
             href={`mailto:${TEAM_EMAILS}?subject=${encodeURIComponent('Space Learn feedback')}`}
-            label="Send feedback by email"
+            label="Email your feedback"
             hint="Write"
+          />
+        ),
+      },
+      {
+        id: 'useful',
+        title: 'What helps most',
+        body: (
+          <List
+            items={[
+              'The moment something felt confusing or slow.',
+              'A feature that would save you time before an exam.',
+              'Anything that felt wrong in an answer, a card or a quiz.',
+            ]}
           />
         ),
       },

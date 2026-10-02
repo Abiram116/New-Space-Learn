@@ -36,7 +36,7 @@ describe('trust slide-over (inside the app)', () => {
     renderAt(['/settings?info=privacy'])
     const dialog = await panel()
     expect(within(dialog).getByRole('heading', { name: 'Privacy' })).toBeInTheDocument()
-    expect(dialog).toHaveTextContent(/never sell your data/i)
+    expect(dialog).toHaveTextContent(/we never sell it/i)
     await waitFor(() => expect(document.title).toBe('Privacy · Space Learn'))
   })
 

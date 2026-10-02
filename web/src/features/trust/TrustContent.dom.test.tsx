@@ -15,9 +15,9 @@ const open = (slug: 'about' | 'contact' | 'privacy') =>
   )
 
 describe('trust page content', () => {
-  it('About: the two of us, by name only, in the column beside the page', () => {
+  it('About: the two of us, by name only, in the column beside the page (Built by)', () => {
     open('about')
-    const aside = screen.getByRole('complementary', { name: 'The two of us' })
+    const aside = screen.getByRole('complementary', { name: 'Built by' })
     for (const p of TEAM) expect(within(aside).getByText(p.name)).toBeInTheDocument()
     expect(TEAM).toHaveLength(2)
   })

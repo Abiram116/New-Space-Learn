@@ -226,7 +226,7 @@ export function SignUp() {
         )}
 
         <TrustAgreement lead="By signing up">
-          We store your uploads to answer your questions; you can delete them anytime from Settings.
+          Your material is used only to answer you, never sold, and you can delete it anytime.
         </TrustAgreement>
       </form>
     </AuthShell>

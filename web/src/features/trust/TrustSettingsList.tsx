@@ -6,9 +6,9 @@ import { PANEL_SLUGS, TRUST_PAGES, TRUST_UPDATED, type PanelSlug } from './pages
 import { trustOverlayHref } from './TrustLayer'
 
 const SUBTITLE: Record<PanelSlug, string> = {
-  about: 'What Space Learn is, and the two of us behind it',
-  privacy: `What we store and who processes it · Effective ${TRUST_UPDATED}`,
-  terms: `The rules for using the service · Effective ${TRUST_UPDATED}`,
+  about: 'What Space Learn is, why we built it, and who we are',
+  privacy: `What we keep, why, and how you stay in control · Effective ${TRUST_UPDATED}`,
+  terms: `What you agree to when you use Space Learn · Effective ${TRUST_UPDATED}`,
 }
 
 /**
@@ -46,7 +46,7 @@ export function TrustSettingsList() {
           <h3 id="settings-contact" className="text-[14.5px] font-semibold text-ink">
             Contact
           </h3>
-          <p className="mt-0.5 text-[13px] text-muted">Two people build Space Learn. Write to either of us.</p>
+          <p className="mt-0.5 text-[13px] text-muted">Questions, problems or ideas — write to either of us.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {TEAM.map((person, i) => (
