@@ -15,7 +15,7 @@
 
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, type Location } from 'react-router-dom'
-import { isTrustSlug, slugFromPath, TRUST_PARAM, type TrustSlug } from './pages'
+import { isPanelSlug, slugFromPath, TRUST_PARAM, type TrustSlug } from './pages'
 import type { CardMotion } from './TrustCard'
 
 const TrustPanel = lazy(() => import('./TrustPanel').then((m) => ({ default: m.TrustPanel })))
@@ -98,7 +98,7 @@ export function TrustLayer() {
   }
 
   const asked = new URLSearchParams(location.search).get(TRUST_PARAM)
-  if (!isTrustSlug(asked)) return null
+  if (!isPanelSlug(asked)) return null
 
   // Switching pages replaces the entry, so Back (and Close) leave the panel in
   // one step however many pages were read.

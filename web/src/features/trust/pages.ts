@@ -26,6 +26,17 @@ export const TRUST_PAGES: Record<TrustSlug, { label: string; title: string; icon
   feedback: { label: 'Feedback', title: 'Feedback', icon: 'thumbUp' },
 }
 
+/**
+ * The pages the in-app slide-over offers: the ones you read. Contact and
+ * Feedback are things you do, so inside the app they live in Settings itself.
+ */
+export const PANEL_SLUGS = ['about', 'privacy', 'terms'] as const satisfies readonly TrustSlug[]
+export type PanelSlug = (typeof PANEL_SLUGS)[number]
+
+export function isPanelSlug(value: string | null | undefined): value is PanelSlug {
+  return (PANEL_SLUGS as readonly string[]).includes(value ?? '')
+}
+
 /** Shown on Privacy and Terms. Change both whenever either page's substance does. */
 export const TRUST_UPDATED = '2 October 2026'
 export const TRUST_VERSION = '1.0'

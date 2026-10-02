@@ -607,7 +607,7 @@ export function Settings() {
           'How you learn': student?.session_length_minutes ? `${student.session_length_minutes}-minute sessions` : '',
           'AI & sources': prefs ? (prefs.answer_only_from_docs ? 'Only from your docs' : 'Docs and general knowledge') : '',
           Privacy: 'Sign out, delete account',
-          'About & legal': 'About, privacy, terms, contact',
+          'About & legal': 'Policies, contact us',
         }}
         deleteDialog={
           /* Phones confirm in a sheet from the bottom edge, where the thumb

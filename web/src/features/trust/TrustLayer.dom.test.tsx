@@ -4,6 +4,7 @@ import { Link, MemoryRouter, Route, Routes, useLocation, type InitialEntry } fro
 import { afterEach, describe, expect, it } from 'vitest'
 import { TrustLayer, trustOverlayHref } from './TrustLayer'
 import { TrustSettingsList } from './TrustSettingsList'
+import { TEAM } from './config'
 
 afterEach(cleanup)
 
@@ -61,7 +62,7 @@ describe('trust slide-over (inside the app)', () => {
   })
 
   it('Esc puts you back on the page it opened over', async () => {
-    renderAt(['/signup', '/signup?info=contact'])
+    renderAt(['/signup', '/signup?info=privacy'])
     await panel()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(await screen.findByTestId('where')).toHaveTextContent(/^\/signup$/)
@@ -74,6 +75,18 @@ describe('trust slide-over (inside the app)', () => {
     expect(await screen.findByTestId('where')).toHaveTextContent(/^\/signin$/)
   })
 
+
+  it('in the app it offers only the pages you read — About, Privacy, Terms', async () => {
+    renderAt(['/settings?info=about'])
+    const dialog = await panel()
+    const tabs = within(dialog).getByRole('navigation')
+    expect(within(tabs).getAllByRole('button').map((b) => b.textContent)).toEqual(['About', 'Privacy', 'Terms'])
+  })
+
+  it('Contact and Feedback do not open as a slide-over in the app (they live in Settings)', () => {
+    renderAt(['/settings?info=contact'])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 
   it('ignores an unknown ?info= value', () => {
     renderAt(['/home?info=nope'])
@@ -90,6 +103,13 @@ describe('trustOverlayHref', () => {
 })
 
 describe('Settings › About & legal', () => {
+  it('lists the three reading pages and both of us to contact', () => {
+    renderAt(['/settings'], <TrustSettingsList />)
+    expect(screen.getAllByRole('link', { name: /About Space Learn|Privacy|Terms of use/ })).toHaveLength(3)
+    expect(screen.getAllByText(/Effective .*2026/, { selector: 'span' })).toHaveLength(2)
+    for (const p of TEAM) expect(screen.getByText(p.email)).toBeInTheDocument()
+  })
+
   it('each row opens the page over Settings', async () => {
     renderAt(
       ['/settings'],

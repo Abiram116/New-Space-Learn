@@ -14,10 +14,12 @@ export function useTrustDialog(
   slug: TrustSlug,
   onSelect: (slug: TrustSlug) => void,
   onClose: () => void,
+  /** The pages ← / → step through, in order. */
+  order: readonly TrustSlug[] = TRUST_SLUGS,
 ): void {
-  const latest = useRef({ slug, onSelect, onClose })
+  const latest = useRef({ slug, onSelect, onClose, order })
   useEffect(() => {
-    latest.current = { slug, onSelect, onClose }
+    latest.current = { slug, onSelect, onClose, order }
   })
 
   useEffect(() => {
@@ -36,7 +38,8 @@ export function useTrustDialog(
       }
       const typing = (e.target as Element | null)?.closest?.('input, textarea, [contenteditable]')
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const next = TRUST_SLUGS[TRUST_SLUGS.indexOf(latest.current.slug) + (e.key === 'ArrowRight' ? 1 : -1)]
+        const { order: pages, slug: current } = latest.current
+        const next = pages[pages.indexOf(current) + (e.key === 'ArrowRight' ? 1 : -1)]
         if (next) {
           e.preventDefault()
           latest.current.onSelect(next)

@@ -1,7 +1,7 @@
 /**
- * The trust pages opened over the app or the sign-in screens (`?info=privacy`):
- * a quiet sheet from the right, with the page you were on still in view behind
- * it. From the landing page the same words rise as full-screen pages instead
+ * The trust pages you read — About, Privacy, Terms — opened over the app or the
+ * sign-in screens (`?info=privacy`): a quiet sheet from the right, with the page
+ * you were on still in view behind it. From the landing page the same words rise as full-screen pages instead
  * (TrustSheet).
  *
  * Loaded on demand (see TrustLayer): nobody who never opens it downloads it.
@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
 import { TRUST_DOCS } from './TrustContent'
-import { TRUST_PAGES, TRUST_SLUGS, type TrustSlug } from './pages'
+import { PANEL_SLUGS, TRUST_PAGES, type PanelSlug, type TrustSlug } from './pages'
 import { useTrustDialog } from './useTrustDialog'
 
 export function TrustPanel({
@@ -20,13 +20,13 @@ export function TrustPanel({
   onSelect,
   onClose,
 }: {
-  slug: TrustSlug
+  slug: PanelSlug
   onSelect: (slug: TrustSlug) => void
   onClose: () => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
-  useTrustDialog(panelRef, slug, onSelect, onClose)
+  useTrustDialog(panelRef, slug, onSelect, onClose, PANEL_SLUGS)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0
   }, [slug])
@@ -51,7 +51,7 @@ export function TrustPanel({
             aria-label="Space Learn information"
             className="-mb-px flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
-            {TRUST_SLUGS.map((s) => (
+            {PANEL_SLUGS.map((s) => (
               <button
                 key={s}
                 type="button"
