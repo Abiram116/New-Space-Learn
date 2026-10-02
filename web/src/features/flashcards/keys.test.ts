@@ -39,6 +39,10 @@ describe('reviewKeyAction', () => {
     expect(reviewKeyAction('1', back)).toEqual({ type: 'grade', index: 0 })
     expect(reviewKeyAction('4', back)).toEqual({ type: 'grade', index: 3 })
     expect(reviewKeyAction('5', back)).toBeNull()
-    expect(reviewKeyAction('Escape', back)).toBeNull()
+  })
+
+  it('Esc ends the session, flipped or not', () => {
+    expect(reviewKeyAction('Escape', front)).toEqual({ type: 'leave' })
+    expect(reviewKeyAction('Escape', back)).toEqual({ type: 'leave' })
   })
 })

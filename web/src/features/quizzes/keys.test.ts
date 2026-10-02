@@ -141,3 +141,15 @@ describe('stageKeyGate', () => {
     expect(stageKeyGate({ ...base, target: icon }, opts)).toBe('handle')
   })
 })
+
+describe('after an answer, "next" works the way it does everywhere else', () => {
+  const answered = { ...fresh, revealed: true, highlight: 2 }
+  it('→ and n go on, as do Enter and Space', () => {
+    for (const key of ['ArrowRight', 'n', 'N', 'Enter', ' ']) {
+      expect(quizKeyAction(key, answered)).toEqual({ type: 'advance' })
+    }
+  })
+  it('but a stray down / j / k cannot skip the explanation', () => {
+    for (const key of ['ArrowDown', 'j', 'k']) expect(quizKeyAction(key, answered)).toBeNull()
+  })
+})

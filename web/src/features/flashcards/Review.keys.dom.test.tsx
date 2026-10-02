@@ -85,6 +85,14 @@ afterEach(() => {
 })
 
 describe('review keyboard', () => {
+  it('Esc ends the session without grading anything', () => {
+    render(<Harness />)
+    press(' ')
+    press('Escape')
+    expect(latest?.kind).toBe('decks')
+    expect(gradeCard).not.toHaveBeenCalled()
+  })
+
   it('Space flips, and never scrolls', () => {
     render(<Harness />)
     expect(press(' ')).toBe(false)

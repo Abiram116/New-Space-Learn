@@ -49,6 +49,9 @@ import { useImmersive } from '../../components/layout/immersive'
  * question index so it is stable across re-renders — a message that reshuffles
  * while you are reading it is worse than a repeated one.
  */
+/** Shortest time an explanation stays up before a key can move on. */
+const MIN_READ_MS = 250
+
 const NICE = [
   'Correct.',
   'That’s the one.',
@@ -231,6 +234,11 @@ export function QuizRunner({
     [choose, isLast, busy, finish, goNext, requestLeave],
   )
 
+  const revealedAt = useRef(0)
+  useEffect(() => {
+    if (isRevealed) revealedAt.current = performance.now()
+  }, [isRevealed, index])
+
   // The listener is bound once; it reads the latest state through this.
   const live = useRef({ revealed: isRevealed, highlight, count: q.choices.length, confirmLeave, act })
   useLayoutEffect(() => {
@@ -258,7 +266,11 @@ export function QuizRunner({
       // Handled or swallowed, Space must not scroll and Enter must not also
       // click whatever the browser thinks is focused.
       e.preventDefault()
-      if (gate === 'handle' && action) s.act(action)
+      if (gate !== 'handle' || !action) return
+      // A quick double-tap on Enter (choose, then straight on) would skip the
+      // explanation the answer just revealed. Card review has the same guard.
+      if (action.type === 'advance' && performance.now() - revealedAt.current < MIN_READ_MS) return
+      s.act(action)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -437,7 +449,7 @@ export function QuizRunner({
   const lastLetter = letterOf(q.choices.length - 1)
   const hints: KeyHint[] = isRevealed
     ? [
-        { keys: ['Enter'], label: isLast ? 'See results' : 'Next question' },
+        { keys: ['Enter', 'or', 'right'], label: isLast ? 'See results' : 'Next question' },
         { keys: ['Esc'], label: 'Leave' },
       ]
     : [

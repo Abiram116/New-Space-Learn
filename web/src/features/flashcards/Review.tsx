@@ -159,6 +159,7 @@ export function Review({
   const act = useCallback(
     (a: ReviewKeyAction) => {
       if (a.type === 'flip') flip()
+      else if (a.type === 'leave') setMode({ kind: 'decks' })
       else if (a.type === 'highlight') {
         setHl({ index: stateRef.current.mode.index, value: a.index })
         gradeRefs.current[a.index]?.focus()
@@ -232,8 +233,12 @@ export function Review({
         { keys: ['left', 'right'], label: 'Choose grade' },
         { keys: ['Enter'], label: 'Confirm' },
         { keys: ['1', '–', '4'], label: 'Grade directly' },
+        { keys: ['Esc'], label: 'End session' },
       ]
-    : [{ keys: ['Space', 'or', 'Enter'], label: 'Flip the card' }]
+    : [
+        { keys: ['Space', 'or', 'Enter'], label: 'Flip the card' },
+        { keys: ['Esc'], label: 'End session' },
+      ]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
