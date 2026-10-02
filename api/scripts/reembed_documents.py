@@ -1,6 +1,10 @@
-"""Re-embed every stored document.
+"""Rebuild stored documents' chunks and embeddings.
 
-**Run this once, after switching from stub embeddings to a real provider.**
+**Run this after a change to how documents are read, chunked or embedded** —
+`--outdated` rebuilds only the documents still on an older index version (see
+`chunking.INDEX_VERSION`), so it is safe to run again and again and picks up
+where it stopped. Also the fix after switching from stub embeddings to a real
+provider.
 
 Documents ingested while `USE_STUB_EMBEDDINGS=true` hold deterministic
 hash-based vectors that carry no meaning. They will never retrieve correctly,
@@ -17,6 +21,7 @@ Usage, from `api/`:
 
     uv run python scripts/reembed_documents.py --dry-run
     uv run python scripts/reembed_documents.py
+    uv run python scripts/reembed_documents.py --outdated
     uv run python scripts/reembed_documents.py --user <uuid>
 """
 
@@ -35,11 +40,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # drift from the real one the first time either changed, and this script exists
 # to make retrieval correct — it must not itself become a source of skew.
 from app.config import settings  # noqa: E402
-from app.services import embeddings, ingest, supabase  # noqa: E402
+from app.services import chunking, embeddings, ingest, supabase  # noqa: E402
 
 
-async def _fetch_documents(user_id: str | None) -> list[dict]:
+async def _fetch_documents(user_id: str | None, outdated: bool = False) -> list[dict]:
     filters = {"status": "eq.ready"}
+    if outdated:
+        filters["index_version"] = f"lt.{chunking.INDEX_VERSION}"
     if user_id:
         filters["user_id"] = f"eq.{user_id}"
     return await supabase.db_select(
@@ -53,6 +60,11 @@ async def _fetch_documents(user_id: str | None) -> list[dict]:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--user", help="Only re-embed this user's documents.")
+    parser.add_argument(
+        "--outdated",
+        action="store_true",
+        help="Only documents built by an older version of the chunker.",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -70,7 +82,7 @@ async def main() -> int:
         )
         return 1
 
-    docs = await _fetch_documents(args.user)
+    docs = await _fetch_documents(args.user, args.outdated)
     if not docs:
         print("No ready documents found — nothing to do.")
         return 0

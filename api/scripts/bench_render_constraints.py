@@ -26,7 +26,8 @@ T0 = time.perf_counter()
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings  # noqa: E402
-from app.services.embeddings import chunk_text, extract_pdf_text  # noqa: E402
+from app.services import chunking  # noqa: E402
+from app.services.pdf_layout import read_pdf  # noqa: E402
 
 APP_IMPORT_S = time.perf_counter() - T0
 
@@ -65,15 +66,15 @@ def main(paths: list[str]) -> None:
     for p in paths:
         data = Path(p).read_bytes()
         t = time.perf_counter()
-        text = extract_pdf_text(data)
+        lines, _pages = read_pdf(data)
         parse_s = time.perf_counter() - t
 
         t = time.perf_counter()
-        chunks = chunk_text(text)
+        chunks = chunking.chunk(lines)
         chunk_s = time.perf_counter() - t
 
         t = time.perf_counter()
-        list(model.embed([c.content for c in chunks], batch_size=settings.embedding_infer_batch_size))
+        list(model.embed([c.embed_text for c in chunks], batch_size=settings.embedding_infer_batch_size))
         embed_s = time.perf_counter() - t
 
         total = parse_s + chunk_s + embed_s
@@ -81,7 +82,7 @@ def main(paths: list[str]) -> None:
             {
                 "doc": Path(p).name,
                 "kb": len(data) // 1024,
-                "pages": text.count("[p."),
+                "pages": _pages,
                 "chunks": len(chunks),
                 "parse_s": round(parse_s, 2),
                 "chunk_s": round(chunk_s, 3),

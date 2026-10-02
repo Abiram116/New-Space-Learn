@@ -10,12 +10,14 @@ Thresholds are only ever tuned on the other questions, so these numbers are hone
 | Pipeline | Found, rank 1 | Found, top 3 | Found, top 5 | Mean rank score | Answer reached the model | …in full | Said “not covered” when it wasn’t | Wrongly said “not covered” | Characters sent | Search ms |
 |---|---|---|---|---|---|---|---|---|---|---|
 | `baseline` | 47.2% | 72.2% | 83.3% | 62.9% | 77.8% | 77.8% | 0.0% | 0.0% | 3046 | 0.02 |
+| `chunks-v2` | 58.3% | 75.0% | 80.6% | 68.2% | 77.8% | 77.8% | 0.0% | 0.0% | 2784 | 0.02 |
 
 ## Retrieval — by kind of question (all questions, answer found in the top 5)
 
 | Pipeline | direct | reworded | followup | exact | cross | unanswerable |
 |---|---|---|---|---|---|---|
 | `baseline` | 88.9% | 81.0% | 55.6% | 84.0% | 85.7% | 0.0% |
+| `chunks-v2` | 92.6% | 85.7% | 50.0% | 88.0% | 100.0% | 0.0% |
 
 For `unanswerable` the figure is how often the pipeline passed no sources.
 
@@ -28,3 +30,4 @@ For `unanswerable` the figure is how often the pipeline passed no sources.
 ## What each pipeline is
 
 - **`baseline`** — Production today: 900-character chunks, one vector search on the latest message, best 4, no cut-off. (542 chunks; run 2026-10-02)
+- **`chunks-v2`** — Structure-aware chunks (sections, pages, heading path embedded with the text); search unchanged. (563 chunks; run 2026-10-02)

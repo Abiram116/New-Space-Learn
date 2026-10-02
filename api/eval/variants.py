@@ -9,8 +9,8 @@ returns two things, because they are judged differently:
   could answer, and whether the pipeline correctly passed *nothing* for a
   question the documents do not cover, are measured here.
 
-`baseline` is today's production behaviour, built from the production
-functions themselves (`chunk_text`, `embed_texts`) with the same arithmetic the
+`baseline` is production as it was when the benchmark was written — its
+chunker is frozen in `legacy.py` — with the same arithmetic the
 `match_document_chunks` SQL function does: cosine similarity against every
 chunk in the topic, best four. New pipelines are added to `VARIANTS` and
 measured against it on the same questions.
@@ -23,10 +23,12 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from app.services.embeddings import chunk_text, extract_pdf_text
+from app.services import chunking
+from app.services.pdf_layout import read_pdf
 
 from .corpus import Document, Question
 from .index import Embedder
+from .legacy import chunk_text, extract_pdf_text
 
 RANKING_DEPTH = 10
 
@@ -94,4 +96,23 @@ class Baseline(Variant):
         )
 
 
-VARIANTS: dict[str, type[Variant]] = {v.name: v for v in (Baseline,)}
+class ChunksV2(Baseline):
+    """Only the chunks change; the search is the baseline's."""
+
+    name = "chunks-v2"
+    description = "Structure-aware chunks (sections, pages, heading path embedded with the text); search unchanged."
+
+    def index(self, docs: list[Document], embedder: Embedder) -> None:
+        self.embedder = embedder
+        self.chunks = {}
+        self.vectors = {}
+        embed_texts: dict[str, list[str]] = {}
+        for doc in docs:
+            for c in chunking.chunk(read_pdf(doc.data)[0]):
+                self.chunks.setdefault(doc.topic, []).append(Chunk(doc.name, c.index, c.content, c.locator))
+                embed_texts.setdefault(doc.topic, []).append(c.embed_text)
+        for topic, texts in embed_texts.items():
+            self.vectors[topic] = embedder.embed(texts)
+
+
+VARIANTS: dict[str, type[Variant]] = {v.name: v for v in (Baseline, ChunksV2)}

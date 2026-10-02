@@ -61,7 +61,7 @@ def main() -> None:
     # Step 1 — load the same modules the real FastAPI worker loads at
     # startup, so "baseline" here means the same thing it means in prod.
     from app.config import settings  # noqa: F401
-    from app.services.embeddings import chunk_text  # noqa: F401
+    from app.services import chunking, embeddings  # noqa: F401
 
     m1 = rss_mb()
     report("After importing app.config + embeddings", m0, m1)

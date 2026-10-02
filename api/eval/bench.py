@@ -61,9 +61,8 @@ def _cell(value: object, key: str = "") -> str:
 def check_questions() -> None:
     """Every quote a question relies on must really be in its topic's documents
     — otherwise the question can never be scored as found, for any pipeline."""
-    from app.services.embeddings import extract_pdf_text
-
     from .corpus import squash
+    from .legacy import extract_pdf_text
 
     text: dict[str, str] = {}
     for doc in documents():

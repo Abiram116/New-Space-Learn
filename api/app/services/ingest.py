@@ -33,15 +33,22 @@ import logging
 from datetime import UTC, datetime
 
 from ..errors import UpstreamUnavailable
-from . import supabase
-from .embeddings import chunk_text, embed_texts
-from .extract import extract_text
+from . import chunking, supabase
+from .embeddings import embed_texts
+from .extract import read_document
 
 log = logging.getLogger("space_learn.ingest")
 
 # Chunks persisted per insert. Small enough that a restart loses at most a
 # few seconds of embedding; large enough that inserts aren't the cost.
 SAVE_EVERY = 8
+
+#: The most chunks one document may have (about a million characters, some 400
+#: pages). Embedding is ~90 seconds per 11 pages on the free instance and one
+#: document holds the only ingestion slot, so without a ceiling a single huge
+#: upload blocks everyone's for hours and fills the database by itself.
+MAX_CHUNKS = 1200
+TRUNCATED_NOTE = "This document is very long, so only the first part was indexed."
 
 _gate = asyncio.Semaphore(1)
 _tasks: dict[str, asyncio.Task[None]] = {}
@@ -114,8 +121,8 @@ async def _run(doc: dict, data: bytes | None, *, fresh: bool) -> None:
             await _ingest(doc, data, fresh=fresh)
     except asyncio.CancelledError:
         raise  # shutdown: leave it at `processing` for resume_pending()
-    except _NoText:
-        await _set(doc_id, {"status": "failed", "error": "No readable text found."})
+    except _NoText as e:
+        await _set(doc_id, {"status": "failed", "error": str(e) or "No readable text found."})
     except UpstreamUnavailable as e:
         log.warning("ingestion upstream failure for %s: %s", doc_id, e)
         await _set(doc_id, {"status": "failed", "error": str(e)[:200]})
@@ -138,10 +145,18 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
             buf.extend(part)
         data = bytes(buf)
 
-    text = await extract_text(data, doc.get("mime_type") or "")
-    if not text.strip():
+    document = await read_document(data, doc.get("mime_type") or "")
+    if document.scanned:
+        raise _NoText(
+            "This PDF is a scan (pictures of pages), so there is no text to read. "
+            "Upload a text PDF, or photos of the pages as images."
+        )
+    if document.empty:
         raise _NoText
-    chunks = chunk_text(text)
+    # Off the event loop with the parsing: cheap, but not free on a tenth of a CPU.
+    chunks = await asyncio.to_thread(chunking.chunk, document.lines)
+    truncated = len(chunks) > MAX_CHUNKS
+    del chunks[MAX_CHUNKS:]
 
     if fresh:
         await supabase.db_delete("document_chunks", filters={"document_id": f"eq.{doc_id}"})
@@ -160,7 +175,9 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
 
     for start in range(0, len(todo), SAVE_EVERY):
         group = todo[start : start + SAVE_EVERY]
-        vectors = await embed_texts([c.content for c in group])
+        # The heading path goes in with the text that is embedded; what is
+        # stored and shown is the document's own words (see chunking.py).
+        vectors = await embed_texts([c.embed_text for c in group])
         await supabase.db_insert(
             "document_chunks",
             [
@@ -171,6 +188,9 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
                     "chunk_index": c.index,
                     "content": c.content,
                     "locator": c.locator,
+                    "page_start": c.page_start,
+                    "page_end": c.page_end,
+                    "section": c.section,
                     "embedding": v,
                 }
                 for c, v in zip(group, vectors, strict=True)
@@ -179,7 +199,16 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
         done += len(group)
         _progress[doc_id] = (done, len(chunks))
 
-    await _set(doc_id, {"status": "ready", "error": None, "ready_at": datetime.now(UTC).isoformat()})
+    await _set(
+        doc_id,
+        {
+            "status": "ready",
+            # Shown under the document's name; not a failure.
+            "error": TRUNCATED_NOTE if truncated else None,
+            "ready_at": datetime.now(UTC).isoformat(),
+            "index_version": chunking.INDEX_VERSION,
+        },
+    )
 
 
 async def _set(doc_id: str, patch: dict) -> None:
