@@ -39,6 +39,15 @@ export function setAuthTokenProvider(fn: () => string | null): void {
   tokenProvider = fn
 }
 
+/** The browser's IANA zone ("Asia/Kolkata"), read once. Empty when unknown. */
+const TIME_ZONE = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ''
+  } catch {
+    return ''
+  }
+})()
+
 async function buildInit(init: Init | undefined): Promise<RequestInit> {
   const headers = new Headers(init?.headers as HeadersInit | undefined)
 
@@ -46,6 +55,9 @@ async function buildInit(init: Init | undefined): Promise<RequestInit> {
     const token = tokenProvider()
     if (token) headers.set('Authorization', `Bearer ${token}`)
   }
+  // The student's time zone, so the server's "today" (streaks, the daily goal,
+  // activity) is their day rather than the server's UTC one.
+  if (TIME_ZONE) headers.set('X-Timezone', TIME_ZONE)
 
   let body: BodyInit | undefined
   if (init?.body !== undefined && init?.body !== null) {

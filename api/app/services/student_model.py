@@ -42,7 +42,7 @@ from ..schemas import (
     StyleSummaryOut,
     TopicSignal,
 )
-from . import style_bandit, supabase
+from . import clock, style_bandit, supabase
 from .streaks import compute_streak
 
 log = logging.getLogger("space_learn.student_model")
@@ -271,12 +271,6 @@ class ConceptView:
     @property
     def is_falling(self) -> bool:
         return self.trend is not None and self.trend <= -TREND_THRESHOLD
-
-    @property
-    def crosses_subjects(self) -> bool:
-        """The same concept tagged in more than one topic — the cheap half
-        of cross-subject transfer."""
-        return len(self.subspace_ids) > 1
 
 
 class QuizAttempt(NamedTuple):
@@ -636,7 +630,7 @@ class Snapshot:
         if not self.activity_days:
             return 0
         try:
-            return (date.today() - date.fromisoformat(str(self.activity_days[0]["day"]))).days
+            return (clock.today() - date.fromisoformat(str(self.activity_days[0]["day"]))).days
         except (ValueError, KeyError):
             return 0
 
@@ -969,7 +963,7 @@ async def snapshot(user_id: str) -> Snapshot:
     subject_names = {s["id"]: s.get("name") or "Untitled" for s in subject_rows}
     deck_subspace = {d["id"]: d.get("subspace_id") for d in decks}
     quiz_by_id = {q["id"]: q for q in quizzes}
-    today = date.today()
+    today = clock.today()
     now = datetime.now(UTC)
 
     # ── Fold every list down to per-subspace counts ────────────────────
@@ -1348,11 +1342,6 @@ def format_for_prompt(sm: StudentModelOut) -> str:
 # ── Small helpers ──────────────────────────────────────────────────────
 
 
-def _due(due_at: str | None, now: datetime) -> bool:
-    parsed = _parse_dt(due_at)
-    return parsed is not None and parsed <= now
-
-
 def _days_since(timestamp: str | None, today: date) -> int | None:
     parsed = _parse_dt(timestamp)
     if parsed is None:
@@ -1651,7 +1640,7 @@ def _trend(attempts: list[int]) -> int | None:
 def _recent_days(activity_days: list[dict], window: int) -> list[dict]:
     """Activity rows inside the last `window` days. The rows only exist for
     days something happened, so this is a list of ACTIVE days, not a calendar."""
-    cutoff = date.today() - timedelta(days=window)
+    cutoff = clock.today() - timedelta(days=window)
     out = []
     for row in activity_days:
         try:

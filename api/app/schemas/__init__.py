@@ -247,6 +247,9 @@ class FlashcardCreate(BaseModel):
 
 class GradeIn(BaseModel):
     grade: Grade
+    #: A one-time id the client makes up per grade, so it can safely re-send a
+    #: grade whose reply it never received: the server applies each id once.
+    review_id: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class FlashcardUpdate(BaseModel):
@@ -706,9 +709,3 @@ class SettingsUpdate(BaseModel):
 # ── Utility ────────────────────────────────────────────────────────────
 class OkOut(BaseModel):
     ok: bool = True
-
-
-class ErrorEnvelope(BaseModel):
-    """Kept for OpenAPI docs — the real serializer lives in errors.py."""
-
-    error: dict[str, Any]

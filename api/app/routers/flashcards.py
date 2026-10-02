@@ -28,7 +28,7 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import activity, fsrs, personalization, rag, supabase
+from ..services import activity, fsrs, locks, personalization, rag, supabase
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.ratelimit import consume_llm_quota
@@ -361,52 +361,62 @@ async def grade_card(
     body: GradeIn,
     user: CurrentUser = Depends(get_current_user),
 ) -> FlashcardOut:
-    rows = await supabase.db_select(
-        "flashcards",
-        filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
-        limit=1,
-    )
-    if not rows:
-        raise NotFound("Card not found.")
-    card = rows[0]
+    # One grade at a time per card. The schedule is computed from the card's
+    # stored state and written back; two grades in flight for the same card (an
+    # "Again" that re-queues it, graded again before the first request lands)
+    # both read the old state, and the second silently overwrote the first.
+    replay_key = f"{user.id}:{card_id}:{body.review_id}" if body.review_id else None
+    async with locks.keyed(f"card:{card_id}"):
+        # A re-sent grade (the client never got our reply) is answered with the
+        # result of the first one, not applied a second time.
+        if replay_key and (done := _graded.get(replay_key)) is not None:
+            return done  # type: ignore[return-value]
+        rows = await supabase.db_select(
+            "flashcards",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
+            limit=1,
+        )
+        if not rows:
+            raise NotFound("Card not found.")
+        card = rows[0]
 
-    # The deck read genuinely depends on the card's deck_id, so it stays
-    # sequential — same reasoning as list_decks above.
-    deck_rows = await supabase.db_select(
-        "decks", filters={"id": f"eq.{card['deck_id']}"}, limit=1
-    )
-    subspace_id = deck_rows[0]["subspace_id"] if deck_rows else None
+        # The deck read genuinely depends on the card's deck_id, so it stays
+        # sequential — same reasoning as list_decks above.
+        deck_rows = await supabase.db_select(
+            "decks", filters={"id": f"eq.{card['deck_id']}"}, limit=1
+        )
+        subspace_id = deck_rows[0]["subspace_id"] if deck_rows else None
 
-    now = datetime.now(UTC)
-    last_review_at = card.get("last_review_at")
-    elapsed_days = max(0, (now - _to_dt(last_review_at)).days) if last_review_at else None
-    stability = card.get("stability")
-    difficulty = card.get("difficulty")
+        now = datetime.now(UTC)
+        last_review_at = card.get("last_review_at")
+        elapsed_days = max(0, (now - _to_dt(last_review_at)).days) if last_review_at else None
+        stability = card.get("stability")
+        difficulty = card.get("difficulty")
 
-    result = fsrs.review(
-        stability=float(stability) if stability is not None else None,
-        difficulty=float(difficulty) if difficulty is not None else None,
-        elapsed_days=elapsed_days,
-        grade=body.grade,
-    )
+        result = fsrs.review(
+            stability=float(stability) if stability is not None else None,
+            difficulty=float(difficulty) if difficulty is not None else None,
+            elapsed_days=elapsed_days,
+            grade=body.grade,
+        )
 
-    lapses = int(card.get("lapses", 0)) + (1 if body.grade == "again" else 0)
-    reps = 0 if body.grade == "again" else int(card.get("reps", 0)) + 1
-    due_at = now + timedelta(days=result.interval_days)
+        lapses = int(card.get("lapses", 0)) + (1 if body.grade == "again" else 0)
+        reps = 0 if body.grade == "again" else int(card.get("reps", 0)) + 1
+        due_at = now + timedelta(days=result.interval_days)
 
-    updated = await supabase.db_update(
-        "flashcards",
-        filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
-        patch={
-            "stability": result.stability,
-            "difficulty": result.difficulty,
-            "last_review_at": now.isoformat(),
-            "lapses": lapses,
-            "reps": reps,
-            "interval_days": result.interval_days,
-            "due_at": due_at.isoformat(),
-        },
-    )
+        updated = await supabase.db_update(
+            "flashcards",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{card_id}"},
+            patch={
+                "stability": result.stability,
+                "difficulty": result.difficulty,
+                "last_review_at": now.isoformat(),
+                "lapses": lapses,
+                "reps": reps,
+                "interval_days": result.interval_days,
+                "due_at": due_at.isoformat(),
+            },
+        )
     await supabase.db_insert(
         "card_reviews",
         {
@@ -425,7 +435,14 @@ async def grade_card(
     if subspace_id:
         await activity.touch_subspace(subspace_id)
     r = updated[0]
-    return FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
+    out = FlashcardOut(**{k: r.get(k) for k in FlashcardOut.model_fields})
+    if replay_key:
+        _graded.put(replay_key, out)
+    return out
+
+
+#: Recently applied grades, by (user, card, review id) — see `grade_card`.
+_graded = locks.Recent()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

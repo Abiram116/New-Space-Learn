@@ -110,20 +110,39 @@ def _is_protected(source: str) -> bool:
     return has_guard or has_user_scope
 
 
+def _api_routes(routes, prefix: str = "") -> list[tuple[str, APIRoute]]:
+    """Every API route in the app, with its full path.
+
+    Newer FastAPI keeps an included router as one lazy entry in `app.routes`
+    (holding the original router and the prefix it was mounted under) instead
+    of copying its routes in. Walking only `app.routes` then finds almost
+    nothing — and both checks below would pass with nothing to check. So this
+    descends into included routers, and still works on versions that flatten.
+    """
+    found: list[tuple[str, APIRoute]] = []
+    for route in routes:
+        if isinstance(route, APIRoute):
+            found.append((prefix + route.path, route))
+            continue
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            mount = getattr(getattr(route, "include_context", None), "prefix", "") or ""
+            found.extend(_api_routes(inner.routes, prefix + mount))
+    return found
+
+
 def _routes_with_owned_ids() -> list[tuple[str, APIRoute, set[str]]]:
     """Every route with a caller-supplied owned id, path or body, plus which
     field names triggered inclusion — so a failure message can say exactly
     what was found, not just that something was."""
     app = create_app()
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        path_fields = set(re.findall(r"\{(\w+)\}", route.path)) & OWNED_ID_PARAMS
+    for path, route in _api_routes(app.routes):
+        path_fields = set(re.findall(r"\{(\w+)\}", path)) & OWNED_ID_PARAMS
         body_fields = _owned_id_body_fields(route.endpoint)
         fields = path_fields | body_fields
         if fields:
-            out.append((route.path, route, fields))
+            out.append((path, route, fields))
     return out
 
 
@@ -207,12 +226,13 @@ def test_every_authenticated_route_requires_a_user():
     """
     app = create_app()
     public = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        if route.path.endswith(("/health", "/ready")):
+    routes = _api_routes(app.routes)
+    # Guard the guard: finding only /health and /ready would pass vacuously.
+    assert len(routes) > 40, f"route discovery found only {len(routes)} routes"
+    for path, route in routes:
+        if path.endswith(("/health", "/ready")):
             continue
         source = inspect.getsource(route.endpoint)
         if "get_current_user" not in source:
-            public.append(f"{route.path} ({route.endpoint.__name__})")
+            public.append(f"{path} ({route.endpoint.__name__})")
     assert not public, "These routes don't require authentication:\n  " + "\n  ".join(public)

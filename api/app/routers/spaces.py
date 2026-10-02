@@ -82,7 +82,13 @@ async def update_space(
         if not updated:
             raise NotFound("Space not found.")
         row = updated[0]
-    return SpaceOut(id=row["id"], name=row["name"], tone=row["tone"], subspaces=[])
+    return SpaceOut(
+        id=row["id"],
+        name=row["name"],
+        tone=row["tone"],
+        pinned=bool(row.get("pinned", False)),
+        subspaces=[],
+    )
 
 
 @router.delete("/spaces/{space_id}", response_model=OkOut)

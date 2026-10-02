@@ -22,17 +22,15 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
-from functools import lru_cache
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Annotated, Literal
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 
 from ...config import settings as cfg
 from ...deps import CurrentUser, get_current_user
 from ...schemas import BriefOut, BriefSuggestion
-from ...services import personalization, supabase
+from ...services import clock, personalization, supabase
 from ...services import student_model as student_model_service
 from ...services.llm import get_llm
 from ...services.streaks import compute_streak
@@ -370,21 +368,10 @@ def _first_name(raw: str | None) -> str | None:
     return token.title() if token.islower() or token.isupper() else token
 
 
-@lru_cache(maxsize=64)
 def _zone(tz: str | None) -> tzinfo | None:
-    """The client's zone, from an IANA name or signed minutes east of UTC."""
-    if not tz:
-        return None
-    tz = tz.strip()
-    if re.fullmatch(r"[+-]?\d{1,4}", tz):
-        minutes = int(tz)
-        return timezone(timedelta(minutes=minutes)) if abs(minutes) <= 14 * 60 else None
-    if not re.fullmatch(r"[A-Za-z0-9_+\-/]{1,64}", tz):
-        return None
-    try:
-        return ZoneInfo(tz)
-    except Exception:  # unknown key, missing tzdata, malformed path
-        return None
+    """The zone to speak in: the `tz` the brief was asked with, else the one the
+    request carried (see `services/clock`)."""
+    return clock.parse_zone(tz) or clock.zone()
 
 
 def _part_of_day(now: datetime, tz: str | None) -> str | None:
@@ -560,7 +547,7 @@ def _brief_facts(
     cache key: a fact that changes is a brief that regenerates.
     """
     now = now or datetime.now(UTC)
-    today = date.today()
+    today = (now.astimezone(_zone(tz) or UTC)).date()
     recent = snap.most_recent
 
     today_row = next(

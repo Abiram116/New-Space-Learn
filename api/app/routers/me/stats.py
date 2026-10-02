@@ -19,7 +19,7 @@ from ...schemas import (
     StatsOut,
     StudyComposition,
 )
-from ...services import supabase
+from ...services import clock, supabase
 from ...services.streaks import compute_max_streak, compute_streak, to_date
 from ._common import _count, _ensure_settings_row
 
@@ -34,7 +34,7 @@ async def stats(user: CurrentUser = Depends(get_current_user)) -> StatsOut:
     # Home waits on this before it can render, and every one of these reads is
     # a separate network round trip to PostgREST. Run sequentially they stacked
     # to roughly two seconds; they're all independent, so they go concurrently.
-    today = date.today()
+    today = clock.today()
     # Half a year of activity, aligned so the grid starts on a Monday. Eight
     # weeks was too little to read as a trend — a student looking at their own
     # analytics wants to see a term, not a fortnight.

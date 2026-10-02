@@ -12,9 +12,9 @@ and swallowed. The caller's real work must never fail because of it.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
-from . import supabase
+from . import clock, locks, supabase
 
 log = logging.getLogger("space_learn.activity")
 
@@ -72,37 +72,43 @@ async def bump(
 ) -> None:
     """Increment today's counters for `user_id`. Never raises."""
 
-    today = date.today().isoformat()
+    # The student's own day (see `clock`), read before waiting on the lock so a
+    # bump that queues across midnight still counts for the day it happened.
+    today = clock.today().isoformat()
     try:
-        existing = await supabase.db_select(
-            "daily_activity",
-            filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-            limit=1,
-        )
-        if existing:
-            row = existing[0]
-            await supabase.db_update(
+        # One at a time per user: grading cards quickly fires several of these
+        # at once, they all read the same count, and each wrote back "that + 1"
+        # — five cards could record as two. See `locks`.
+        async with locks.keyed(f"activity:{user_id}"):
+            existing = await supabase.db_select(
                 "daily_activity",
                 filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
-                patch={
-                    "chat_messages": int(row.get("chat_messages", 0)) + chat_messages,
-                    "cards_reviewed": int(row.get("cards_reviewed", 0)) + cards_reviewed,
-                    "quizzes_taken": int(row.get("quizzes_taken", 0)) + quizzes_taken,
-                    "study_seconds": int(row.get("study_seconds", 0)) + study_seconds,
-                },
+                limit=1,
             )
-        else:
-            await supabase.db_insert(
-                "daily_activity",
-                {
-                    "user_id": user_id,
-                    "day": today,
-                    "chat_messages": chat_messages,
-                    "cards_reviewed": cards_reviewed,
-                    "quizzes_taken": quizzes_taken,
-                    "study_seconds": study_seconds,
-                },
-            )
+            if existing:
+                row = existing[0]
+                await supabase.db_update(
+                    "daily_activity",
+                    filters={"user_id": f"eq.{user_id}", "day": f"eq.{today}"},
+                    patch={
+                        "chat_messages": int(row.get("chat_messages", 0)) + chat_messages,
+                        "cards_reviewed": int(row.get("cards_reviewed", 0)) + cards_reviewed,
+                        "quizzes_taken": int(row.get("quizzes_taken", 0)) + quizzes_taken,
+                        "study_seconds": int(row.get("study_seconds", 0)) + study_seconds,
+                    },
+                )
+            else:
+                await supabase.db_insert(
+                    "daily_activity",
+                    {
+                        "user_id": user_id,
+                        "day": today,
+                        "chat_messages": chat_messages,
+                        "cards_reviewed": cards_reviewed,
+                        "quizzes_taken": quizzes_taken,
+                        "study_seconds": study_seconds,
+                    },
+                )
     except Exception:  # noqa: BLE001 — telemetry must never break the request
         log.warning("activity bump failed for %s", user_id, exc_info=True)
 

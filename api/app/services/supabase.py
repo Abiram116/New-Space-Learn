@@ -258,6 +258,11 @@ async def _request(method: str, url: str, *, idempotent: bool, **kwargs: Any) ->
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+#: Supabase's PostgREST returns at most this many rows per request, whatever
+#: `limit` asks for — silently. `db_select` pages past it.
+_MAX_ROWS = 1000
+
+
 async def db_select(
     table: str,
     *,
@@ -266,16 +271,34 @@ async def db_select(
     order: str | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    params: dict[str, str] = {"select": select}
+    """Rows matching `filters` — all of them, or the first `limit`.
+
+    The server caps every response at `_MAX_ROWS`. A read that asked for more
+    (or set no limit) used to come back truncated with nothing to say so: a
+    student with 1,200 cards had a due forecast built from 1,000 of them. So
+    this fetches in pages of `_MAX_ROWS` until it has what was asked for or the
+    table runs out. The common case — fewer rows than a page — is still exactly
+    one request.
+    """
+    base: dict[str, str] = {"select": select}
     if filters:
-        params.update(filters)
+        base.update(filters)
     if order:
-        params["order"] = order
-    if limit:
-        params["limit"] = str(limit)
-    r = await _request("GET", f"/rest/v1/{table}", idempotent=True, params=params)
-    _raise_if_bad(r)
-    return r.json()
+        base["order"] = order
+
+    rows: list[dict[str, Any]] = []
+    while True:
+        want = _MAX_ROWS if limit is None else min(_MAX_ROWS, limit - len(rows))
+        params = dict(base)
+        params["limit"] = str(want)
+        if rows:
+            params["offset"] = str(len(rows))
+        r = await _request("GET", f"/rest/v1/{table}", idempotent=True, params=params)
+        _raise_if_bad(r)
+        page = r.json()
+        rows.extend(page)
+        if len(page) < want or (limit is not None and len(rows) >= limit):
+            return rows
 
 
 async def db_count(table: str, *, filters: dict[str, str] | None = None) -> int:

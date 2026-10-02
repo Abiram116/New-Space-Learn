@@ -54,6 +54,15 @@ class ValidationFailed(ApiError):
     message = "Some of the input isn't valid."
 
 
+class PayloadTooLarge(ApiError):
+    """The request body is bigger than this endpoint will read (see
+    `middleware.RequestGuard`). Refused before it is held in memory."""
+
+    code = "payload_too_large"
+    status = 413
+    message = "That's too large to send. Try a smaller file or less text."
+
+
 class RateLimited(ApiError):
     code = "rate_limited"
     status = 429

@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'not_found'
   | 'validation_error'
   | 'rate_limited'
+  | 'payload_too_large'
   | 'upstream_unavailable'
   | 'not_configured'
   | 'nothing_indexed'
@@ -122,6 +123,7 @@ const DEFAULTS: Record<ErrorCode, string> = {
   not_found: "We couldn't find that.",
   validation_error: 'Some of the input needs a small fix.',
   rate_limited: 'Slow down for a moment and try again.',
+  payload_too_large: "That's too large to send. Try a smaller file or less text.",
   upstream_unavailable: 'A service we depend on is offline. Try again shortly.',
   not_configured: 'This feature is not connected yet.',
   // Was "Upload a document first" — stale since generation started accepting

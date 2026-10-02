@@ -25,6 +25,7 @@ from .errors import (
     handle_unexpected,
     handle_validation_error,
 )
+from .middleware import RequestGuard
 from .routers import (
     documents,
     feedback,
@@ -99,6 +100,12 @@ def create_app() -> FastAPI:
     # responses that are already streaming, which is why this is safe here —
     # but it is the reason to think twice before raising the compression level.
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
+
+    # Size limits and the student's time zone (see middleware.RequestGuard).
+    # Added before CORS so CORS stays outermost: a refused request still gets
+    # its CORS headers, and the browser shows our message instead of a bare
+    # network error.
+    app.add_middleware(RequestGuard)
 
     app.add_middleware(
         CORSMiddleware,
