@@ -83,6 +83,20 @@ class FakeDb:
         return [{"id": f"generated-{i}", **r} for i, r in enumerate(payload)]
 
 
+@pytest.fixture(autouse=True)
+def _no_student_model_cache(monkeypatch: pytest.MonkeyPatch):
+    """The snapshot is kept for a few seconds per user in production, and every
+    write through the API clears it. Tests change the fake database directly,
+    behind the API's back, so by default nothing is kept; the cache has its own
+    tests (`test_snapshot_cache.py`) that turn it back on."""
+    from app.services import student_model
+
+    monkeypatch.setattr(student_model, "_SNAPSHOT_TTL_S", 0.0)
+    student_model.reset_cache()
+    yield
+    student_model.reset_cache()
+
+
 @pytest.fixture
 def db(monkeypatch: pytest.MonkeyPatch) -> FakeDb:
     """Patch the supabase service everywhere it's imported.

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 
 from .config import settings
 from .errors import Forbidden, Unauthorized
-from .services import supabase
+from .services import student_model, supabase
 
 
 @dataclass(slots=True)
@@ -21,7 +21,7 @@ class CurrentUser:
     name: str | None = None
 
 
-async def get_current_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+async def _authenticate(authorization: str | None) -> CurrentUser:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise Unauthorized("Sign in required.")
     token = authorization.split(" ", 1)[1].strip()
@@ -34,6 +34,21 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
     return CurrentUser(id=user_id, email=claims.get("email"), name=_claimed_name(claims))
 
 
+async def get_current_user(
+    request: Request, authorization: str | None = Header(default=None)
+) -> CurrentUser:
+    user = await _authenticate(authorization)
+    # Anything that is not a read may change what the student model sees, so
+    # its short-lived cache for this user is dropped before the handler runs.
+    # One rule here covers every write endpoint, including ones written later.
+    if request.method not in _READ_METHODS:
+        student_model.invalidate(user.id)
+    return user
+
+
+_READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
 async def get_optional_user(authorization: str | None = Header(default=None)) -> CurrentUser | None:
     """The signed-in user, or None for a visitor.
 
@@ -43,7 +58,7 @@ async def get_optional_user(authorization: str | None = Header(default=None)) ->
     """
     if not authorization:
         return None
-    return await get_current_user(authorization)
+    return await _authenticate(authorization)
 
 
 async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:

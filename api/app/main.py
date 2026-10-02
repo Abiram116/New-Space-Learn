@@ -45,6 +45,10 @@ logging.basicConfig(
     level=settings.log_level.upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# The HTTP client logs one INFO line per database call, with the full URL — a
+# line of I/O per query on a small server, and every user id written to the
+# logs. Warnings and errors still come through.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("space_learn.main")
 
 

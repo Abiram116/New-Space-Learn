@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import statistics
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
@@ -912,7 +913,65 @@ async def _snapshot_rows_via_selects(user_id: str) -> dict[str, Any]:
     }
 
 
+# ── A few seconds of memory ────────────────────────────────────────────
+#
+# The snapshot is the read behind chat, quiz and note generation, the Home
+# brief and the feedback policy — and those arrive in bursts: opening Home asks
+# for it twice, sending a chat message asks again a moment later. Each one was
+# a full database round trip plus the arithmetic below, for an answer that had
+# not changed. So the built snapshot is kept per user for a short while.
+#
+# It can never serve a stale picture after the student does something: every
+# write they make clears their entry first (see `deps.get_current_user`). The
+# TTL only bounds how long an untouched one is reused. In memory and bounded,
+# on the same single-worker footing as the rate limiter.
+_SNAPSHOT_TTL_S = 20.0
+_SNAPSHOT_MAX_USERS = 500
+_snapshots: dict[str, tuple[float, Snapshot]] = {}
+_building: dict[str, asyncio.Task[Snapshot]] = {}
+
+
+def invalidate(user_id: str) -> None:
+    """Forget `user_id`'s snapshot — they just changed something."""
+    _snapshots.pop(user_id, None)
+    # A build already in flight may have read the old rows; let it finish for
+    # whoever is waiting, but do not let its result be kept.
+    _building.pop(user_id, None)
+
+
+def reset_cache() -> None:
+    """Test hook — forget everything."""
+    _snapshots.clear()
+    _building.clear()
+
+
 async def snapshot(user_id: str) -> Snapshot:
+    """The student's snapshot: a recent one if nothing has changed since,
+    otherwise built now. Callers arriving together share one build."""
+    hit = _snapshots.get(user_id)
+    if hit and hit[0] > time.monotonic():
+        return hit[1]
+
+    task = _building.get(user_id)
+    if task is None:
+        task = asyncio.ensure_future(_build_snapshot(user_id))
+        _building[user_id] = task
+    try:
+        snap = await task
+    finally:
+        if _building.get(user_id) is task:
+            del _building[user_id]
+            mine = True
+        else:
+            mine = False  # invalidated mid-build: answer, but do not keep it
+    if mine:
+        if len(_snapshots) >= _SNAPSHOT_MAX_USERS:
+            _snapshots.clear()
+        _snapshots[user_id] = (time.monotonic() + _SNAPSHOT_TTL_S, snap)
+    return snap
+
+
+async def _build_snapshot(user_id: str) -> Snapshot:
     """Everything, concurrently. Ten small selects rather than one join,
     because the httpx/PostgREST wrapper has no join builder and aggregating a
     few hundred rows in Python is far cheaper than the round trips would be.
