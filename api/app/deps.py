@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Depends, Header, Request
+from fastapi import Header, Request
 
-from .config import settings
 from .errors import Forbidden, Unauthorized
-from .services import student_model, supabase
+from .services import admin_gate, student_model, supabase
 
 
 @dataclass(slots=True)
@@ -61,16 +60,15 @@ async def get_optional_user(authorization: str | None = Header(default=None)) ->
     return await _authenticate(authorization)
 
 
-async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-    """One of the accounts named in `ADMIN_EMAILS`, or a 403.
+async def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    """Someone who unlocked the admin page with the shared password, or a 403.
 
-    Matched on the email in the verified token, never on anything the client
-    sends or the user can edit. Relies on Supabase's "Confirm email" being on,
-    so nobody can hold an address they do not control.
+    Separate from signing in on purpose: the admin side belongs to no account.
+    The token comes from `POST /admin/unlock` (see `services/admin_gate`). A 403
+    rather than a 401, so a stale admin token never signs a student out.
     """
-    if not user.email or user.email.strip().lower() not in settings.admin_email_set:
-        raise Forbidden("You don't have access to that.")
-    return user
+    if not admin_gate.check_token(x_admin_token):
+        raise Forbidden("The admin page is locked.")
 
 
 def _claimed_name(claims: dict) -> str | None:

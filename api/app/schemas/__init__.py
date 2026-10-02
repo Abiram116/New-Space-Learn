@@ -782,21 +782,72 @@ class ProductFeedbackOut(BaseModel):
     answers: list[dict[str, Any]]
 
 
+class FeedbackTextAnswer(BaseModel):
+    text: str
+    created_at: datetime | None = None
+    #: The same person's overall rating (1–5), when they gave one — so a
+    #: comment can be read knowing whether a happy or unhappy person wrote it.
+    score: int | None = None
+
+
+class FeedbackKeyword(BaseModel):
+    word: str
+    count: int
+
+
 class FeedbackSummaryItem(BaseModel):
     question_id: str
     prompt: str
     kind: str
     responses: int
-    #: Mean, for rating and scale questions.
+    #: Rating and scale questions.
     average: float | None = None
-    #: How often each choice was picked, for choice and multi questions.
+    median: float | None = None
+    #: The same average over the period before this one, to show the direction.
+    previous_average: float | None = None
+    #: How many gave each number, every number present ("1".."5" or "0".."10").
+    distribution: dict[str, int] = Field(default_factory=dict)
+    #: Rating: the share (0–100) who gave 4 or 5.
+    positive_share: int | None = None
+    #: Scale: promoters (9–10) minus detractors (0–6), as a percentage, −100..100.
+    nps: int | None = None
+    promoters: int = 0
+    passives: int = 0
+    detractors: int = 0
+    #: Choice and multi questions: how often each choice was picked.
     counts: dict[str, int] = Field(default_factory=dict)
+    #: Short and long questions: the words that keep coming up, and the answers.
+    keywords: list[FeedbackKeyword] = Field(default_factory=list)
+    texts: list[FeedbackTextAnswer] = Field(default_factory=list)
+
+
+class FeedbackDay(BaseModel):
+    date: str
+    count: int
 
 
 class FeedbackSummaryOut(BaseModel):
+    #: The period in days; 0 means everything.
+    days: int
     total: int
-    items: list[FeedbackSummaryItem]
+    #: Responses in the period of the same length just before; None for "all".
+    previous_total: int | None = None
+    by_day: list[FeedbackDay] = Field(default_factory=list)
+    sources: dict[str, int] = Field(default_factory=dict)
+    signed_in: int = 0
+    visitors: int = 0
+    #: Visitors who left an address and are owed a reply.
+    want_reply: int = 0
+    #: The findings in plain sentences, most important first.
+    takeaways: list[str] = Field(default_factory=list)
+    items: list[FeedbackSummaryItem] = Field(default_factory=list)
 
 
-class AdminOut(BaseModel):
-    admin: bool
+class AdminUnlockIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class AdminUnlockOut(BaseModel):
+    token: str
+    #: Epoch seconds.
+    expires_at: int

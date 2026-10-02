@@ -7,41 +7,43 @@ Three audiences, three levels of access:
   API open to the world, so it is rate-limited per person and overall, carries
   a hidden field that only a bot fills in, and every answer is checked against
   the question it claims to answer.
-- **Admins** (`ADMIN_EMAILS`, see `deps.require_admin`) manage the questions
-  and read the responses.
+- **Admins** — whoever unlocked the admin page with the shared password (see
+  `services/admin_gate` and `deps.require_admin`) — manage the questions and
+  read the responses. It belongs to no account.
 - Nobody reads responses from the browser directly: both tables have row-level
   security on with no policies, so only this API can touch them.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from ..config import settings
-from ..deps import CurrentUser, get_current_user, get_optional_user, require_admin
-from ..errors import NotFound, ValidationFailed
+from ..deps import CurrentUser, get_optional_user, require_admin
+from ..errors import Forbidden, NotFound, ValidationFailed
 from ..schemas import (
     FEEDBACK_LONG_MAX,
     FEEDBACK_OPTION_MAX,
     FEEDBACK_OPTIONS_MAX,
     FEEDBACK_SHORT_MAX,
-    AdminOut,
+    AdminUnlockIn,
+    AdminUnlockOut,
     FeedbackQuestionCreate,
     FeedbackQuestionOut,
     FeedbackQuestionUpdate,
     FeedbackReorder,
-    FeedbackSummaryItem,
     FeedbackSummaryOut,
     OkOut,
     ProductFeedbackIn,
     ProductFeedbackOut,
 )
-from ..services import supabase
+from ..services import admin_gate, clock, feedback_summary, supabase
 from ..services.ratelimit import consume_window
 
 log = logging.getLogger("space_learn.product_feedback")
@@ -229,22 +231,40 @@ async def send_feedback(
 # ── Admin ──────────────────────────────────────────────────────────────
 
 
-@router.get("/me/admin", response_model=AdminOut)
-async def am_i_admin(user: CurrentUser = Depends(get_current_user)) -> AdminOut:
-    """Whether to show the admin tools. Showing them is all this decides —
-    every admin endpoint checks again for itself."""
-    return AdminOut(admin=bool(user.email and user.email.strip().lower() in settings.admin_email_set))
+#: Guesses at the password: a handful per address, and a ceiling for everyone
+#: together in case the address is forged. With a 12-character minimum, that
+#: ceiling makes guessing hopeless.
+_UNLOCK_PER_ADDRESS = 5
+_UNLOCK_TOTAL = 40
+_UNLOCK_WINDOW_S = 900.0
+_UNLOCK_BUSY = "Too many tries. Wait a few minutes and try again."
+
+
+@router.post("/admin/unlock", response_model=AdminUnlockOut)
+async def unlock(body: AdminUnlockIn, request: Request) -> AdminUnlockOut:
+    """The shared password, exchanged for a token that opens the admin side."""
+    consume_window(
+        f"admin:addr:{_client_address(request)}",
+        limit=_UNLOCK_PER_ADDRESS, window_s=_UNLOCK_WINDOW_S, message=_UNLOCK_BUSY,
+    )
+    consume_window("admin:all", limit=_UNLOCK_TOTAL, window_s=_UNLOCK_WINDOW_S, message=_UNLOCK_BUSY)
+    # Off the event loop: the hash is deliberately slow.
+    if not admin_gate.configured() or not await asyncio.to_thread(admin_gate.verify_password, body.password):
+        log.warning("admin unlock refused")
+        raise Forbidden("That's not the password.")
+    token, expires_at = admin_gate.issue_token()
+    return AdminUnlockOut(token=token, expires_at=expires_at)
 
 
 @router.get("/admin/feedback/questions", response_model=list[FeedbackQuestionOut])
-async def list_questions(_: CurrentUser = Depends(require_admin)) -> list[FeedbackQuestionOut]:
+async def list_questions(_: None = Depends(require_admin)) -> list[FeedbackQuestionOut]:
     rows = await supabase.db_select("feedback_questions", order="position.asc,created_at.asc")
     return [_to_question(r) for r in rows]
 
 
 @router.post("/admin/feedback/questions", response_model=FeedbackQuestionOut, status_code=201)
 async def create_question(
-    body: FeedbackQuestionCreate, _: CurrentUser = Depends(require_admin)
+    body: FeedbackQuestionCreate, _: None = Depends(require_admin)
 ) -> FeedbackQuestionOut:
     existing = await supabase.db_select(
         "feedback_questions", select="position", order="position.desc", limit=1
@@ -268,7 +288,7 @@ async def create_question(
 
 @router.patch("/admin/feedback/questions/{question_id}", response_model=FeedbackQuestionOut)
 async def update_question(
-    question_id: str, body: FeedbackQuestionUpdate, _: CurrentUser = Depends(require_admin)
+    question_id: str, body: FeedbackQuestionUpdate, _: None = Depends(require_admin)
 ) -> FeedbackQuestionOut:
     rows = await supabase.db_select("feedback_questions", filters={"id": f"eq.{question_id}"}, limit=1)
     if not rows:
@@ -288,7 +308,7 @@ async def update_question(
 
 
 @router.delete("/admin/feedback/questions/{question_id}", response_model=OkOut)
-async def delete_question(question_id: str, _: CurrentUser = Depends(require_admin)) -> OkOut:
+async def delete_question(question_id: str, _: None = Depends(require_admin)) -> OkOut:
     """Remove a question for good. Answers already given keep their own copy of
     the prompt, so nothing that was said is lost."""
     await supabase.db_delete("feedback_questions", filters={"id": f"eq.{question_id}"})
@@ -297,7 +317,7 @@ async def delete_question(question_id: str, _: CurrentUser = Depends(require_adm
 
 
 @router.post("/admin/feedback/questions/reorder", response_model=OkOut)
-async def reorder_questions(body: FeedbackReorder, _: CurrentUser = Depends(require_admin)) -> OkOut:
+async def reorder_questions(body: FeedbackReorder, _: None = Depends(require_admin)) -> OkOut:
     for index, question_id in enumerate(dict.fromkeys(body.ids)):
         await supabase.db_update(
             "feedback_questions",
@@ -310,7 +330,7 @@ async def reorder_questions(body: FeedbackReorder, _: CurrentUser = Depends(requ
 
 @router.get("/admin/feedback/responses", response_model=list[ProductFeedbackOut])
 async def list_responses(
-    limit: int = 50, before: str | None = None, _: CurrentUser = Depends(require_admin)
+    limit: int = 50, before: str | None = None, _: None = Depends(require_admin)
 ) -> list[ProductFeedbackOut]:
     """Newest first. `before` (an ISO timestamp) pages back through older ones."""
     filters: dict[str, str] = {}
@@ -336,40 +356,39 @@ async def list_responses(
     ]
 
 
-#: How many recent responses the summary is computed over.
-_SUMMARY_WINDOW = 500
+@router.delete("/admin/feedback/responses/{response_id}", response_model=OkOut)
+async def delete_response(response_id: str, _: None = Depends(require_admin)) -> OkOut:
+    """Remove one response — spam, a test, or something sent by mistake."""
+    await supabase.db_delete("product_feedback", filters={"id": f"eq.{response_id}"})
+    return OkOut()
+
+
+#: The periods the summary can be asked for, in days. 0 is everything.
+_PERIODS = (7, 30, 90, 0)
+#: The most responses one summary reads (this period and the one before it).
+_SUMMARY_MAX = 2000
+_SUMMARY_COLUMNS = "created_at,source,user_id,contact_email,answers"
 
 
 @router.get("/admin/feedback/summary", response_model=FeedbackSummaryOut)
-async def summary(_: CurrentUser = Depends(require_admin)) -> FeedbackSummaryOut:
-    """Averages and tallies over the most recent responses."""
+async def summary(days: int = 30, _: None = Depends(require_admin)) -> FeedbackSummaryOut:
+    """What the feedback says over the last `days` days, next to the same
+    stretch before it. One query: both periods are read together and split here."""
+    if days not in _PERIODS:
+        days = 30
+    now = datetime.now(UTC)
+    filters: dict[str, str] = {}
+    if days:
+        filters["created_at"] = f"gte.{(now - timedelta(days=days * 2)).strftime('%Y-%m-%dT%H:%M:%SZ')}"
     rows = await supabase.db_select(
-        "product_feedback", select="answers", order="created_at.desc", limit=_SUMMARY_WINDOW
+        "product_feedback", select=_SUMMARY_COLUMNS, filters=filters, order="created_at.desc", limit=_SUMMARY_MAX
     )
-    return summarise([r.get("answers") or [] for r in rows])
-
-
-def summarise(responses: list[list[dict[str, Any]]]) -> FeedbackSummaryOut:
-    items: dict[str, FeedbackSummaryItem] = {}
-    totals: dict[str, int] = {}
-    for answers in responses:
-        for a in answers:
-            qid = str(a.get("question_id"))
-            item = items.setdefault(
-                qid,
-                FeedbackSummaryItem(
-                    question_id=qid, prompt=str(a.get("prompt", "")), kind=str(a.get("kind", "")), responses=0
-                ),
-            )
-            item.responses += 1
-            value = a.get("value")
-            if item.kind in ("rating", "scale") and isinstance(value, int):
-                totals[qid] = totals.get(qid, 0) + value
-            elif item.kind == "choice" and isinstance(value, str):
-                item.counts[value] = item.counts.get(value, 0) + 1
-            elif item.kind == "multi" and isinstance(value, list):
-                for v in value:
-                    item.counts[str(v)] = item.counts.get(str(v), 0) + 1
-    for qid, total in totals.items():
-        items[qid].average = round(total / items[qid].responses, 2)
-    return FeedbackSummaryOut(total=len(responses), items=list(items.values()))
+    current, previous = rows, None
+    if days:
+        cutoff = now - timedelta(days=days)
+        recent = [(feedback_summary.parse_time(r.get("created_at")) or now) >= cutoff for r in rows]
+        current = [r for r, is_recent in zip(rows, recent, strict=True) if is_recent]
+        previous = [r for r, is_recent in zip(rows, recent, strict=True) if not is_recent]
+    return feedback_summary.summarise(
+        current, previous=previous, days=days, zone=clock.zone(), today=clock.today()
+    )

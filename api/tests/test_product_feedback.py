@@ -13,7 +13,7 @@ from app.config import settings
 from app.errors import Unauthorized, ValidationFailed
 from app.main import create_app
 from app.routers import product_feedback as pf
-from app.services import ratelimit, supabase
+from app.services import admin_gate, feedback_summary, ratelimit, supabase
 
 from .conftest import OWNER
 
@@ -32,6 +32,9 @@ GOOD = [
     {"question_id": "q-nps", "value": 9},
     {"question_id": "q-next", "value": "  Dark mode toggle  "},
 ]
+
+
+PASSWORD = "correct horse battery"
 
 
 @pytest.fixture
@@ -70,7 +73,7 @@ def world(monkeypatch):
         return {"sub": OWNER, "email": token[4:]}
 
     monkeypatch.setattr(supabase, "verify_access_token", verify)
-    monkeypatch.setattr(settings, "admin_emails", "boss@x.test, Second@X.test")
+    monkeypatch.setattr(settings, "admin_password_hash", admin_gate.hash_password(PASSWORD))
     ratelimit.reset()
     pf._clear_form_cache()
     return tables
@@ -194,28 +197,68 @@ ADMIN_CALLS = [
     ("delete", "/api/v1/admin/feedback/questions/q-rate", None),
     ("post", "/api/v1/admin/feedback/questions/reorder", {"ids": ["q-nps", "q-rate"]}),
     ("get", "/api/v1/admin/feedback/responses", None),
+    ("delete", "/api/v1/admin/feedback/responses/product_feedback-0", None),
     ("get", "/api/v1/admin/feedback/summary", None),
 ]
 
 
-@pytest.mark.parametrize("method,path,body", ADMIN_CALLS)
-def test_the_admin_side_is_closed_to_ordinary_users(world, method, path, body):
-    r = _client("student@x.test").request(method, path, json=body)
-    assert r.status_code == 403, f"{method} {path}"
+def _admin():
+    """A client that unlocked the admin side with the password. Signed out:
+    the admin side belongs to no account."""
+    client = _client(None)
+    r = client.post("/api/v1/admin/unlock", json={"password": PASSWORD})
+    assert r.status_code == 200, r.text
+    client.headers["X-Admin-Token"] = r.json()["token"]
+    return client
 
 
 @pytest.mark.parametrize("method,path,body", ADMIN_CALLS)
-def test_the_admin_side_is_closed_to_visitors(world, method, path, body):
-    assert _client(None).request(method, path, json=body).status_code == 401
+def test_the_admin_side_is_closed_without_the_password(world, method, path, body):
+    """Signed in or not: an account opens nothing here. And it is a 403, never
+    a 401 — a 401 would sign a student out of the app."""
+    for client in (_client(None), _client("student@x.test")):
+        assert client.request(method, path, json=body).status_code == 403, f"{method} {path}"
 
 
-def test_admin_status_is_by_email_case_insensitive_and_only_a_hint(world):
-    assert _client("SECOND@x.test").get("/api/v1/me/admin").json() == {"admin": True}
-    assert _client("student@x.test").get("/api/v1/me/admin").json() == {"admin": False}
+@pytest.mark.parametrize("token", ["", "nonsense", "9999999999.deadbeef", "1.abc", "-5.x"])
+def test_a_made_up_token_opens_nothing(world, token):
+    r = _client(None).get("/api/v1/admin/feedback/responses", headers={"X-Admin-Token": token})
+    assert r.status_code == 403
+
+
+def test_the_wrong_password_is_refused_and_guesses_are_limited(world):
+    c = _client(None)
+    codes = [c.post("/api/v1/admin/unlock", json={"password": f"guess-{i}"}).status_code for i in range(6)]
+    assert codes == [403] * 5 + [429]
+    # Out of tries: even the right one waits.
+    assert c.post("/api/v1/admin/unlock", json={"password": PASSWORD}).status_code == 429
+
+
+def test_with_no_password_set_the_admin_side_is_closed(world, monkeypatch):
+    monkeypatch.setattr(settings, "admin_password_hash", "")
+    assert _client(None).post("/api/v1/admin/unlock", json={"password": ""}).status_code == 422
+    assert _client(None).post("/api/v1/admin/unlock", json={"password": "anything"}).status_code == 403
+    token, _ = admin_gate.issue_token()
+    assert admin_gate.check_token(token) is False
+
+
+def test_a_token_expires_and_dies_when_the_password_changes(world, monkeypatch):
+    token, expires = admin_gate.issue_token(now=1000)
+    assert expires == 1000 + admin_gate.SESSION_S
+    assert admin_gate.check_token(token, now=1000 + admin_gate.SESSION_S - 1)
+    assert not admin_gate.check_token(token, now=1000 + admin_gate.SESSION_S + 1)
+    assert not admin_gate.check_token(f"{expires + 60}.{token.split('.')[1]}", now=1000)  # stretched
+    monkeypatch.setattr(settings, "admin_password_hash", admin_gate.hash_password("a different one"))
+    assert not admin_gate.check_token(token, now=1000)
+
+
+def test_the_hash_does_not_contain_the_password_and_is_salted():
+    one, two = admin_gate.hash_password(PASSWORD), admin_gate.hash_password(PASSWORD)
+    assert one != two and PASSWORD not in one and one.startswith("scrypt:")
 
 
 def test_an_admin_can_add_edit_reorder_retire_and_delete_questions(world):
-    c = _client("boss@x.test")
+    c = _admin()
     made = c.post("/api/v1/admin/feedback/questions",
                   json={"prompt": " Favourite subject? ", "kind": "choice", "options": ["Maths", " Maths ", "", "Physics"]})
     assert made.status_code == 201
@@ -235,26 +278,87 @@ def test_an_admin_can_add_edit_reorder_retire_and_delete_questions(world):
 
 
 def test_a_choice_question_needs_at_least_two_choices(world):
-    r = _client("boss@x.test").post("/api/v1/admin/feedback/questions", json={"prompt": "Pick?", "kind": "choice", "options": ["Only"]})
+    r = _admin().post("/api/v1/admin/feedback/questions", json={"prompt": "Pick?", "kind": "choice", "options": ["Only"]})
     assert r.status_code == 422
 
 
-def test_an_admin_reads_responses_without_seeing_who_sent_them(world):
+def test_an_admin_reads_responses_without_seeing_who_sent_them_and_can_delete_one(world):
     _send(_client("student@x.test"))
-    row = _client("boss@x.test").get("/api/v1/admin/feedback/responses").json()[0]
+    c = _admin()
+    row = c.get("/api/v1/admin/feedback/responses").json()[0]
     assert row["signed_in"] is True and "user_id" not in row
     assert row["answers"][0] == {"question_id": "q-rate", "prompt": "Overall?", "kind": "rating", "value": 4}
+    assert c.delete(f"/api/v1/admin/feedback/responses/{row['id']}").status_code == 200
+    assert world["product_feedback"] == []
 
 
-def test_summary_averages_numbers_and_tallies_choices():
-    out = pf.summarise([
-        [{"question_id": "a", "prompt": "Overall?", "kind": "rating", "value": 4},
-         {"question_id": "b", "prompt": "Liked?", "kind": "multi", "value": ["Speed", "Design"]}],
-        [{"question_id": "a", "prompt": "Overall?", "kind": "rating", "value": 5},
-         {"question_id": "b", "prompt": "Liked?", "kind": "multi", "value": ["Speed"]}],
-    ])
-    by = {i.question_id: i for i in out.items}
-    assert out.total == 2 and by["a"].average == 4.5 and by["b"].counts == {"Speed": 2, "Design": 1}
+def test_the_summary_endpoint_reads_what_was_sent(world):
+    _send(_client(None), contact_email="me@uni.test")
+    out = _admin().get("/api/v1/admin/feedback/summary?days=7").json()
+    assert out["total"] == 1 and out["days"] == 7 and out["want_reply"] == 1
+    assert out["takeaways"][0].startswith("1 response in the last 7 days")
+
+
+# ── What the summary works out ─────────────────────────────────────────
+
+
+def _row(day, rating, nps, liked, text, **extra):
+    return {
+        "created_at": f"2026-10-{day:02d}T09:00:00+00:00", "source": "landing", "user_id": None, "contact_email": None,
+        "answers": [
+            {"question_id": "a", "prompt": "Overall?", "kind": "rating", "value": rating},
+            {"question_id": "n", "prompt": "Recommend?", "kind": "scale", "value": nps},
+            {"question_id": "b", "prompt": "Liked?", "kind": "multi", "value": liked},
+            {"question_id": "t", "prompt": "Next?", "kind": "long", "value": text},
+        ],
+        **extra,
+    }
+
+
+ROWS = [
+    _row(2, 5, 10, ["Speed", "Design"], "Offline flashcards please", user_id="u1"),
+    _row(2, 4, 9, ["Speed"], "Flashcards on my phone, offline", contact_email="a@b.test"),
+    _row(1, 1, 3, ["Design"], "The upload kept failing"),
+    _row(1, 4, 7, ["Speed"], "   "),
+]
+
+
+def _summary(**kw):
+    from datetime import date
+
+    return feedback_summary.summarise(ROWS, days=7, today=date(2026, 10, 2), **kw)
+
+
+def test_summary_numbers():
+    by = {i.question_id: i for i in _summary().items}
+    rating, nps = by["a"], by["n"]
+    assert (rating.average, rating.median, rating.positive_share) == (3.5, 4.0, 75)
+    assert rating.distribution == {"1": 1, "2": 0, "3": 0, "4": 2, "5": 1}
+    assert (nps.promoters, nps.passives, nps.detractors, nps.nps) == (2, 1, 1, 25)
+    assert list(by["b"].counts.items()) == [("Speed", 3), ("Design", 2)]  # most picked first
+
+
+def test_summary_words_and_whose_they_are():
+    text = {i.question_id: i for i in _summary().items}["t"]
+    assert text.responses == 4 and len(text.texts) == 3  # the blank one is not a comment
+    assert [(k.word, k.count) for k in text.keywords] == [("flashcards", 2), ("offline", 2)]
+    assert [t.score for t in text.texts] == [5, 4, 1]  # each carries its writer's rating
+
+
+def test_summary_people_days_and_the_period_before():
+    out = _summary(previous=[_row(20, 2, 5, ["Design"], "meh")])
+    assert (out.total, out.previous_total, out.signed_in, out.visitors, out.want_reply) == (4, 1, 1, 3, 1)
+    assert len(out.by_day) == 7 and [d.count for d in out.by_day[-2:]] == [2, 2] and out.by_day[-1].date == "2026-10-02"
+    assert {i.question_id: i for i in out.items}["a"].previous_average == 2.0
+    text = " ".join(out.takeaways)
+    assert "up from 1" in text and "averages 3.5 out of 5, up from 2" in text
+    assert "Recommend score +25" in text and "Speed (75% of answers)" in text
+    assert "1 written answer comes from people who rated it 1 or 2" in text and "1 visitor left an email" in text
+
+
+def test_summary_of_nothing_is_empty_not_an_error():
+    out = feedback_summary.summarise([], days=30)
+    assert out.total == 0 and out.takeaways == [] and out.items == [] and len(out.by_day) == 30
 
 
 def test_validate_answers_skips_an_optional_blank():

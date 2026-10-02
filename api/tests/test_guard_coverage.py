@@ -223,6 +223,7 @@ PUBLIC_ROUTES = (
     "/ready",  # readiness — booleans only; the keep-alive cron calls it
     "/feedback-form",  # the feedback questions, shown on the landing page
     "/product-feedback",  # sending that form: rate-limited, bot-trapped, validated
+    "/admin/unlock",  # the admin password check itself: attempt-limited
 )
 
 
@@ -250,8 +251,8 @@ def test_every_authenticated_route_requires_a_user():
         if path.endswith(PUBLIC_ROUTES):
             continue
         source = inspect.getsource(route.endpoint)
-        # `require_admin` is stricter than signed-in: it depends on
-        # `get_current_user` and then also checks the admin list.
+        # `require_admin` is its own lock: a token from the shared admin
+        # password, belonging to no account (see `services/admin_gate`).
         if "get_current_user" not in source and "require_admin" not in source:
             public.append(f"{path} ({route.endpoint.__name__})")
     assert not public, "These routes don't require authentication:\n  " + "\n  ".join(public)

@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell'
 import { Home } from './features/home/Home'
 import { OnboardingGate } from './features/onboarding/OnboardingGate'
 import {
+  AdminPage,
   AuthCallback,
   Onboarding,
   ResetPassword,
@@ -19,6 +20,7 @@ import {
   Settings,
 } from './routes/lazyRoutes'
 import { NotFound } from './routes/NotFound'
+import { ADMIN_PATH } from './lib/env'
 import { RealLocationContext } from './lib/realLocation'
 import { TrustLayer, type TrustState } from './features/trust/TrustLayer'
 import { TRUST_SLUGS } from './features/trust/pages'
@@ -240,6 +242,17 @@ function AppRoutes() {
           }
         />
       ))}
+
+      {/* The feedback desk: linked from nowhere, behind its own password
+          rather than an account — see features/admin. */}
+      <Route
+        path={`/${ADMIN_PATH}`}
+        element={
+          <Lazy>
+            <AdminPage />
+          </Lazy>
+        }
+      />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

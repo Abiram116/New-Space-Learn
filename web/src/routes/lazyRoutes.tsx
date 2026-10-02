@@ -31,6 +31,9 @@ import { isMobileNow } from '../lib/useIsMobile'
 export const Landing = lazy(() =>
   import('../features/landing/Landing').then((m) => ({ default: m.Landing })),
 )
+export const AdminPage = lazy(() =>
+  import('../features/admin/AdminPage').then((m) => ({ default: m.AdminPage })),
+)
 export const NotesView = lazy(() =>
   import('../features/notes/NotesView').then((m) => ({ default: m.NotesView })),
 )

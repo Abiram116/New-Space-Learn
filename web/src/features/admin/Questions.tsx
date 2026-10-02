@@ -1,8 +1,6 @@
 /**
- * The admin side of the feedback form: change what is asked, and read what
- * people said. Shown only to the accounts on the server's admin list — and the
- * server checks that again on every call, so hiding this is a courtesy, not
- * the lock.
+ * The feedback form's questions: add, reword, reorder, retire, delete. What is
+ * saved here is what the form asks from the next time it is opened.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -10,14 +8,10 @@ import { friendlyMessage } from '../../api/errors'
 import {
   createQuestion,
   deleteQuestion,
-  getFeedbackSummary,
   listQuestions,
-  listResponses,
   reorderQuestions,
   updateQuestion,
   type FeedbackQuestion,
-  type FeedbackResponse,
-  type FeedbackSummary,
   type QuestionKind,
 } from '../../api/productFeedback'
 import { Button } from '../../components/ui/Button'
@@ -47,40 +41,9 @@ export function parseOptions(text: string): string[] {
 const field =
   'w-full rounded-lg border border-line bg-well px-3 py-2 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand/70'
 
-export function FeedbackAdmin() {
-  const [tab, setTab] = useState<'questions' | 'responses'>('questions')
-  return (
-    <section aria-labelledby="feedback-admin" className="flex flex-col gap-4 rounded-xl border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h3 id="feedback-admin" className="text-[14.5px] font-semibold text-ink">
-          Manage feedback
-        </h3>
-        <span className="setcode rounded-full bg-brand-soft px-2 py-0.5 text-brand-deep">Admin</span>
-        <div className="ml-auto flex gap-1 rounded-lg bg-well p-1">
-          {(['questions', 'responses'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              aria-pressed={tab === t}
-              className={cn(
-                'cursor-pointer rounded-md px-3 py-1 text-[13px] capitalize transition-colors',
-                tab === t ? 'bg-raised font-semibold text-ink' : 'font-medium text-muted hover:text-ink',
-              )}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      </div>
-      {tab === 'questions' ? <Questions /> : <Responses />}
-    </section>
-  )
-}
-
 // ── Questions ──────────────────────────────────────────────────────────
 
-function Questions() {
+export function Questions() {
   const { show, showError } = useToast()
   const [list, setList] = useState<FeedbackQuestion[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -135,7 +98,7 @@ function Questions() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-[13px] text-muted">
+      <p className="text-[13.5px] text-muted">
         People see the active questions, in this order. Retire one to stop asking it without losing its answers.
       </p>
       <ul className="flex flex-col gap-2">
@@ -154,7 +117,7 @@ function Questions() {
           ) : (
             <li
               key={q.id}
-              className={cn('flex items-start gap-3 rounded-lg border border-line bg-well px-3 py-2.5', !q.active && 'opacity-60')}
+              className={cn('flex items-start gap-3 rounded-lg border border-line bg-surface px-3 py-2.5', !q.active && 'opacity-60')}
             >
               <div className="flex shrink-0 flex-col">
                 <button
@@ -326,108 +289,5 @@ function QuestionEditor({
         {problem && <span className="text-[12.5px] text-muted">{problem}</span>}
       </div>
     </form>
-  )
-}
-
-// ── Responses ──────────────────────────────────────────────────────────
-
-function Responses() {
-  const [summary, setSummary] = useState<FeedbackSummary | null>(null)
-  const [rows, setRows] = useState<FeedbackResponse[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    Promise.all([getFeedbackSummary(), listResponses()])
-      .then(([s, r]) => {
-        setSummary(s)
-        setRows(r)
-        setDone(r.length < 30)
-      })
-      .catch((err) => setError(friendlyMessage(err)))
-  }, [])
-
-  const older = async () => {
-    if (!rows?.length || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const more = await listResponses(rows[rows.length - 1].created_at)
-      setRows([...rows, ...more])
-      setDone(more.length < 30)
-    } catch (err) {
-      setError(friendlyMessage(err))
-    } finally {
-      setLoadingMore(false)
-    }
-  }
-
-  if (error) return <p className="text-[14px] text-coral-deep">{error}</p>
-  if (!rows || !summary) return <p className="text-[14px] text-muted">Loading responses…</p>
-  if (rows.length === 0) return <p className="text-[14px] text-muted">No feedback yet.</p>
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="grid gap-2 sm:grid-cols-2">
-        {summary.items
-          .filter((item) => item.average !== null || Object.keys(item.counts).length > 0)
-          .map((item) => (
-            <div key={item.question_id} className="rounded-lg border border-line bg-well p-3">
-              <p className="text-[12.5px] text-muted">{item.prompt}</p>
-              {item.average !== null ? (
-                <p className="mt-1 text-[14px] text-ink">
-                  <span className="nameplate text-[22px] text-brand">{item.average}</span>
-                  <span className="ml-1.5 text-muted">
-                    average of {item.responses} · out of {item.kind === 'rating' ? 5 : 10}
-                  </span>
-                </p>
-              ) : (
-                <ul className="mt-1.5 flex flex-col gap-0.5 text-[13px] text-ink-2">
-                  {Object.entries(item.counts)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([choice, n]) => (
-                      <li key={choice} className="flex justify-between gap-3">
-                        <span className="min-w-0 truncate">{choice}</span>
-                        <span className="tabular-nums text-muted">{n}</span>
-                      </li>
-                    ))}
-                </ul>
-              )}
-            </div>
-          ))}
-      </div>
-      <p className="setcode text-faint">Latest {rows.length} of the most recent · summary over the last {summary.total}</p>
-      <ul className="flex flex-col gap-2">
-        {rows.map((r) => (
-          <li key={r.id} className="rounded-lg border border-line bg-well p-3">
-            <p className="setcode text-faint">
-              {new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })} ·{' '}
-              {r.source === 'landing' ? 'Landing page' : 'Settings'} · {r.signed_in ? 'Signed-in user' : 'Visitor'}
-              {r.contact_email && (
-                <>
-                  {' · '}
-                  <a href={`mailto:${r.contact_email}`} className="text-brand-deep hover:underline">
-                    {r.contact_email}
-                  </a>
-                </>
-              )}
-            </p>
-            <dl className="mt-2 flex flex-col gap-1.5">
-              {r.answers.map((a) => (
-                <div key={a.question_id} className="text-[13.5px]">
-                  <dt className="text-muted">{a.prompt}</dt>
-                  <dd className="whitespace-pre-wrap text-ink">{Array.isArray(a.value) ? a.value.join(', ') : String(a.value)}</dd>
-                </div>
-              ))}
-            </dl>
-          </li>
-        ))}
-      </ul>
-      {!done && (
-        <Button variant="secondary" size="sm" className="self-start" disabled={loadingMore} onClick={() => void older()}>
-          {loadingMore ? 'Loading…' : 'Load older'}
-        </Button>
-      )}
-    </div>
   )
 }

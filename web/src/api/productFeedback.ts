@@ -1,3 +1,4 @@
+import { adminFetch } from './admin'
 import { apiFetch } from './client'
 
 /**
@@ -36,28 +37,27 @@ export const sendProductFeedback = (input: {
 }) => apiFetch<{ ok: true }>('/product-feedback', { method: 'POST', body: input })
 
 // ── Admin ──────────────────────────────────────────────────────────────
+// Behind the admin page's password, not an account — see `api/admin.ts`.
 
-export const amIAdmin = () => apiFetch<{ admin: boolean }>('/me/admin')
-
-export const listQuestions = () => apiFetch<FeedbackQuestion[]>('/admin/feedback/questions')
+export const listQuestions = () => adminFetch<FeedbackQuestion[]>('/admin/feedback/questions')
 
 export const createQuestion = (input: {
   prompt: string
   kind: QuestionKind
   options?: string[]
   required?: boolean
-}) => apiFetch<FeedbackQuestion>('/admin/feedback/questions', { method: 'POST', body: input })
+}) => adminFetch<FeedbackQuestion>('/admin/feedback/questions', { method: 'POST', body: input })
 
 export const updateQuestion = (
   id: string,
   patch: Partial<Pick<FeedbackQuestion, 'prompt' | 'options' | 'required' | 'active'>>,
-) => apiFetch<FeedbackQuestion>(`/admin/feedback/questions/${id}`, { method: 'PATCH', body: patch })
+) => adminFetch<FeedbackQuestion>(`/admin/feedback/questions/${id}`, { method: 'PATCH', body: patch })
 
 export const deleteQuestion = (id: string) =>
-  apiFetch<{ ok: true }>(`/admin/feedback/questions/${id}`, { method: 'DELETE' })
+  adminFetch<{ ok: true }>(`/admin/feedback/questions/${id}`, { method: 'DELETE' })
 
 export const reorderQuestions = (ids: string[]) =>
-  apiFetch<{ ok: true }>('/admin/feedback/questions/reorder', { method: 'POST', body: { ids } })
+  adminFetch<{ ok: true }>('/admin/feedback/questions/reorder', { method: 'POST', body: { ids } })
 
 export type StoredAnswer = { question_id: string; prompt: string; kind: QuestionKind; value: AnswerValue }
 export type FeedbackResponse = {
@@ -70,21 +70,51 @@ export type FeedbackResponse = {
   answers: StoredAnswer[]
 }
 
+export const RESPONSES_PAGE = 30
+
 export const listResponses = (before?: string) =>
-  apiFetch<FeedbackResponse[]>(
-    `/admin/feedback/responses?limit=30${before ? `&before=${encodeURIComponent(before)}` : ''}`,
+  adminFetch<FeedbackResponse[]>(
+    `/admin/feedback/responses?limit=${RESPONSES_PAGE}${before ? `&before=${encodeURIComponent(before)}` : ''}`,
   )
 
+export const deleteResponse = (id: string) =>
+  adminFetch<{ ok: true }>(`/admin/feedback/responses/${id}`, { method: 'DELETE' })
+
+export type SummaryText = { text: string; created_at: string | null; score: number | null }
+export type SummaryItem = {
+  question_id: string
+  prompt: string
+  kind: QuestionKind
+  responses: number
+  average: number | null
+  median: number | null
+  previous_average: number | null
+  distribution: Record<string, number>
+  positive_share: number | null
+  nps: number | null
+  promoters: number
+  passives: number
+  detractors: number
+  counts: Record<string, number>
+  keywords: { word: string; count: number }[]
+  texts: SummaryText[]
+}
 export type FeedbackSummary = {
+  days: number
   total: number
-  items: {
-    question_id: string
-    prompt: string
-    kind: QuestionKind
-    responses: number
-    average: number | null
-    counts: Record<string, number>
-  }[]
+  previous_total: number | null
+  by_day: { date: string; count: number }[]
+  sources: Record<string, number>
+  signed_in: number
+  visitors: number
+  want_reply: number
+  takeaways: string[]
+  items: SummaryItem[]
 }
 
-export const getFeedbackSummary = () => apiFetch<FeedbackSummary>('/admin/feedback/summary')
+/** The periods the server answers for; 0 is everything. */
+export const SUMMARY_PERIODS = [7, 30, 90, 0] as const
+export type SummaryPeriod = (typeof SUMMARY_PERIODS)[number]
+
+export const getFeedbackSummary = (days: SummaryPeriod) =>
+  adminFetch<FeedbackSummary>(`/admin/feedback/summary?days=${days}`)

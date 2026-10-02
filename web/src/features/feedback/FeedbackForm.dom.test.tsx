@@ -15,7 +15,7 @@ vi.mock('../../api/productFeedback', () => ({
 }))
 
 import { FeedbackForm, isBlank, missingRequired } from './FeedbackForm'
-import { parseOptions } from './FeedbackAdmin'
+import { parseOptions } from '../admin/Questions'
 
 const q = (over: Partial<FeedbackQuestion>): FeedbackQuestion => ({
   id: 'x', position: 0, prompt: 'Q?', kind: 'short', options: [], required: true, active: true, ...over,

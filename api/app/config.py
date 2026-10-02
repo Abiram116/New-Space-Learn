@@ -100,10 +100,10 @@ class Settings(BaseSettings):
     # Runtime
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     log_level: str = "info"
-    # Who may manage the feedback form and read what people sent: a
-    # comma-separated list of account emails. Set on the server only — there is
-    # deliberately no way to grant this from inside the app.
-    admin_emails: str = ""
+    # The lock on the admin page: a salted hash of the one shared password,
+    # never the password itself. Make it with
+    # `uv run python -m app.services.admin_gate`. Empty = the admin side is closed.
+    admin_password_hash: str = ""
 
     # OpenAPI docs are a live map of every endpoint and payload shape. Useful
     # locally, needless attack-surface detail in production.
@@ -126,10 +126,6 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-    @property
-    def admin_email_set(self) -> frozenset[str]:
-        return frozenset(e.strip().lower() for e in self.admin_emails.split(",") if e.strip())
 
     @property
     def supabase_configured(self) -> bool:

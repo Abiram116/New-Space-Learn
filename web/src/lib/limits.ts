@@ -104,6 +104,8 @@ export const LIMITS = {
   feedbackLong: 2000,
   /** `FEEDBACK_OPTION_MAX` — one choice of a feedback question. */
   feedbackOption: 60,
+  /** `AdminUnlockIn.password` — the admin page's password box. */
+  adminPassword: 200,
 } as const
 
 export type LimitName = keyof typeof LIMITS
