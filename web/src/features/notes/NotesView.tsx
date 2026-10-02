@@ -307,7 +307,7 @@ function Inner({
           scoped to one topic. */}
       <SubspaceHeader
         title="Notes"
-        tabs={false}
+        breadcrumb={false}
         actions={
           <div className="flex shrink-0 gap-2">
             {/* "Write with AI" (the fuller label) lives in the empty state
@@ -323,7 +323,7 @@ function Inner({
               <Icon name="sparkle" size={14} /> AI note
             </Button>
             <Button size="sm" onClick={newBlank}>
-              <Icon name="plus" size={14} /> New
+              <Icon name="plus" size={14} /> New note
             </Button>
           </div>
         }

@@ -37,6 +37,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
+import { useNavReset } from '../../lib/useNavReset'
 import { isUuid, useSlugParam } from '../../lib/useSlugParam'
 import { useTopicScope } from '../../lib/useTopicScope'
 import { estimateRetention } from '../../lib/retention'
@@ -52,7 +53,7 @@ import { PhoneDecks } from './PhoneDecks'
 import { Review } from './Review'
 import { Summary } from './Summary'
 import { GenerateModal, NewDeckModal } from './modals'
-import type { Mode } from './model'
+import { REVIEW_BATCH, type Mode } from './model'
 
 /** A deck is named by its name; `?deck=` shows that, not the id. */
 const deckName = (d: { name: string }) => d.name
@@ -123,6 +124,12 @@ function Inner({
     setParams({}, { replace: true })
     decks.refresh()
   }, [setParams, decks])
+  // Clicking "Cards" in the sidebar while inside a deck or a review goes to the
+  // same address, so nothing would change. Take it as "back to the top".
+  useNavReset(() => {
+    setMode({ kind: 'decks' })
+    decks.refresh()
+  })
   // On a phone the shell's Back arrow is a plain link that drops `?deck=`;
   // follow the URL out of a deck so that one control does the whole job.
   const hasDeckParam = params.has('deck')
@@ -232,6 +239,8 @@ function Inner({
         mode={mode}
         setMode={setMode}
         onFinish={() => decks.refresh()}
+        onExit={backToDecks}
+        title={mode.mixed ? 'Due cards' : (decks.data?.find((d) => d.id === mode.deckId)?.name ?? 'Review')}
         showError={showError}
       />
     )
@@ -289,9 +298,10 @@ function Inner({
     <>
       <NewDeckModal
         open={newDeckOpen}
+        defaultTopicId={subspaceId}
         onClose={() => setNewDeckOpen(false)}
-        onCreate={async (name) => {
-          const deck = await createDeck(subspaceId, { name })
+        onCreate={async (name, topicId) => {
+          const deck = await createDeck(topicId, { name })
           decks.setData((prev) => [...(prev ?? []), deck])
           setNewDeckOpen(false)
           openDeck(deck.id)
@@ -300,10 +310,10 @@ function Inner({
 
       <GenerateModal
         open={genOpen}
-        subspaceName={subspaceName}
+        defaultTopicId={subspaceId}
         onClose={() => setGenOpen(false)}
-        onGenerate={async (topic, count) => {
-          const cards = await generateCards(subspaceId, { topic, count })
+        onGenerate={async (topicId, topic, count) => {
+          const cards = await generateCards(topicId, { topic, count })
           setGenOpen(false)
           await decks.refresh()
           show(`Wrote ${cards.length} cards.`, 'success')
@@ -347,6 +357,7 @@ function Inner({
           }
           onOpen={openDeck}
           onReview={(id) => void beginReview(id)}
+          onReviewDue={() => void startDueSession(REVIEW_BATCH, new Set(), totalDue)}
           onDelete={setDeleteDeckId}
           onNew={() => setNewDeckOpen(true)}
           onGenerate={() => setGenOpen(true)}
@@ -363,13 +374,13 @@ function Inner({
         // Cards is an account-wide library now (2026-08 audit), not scoped
         // to the topic that happened to be open — see the identical note on
         // NotesView's own SubspaceHeader call.
-        tabs={false}
+        breadcrumb={false}
         actions={
           /* Manual deck creation belongs to the dashed slot in the grid — the
              one empty binder pocket. The header keeps the one action the grid
              can't express. */
-          <Button size="sm" onClick={() => setGenOpen(true)}>
-            <Icon name="sparkle" size={14} /> Generate
+          <Button onClick={() => setGenOpen(true)}>
+            <Icon name="sparkle" size={14} /> Generate cards
           </Button>
         }
       />
@@ -396,6 +407,11 @@ function Inner({
             <span className="text-[13px] text-ink-2">
               card{totalDue === 1 ? '' : 's'} ready across your decks.
             </span>
+            {/* The reason you opened this page, as a button. Without it the
+                only way to review was to find the right deck tile first. */}
+            <Button size="sm" className="ml-auto" onClick={() => void startDueSession(REVIEW_BATCH, new Set(), totalDue)}>
+              Review {Math.min(totalDue, REVIEW_BATCH)}
+            </Button>
           </div>
         )}
 
@@ -414,7 +430,7 @@ function Inner({
             used to be ignored entirely here, so it did exactly that. Retry
             just re-runs the same `useAsync` fetch — no new error framework,
             the capability already existed and only needed a button. */}
-        {!decks.loading && decks.error && (
+        {!decks.loading && decks.error && !decks.data && (
           <div className="mx-auto flex max-w-lg flex-col items-start gap-2 rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
             <p>{decks.error}</p>
             <Button size="sm" variant="secondary" onClick={decks.refresh}>
@@ -423,14 +439,14 @@ function Inner({
           </div>
         )}
 
-        {!decks.loading && !decks.error && list.length === 0 && (
+        {!decks.loading && !decks.error && decks.data && list.length === 0 && (
           <div className="flex flex-1 items-center justify-center py-6">
           <EmptyState
             className="w-full max-w-lg"
             icon="deck"
             title="No decks yet"
             bot={{ agent: 'cards', say: 'emptyCards' }}
-            description={`Write cards yourself, or have them drafted from what you've indexed under ${subspaceName}.`}
+            description="Write cards yourself, or have them drafted from the material you've added."
             action={
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setNewDeckOpen(true)}>
@@ -723,7 +739,7 @@ function DeckDetail({
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title={deckName}
-        tabs={false}
+        breadcrumb={false}
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={onBack}>

@@ -33,9 +33,9 @@ import { useReducedMotion } from '../../components/ui/motion'
 import { celebrate, useAmbience, useStudySession } from '../../components/celebrate'
 import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
-import { useAssessmentLock } from '../../lib/assessment'
+import { useAssessmentLock, useUnsavedWork } from '../../lib/assessment'
 import { anyModalOpen, quizKeyAction, stageKeyGate, type QuizKeyAction } from './keys'
-import { KeyHints, StageCount, type KeyHint } from './StageKit'
+import { Kbd, KeyHints, StageCount, type KeyHint } from './StageKit'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizStage } from './PhoneQuiz'
 import { haptic } from './phoneKit'
@@ -108,6 +108,8 @@ export function QuizRunner({
   const isRevealed = revealed[index]
   const isCorrect = chosen === q.answer_index
   const answeredCount = revealed.filter(Boolean).length
+  // Answers are only sent on "See results"; until then leaving throws them away.
+  useUnsavedWork(answeredCount > 0 && !compact)
   const isLast = index === total - 1
 
   useEffect(() => {
@@ -446,17 +448,13 @@ export function QuizRunner({
   }
 
   const letterOf = (i: number) => String.fromCharCode(65 + i)
-  const lastLetter = letterOf(q.choices.length - 1)
+  // Only what the screen does not already say: the options carry their own
+  // A-D, and the Leave button carries its own Esc.
   const hints: KeyHint[] = isRevealed
-    ? [
-        { keys: ['Enter', 'or', 'right'], label: isLast ? 'See results' : 'Next question' },
-        { keys: ['Esc'], label: 'Leave' },
-      ]
+    ? [{ keys: ['Enter', 'or', 'right'], label: isLast ? 'See results' : 'Next question' }]
     : [
         { keys: ['up', 'down'], label: 'Move' },
         { keys: ['Enter'], label: 'Choose' },
-        { keys: ['1', '–', String(q.choices.length), 'or', 'A', '–', lastLetter], label: 'Answer directly' },
-        { keys: ['Esc'], label: 'Leave' },
       ]
   const stemId = `quiz-stem-${index}`
 
@@ -855,6 +853,9 @@ function StageHeader({
           )}
         >
           <Icon name="arrowLeft" size={14} /> Leave
+          <span className="stage-keys ml-1 text-[0.85em]">
+            <Kbd k="Esc" />
+          </span>
         </button>
         {/* Elapsed, not a countdown: the same information without the
             pressure, and what the study record wants anyway. */}

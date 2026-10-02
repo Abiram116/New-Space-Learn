@@ -32,7 +32,8 @@ import { nextIntervalLabel } from '../../lib/schedule'
 import { stripMarkdown } from '../../lib/text'
 import { EASE } from '../../components/celebrate/easing'
 import { anyModalOpen, isConfirmKey, stageKeyGate } from '../quizzes/keys'
-import { KeyHints, StageCount, type KeyHint } from '../quizzes/StageKit'
+import { Kbd, KeyHints, StageCount, type KeyHint } from '../quizzes/StageKit'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useImmersive } from '../../components/layout/immersive'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneReview } from './PhoneReview'
@@ -46,16 +47,24 @@ const OWN = 'data-review-key'
 /** An Enter/Space this soon after the flip is a double-press, not a grade:
  *  nobody has read the answer in a quarter of a second. */
 const MIN_READ_MS = 250
+/** How long after a handled key a keyboard-made click counts as its echo. */
+const KEY_ECHO_MS = 400
 
 export function Review({
   mode,
   setMode,
   onFinish,
+  onExit,
+  title,
   showError,
 }: {
   mode: Extract<Mode, { kind: 'review' }>
   setMode: (m: Mode) => void
   onFinish: () => void
+  /** Leave the session for the deck list (clears `?deck=` and refreshes). */
+  onExit: () => void
+  /** What is being reviewed: the deck's name, or "Due cards" for a mixed session. */
+  title: string
   showError: (e: unknown) => void
 }) {
   const card = mode.cards[mode.index]
@@ -111,6 +120,21 @@ export function Review({
     return out
   }, [card])
 
+  // When the stage last acted on a key. Space/Enter on a focused <button> can
+  // also fire a "click" of its own as the key is released (some browsers do it
+  // on keyup). Focus moves to the next card as you grade, so that echo landed
+  // on the NEW card's face and flipped it unasked. A keyboard-made click
+  // (`detail === 0`) right after the stage handled a key is that echo.
+  const lastKeyAt = useRef(0)
+  const isKeyEcho = useCallback(
+    (e: { detail: number }) => e.detail === 0 && performance.now() - lastKeyAt.current < KEY_ECHO_MS,
+    [],
+  )
+  // And stop the release itself from activating anything.
+  const swallowKeyUp = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === ' ' || e.key === 'Enter') e.preventDefault()
+  }, [])
+
   const flip = useCallback(() => {
     const m = stateRef.current.mode
     if (!m.flipped) flippedAt.current = performance.now()
@@ -156,16 +180,39 @@ export function Review({
     }
   }, [mode.index])
 
+  // Leaving is a tap or Esc away, so it asks once there is something to
+  // lose track of. Grades are saved as you go and the rest stay due, so unlike
+  // a quiz nothing is discarded: the dialog says so rather than warning.
+  const [confirmLeave, setConfirmLeave] = useState(false)
+  const reviewed = mode.grades.length
+  const requestLeave = useCallback(() => {
+    if (reviewed === 0) onExit()
+    else setConfirmLeave(true)
+  }, [reviewed, onExit])
+  const leaveDialog = (
+    <ConfirmDialog
+      open={confirmLeave}
+      title="End this session?"
+      description={`You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your grades are saved, and the rest stay due for next time.`}
+      confirmLabel="End session"
+      onCancel={() => setConfirmLeave(false)}
+      onConfirm={() => {
+        setConfirmLeave(false)
+        onExit()
+      }}
+    />
+  )
+
   const act = useCallback(
     (a: ReviewKeyAction) => {
       if (a.type === 'flip') flip()
-      else if (a.type === 'leave') setMode({ kind: 'decks' })
+      else if (a.type === 'leave') requestLeave()
       else if (a.type === 'highlight') {
         setHl({ index: stateRef.current.mode.index, value: a.index })
         gradeRefs.current[a.index]?.focus()
       } else grade(GRADES[a.index].key)
     },
-    [flip, grade],
+    [flip, grade, requestLeave],
   )
   const live = useRef({ highlight, act })
   useLayoutEffect(() => {
@@ -196,6 +243,7 @@ export function Review({
       ) {
         return
       }
+      lastKeyAt.current = performance.now()
       live.current.act(action)
     }
     window.addEventListener('keydown', onKey)
@@ -206,6 +254,7 @@ export function Review({
 
   if (isMobile) {
     return (
+      <>
       <PhoneReview
         index={mode.index}
         total={total}
@@ -220,33 +269,37 @@ export function Review({
         reduced={reduced}
         // Light on a phone: the compact field is a single soft glow.
         ambience={<AmbienceField field={ambience} compact />}
-        onClose={() => setMode({ kind: 'decks' })}
+        onClose={requestLeave}
         onFlip={flip}
         onGrade={grade}
         onHighlight={(i) => setHl({ index: mode.index, value: i })}
       />
+      {leaveDialog}
+      </>
     )
   }
 
+  // Only what the screen does not already say. The grade buttons carry their
+  // own 1-4, and the End session button carries its own Esc.
   const hints: KeyHint[] = mode.flipped
     ? [
         { keys: ['left', 'right'], label: 'Choose grade' },
         { keys: ['Enter'], label: 'Confirm' },
-        { keys: ['1', '–', '4'], label: 'Grade directly' },
-        { keys: ['Esc'], label: 'End session' },
       ]
-    : [
-        { keys: ['Space', 'or', 'Enter'], label: 'Flip the card' },
-        { keys: ['Esc'], label: 'End session' },
-      ]
+    : [{ keys: ['Space'], label: 'Flip the card' }]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {leaveDialog}
       <SubspaceHeader
-        title="Review"
+        title={title}
+        breadcrumb={false}
         actions={
-          <Button variant="ghost" size="sm" onClick={() => setMode({ kind: 'decks' })}>
+          <Button variant="ghost" size="sm" onClick={requestLeave}>
             <Icon name="close" size={14} /> End session
+            <span className="stage-keys ml-1 text-[0.85em]">
+              <Kbd k="Esc" />
+            </span>
           </Button>
         }
       />
@@ -274,7 +327,10 @@ export function Review({
                     key={mode.index}
                     ref={faceRef}
                     type="button"
-                    onClick={flip}
+                    onClick={(e) => {
+                      if (!isKeyEcho(e)) flip()
+                    }}
+                    onKeyUp={swallowKeyUp}
                     {...{ [OWN]: '' }}
                     aria-label={mode.flipped ? 'Show question' : 'Show answer'}
                     className={cn(
@@ -311,7 +367,8 @@ export function Review({
                         {...{ [OWN]: '' }}
                         data-grade-index={i}
                         data-active={active || undefined}
-                        onClick={() => mode.flipped && grade(g.key)}
+                        onClick={(e) => mode.flipped && !isKeyEcho(e) && grade(g.key)}
+                        onKeyUp={swallowKeyUp}
                         onFocus={() => mode.flipped && setHl({ index: mode.index, value: i })}
                         aria-disabled={!mode.flipped}
                         tabIndex={mode.flipped && highlight === i ? 0 : -1}

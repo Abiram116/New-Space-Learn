@@ -103,6 +103,28 @@ describe('phone deck list', () => {
     await waitFor(() => expect(listCards).toHaveBeenCalledWith('d1', { dueOnly: true }))
   })
 
+  it('has one review button, for everything due across decks; the per-deck count is not a button', async () => {
+    listAllDecks.mockResolvedValue([deck({ id: 'd1', due: 3 }), deck({ id: 'd2', name: 'Attention', due: 2 })])
+    listCards.mockImplementation((id: string) => Promise.resolve([flash({ id: `${id}-c`, deck_id: id })]))
+    renderView()
+    await waitFor(() => expect(screen.getByText('Attention')).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: /^3 due$/ })).toBeNull()
+    expect(screen.getAllByRole('button', { name: /Review \d+ due/ })).toHaveLength(1)
+
+    const bar = document.querySelector('[data-sticky-action-bar]') as HTMLElement
+    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Review 5 due' }))
+    await waitFor(() => expect(listCards).toHaveBeenCalledWith('d2', { dueOnly: true }))
+    expect(listCards).toHaveBeenCalledWith('d1', { dueOnly: true })
+  })
+
+  it('with nothing due there is no bottom bar repeating "New deck"', async () => {
+    listAllDecks.mockResolvedValue([deck({ due: 0 })])
+    renderView()
+    await waitFor(() => expect(screen.getByText('Transformer basics')).toBeInTheDocument())
+    expect(document.querySelector('[data-sticky-action-bar]')).toBeNull()
+    expect(screen.getAllByRole('button', { name: /New deck/ })).toHaveLength(1)
+  })
+
   it('delete lives behind the row ⋯ sheet and asks before deleting', async () => {
     const user = userEvent.setup()
     listAllDecks.mockResolvedValue([deck()])

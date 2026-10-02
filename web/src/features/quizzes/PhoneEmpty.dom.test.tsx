@@ -29,6 +29,7 @@ function decks(addMaterialHref: string | null) {
         addMaterialHref={addMaterialHref}
         onOpen={noop}
         onReview={noop}
+        onReviewDue={noop}
         onDelete={noop}
         onNew={noop}
         onGenerate={vi.fn()}

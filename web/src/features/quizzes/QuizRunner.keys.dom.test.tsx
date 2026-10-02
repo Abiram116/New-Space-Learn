@@ -31,6 +31,8 @@ function renderRunner(props: Partial<ComponentProps<typeof QuizRunner>> = {}) {
   return render(
     <AssessmentProvider>
       <input aria-label="elsewhere" />
+      {/* AppShell keeps this in the page, closed, on every screen. */}
+      <div role="dialog" aria-modal="true" aria-hidden="true" aria-label="Navigation" />
       <QuizRunner quiz={quiz()} onFinished={vi.fn()} onExit={vi.fn()} {...props} />
     </AssessmentProvider>,
   )
@@ -147,6 +149,20 @@ describe('quiz keyboard', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Leave quiz' }))
     expect(onExit).toHaveBeenCalledTimes(1)
+  })
+
+  it('in the leave dialog ← / → move between Cancel and Leave, stopping at the ends', () => {
+    renderRunner()
+    press('Escape')
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const leave = screen.getByRole('button', { name: 'Leave quiz' })
+    expect(cancel).toHaveFocus()
+    expect(press('ArrowRight')).toBe(false) // handled, not left to scroll anything
+    expect(leave).toHaveFocus()
+    press('ArrowRight')
+    expect(leave).toHaveFocus() // an end is an end
+    press('ArrowLeft')
+    expect(cancel).toHaveFocus()
   })
 
   it('on the last question Enter submits once, however often it is pressed', async () => {

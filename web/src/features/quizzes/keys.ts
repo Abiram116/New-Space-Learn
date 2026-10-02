@@ -134,7 +134,19 @@ function isForeignControl(t: EventTarget | null, ownAttr: string): boolean {
   return control !== null && !control.hasAttribute(ownAttr)
 }
 
-/** True while any modal dialog is on screen — it owns the keyboard then. */
+/**
+ * True while a modal dialog is actually on screen — it owns the keyboard then.
+ *
+ * "Actually" matters: the app shell keeps its mobile navigation drawer in the
+ * page at all times, `aria-modal="true"` and all, and hides it with
+ * `aria-hidden` while it is closed. Counting that made this answer "yes" on
+ * every desktop screen, so every study shortcut was silently ignored. A modal
+ * that is `aria-hidden` (itself or via an ancestor) is closed.
+ */
 export function anyModalOpen(): boolean {
-  return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null
+  if (typeof document === 'undefined') return false
+  for (const el of document.querySelectorAll('[aria-modal="true"]')) {
+    if (el.closest('[aria-hidden="true"]') === null) return true
+  }
+  return false
 }

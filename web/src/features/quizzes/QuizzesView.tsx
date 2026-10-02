@@ -32,6 +32,7 @@ import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
+import { TopicSelect } from '../spaces/TopicSelect'
 import { StudyAmbience } from '../../components/celebrate'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizzes } from './PhoneQuizzes'
@@ -89,10 +90,10 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
   }, [setParams])
 
   const generate = useCallback(
-    async (topic: string, count: number) => {
+    async (topicId: string, topic: string, count: number) => {
       setGenerating(true)
       try {
-        const quiz = await generateQuiz(subspaceId, { topic: topic || undefined, count })
+        const quiz = await generateQuiz(topicId, { topic: topic || undefined, count })
         setGenOpen(false)
         await quizzes.refresh()
         startQuiz(quiz.id)
@@ -102,7 +103,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         setGenerating(false)
       }
     },
-    [quizzes, startQuiz, subspaceId, showError],
+    [quizzes, startQuiz, showError],
   )
 
   // A readable link needs the list to say which quiz it means; an id doesn't.
@@ -132,8 +133,8 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <SubspaceHeader
-          title="Quizzes"
-          tabs={false}
+          title={quizzes.data?.find((q) => q.id === activeId)?.topic || 'Quiz'}
+          breadcrumb={false}
           actions={
             <Button variant="secondary" onClick={back}>
               All quizzes
@@ -187,6 +188,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         />
         <GenerateQuizModal
           open={genOpen}
+          defaultTopicId={subspaceId}
           busy={generating}
           onClose={() => setGenOpen(false)}
           onGenerate={generate}
@@ -201,7 +203,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         title="Quizzes"
         // Quizzes is an account-wide library now (2026-08 audit) — see the
         // identical note on NotesView's own SubspaceHeader call.
-        tabs={false}
+        breadcrumb={false}
         actions={
           <Button onClick={() => setGenOpen(true)} disabled={generating}>
             <Icon name="sparkle" size={14} />
@@ -243,6 +245,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
 
       <GenerateQuizModal
         open={genOpen}
+        defaultTopicId={subspaceId}
         busy={generating}
         onClose={() => setGenOpen(false)}
         onGenerate={generate}
@@ -325,6 +328,12 @@ function QuizList({
                 <Icon name="quiz" size={13} />
               </span>
               <span className="setcode">Quiz</span>
+              {/* The verb. The whole card is the button, but nothing on it said
+                  so, and a quiz you have already taken reads differently from
+                  one you haven't. Decoration only — the button keeps its name. */}
+              <span aria-hidden className="setcode ml-auto text-sky-deep">
+                {q.best_score != null ? 'Retake' : 'Start'} →
+              </span>
             </div>
             <div className="nameplate text-[19px] leading-tight text-ink">
               {q.topic || 'Untitled topic'}
@@ -399,11 +408,18 @@ function QuizSession({
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    // Opening another quiz while one is still loading must not let the slow
+    // answer overwrite the one now on screen.
+    let current = true
     setQuiz(null)
     setFinished(null)
+    setError(null)
     getQuiz(quizId)
-      .then(setQuiz)
-      .catch((err) => setError(friendlyMessage(err)))
+      .then((q) => current && setQuiz(q))
+      .catch((err) => current && setError(friendlyMessage(err)))
+    return () => {
+      current = false
+    }
   }, [quizId])
 
   if (error) {
@@ -451,29 +467,38 @@ function QuizSession({
 
 function GenerateQuizModal({
   open,
+  defaultTopicId,
   busy,
   onClose,
   onGenerate,
 }: {
   open: boolean
+  /** Whose material the quiz draws on, unless another topic is picked. */
+  defaultTopicId: string
   busy: boolean
   onClose: () => void
-  onGenerate: (topic: string, count: number) => void
+  onGenerate: (topicId: string, focus: string, count: number) => void
 }) {
+  const [topicId, setTopicId] = useState(defaultTopicId)
   const [topic, setTopic] = useState('')
   const [count, setCount] = useState(5)
+  // Each time it opens it starts from the current topic again.
+  useEffect(() => {
+    if (open) setTopicId(defaultTopicId)
+  }, [open, defaultTopicId])
 
   return (
     <Modal open={open} onClose={onClose} title="Generate a quiz" width="sm">
       <div className="flex flex-col gap-4">
+        <TopicSelect value={topicId} onChange={setTopicId} />
         <Input
-          label="Topic (optional)"
+          label="Focus (optional)"
           className="pointer-coarse:text-base"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           maxLength={LIMITS.quizTopic}
           placeholder="Attention basics"
-          hint="Leave blank to cover the whole subspace."
+          hint="Leave blank to cover everything in the topic above."
         />
         <Input
           label="Questions"
@@ -488,7 +513,7 @@ function GenerateQuizModal({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => onGenerate(topic.trim(), count)} disabled={busy}>
+          <Button onClick={() => onGenerate(topicId, topic.trim(), count)} disabled={busy}>
             {busy ? 'Generating…' : 'Generate'}
           </Button>
         </div>

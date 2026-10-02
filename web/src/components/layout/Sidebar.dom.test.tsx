@@ -5,7 +5,7 @@
  * it was clicked on so "Back" can return there.
  */
 
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Space } from '../../api/types'
@@ -78,3 +78,33 @@ describe('Sidebar › Skills', () => {
     expect(skills).toHaveTextContent('')
   })
 })
+
+describe('Sidebar › brand and collapse control', () => {
+  const renderWith = (collapsed: boolean, onToggleCollapse = vi.fn()) => {
+    render(
+      <MemoryRouter initialEntries={['/home']}>
+        <ToastProvider>
+          <Sidebar collapsed={collapsed} onToggleCollapse={onToggleCollapse} />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+    return onToggleCollapse
+  }
+
+  it('collapsed: the logo IS the expand control — one slot, no separate button under it', () => {
+    const toggle = renderWith(true)
+    const expand = screen.getByRole('button', { name: 'Expand sidebar' })
+    expect(expand.querySelector('svg')).not.toBeNull() // the mark lives inside it
+    expect(screen.queryByRole('link', { name: 'Space Learn — home' })).toBeNull()
+    fireEvent.click(expand)
+    expect(toggle).toHaveBeenCalledTimes(1)
+  })
+
+  it('open: the logo goes home and the collapse button sits beside it', () => {
+    const toggle = renderWith(false)
+    expect(screen.getByRole('link', { name: 'Space Learn — home' })).toHaveAttribute('href', '/home')
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }))
+    expect(toggle).toHaveBeenCalledTimes(1)
+  })
+})
+

@@ -80,7 +80,19 @@ function DocsPanel({
   return (
     <div className="flex flex-1 flex-col gap-5">
       <section className="flex flex-col gap-2">
-        <span className="setcode">{docs.length > 0 ? `Sources · ${docs.length}` : 'Sources'}</span>
+        {/* The way to the full page sits with the heading it belongs to — same
+            spot as "+ Add" on the overview — not at the foot of the panel,
+            where it was the last thing you found. */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="setcode">{docs.length > 0 ? `Sources · ${docs.length}` : 'Sources'}</span>
+          <Link
+            to={`${base}/docs`}
+            className="setcode inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-brand-deep transition-colors hover:text-brand"
+          >
+            {hidden > 0 ? `See all ${docs.length} sources` : 'Manage sources'}
+            <Icon name="arrowRight" size={11} />
+          </Link>
+        </div>
         {loading && docs.length === 0 ? (
           <div className="flex flex-col gap-2">
             {[0, 1].map((i) => (
@@ -117,23 +129,6 @@ function DocsPanel({
           material — they never replace this topic’s own.
         </p>
       </section>
-      <FullPageLink to={`${base}/docs`}>
-        {hidden > 0 ? `See all ${docs.length} sources` : 'Manage sources'}
-      </FullPageLink>
     </div>
-  )
-}
-
-/* ── Shared ──────────────────────────────────────────────────────────── */
-
-/** The deliberate exit: some work genuinely needs the whole screen. */
-function FullPageLink({ to, children }: { to: string; children: React.ReactNode }) {
-  return (
-    <Link
-      to={to}
-      className="mt-auto flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
-    >
-      {children} <Icon name="arrowRight" size={12} />
-    </Link>
   )
 }

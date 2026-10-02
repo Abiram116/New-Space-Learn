@@ -6,6 +6,7 @@
  * now every use is a small confirm or a tiny form and this is enough.
  */
 
+import { moveAcrossActions } from './dialogKeys'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
@@ -61,6 +62,15 @@ function CenteredModal({
   width = 'md',
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // The latest `onClose` without making it a dependency of the effect below.
+  // Callers pass a fresh arrow function on every render, and a page with a
+  // clock (the quiz) renders every second: with `onClose` as a dependency the
+  // effect re-ran each tick, put focus back on the first button and undid
+  // whatever the keyboard user had just chosen.
+  const closeRef = useRef(onClose)
+  useEffect(() => {
+    closeRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) return
@@ -76,9 +86,10 @@ function CenteredModal({
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        closeRef.current()
         return
       }
+      if (moveAcrossActions(e)) return
       if (e.key !== 'Tab' || !panel) return
       const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
       if (focusable.length === 0) return
@@ -98,7 +109,7 @@ function CenteredModal({
       window.removeEventListener('keydown', onKey)
       previouslyFocused?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
@@ -145,7 +156,7 @@ function CenteredModal({
         )}
         <div className="min-h-0 flex-1 overflow-y-auto p-5">{children}</div>
         {footer && (
-          <div className="shrink-0 border-t border-line px-5 py-3.5">{footer}</div>
+          <div data-dialog-actions className="shrink-0 border-t border-line px-5 py-3.5">{footer}</div>
         )}
       </div>
     </div>,

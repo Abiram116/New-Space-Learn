@@ -1,5 +1,5 @@
 /**
- * The two dialogs that create decks — by hand, and from this topic's material.
+ * The two dialogs that create decks — by hand, and from a topic's material.
  */
 
 import { useEffect, useState } from 'react'
@@ -8,29 +8,37 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
+import { TopicSelect, useTopicName } from '../spaces/TopicSelect'
 
 export function NewDeckModal({
   open,
+  defaultTopicId,
   onClose,
   onCreate,
 }: {
   open: boolean
+  /** Where the deck goes unless the student picks another topic. */
+  defaultTopicId: string
   onClose: () => void
-  onCreate: (name: string) => Promise<void>
+  onCreate: (name: string, topicId: string) => Promise<void>
 }) {
   const [name, setName] = useState('')
+  const [topicId, setTopicId] = useState(defaultTopicId)
   const [busy, setBusy] = useState(false)
   const { showError } = useToast()
 
   useEffect(() => {
-    if (open) setName('')
-  }, [open])
+    if (open) {
+      setName('')
+      setTopicId(defaultTopicId)
+    }
+  }, [open, defaultTopicId])
 
   const submit = async () => {
     if (!name.trim()) return
     setBusy(true)
     try {
-      await onCreate(name.trim())
+      await onCreate(name.trim(), topicId)
     } catch (err) {
       showError(err)
     } finally {
@@ -52,6 +60,7 @@ export function NewDeckModal({
           placeholder="Photosynthesis"
           autoFocus
         />
+        <TopicSelect value={topicId} onChange={setTopicId} />
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -67,15 +76,18 @@ export function NewDeckModal({
 
 export function GenerateModal({
   open,
-  subspaceName,
+  defaultTopicId,
   onClose,
   onGenerate,
 }: {
   open: boolean
-  subspaceName: string
+  /** Whose material the cards are drawn from, unless another topic is picked. */
+  defaultTopicId: string
   onClose: () => void
-  onGenerate: (topic: string | undefined, count: number) => Promise<void>
+  onGenerate: (topicId: string, focus: string | undefined, count: number) => Promise<void>
 }) {
+  const [topicId, setTopicId] = useState(defaultTopicId)
+  const topicName = useTopicName(topicId)
   const [topic, setTopic] = useState('')
   const [count, setCount] = useState(8)
   const [busy, setBusy] = useState(false)
@@ -85,13 +97,14 @@ export function GenerateModal({
     if (open) {
       setTopic('')
       setCount(8)
+      setTopicId(defaultTopicId)
     }
-  }, [open])
+  }, [open, defaultTopicId])
 
   const submit = async () => {
     setBusy(true)
     try {
-      await onGenerate(topic.trim() || undefined, count)
+      await onGenerate(topicId, topic.trim() || undefined, count)
     } catch (err) {
       showError(err)
     } finally {
@@ -102,15 +115,16 @@ export function GenerateModal({
   return (
     <Modal open={open} onClose={onClose} title="Generate a deck">
       <div className="flex flex-col gap-3">
+        <TopicSelect value={topicId} onChange={setTopicId} />
         <Input
           name="topic"
-          label="Topic"
+          label="Focus (optional)"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           className="pointer-coarse:text-base"
           maxLength={LIMITS.cardsTopic}
-          placeholder={subspaceName}
-          hint="Left blank, it draws on everything indexed in this topic."
+          placeholder={topicName}
+          hint="Left blank, it draws on everything indexed in the topic above."
         />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="count" className="setcode">

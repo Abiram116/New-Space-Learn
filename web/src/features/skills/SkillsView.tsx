@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   createSkill,
   deleteSkill,
@@ -69,6 +70,16 @@ const emptyForm = (): SkillInput => ({
 const XL_QUERY = '(min-width: 1280px)'
 
 export function SkillsView() {
+  // Back is one step of browser history: wherever you came from — a chat's
+  // "Add more", Settings, anywhere — with nothing to store or keep in sync.
+  // Opened directly (bookmark, new tab) there is no "before" in this app,
+  // which the router marks with the "default" key, so it goes Home instead.
+  const navigate = useNavigate()
+  const { key: locationKey } = useLocation()
+  const goBack = useCallback(
+    () => (locationKey === 'default' ? navigate('/home') : navigate(-1)),
+    [locationKey, navigate],
+  )
   const { show, showError } = useToast()
   const [own, setOwn] = useState<Skill[] | null>(null)
   const [library, setLibrary] = useState<Skill[] | null>(null)
@@ -434,11 +445,16 @@ export function SkillsView() {
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title="Skills"
-        tabs={false}
+        breadcrumb={false}
         actions={
-          <Button onClick={() => openEditor(null)}>
-            <Icon name="plus" size={15} /> New skill
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={goBack}>
+              <Icon name="arrowLeft" size={14} /> Back
+            </Button>
+            <Button onClick={() => openEditor(null)}>
+              <Icon name="plus" size={15} /> New skill
+            </Button>
+          </>
         }
       />
 

@@ -14,9 +14,9 @@
  *    mutated (it has no activate/toggle control of its own).
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
 import type { Skill } from '../../api/types'
@@ -255,3 +255,33 @@ describe('the account-wide Skills page', () => {
     expect(listLibrarySkills).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('Back', () => {
+  function Where() {
+    return <span data-testid="where">{useLocation().pathname}</span>
+  }
+  const renderFrom = (entries: string[]) =>
+    render(
+      <MemoryRouter initialEntries={entries} initialIndex={entries.length - 1}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/skills" element={<SkillsView />} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+
+  it('returns to wherever you came from — a topic chat, say', async () => {
+    renderFrom(['/fsd/transformer', '/skills'])
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/fsd/transformer')
+  })
+
+  it('opened directly, with nothing to go back to, it goes Home', async () => {
+    renderFrom(['/skills'])
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/home')
+  })
+})
+

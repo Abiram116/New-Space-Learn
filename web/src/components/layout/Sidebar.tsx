@@ -62,55 +62,76 @@ export function Sidebar({
     <>
       <aside
         className={cn(
-          'flex h-full min-h-0 w-full flex-col gap-4 overflow-x-hidden bg-surface p-3',
-          collapsed && 'items-center gap-3 px-2',
+          'flex h-full min-h-0 w-full flex-col gap-3.5 overflow-x-hidden bg-surface p-2.5',
+          collapsed && 'items-center gap-3 px-1.5',
         )}
       >
-        <div className={cn('flex w-full items-center gap-2 px-1 pt-1', collapsed && 'flex-col gap-3 px-0')}>
-          <Link
-            to="/home"
-            onClick={onNavigate}
-            className="flex min-w-0 items-center gap-2.5"
-            aria-label="Space Learn — home"
+        {collapsed && onToggleCollapse ? (
+          /* Collapsed: one slot, not a logo with a separate button stacked under
+             it. The mark is the expand control — hover or focus it and it turns
+             into the expand icon, so the rail stays one tidy column. Home is
+             still one row below. */
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            className="group relative mt-1 grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-[10px] transition-colors hover:bg-line-soft focus-visible:bg-line-soft"
           >
-            <LogoMark size={28} />
-            {!collapsed && (
-              /* Sized to FIT the rail rather than be clipped by it. The display
-                 face is now Archivo at a 112% width axis, which is materially
-                 wider than the condensed face it replaced, so "Space Learn" no
-                 longer cleared the 238px rail beside the mark and the truncate
-                 rendered it "SPACE LEA…". Normal width and 16px fit with room;
-                 `truncate` stays as a backstop for long display names. */
-              <span
-                className="nameplate truncate text-[16px] text-ink"
-                style={{ fontStretch: '100%' }}
-              >
-                Space Learn
-              </span>
-            )}
-          </Link>
-          {onToggleCollapse && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className={cn(
-                'hidden h-10 w-10 shrink-0 place-items-center rounded-[10px] text-faint transition-colors hover:bg-line-soft hover:text-ink md:grid',
-                !collapsed && 'ml-auto',
-              )}
+            <span className="grid place-items-center transition duration-200 ease-out group-hover:scale-75 group-hover:opacity-0 group-focus-visible:scale-75 group-focus-visible:opacity-0 motion-reduce:transition-none">
+              <LogoMark size={26} />
+            </span>
+            <span
+              aria-hidden
+              className="absolute inset-0 grid scale-75 place-items-center text-ink opacity-0 transition duration-200 ease-out group-hover:scale-100 group-hover:opacity-100 group-focus-visible:scale-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
             >
-              <Icon name={collapsed ? 'expand' : 'collapse'} size={18} />
-            </button>
-          )}
-        </div>
+              <Icon name="expand" size={18} />
+            </span>
+          </button>
+        ) : (
+          <div className="flex w-full items-center gap-2 px-1 pt-1">
+            <Link
+              to="/home"
+              onClick={onNavigate}
+              className="flex min-w-0 items-center gap-2.5"
+              aria-label="Space Learn — home"
+            >
+              <LogoMark size={collapsed ? 26 : 28} />
+              {!collapsed && (
+                /* Sized to FIT the rail rather than be clipped by it: Archivo at
+                   normal width and 16px clears the 232px rail beside the mark,
+                   with `truncate` as a backstop. */
+                <span
+                  className="nameplate truncate text-[16px] text-ink"
+                  style={{ fontStretch: '100%' }}
+                >
+                  Space Learn
+                </span>
+              )}
+            </Link>
+            {onToggleCollapse && (
+              <button
+                type="button"
+                onClick={onToggleCollapse}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+                className="ml-auto hidden h-9 w-9 shrink-0 place-items-center rounded-[10px] text-faint transition-colors hover:bg-line-soft hover:text-ink md:grid"
+              >
+                <Icon name="collapse" size={17} />
+              </button>
+            )}
+          </div>
+        )}
 
-        <nav aria-label="Primary" className={cn('flex w-full flex-col gap-1 text-[15px]', collapsed && 'items-center')}>
+        <nav aria-label="Primary" className={cn('flex w-full flex-col gap-0.5 text-[14px]', collapsed && 'items-center')}>
           {nav.map((item) => (
             <NavLink
               key={item.label}
               to={item.to}
               end={item.end}
+              // Marks this as "the student picked this page", so a click on the
+              // page you are already on can take you back to its top (useNavReset).
+              state={{ nav: true }}
               onClick={(e) => {
                 // `pointer-events-none` would have been the simpler way to
                 // block a disabled item, but it also blocks :hover — which
@@ -128,8 +149,8 @@ export function Sidebar({
               aria-disabled={!item.enabled}
               className={({ isActive }) =>
                 cn(
-                  'flex min-h-11 min-w-0 items-center gap-3 rounded-[10px] px-3 py-2 transition-colors md:min-h-10 pointer-coarse:min-h-11',
-                  collapsed && 'w-11 justify-center px-0',
+                  'flex min-h-11 min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2 transition-colors md:min-h-10 pointer-coarse:min-h-11',
+                  collapsed && 'w-10 justify-center px-0',
                   isActive && item.enabled
                     ? 'bg-brand-soft font-semibold text-brand-deep'
                     : 'font-semibold text-ink-2 hover:bg-line-soft hover:text-ink',
@@ -213,7 +234,7 @@ export function Sidebar({
             className={({ isActive }) =>
               cn(
                 'group flex min-h-10 items-center gap-2.5 rounded-xl border px-2 text-[14px] font-bold transition-colors',
-                collapsed ? 'h-11 w-11 justify-center px-0' : 'w-full',
+                collapsed ? 'h-10 w-10 justify-center px-0' : 'w-full',
                 isActive
                   ? 'border-brand/50 bg-brand-soft text-brand-deep'
                   : 'border-line bg-raised/60 text-ink-2 hover:border-brand/40 hover:text-ink',

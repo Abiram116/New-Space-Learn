@@ -52,3 +52,7 @@ export const GRADE_PULSE: Record<Grade, Pulse> = {
   good: 'good',
   easy: 'bright',
 }
+
+/** Cards in one "review what's due" session; the rest are offered as "Keep going". */
+export const REVIEW_BATCH = 20
+

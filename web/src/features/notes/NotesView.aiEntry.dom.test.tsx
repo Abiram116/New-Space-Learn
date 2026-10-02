@@ -19,7 +19,7 @@
  * screen (it's an account-wide library now, see NotesView's own top-level
  * comment), so `SubspaceHeader`'s five-tab strip — "which of THIS topic's
  * screens am I on" — became actively misleading here and was deliberately
- * turned off (`tabs={false}`). The breadcrumb/title/actions row it still
+ * turned off (`breadcrumb={false}`). The breadcrumb/title/actions row it still
  * renders is what this file actually needs to keep proving.
  */
 
