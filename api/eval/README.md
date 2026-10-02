@@ -12,7 +12,10 @@ uv run python -m eval.bench --table            # rebuild RESULTS.md
 ```
 
 It runs on this machine against the six documents in `corpus/`. It never reads
-or writes the database. `--answers` uses your Groq key: two calls per question,
+or writes the project's database: the pipelines that need PostgreSQL get a
+throwaway local one (`pg.py`), with the project's real search migration
+applied, so keyword search is measured on the real thing. That needs the
+`eval` extra once: `uv sync --extra dev --extra eval`. `--answers` uses your Groq key: two calls per question,
 paced slowly enough for the free tier (about fifteen minutes for 36), and a
 re-run only pays for questions whose sources changed.
 
@@ -23,7 +26,11 @@ re-run only pays for questions whose sources changed.
 | `corpus/` | Six Wikipedia articles as PDFs (see `SOURCES.md`), grouped into three topics |
 | `questions.json` | 114 questions: direct, reworded, follow-up, exact-term, cross-section and unanswerable |
 | `corpus.py` | Loads both, and decides whether a chunk supports an answer |
-| `variants.py` | The pipelines being compared. `baseline` is production today |
+| `variants.py` | The pipelines being compared: `baseline` (as first measured), then one stage added at a time up to `v2-5-judge`, which is production's own config |
+| `pg.py` | The local PostgreSQL the pipeline variants search |
+| `rewrites.py`, `rewrites.json` | Follow-up rewrites already paid for, so runs are free and repeatable |
+| `calibrate.py` | Fits the "do the documents cover this?" thresholds on the tune questions |
+| `legacy.py` | The first chunker, frozen, so `baseline` stays what was measured |
 | `metrics.py` | Retrieval scores |
 | `answers.py` | Answer scores, on a sample |
 | `bench.py` | Runs a variant, saves `results/<variant>.json`, rebuilds `RESULTS.md` |
@@ -41,8 +48,10 @@ questions independent of how documents are chunked — the thing being changed.
 - Each question is `tune` or `test`. Thresholds may be fitted on `tune` only;
   the headline table is `test`.
 
-## Adding a pipeline
+## Changing retrieval
 
-Subclass `Variant` in `variants.py`, give it a `name` and `description`, add it
-to `VARIANTS`, and run it. It appears as a new row in `RESULTS.md` beside the
-ones before it.
+Production's retrieval is `app/services/retrieval.py` run with
+`RetrievalConfig`'s defaults, and `v2-5-judge` is exactly that. To try a
+change, add a `Pipeline` subclass in `variants.py` with a different config,
+run it, and compare its row in `RESULTS.md`. Only move the default once the
+numbers say so (a test pins the defaults to make that a deliberate act).

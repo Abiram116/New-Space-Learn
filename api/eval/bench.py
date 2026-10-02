@@ -37,6 +37,8 @@ COLUMNS = [
     ("context_full", "…in full"),
     ("abstain_when_unanswerable", "Said “not covered” when it wasn’t"),
     ("abstain_when_answerable", "Wrongly said “not covered”"),
+    ("doubt_when_unanswerable", "Doubted an uncovered question"),
+    ("doubt_when_answerable", "Doubted a covered one"),
     ("context_chars", "Characters sent"),
     ("search_ms", "Search ms"),
 ]

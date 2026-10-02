@@ -33,6 +33,7 @@ from ..services import (
     guardrails,
     personalization,
     rag,
+    retrieval,
     student_model,
     supabase,
 )
@@ -114,11 +115,28 @@ async def send_chat(
     # style_bandit's own reads are cached per user, but on a cold cache this
     # is the difference between adding a full extra round trip to the
     # request and adding none.
-    prior, retrieved, (student_context, prefs_applied, style_applied) = await asyncio.gather(
-        recent_history(user.id, subspace_id, limit=history_limit),
-        rag.retrieve_with_links(subspace_id, body.text, linked_ids),
+    #
+    # Retrieval needs the history too — a follow-up is searched as the question
+    # it stands for — so it waits on the same fetch rather than a second one,
+    # and still overlaps with everything else.
+    history_task = asyncio.ensure_future(recent_history(user.id, subspace_id, limit=history_limit))
+
+    async def find_sources() -> retrieval.Retrieval:
+        earlier = _before_this_question(await history_task, body.text, body.regenerate)
+        return await rag.search(
+            body.text,
+            subspace_id=subspace_id,
+            linked_subspace_ids=linked_ids,
+            history=earlier,
+            topic=subspace["name"],
+        )
+
+    prior, found, (student_context, prefs_applied, style_applied) = await asyncio.gather(
+        history_task,
+        find_sources(),
         personalization.render_chat(snap, subspace_id, user.id),
     )
+    retrieved = [rag.as_retrieved(c) for c in found.chunks]
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],
         # The skill's mode composed WITH this student's weak concepts, rather
@@ -135,6 +153,7 @@ async def send_chat(
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
         student_context=student_context,
         memory_summary=subspace.get("memory_summary") or "",
+        sources_doubtful=found.confidence == "weak",
     )
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
@@ -199,9 +218,11 @@ async def send_chat(
             # needs today.
             used_markers = {int(n) for n in rag.cited_markers(assistant_text)}
             log.info(
-                "chat turn subspace=%s user=%s retrieved=%s cited=%s",
+                "chat turn subspace=%s user=%s query=%s confidence=%s retrieved=%s cited=%s",
                 subspace_id,
                 user.id,
+                found.query.how,
+                found.confidence,
                 [
                     {
                         "marker": i,
@@ -236,6 +257,10 @@ async def send_chat(
                         # experiment) — `style_bandit` reads this back to
                         # score a later feedback tap against it.
                         "style": style_applied,
+                        # What was searched for, what came back and what was
+                        # used — so "why did it answer that?" can be read off
+                        # the message instead of re-run.
+                        "retrieval": found.trace(),
                     },
                 },
             )
@@ -288,6 +313,20 @@ async def send_chat(
 
 
 # ── Internals ──────────────────────────────────────────────────────────
+
+
+def _before_this_question(history: list[dict[str, str]], question: str, regenerate: bool) -> list[dict[str, str]]:
+    """The conversation as it stood before this question was asked.
+
+    On a regenerate the question is already the last thing the student said,
+    so it (and anything after it) is dropped: otherwise a follow-up would be
+    resolved against itself as "the previous question"."""
+    if not regenerate:
+        return history
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user" and history[i].get("content") == question:
+            return history[:i]
+    return history
 
 
 def _sse(event: str, data: dict) -> bytes:

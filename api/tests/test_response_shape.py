@@ -192,3 +192,19 @@ def test_citation_instructions_survive_the_new_style_guidance() -> None:
     assert "Answer only using the Sources below" in text
     assert text.index(RESPONSE_SHAPE) < text.index("[[n]]")
     assert meta[0]["marker"] == 1
+
+
+def test_doubtful_sources_are_passed_with_a_warning_and_good_ones_without():
+    """Retrieval's "weak" verdict reaches the model as an instruction to check
+    the sources before leaning on them — and only then."""
+    source = [rag.Retrieved(document_id="d", document_name="notes.pdf", content="Plants make sugar.", locator="p. 1", similarity=0.6)]
+    common = dict(
+        subspace_name="Biology", active_skill_instructions=[], history=[], question="What is mitosis?",
+        answer_only_from_docs=True, always_show_citations=True,
+    )
+    doubtful, _ = rag.build_prompt(retrieved=source, sources_doubtful=True, **common)
+    sure, _ = rag.build_prompt(retrieved=source, **common)
+    nothing, _ = rag.build_prompt(retrieved=[], sources_doubtful=True, **common)
+    warning = "may not be about this question"
+    assert warning in doubtful[0]["content"]
+    assert warning not in sure[0]["content"] and warning not in nothing[0]["content"]

@@ -28,6 +28,8 @@ def covered(question: Question, chunks: list[Chunk]) -> float:
 def score(question: Question, result: Result) -> dict:
     row: dict = {"id": question.id, "category": question.category, "split": question.split, "query": result.query}
     row["abstained"] = result.abstained
+    # Passed, but flagged to the model as possibly not answering the question.
+    row["doubted"] = result.abstained or getattr(result.found, "confidence", "good") == "weak"
     row["context_chars"] = sum(len(c.text) for c in result.context)
     row["ms"] = round(result.ms, 2)
     if question.answerable:
@@ -59,6 +61,9 @@ def summarise(rows: list[dict]) -> dict:
         # Said "not in your documents" when it was not / when it was.
         "abstain_when_unanswerable": _mean([r["abstained"] for r in unanswerable]),
         "abstain_when_answerable": _mean([r["abstained"] for r in answerable]),
+        # Abstained or passed with a warning.
+        "doubt_when_unanswerable": _mean([r["doubted"] for r in unanswerable]),
+        "doubt_when_answerable": _mean([r["doubted"] for r in answerable]),
         "context_chars": round(median(r["context_chars"] for r in rows)) if rows else 0,
         "search_ms": round(median(r["ms"] for r in rows), 2) if rows else 0,
     }

@@ -48,6 +48,16 @@ class Embedder:
         out = np.array([self._store[_key(t, kind)] for t in texts], dtype=np.float32)
         return out / np.clip(np.linalg.norm(out, axis=1, keepdims=True), 1e-12, None)
 
+    async def aembed(self, texts: list[str]) -> list[list[float]]:
+        """The same cache, for code that is already inside an event loop (the
+        retrieval pipeline). Texts are cached exactly as given, prefix and all."""
+        missing = [t for t in dict.fromkeys(texts) if _key(t, "raw") not in self._store]
+        if missing:
+            for text, vector in zip(missing, await embeddings.embed_texts(missing), strict=True):
+                self._store[_key(text, "raw")] = [round(float(x), 6) for x in vector]
+            self._dirty = True
+        return [self._store[_key(t, "raw")] for t in texts]
+
     def time_one(self, texts: list[str]) -> float:
         """Median milliseconds to embed one text, bypassing the cache."""
         import time

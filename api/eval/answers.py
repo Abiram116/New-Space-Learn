@@ -103,6 +103,8 @@ async def answer_one(question: Question, result: Result) -> dict:
         retrieved=retrieved,
         answer_only_from_docs=True,
         always_show_citations=True,
+        # As production does: tell the model when retrieval doubted its sources.
+        sources_doubtful=getattr(result.found, "confidence", "good") == "weak",
     )
     raw = await _complete(messages, settings.groq_model, 0.4)
     answer, _ = rag.strip_invalid_citations(raw, len(retrieved))
