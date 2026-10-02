@@ -194,7 +194,8 @@ function Offer({ model, onUpdated, className }: CardProps) {
   )
 }
 
-function Choice({
+/** One choice as a tappable card — also what Settings › Learning is built from. */
+export function Choice({
   on,
   role,
   label,

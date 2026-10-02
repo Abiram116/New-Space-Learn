@@ -32,6 +32,13 @@ export function isBlank(value: AnswerValue | undefined): boolean {
   return false
 }
 
+/** Whether what was picked is a choice that asks for more ("Something broke"). */
+export function asksForDetail(question: FeedbackQuestion, value: AnswerValue | undefined): boolean {
+  const asks = question.detail_options ?? []
+  if (!asks.length || value === undefined) return false
+  return (Array.isArray(value) ? value : [value]).some((v) => typeof v === 'string' && asks.includes(v))
+}
+
 /** The required questions still unanswered, in order. */
 export function missingRequired(questions: FeedbackQuestion[], answers: Answers): string[] {
   return questions.filter((q) => q.required && isBlank(answers[q.id])).map((q) => q.id)
@@ -54,6 +61,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
   const [questions, setQuestions] = useState<FeedbackQuestion[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [answers, setAnswers] = useState<Answers>({})
+  const [details, setDetails] = useState<Record<string, string>>({})
   const [email, setEmail] = useState('')
   const [trap, setTrap] = useState('')
   const [missing, setMissing] = useState<string[]>([])
@@ -97,7 +105,12 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
           .filter((q) => !isBlank(answers[q.id]))
           .map((q) => {
             const value = answers[q.id]!
-            return { question_id: q.id, value: typeof value === 'string' ? value.trim() : value }
+            const detail = asksForDetail(q, value) ? details[q.id]?.trim() : ''
+            return {
+              question_id: q.id,
+              value: typeof value === 'string' ? value.trim() : value,
+              ...(detail ? { detail } : {}),
+            }
           }),
         contact_email: !signedIn && email.trim() ? email.trim() : undefined,
         page: (window.location.pathname + window.location.search).slice(0, 300),
@@ -105,6 +118,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
       })
       setSent(true)
       setAnswers({})
+      setDetails({})
       setEmail('')
     } catch (err) {
       // Nothing typed is thrown away: the answers stay in the form.
@@ -172,6 +186,17 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
               </span>
             </legend>
             <Answer question={q} value={value} onChange={(v) => set(q.id, v)} />
+            {asksForDetail(q, value) && (
+              <input
+                autoFocus
+                value={details[q.id] ?? ''}
+                maxLength={LIMITS.feedbackDetail}
+                onChange={(e) => setDetails((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder="Tell us a little more — what happened?"
+                aria-label={`${q.prompt} — tell us more`}
+                className={cn(field, 'mt-2.5')}
+              />
+            )}
             {skipped && (
               <p role="alert" className="mt-2 text-[13px] font-medium text-coral-deep">
                 Please answer this one.

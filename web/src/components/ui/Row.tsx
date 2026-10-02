@@ -15,7 +15,7 @@
  * padding the list stops reading as a list.
  */
 
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { Toggle } from './Bits'
 
@@ -25,9 +25,12 @@ export function RowShell({
   children,
   last,
   saving,
+  saved,
 }: {
   label: string
   hint?: string
+  /** A moment after a save lands: says so, in the same spot, then goes. */
+  saved?: boolean
   /** Shows the autosave tell beside the LABEL, not beside the control — the
    *  control is right-aligned, so anything appended to it shoves it sideways
    *  every time a save starts. The label column has slack to absorb it. */
@@ -47,7 +50,7 @@ export function RowShell({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span>{label}</span>
-          {saving && <SavingDot />}
+          {saving ? <SavingDot /> : saved ? <SavedTick /> : null}
         </div>
         {hint && <div className="mt-0.5 text-[12.5px] leading-snug text-faint">{hint}</div>}
       </div>
@@ -70,21 +73,35 @@ export function SavingDot() {
   )
 }
 
+/** The other half of the tell: it landed. Quiet, and gone in a second or two. */
+export function SavedTick() {
+  return (
+    <span role="status" className="flex items-center gap-1 text-[12px] text-jade-deep">
+      <span aria-hidden>✓</span>
+      saved
+    </span>
+  )
+}
+
 export function RowWithToggle({
   label,
   hint,
   checked,
   onChange,
   last,
+  saving,
+  saved,
 }: {
   label: string
   hint?: string
   checked: boolean
   onChange: (next: boolean) => void
   last?: boolean
+  saving?: boolean
+  saved?: boolean
 }) {
   return (
-    <RowShell label={label} hint={hint} last={last}>
+    <RowShell label={label} hint={hint} last={last} saving={saving} saved={saved}>
       <Toggle checked={checked} onChange={onChange} label={label} />
     </RowShell>
   )
@@ -96,6 +113,8 @@ export function RowWithNumber({
   suffix,
   onChange,
   saving,
+  saved,
+  hint,
   min,
   max,
   last,
@@ -105,27 +124,67 @@ export function RowWithNumber({
   suffix?: string
   onChange: (next: number) => void
   saving?: boolean
+  saved?: boolean
+  hint?: string
   min?: number
   max?: number
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last} saving={saving}>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => {
-          const n = Number(e.target.value)
-          // Guarded because an empty field parses to NaN, which would be
-          // persisted and come back as a broken number input.
-          if (Number.isFinite(n)) onChange(n)
-        }}
-        className="h-10 w-20 max-md:h-11 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
-      />
+    <RowShell label={label} hint={hint} last={last} saving={saving} saved={saved}>
+      <NumberInput value={value} min={min} max={max} onCommit={onChange} label={label} />
       {suffix && <span className="text-[13px] text-muted">{suffix}</span>}
     </RowShell>
+  )
+}
+
+/**
+ * A number you can actually type. What is typed stays in the box until it is
+ * finished — Enter, or leaving the field — and only then is it saved, so "45"
+ * is one save rather than "4" then "45", and clearing the box to retype never
+ * saves a zero. Anything out of range goes back to the last good value.
+ */
+export function NumberInput({
+  value,
+  min = 0,
+  max = Number.MAX_SAFE_INTEGER,
+  onCommit,
+  label,
+}: {
+  value: number
+  min?: number
+  max?: number
+  onCommit: (next: number) => void
+  label: string
+}) {
+  const [draft, setDraft] = useState(String(value))
+  useEffect(() => setDraft(String(value)), [value])
+
+  const commit = () => {
+    const n = Math.round(Number(draft))
+    if (draft.trim() === '' || !Number.isFinite(n) || n < min || n > max) return setDraft(String(value))
+    setDraft(String(n))
+    if (n !== value) onCommit(n)
+  }
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      value={draft}
+      min={min}
+      max={max}
+      aria-label={label}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit()
+        }
+      }}
+      className="h-10 w-20 max-md:h-11 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
+    />
   )
 }
 
@@ -160,6 +219,9 @@ export function RowWithText({
   placeholder,
   onChange,
   saving,
+  saved,
+  hint,
+  maxLength,
   last,
 }: {
   label: string
@@ -167,13 +229,18 @@ export function RowWithText({
   placeholder?: string
   onChange: (next: string | null) => void
   saving?: boolean
+  saved?: boolean
+  hint?: string
+  maxLength?: number
   last?: boolean
 }) {
   return (
-    <RowShell label={label} last={last} saving={saving}>
+    <RowShell label={label} hint={hint} last={last} saving={saving} saved={saved}>
       <input
         type="text"
         value={value ?? ''}
+        maxLength={maxLength}
+        aria-label={label}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value || null)}
         className="h-10 w-40 rounded-[10px] border border-line bg-well px-2.5 text-right text-[14px] text-ink sm:w-56 outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"

@@ -18,7 +18,7 @@ import { FeedbackForm, isBlank, missingRequired } from './FeedbackForm'
 import { parseOptions } from '../admin/Questions'
 
 const q = (over: Partial<FeedbackQuestion>): FeedbackQuestion => ({
-  id: 'x', position: 0, prompt: 'Q?', kind: 'short', options: [], required: true, active: true, ...over,
+  id: 'x', position: 0, prompt: 'Q?', kind: 'short', options: [], detail_options: [], required: true, active: true, ...over,
 })
 const QUESTIONS: FeedbackQuestion[] = [
   q({ id: 'rate', prompt: 'Overall?', kind: 'rating' }),
@@ -92,6 +92,25 @@ describe('FeedbackForm', () => {
       { question_id: 'next', value: 'Offline mode' },
     ])
     expect(sent.website).toBe('') // the bot trap, untouched by a person
+  })
+
+  it('opens a "tell us more" box only for a choice that asks, and sends what was typed', async () => {
+    getFeedbackForm.mockResolvedValue(
+      QUESTIONS.map((x) => (x.id === 'use' ? { ...x, detail_options: ['Quizzes'] } : x)),
+    )
+    render(<FeedbackForm source="settings" />)
+    await answerEverything()
+    expect(screen.queryByLabelText('Use it for? — tell us more')).toBeNull()
+
+    fireEvent.click(pick('Use it for?', 'Quizzes'))
+    fireEvent.change(screen.getByLabelText('Use it for? — tell us more'), { target: { value: ' the timer froze ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    await waitFor(() => expect(sendProductFeedback).toHaveBeenCalled())
+    const sent = sendProductFeedback.mock.calls[0][0].answers
+    expect(sent.find((a: { question_id: string }) => a.question_id === 'use')).toEqual({
+      question_id: 'use', value: 'Quizzes', detail: 'the timer froze',
+    })
+    expect(sent.find((a: { question_id: string }) => a.question_id === 'rate')).toEqual({ question_id: 'rate', value: 4 })
   })
 
   it('asks a signed-out visitor for an optional reply address, and never a signed-in user', async () => {

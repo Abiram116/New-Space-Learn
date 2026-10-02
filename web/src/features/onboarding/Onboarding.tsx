@@ -435,7 +435,7 @@ function DesktopOnboarding() {
   const skipAll = useCallback(() => {
     // Say where it went: leaving without being told the questions still exist
     // makes it look like a one-time door you just closed.
-    show('You can answer these later in Settings → How you learn.', 'info')
+    show('You can answer these later in Settings → Learning.', 'info')
     void leave()
   }, [leave, show])
 

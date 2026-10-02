@@ -17,6 +17,8 @@ import { cn } from '../../lib/cn'
 import { scoreTone } from './Summary'
 
 const shown = (value: StoredAnswer['value']) => (Array.isArray(value) ? value.join(', ') : String(value))
+/** The answer with what they added after it, for search and the spreadsheet. */
+const full = (a: StoredAnswer) => (a.detail ? `${shown(a.value)} — ${a.detail}` : shown(a.value))
 
 const overall = (r: FeedbackResponse): number | null => {
   const first = r.answers.find((a) => a.kind === 'rating')
@@ -31,7 +33,7 @@ export function toCsv(rows: FeedbackResponse[]): string {
   const lines = rows.map((r) =>
     [r.created_at, r.source, r.signed_in ? 'signed in' : 'visitor', r.contact_email ?? '', ...prompts.map((p) => {
       const a = r.answers.find((x) => x.prompt === p)
-      return a ? shown(a.value) : ''
+      return a ? full(a) : ''
     })].map(cell).join(','),
   )
   return [['When', 'From', 'Who', 'Reply to', ...prompts].map(cell).join(','), ...lines].join('\n')
@@ -86,7 +88,7 @@ export function Responses() {
     const q = query.trim().toLowerCase()
     if (!rows || !q) return rows ?? []
     return rows.filter(
-      (r) => r.contact_email?.toLowerCase().includes(q) || r.answers.some((a) => shown(a.value).toLowerCase().includes(q)),
+      (r) => r.contact_email?.toLowerCase().includes(q) || r.answers.some((a) => full(a).toLowerCase().includes(q)),
     )
   }, [rows, query])
 
@@ -157,6 +159,7 @@ export function Responses() {
                       {shown(a.value)}
                       {a.kind === 'rating' && <span className="text-faint"> / 5</span>}
                       {a.kind === 'scale' && <span className="text-faint"> / 10</span>}
+                      {a.detail && <span className="mt-0.5 block text-ink-2">“{a.detail}”</span>}
                     </dd>
                   </div>
                 ))}

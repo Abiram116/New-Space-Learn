@@ -361,6 +361,50 @@ def test_summary_of_nothing_is_empty_not_an_error():
     assert out.total == 0 and out.takeaways == [] and out.items == [] and len(out.by_day) == 30
 
 
+# ── "Tell us more" after a choice ──────────────────────────────────────
+
+
+def test_a_choice_that_asks_for_more_keeps_what_was_typed(world):
+    world["feedback_questions"][1]["detail_options"] = ["Quizzes"]
+    answers = [a | {"detail": "  the timer froze  "} if a["question_id"] == "q-pick" else a for a in GOOD]
+    answers[1] = {"question_id": "q-pick", "value": "Quizzes", "detail": "  the timer froze  "}
+    assert _send(_client(None), answers).status_code == 201
+    stored = world["product_feedback"][0]["answers"][1]
+    assert stored["value"] == "Quizzes" and stored["detail"] == "the timer froze"
+
+
+def test_detail_is_dropped_when_the_picked_choice_does_not_ask(world):
+    world["feedback_questions"][1]["detail_options"] = ["Quizzes"]
+    answers = list(GOOD)
+    answers[1] = {"question_id": "q-pick", "value": "Notes", "detail": "sneaked in"}
+    answers[0] = {"question_id": "q-rate", "value": 4, "detail": "not a choice at all"}
+    assert _send(_client(None), answers).status_code == 201
+    assert all("detail" not in a for a in world["product_feedback"][0]["answers"])
+    too_long = [{"question_id": "q-pick", "value": "Quizzes", "detail": "x" * 501}]
+    assert _send(_client(None), too_long).status_code == 422
+
+
+def test_an_admin_sets_which_choices_ask_and_a_removed_choice_stops_asking(world):
+    c = _admin()
+    made = c.post("/api/v1/admin/feedback/questions", json={
+        "prompt": "Did it work?", "kind": "choice", "options": ["Yes", "Broke"], "detail_options": ["Broke", "Made up"],
+    }).json()
+    assert made["detail_options"] == ["Broke"]
+    assert _client(None).get("/api/v1/feedback-form").json()[-1]["detail_options"] == ["Broke"]
+    edited = c.patch(f"/api/v1/admin/feedback/questions/{made['id']}", json={"options": ["Yes", "No"]}).json()
+    assert edited["detail_options"] == []
+
+
+def test_summary_lists_the_details_under_their_choice():
+    rows = [{"created_at": "2026-10-02T09:00:00+00:00", "answers": [
+        {"question_id": "a", "prompt": "Overall?", "kind": "rating", "value": 2},
+        {"question_id": "w", "prompt": "Did it work?", "kind": "choice", "value": "Broke", "detail": "upload failed"},
+    ]}]
+    item = {i.question_id: i for i in feedback_summary.summarise(rows).items}["w"]
+    assert item.counts == {"Broke": 1}
+    assert [(t.text, t.about, t.score) for t in item.texts] == [("upload failed", "Broke", 2)]
+
+
 def test_validate_answers_skips_an_optional_blank():
     stored = pf.validate_answers(Q, {a["question_id"]: a["value"] for a in GOOD} | {"q-more": "   "})
     assert [a["question_id"] for a in stored] == ["q-rate", "q-pick", "q-many", "q-nps", "q-next"]

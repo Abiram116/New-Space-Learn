@@ -77,6 +77,7 @@ const MIRRORS: [keyof typeof LIMITS, string[]][] = [
   ['feedbackPrompt', ['FeedbackQuestionCreate.prompt', 'FeedbackQuestionUpdate.prompt']],
   ['feedbackEmail', ['ProductFeedbackIn.contact_email']],
   ['adminPassword', ['AdminUnlockIn.password']],
+  ['feedbackDetail', ['FeedbackAnswerIn.detail']],
 ]
 
 describe('client limits mirror the API schema', () => {

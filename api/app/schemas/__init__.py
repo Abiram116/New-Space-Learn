@@ -732,6 +732,8 @@ class FeedbackQuestionOut(BaseModel):
     prompt: str
     kind: QuestionKind
     options: list[str] = Field(default_factory=list)
+    #: The choices that open a "tell us more" box when picked.
+    detail_options: list[str] = Field(default_factory=list)
     required: bool = True
     active: bool = True
 
@@ -740,12 +742,14 @@ class FeedbackQuestionCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=200)
     kind: QuestionKind
     options: list[str] = Field(default_factory=list)
+    detail_options: list[str] = Field(default_factory=list)
     required: bool = True
 
 
 class FeedbackQuestionUpdate(BaseModel):
     prompt: str | None = Field(default=None, min_length=3, max_length=200)
     options: list[str] | None = None
+    detail_options: list[str] | None = None
     required: bool | None = None
     active: bool | None = None
 
@@ -760,6 +764,9 @@ class FeedbackAnswerIn(BaseModel):
     #: against the question's kind in the handler. Strict, so `true` is not
     #: quietly read as the number 1, nor "5" as 5.
     value: StrictInt | StrictStr | list[StrictStr]
+    #: The "tell us more" text, for a choice that asks for it. Kept only when
+    #: the picked choice really does ask (checked in the handler).
+    detail: str | None = Field(default=None, max_length=500)
 
 
 class ProductFeedbackIn(BaseModel):
@@ -784,6 +791,8 @@ class ProductFeedbackOut(BaseModel):
 
 class FeedbackTextAnswer(BaseModel):
     text: str
+    #: For a "tell us more" answer: the choice it was written about.
+    about: str | None = None
     created_at: datetime | None = None
     #: The same person's overall rating (1–5), when they gave one — so a
     #: comment can be read knowing whether a happy or unhappy person wrote it.

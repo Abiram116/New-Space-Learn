@@ -104,6 +104,8 @@ export const LIMITS = {
   feedbackLong: 2000,
   /** `FEEDBACK_OPTION_MAX` — one choice of a feedback question. */
   feedbackOption: 60,
+  /** `FeedbackAnswerIn.detail` — the "tell us more" box after a choice. */
+  feedbackDetail: 500,
   /** `AdminUnlockIn.password` — the admin page's password box. */
   adminPassword: 200,
 } as const

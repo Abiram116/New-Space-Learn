@@ -17,12 +17,14 @@ export type FeedbackQuestion = {
   prompt: string
   kind: QuestionKind
   options: string[]
+  /** The choices that open a "tell us more" box when picked. */
+  detail_options: string[]
   required: boolean
   active: boolean
 }
 
 export type AnswerValue = number | string | string[]
-export type FeedbackAnswer = { question_id: string; value: AnswerValue }
+export type FeedbackAnswer = { question_id: string; value: AnswerValue; detail?: string }
 
 /** Public: a signed-out visitor on the landing page reads this too. */
 export const getFeedbackForm = () => apiFetch<FeedbackQuestion[]>('/feedback-form')
@@ -45,12 +47,13 @@ export const createQuestion = (input: {
   prompt: string
   kind: QuestionKind
   options?: string[]
+  detail_options?: string[]
   required?: boolean
 }) => adminFetch<FeedbackQuestion>('/admin/feedback/questions', { method: 'POST', body: input })
 
 export const updateQuestion = (
   id: string,
-  patch: Partial<Pick<FeedbackQuestion, 'prompt' | 'options' | 'required' | 'active'>>,
+  patch: Partial<Pick<FeedbackQuestion, 'prompt' | 'options' | 'detail_options' | 'required' | 'active'>>,
 ) => adminFetch<FeedbackQuestion>(`/admin/feedback/questions/${id}`, { method: 'PATCH', body: patch })
 
 export const deleteQuestion = (id: string) =>
@@ -59,7 +62,7 @@ export const deleteQuestion = (id: string) =>
 export const reorderQuestions = (ids: string[]) =>
   adminFetch<{ ok: true }>('/admin/feedback/questions/reorder', { method: 'POST', body: { ids } })
 
-export type StoredAnswer = { question_id: string; prompt: string; kind: QuestionKind; value: AnswerValue }
+export type StoredAnswer = { question_id: string; prompt: string; kind: QuestionKind; value: AnswerValue; detail?: string }
 export type FeedbackResponse = {
   id: string
   created_at: string
@@ -80,7 +83,7 @@ export const listResponses = (before?: string) =>
 export const deleteResponse = (id: string) =>
   adminFetch<{ ok: true }>(`/admin/feedback/responses/${id}`, { method: 'DELETE' })
 
-export type SummaryText = { text: string; created_at: string | null; score: number | null }
+export type SummaryText = { text: string; about?: string | null; created_at: string | null; score: number | null }
 export type SummaryItem = {
   question_id: string
   prompt: string

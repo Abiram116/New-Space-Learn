@@ -77,7 +77,9 @@ def _keywords(texts: list[str]) -> list[FeedbackKeyword]:
     for text in texts:
         # Once per answer: one person repeating a word is not a theme.
         seen.update({w for w in _WORD.findall(text.lower()) if w not in _STOP and len(w) > 3})
-    return [FeedbackKeyword(word=w, count=n) for w, n in seen.most_common(KEYWORDS_MAX) if n >= 2]
+    # Most mentioned first; ties in alphabetical order, so the list never reshuffles.
+    ranked = sorted(seen.items(), key=lambda kv: (-kv[1], kv[0]))[:KEYWORDS_MAX]
+    return [FeedbackKeyword(word=w, count=n) for w, n in ranked if n >= 2]
 
 
 def _percent(part: int, whole: int) -> int:
@@ -130,6 +132,13 @@ def summarise(
             elif kind == "multi" and isinstance(value, list):
                 for v in value:
                     item.counts[str(v)] = item.counts.get(str(v), 0) + 1
+            # What they typed after a choice that asks for more.
+            detail = a.get("detail")
+            if kind in ("choice", "multi") and isinstance(detail, str) and detail.strip():
+                about = ", ".join(map(str, value)) if isinstance(value, list) else str(value)
+                item.texts.append(
+                    FeedbackTextAnswer(text=detail.strip(), about=about, created_at=created, score=score)
+                )
             elif kind in ("short", "long") and isinstance(value, str) and value.strip():
                 item.texts.append(FeedbackTextAnswer(text=value.strip(), created_at=created, score=score))
 

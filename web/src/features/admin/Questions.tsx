@@ -109,7 +109,11 @@ export function Questions() {
                 question={q}
                 onCancel={() => setEditing(null)}
                 onSave={async (values) => {
-                  await patch(q, { prompt: values.prompt, required: values.required, ...(hasOptions(q.kind) ? { options: values.options } : {}) })
+                  await patch(q, {
+                    prompt: values.prompt,
+                    required: values.required,
+                    ...(hasOptions(q.kind) ? { options: values.options, detail_options: values.detail_options } : {}),
+                  })
                   setEditing(null)
                 }}
               />
@@ -144,6 +148,7 @@ export function Questions() {
                 <p className="mt-0.5 text-[12.5px] text-muted">
                   {KIND_LABEL[q.kind]}
                   {hasOptions(q.kind) && ` · ${q.options.join(', ')}`}
+                  {q.detail_options?.length > 0 && ` · asks for more on: ${q.detail_options.join(', ')}`}
                   {' · '}
                   {q.required ? 'Required' : 'Optional'}
                   {!q.active && ' · Retired'}
@@ -198,7 +203,7 @@ export function Questions() {
   )
 }
 
-type Draft = { prompt: string; kind: QuestionKind; options: string[]; required: boolean }
+type Draft = { prompt: string; kind: QuestionKind; options: string[]; detail_options: string[]; required: boolean }
 
 function QuestionEditor({
   question,
@@ -215,6 +220,7 @@ function QuestionEditor({
   const [kind, setKind] = useState<QuestionKind>(question?.kind ?? 'choice')
   const [optionsText, setOptionsText] = useState((question?.options ?? []).join('\n'))
   const [required, setRequired] = useState(question?.required ?? true)
+  const [asks, setAsks] = useState<string[]>(question?.detail_options ?? [])
   const [busy, setBusy] = useState(false)
 
   const options = parseOptions(optionsText)
@@ -235,7 +241,13 @@ function QuestionEditor({
         if (problem || busy) return
         setBusy(true)
         try {
-          await onSave({ prompt: prompt.trim(), kind, options: hasOptions(kind) ? options : [], required })
+          await onSave({
+            prompt: prompt.trim(),
+            kind,
+            options: hasOptions(kind) ? options : [],
+            detail_options: hasOptions(kind) ? options.filter((o) => asks.includes(o)) : [],
+            required,
+          })
         } finally {
           setBusy(false)
         }
@@ -274,6 +286,25 @@ function QuestionEditor({
             className={cn(field, 'resize-y leading-relaxed')}
           />
         </label>
+      )}
+      {hasOptions(kind) && options.length > 0 && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className="setcode mb-1.5">Ask “tell us more” when someone picks</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            {options.map((o) => (
+              <label key={o} className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-2">
+                <input
+                  type="checkbox"
+                  checked={asks.includes(o)}
+                  onChange={(e) => setAsks((prev) => (e.target.checked ? [...prev, o] : prev.filter((x) => x !== o)))}
+                  className="accent-[var(--color-brand)]"
+                />
+                {o}
+              </label>
+            ))}
+          </div>
+          <p className="text-[12.5px] text-faint">A small text box opens under the question for those choices. It is optional to fill in.</p>
+        </fieldset>
       )}
       <label className="flex cursor-pointer items-center gap-2 text-[13.5px] text-ink-2">
         <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} className="accent-[var(--color-brand)]" />

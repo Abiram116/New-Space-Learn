@@ -1,12 +1,15 @@
 /**
  * Settings — real preferences persisted via `/me/settings`.
  *
- * Sections:
- *   - Account (identity from Supabase, read-only in v1)
- *   - Study (daily goal, streak-freeze)
- *   - How you learn (explicit + observed personalization signals)
- *   - AI & sources (RAG toggles)
- *   - Privacy → sign out
+ * Five sections, ordered by how often they are opened:
+ *   - Learning (how the AI should teach you — the first-run answers, editable)
+ *   - Study (daily goal, streak freeze, how answers use your documents)
+ *   - Account (name, password, sign out, and — last, apart — delete)
+ *   - Feedback
+ *   - About & legal
+ *
+ * Placement follows one rule throughout: what is changed most comes first,
+ * what cannot be undone comes last and stands apart.
  *
  * Space Learn Plus is intentionally removed (per user's answer).
  *
@@ -25,7 +28,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deleteAccount,
   getSettings,
@@ -47,22 +50,25 @@ import { useImmersive } from '../../components/layout/immersive'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { SectionLabel } from '../../components/ui/Bits'
 import { TrustSettingsList } from '../trust/TrustSettingsList'
+import { trustOverlayHref } from '../trust/TrustLayer'
 import { FeedbackTab } from '../feedback/FeedbackTab'
 // The six labelled-row primitives used to be defined at the bottom of this
 // file. Nothing in them knows what a preference is — they are the generic
 // "row in a grouped list" pattern — so they live in `components/ui/` now and
 // this file is ~150 lines shorter for it.
-import { RowWithNumber, RowWithText, RowWithToggle, SavingDot } from '../../components/ui/Row'
+import { RowWithNumber, RowWithToggle } from '../../components/ui/Row'
 import { useToast } from '../../components/ui/Toast'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { writeCache } from '../../lib/asyncCache'
 import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
-import { StyleIntakeCard } from '../onboarding/StyleIntakeCard'
+import { NAME_MAX } from '../onboarding/steps'
+import { LearningPanel } from './LearningPanel'
+import { Shortcuts } from './Shortcuts'
 import { setBotsEnabled, useBotsEnabled } from '../../lib/botPreference'
 
-const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy', 'Feedback', 'About & legal'] as const
+const SECTIONS = ['Learning', 'Study', 'Account', 'Feedback', 'About & legal'] as const
 type Section = (typeof SECTIONS)[number]
 const PANEL_ID = 'settings-panel'
 const tabId = (name: string) => `settings-tab-${name.replace(/\W+/g, '-').toLowerCase()}`
@@ -71,19 +77,31 @@ const tabId = (name: string) => `settings-tab-${name.replace(/\W+/g, '-').toLowe
  *  keystroke — typing "Amazon OA next week" used to be six or seven network
  *  requests, one per pause, none of which the student was waiting on. */
 const TEXT_PATCH_DEBOUNCE_MS = 600
+/** How long "saved" stays beside a setting after its save lands. */
+const SAVED_SHOWN_MS = 1800
 
 export function Settings() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, setDisplayName } = useAuth()
+  const location = useLocation()
   const { show, showError } = useToast()
   const navigate = useNavigate()
 
   const phone = useIsMobile()
   const botsOn = useBotsEnabled()
-  const [active, setActive] = useState<Section>('Account')
+  const [active, setActive] = useState<Section>('Learning')
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [student, setStudent] = useState<StudentModel | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [savingKey, setSavingKey] = useState<string | null>(null)
+  const [savedKey, setSavedKey] = useState<string | null>(null)
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Say "saved" beside the setting that just landed, briefly. */
+  const flashSaved = useCallback((key: string) => {
+    if (savedTimer.current) clearTimeout(savedTimer.current)
+    setSavedKey(key)
+    savedTimer.current = setTimeout(() => setSavedKey(null), SAVED_SHOWN_MS)
+  }, [])
+  useEffect(() => () => void (savedTimer.current && clearTimeout(savedTimer.current)), [])
   // `learned`, not `prefs` — `prefs` is already this file's word for the
   // settings object. These are the inferred preferences, a different thing.
   const [learned, setLearned] = useState<Preference[]>([])
@@ -133,6 +151,7 @@ export function Settings() {
       try {
         const updated = await updateSettings(updates)
         setPrefs(updated)
+        flashSaved(fieldKey)
       } catch (err) {
         setPrefs(prefs)
         showError(err)
@@ -140,18 +159,27 @@ export function Settings() {
         setSavingKey(null)
       }
     },
-    [prefs, showError],
+    [prefs, showError, flashSaved],
   )
+
+  // One timer per field, keyed the same way `savingKey` is, so typing in
+  // "working towards" doesn't reset a pending "learning style" save.
+  const textTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const patchStudent = useCallback(
     async (fieldKey: string, updates: Partial<StudentModel>) => {
       if (!student) return
+      // A choice made while typed words for the same field are still waiting
+      // to save replaces them: the older, queued value must not land on top.
+      if (textTimers.current[fieldKey]) clearTimeout(textTimers.current[fieldKey])
       const optimistic = { ...student, ...updates }
       setStudent(optimistic)
       setSavingKey(fieldKey)
       try {
         const updated = await updateStudentModel(updates)
         setStudent(updated)
+        writeCache(STUDENT_MODEL_KEY, updated)
+        flashSaved(fieldKey)
       } catch (err) {
         setStudent(student)
         showError(err)
@@ -159,12 +187,8 @@ export function Settings() {
         setSavingKey(null)
       }
     },
-    [student, showError],
+    [student, showError, flashSaved],
   )
-
-  // One timer per field, keyed the same way `savingKey` is, so typing in
-  // "studying for" doesn't reset a pending "learning style" save.
-  const textTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
   const patchStudentText = useCallback(
     (fieldKey: string, updates: Partial<StudentModel>) => {
@@ -178,7 +202,10 @@ export function Settings() {
         setSavingKey(fieldKey)
         try {
           const updated = await updateStudentModel(updates)
-          setStudent(updated)
+          // Not `setStudent(updated)`: they may have typed more since this
+          // was sent, and the reply would put the field back a few letters.
+          writeCache(STUDENT_MODEL_KEY, updated)
+          flashSaved(fieldKey)
         } catch (err) {
           // Unlike `patchStudent`, this doesn't roll back to the
           // pre-edit value on failure — by the time a debounced request
@@ -191,7 +218,7 @@ export function Settings() {
         }
       }, TEXT_PATCH_DEBOUNCE_MS)
     },
-    [student, showError],
+    [student, showError, flashSaved],
   )
 
   const doSignOut = async () => {
@@ -200,6 +227,20 @@ export function Settings() {
       navigate('/signin', { replace: true })
     } catch (err) {
       showError(err)
+    }
+  }
+
+  const [othersBusy, setOthersBusy] = useState(false)
+  const signOutOthers = async () => {
+    setOthersBusy(true)
+    try {
+      const { error } = await getSupabase().auth.signOut({ scope: 'others' })
+      if (error) throw error
+      show('Signed out everywhere else.', 'success')
+    } catch (err) {
+      showError(err)
+    } finally {
+      setOthersBusy(false)
     }
   }
 
@@ -262,6 +303,26 @@ export function Settings() {
     'You'
   const initials = displayName.slice(0, 2).toUpperCase()
   const email = user?.email ?? ''
+  // Someone who only ever signed in with Google has no password to change.
+  const providers = user?.app_metadata?.providers as string[] | undefined
+  const hasPassword = !providers || providers.includes('email')
+
+  const savedName = ((user?.user_metadata?.display_name as string | undefined) ?? '').trim()
+  const [name, setName] = useState(savedName)
+  const [nameBusy, setNameBusy] = useState(false)
+  const saveName = async () => {
+    const next = name.trim()
+    if (!next || next === savedName) return
+    setNameBusy(true)
+    try {
+      await setDisplayName(next)
+      show('Name updated.', 'success')
+    } catch (err) {
+      showError(err)
+    } finally {
+      setNameBusy(false)
+    }
+  }
 
   /** One section's controls — the desktop panel and the phone detail screen
    *  render the same thing, so a setting can never exist on one and not the
@@ -276,19 +337,122 @@ export function Settings() {
 
       {!prefs && !error && <PageSpinner label="Loading preferences…" />}
 
-      {prefs && active === 'Account' && (
+      {student && active === 'Learning' && (
+        <LearningPanel
+          student={student}
+          savingKey={savingKey}
+          savedKey={savedKey}
+          save={(key, updates) => void patchStudent(key, updates)}
+          saveText={patchStudentText}
+          learned={learned}
+          resetting={resetting}
+          onResetLearned={() => void resetLearned()}
+        />
+      )}
+
+      {prefs && active === 'Study' && (
         <>
-          {!phone && <SectionLabel>ACCOUNT</SectionLabel>}
-          <div className="rounded-xl border border-line bg-surface flex items-center gap-3 p-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
-              {initials}
-            </span>
-            <div className="min-w-0 text-[15px]">
-              <b className="block truncate">{displayName}</b>
-              <div className="truncate text-[13px] text-muted">{email}</div>
-            </div>
+          <div className="rounded-xl border border-line bg-surface overflow-hidden">
+            <RowWithNumber
+              label="Daily goal"
+              hint="Cards to review each day."
+              suffix="cards"
+              value={prefs.daily_goal}
+              onChange={(n) => patch('daily_goal', { daily_goal: n })}
+              saving={savingKey === 'daily_goal'}
+              saved={savedKey === 'daily_goal'}
+              min={1}
+              max={500}
+            />
+            <RowWithToggle
+              label="Streak freeze"
+              hint="Miss one day without breaking your streak."
+              checked={prefs.streak_freeze_enabled}
+              onChange={(v) =>
+                patch('streak_freeze_enabled', { streak_freeze_enabled: v })
+              }
+              saved={savedKey === 'streak_freeze_enabled'}
+              last
+            />
           </div>
 
+          <div className="rounded-xl border border-line bg-surface overflow-hidden">
+            <RowWithToggle
+              label="Answer only from my docs"
+              hint="If your documents don’t cover it, the tutor says so instead of guessing."
+              checked={prefs.answer_only_from_docs}
+              onChange={(v) =>
+                patch('answer_only_from_docs', { answer_only_from_docs: v })
+              }
+              saved={savedKey === 'answer_only_from_docs'}
+            />
+            <RowWithToggle
+              label="Always show citations"
+              hint="Marks which part of your documents each answer came from."
+              checked={prefs.always_show_citations}
+              onChange={(v) =>
+                patch('always_show_citations', { always_show_citations: v })
+              }
+              saved={savedKey === 'always_show_citations'}
+              last={phone}
+            />
+            {!phone && (
+            <RowWithToggle
+              label="Show the agent bots"
+              hint="Nova and the crew, while the AI works. Saved on this device."
+              checked={botsOn}
+              onChange={setBotsEnabled}
+              last
+            />
+            )}
+          </div>
+          {phone ? (
+            <p className="flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
+              <Icon name="skill" size={15} className="mt-0.5 shrink-0 text-mint" />
+              Skills shape the chat tutor and are managed on desktop.
+            </p>
+          ) : (
+            <Shortcuts />
+          )}
+        </>
+      )}
+
+      {active === 'Account' && (
+        <>
+          <form
+            className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void saveName()
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
+                {initials}
+              </span>
+              <div className="min-w-0 flex-1">
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={NAME_MAX}
+                  placeholder="Your name"
+                  autoComplete="name"
+                  aria-label="Your name"
+                />
+              </div>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={nameBusy || !name.trim() || name.trim() === savedName}
+                className="min-w-20 shrink-0"
+              >
+                {nameBusy ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+            <div className="truncate text-[13px] text-muted">{email}</div>
+          </form>
+
+          {hasPassword ? (
           <form
             className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
             onSubmit={(e) => {
@@ -316,216 +480,38 @@ export function Settings() {
               {passwordBusy ? 'Updating…' : 'Update password'}
             </Button>
           </form>
-        </>
-      )}
-
-      {prefs && active === 'Study' && (
-        <>
-          {!phone && <SectionLabel>STUDY</SectionLabel>}
-          <div className="rounded-xl border border-line bg-surface overflow-hidden">
-            <RowWithNumber
-              label="Daily goal"
-              suffix="cards"
-              value={prefs.daily_goal}
-              onChange={(n) => patch('daily_goal', { daily_goal: n })}
-              saving={savingKey === 'daily_goal'}
-              min={1}
-              max={500}
-            />
-            <RowWithToggle
-              label="Streak freeze"
-              hint="Miss one day without breaking your streak."
-              checked={prefs.streak_freeze_enabled}
-              onChange={(v) =>
-                patch('streak_freeze_enabled', { streak_freeze_enabled: v })
-              }
-              last
-            />
-          </div>
-        </>
-      )}
-
-      {student && active === 'How you learn' && (
-        <>
-          {!phone && <SectionLabel>HOW YOU LEARN</SectionLabel>}
-          {/* Signed up on a phone: the two questions it skipped. Desktop
-              only — they shape the chat tutor, which a phone doesn't have. */}
-          {!phone && <StyleIntakeCard model={student} onUpdated={setStudent} />}
-          <p className="text-[13px] leading-relaxed text-faint">
-            What the AI knows about how you study — the fields below feed
-            every chat reply and generated card, quiz, and note. Profile
-            shows how your quiz scores are actually trending; this page is
-            only what you've set and what's been learned from feedback.
-          </p>
-          <div className="rounded-xl border border-line bg-surface overflow-hidden">
-            <RowWithText
-              label="Learning style"
-              placeholder="e.g. visual, worked examples, analogies"
-              value={student.learning_style}
-              onChange={(v) => patchStudentText('learning_style', { learning_style: v })}
-              saving={savingKey === 'learning_style'}
-            />
-            <RowWithNumber
-              label="Session length"
-              suffix="min"
-              value={student.session_length_minutes ?? 20}
-              onChange={(n) =>
-                patchStudent('session_length_minutes', { session_length_minutes: n })
-              }
-              saving={savingKey === 'session_length_minutes'}
-              min={5}
-              max={180}
-            />
-            <RowWithText
-              label="Studying for"
-              placeholder="e.g. Amazon OA next week"
-              value={student.exam_context}
-              onChange={(v) => patchStudentText('exam_context', { exam_context: v })}
-              saving={savingKey === 'exam_context'}
-              last
-            />
-          </div>
-          <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-            <div className="mb-1.5 text-ink-3">Explain things to me like this</div>
-            <textarea
-              value={student.teaching_preference ?? ''}
-              onChange={(e) =>
-                patchStudentText('teaching_preference', {
-                  teaching_preference: e.target.value || null,
-                })
-              }
-              placeholder="Optional — free text the AI reads before every reply."
-              rows={3}
-              className="w-full resize-none rounded-[10px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25"
-            />
-            {savingKey === 'teaching_preference' && (
-              <div className="mt-1.5">
-                <SavingDot />
-              </div>
-            )}
-          </div>
-
-          {/* What the personalization layer currently believes, with its
-              source and how sure it is.
-
-              Inspectable by requirement rather than as a nicety: anything
-              that changes how you are taught should be something you can
-              read, question and delete. Confidence is shown as a plain
-              word, not a percentage — "fairly sure" is honest about the
-              precision, where "0.62" implies a measurement. */}
-          {learned.length > 0 && (
-            <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-ink-3">What I’ve learned about how you like to learn</span>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={resetLearned}
-                  disabled={resetting}
-                  className="ml-auto min-w-24 shrink-0"
-                >
-                  Reset
-                </Button>
-              </div>
-              <div className="flex flex-col gap-2">
-                {learned.map((p) => (
-                  <div key={p.key} className="flex flex-col gap-0.5">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className={cn('min-w-0', p.actionable ? 'text-ink' : 'text-muted')}>
-                        {PREF_LABEL[p.key] ?? p.key}: <b>{PREF_VALUE[p.value] ?? p.value}</b>
-                      </span>
-                      <span className="setcode shrink-0">{confidenceWord(p)}</span>
-                    </div>
-                    <span className="text-[12.5px] text-faint">{p.because}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-[12.5px] text-faint">
-                Reset clears what I learned from your feedback. It doesn’t touch
-                anything you set yourself above.
-              </p>
-            </div>
-          )}
-
-          {/* Observations, shown to the student because they feed every
-              prompt and anything feeding a prompt should be inspectable.
-              Read-only on purpose: these are things the app noticed, not
-              things you told it, and the editable fields above are where
-              your own words go. Conflating the two would show you a
-              sentence you never wrote in a box that implies you did. */}
-          {student.observed_habits.length > 0 && (
-            <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
-              <div className="mb-2 text-ink-3">What I’ve noticed</div>
-              <ul className="flex flex-col gap-1.5 text-ink-2">
-                {student.observed_habits.map((h) => (
-                  <li key={h} className="leading-snug">
-                    {h}
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-3 text-[12.5px] text-faint">
-                Observed from what you’ve done, not from anything you set.
-              </p>
-            </div>
-          )}
-        </>
-      )}
-
-      {prefs && active === 'AI & sources' && (
-        <>
-          {!phone && <SectionLabel>AI &amp; SOURCES</SectionLabel>}
-          <div className="rounded-xl border border-line bg-surface overflow-hidden">
-            <RowWithToggle
-              label="Answer only from my docs"
-              hint="Refuses to guess when the sources don't cover a question."
-              checked={prefs.answer_only_from_docs}
-              onChange={(v) =>
-                patch('answer_only_from_docs', { answer_only_from_docs: v })
-              }
-            />
-            <RowWithToggle
-              label="Always show citations"
-              hint="Inserts [[n]] markers when the AI cites a source."
-              checked={prefs.always_show_citations}
-              onChange={(v) =>
-                patch('always_show_citations', { always_show_citations: v })
-              }
-              last={phone}
-            />
-            {!phone && (
-            <RowWithToggle
-              label="Show the agent bots"
-              hint="Nova and the crew: little faces and messages while the AI works. Off gives a plain interface. Saved on this device."
-              checked={botsOn}
-              onChange={setBotsEnabled}
-              last
-            />
-            )}
-          </div>
-          {phone && (
-            <p className="flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
-              <Icon name="skill" size={15} className="mt-0.5 shrink-0 text-mint" />
-              Skills shape the chat tutor and are managed on desktop.
+          ) : (
+            <p className="rounded-xl border border-line bg-surface p-4 text-[14px] text-muted">
+              You sign in with Google, so there is no password to change here.
             </p>
           )}
-        </>
-      )}
 
-      {prefs && active === 'Privacy' && (
-        <>
-          {!phone && <SectionLabel>PRIVACY</SectionLabel>}
           <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-[14px]">
             <p className="text-muted">
-              Sign out on this device. Your data stays in your account.
+              Signing out keeps everything in your account.{' '}
+              <Link to={trustOverlayHref(location, 'privacy')} className="text-brand-deep hover:underline">
+                What we keep and why
+              </Link>
             </p>
-            {/* Signing out is reversible, so it is an ordinary secondary
-                button — coral is reserved for things that cannot be undone. */}
-            <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto sm:self-start">
-              Sign out
-            </Button>
+            {/* Signing out is reversible, so both are ordinary secondary
+                buttons — coral is reserved for things that cannot be undone. */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto">
+                Sign out
+              </Button>
+              <Button
+                onClick={() => void signOutOthers()}
+                variant="secondary"
+                disabled={othersBusy}
+                title="Other devices are asked to sign in again within the hour"
+                className="w-full min-w-52 sm:w-auto"
+              >
+                {othersBusy ? 'Signing out…' : 'Sign out of other devices'}
+              </Button>
+            </div>
           </div>
 
-          <SectionLabel className="mt-4">DANGER ZONE</SectionLabel>
+          <SectionLabel className="mt-6">DANGER ZONE</SectionLabel>
           <div className="flex flex-col gap-3 rounded-xl border border-coral/30 bg-surface p-4 text-[14px]">
             <p className="text-muted">
               Permanently delete your account and everything in it — every
@@ -610,11 +596,9 @@ export function Settings() {
         initials={initials}
         email={email}
         summary={{
-          Account: email || displayName,
+          Learning: student?.session_length_minutes ? `How you’re taught · ${student.session_length_minutes}-minute sessions` : 'How you’re taught',
           Study: prefs ? `${prefs.daily_goal} cards a day` : '',
-          'How you learn': student?.session_length_minutes ? `${student.session_length_minutes}-minute sessions` : '',
-          'AI & sources': prefs ? (prefs.answer_only_from_docs ? 'Only from your docs' : 'Docs and general knowledge') : '',
-          Privacy: 'Sign out, delete account',
+          Account: 'Name, password, sign out',
           Feedback: 'Tell us what to fix or build',
           'About & legal': 'Policies, contact us',
         }}
@@ -712,7 +696,9 @@ export function Settings() {
           role="tabpanel"
           id={PANEL_ID}
           aria-label={active}
-          className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 sm:px-7"
+          // Beside the rail, not floating in the middle: the column starts where
+          // the rail ends and stops at a width a line of text is still readable at.
+          className="flex w-full flex-col gap-4 px-4 py-6 max-lg:mx-auto max-lg:max-w-3xl sm:px-7 lg:max-w-[1040px] lg:px-10"
         >
           {panel(active)}
         </div>
@@ -721,48 +707,6 @@ export function Settings() {
       {deleteDialog}
     </div>
   )
-}
-
-/** Preference keys read as sentences, not dotted paths. */
-const PREF_LABEL: Record<string, string> = {
-  'explanation.length': 'Explanation length',
-  'explanation.depth': 'Level',
-  'explanation.opens_with': 'Starts with',
-  'explanation.note': 'In your words',
-  'interaction.mode': 'How you study',
-  'interaction.answer_mode': 'Answers',
-  'session.length_minutes': 'Session length',
-  'study.goal': 'Studying for',
-}
-
-const PREF_VALUE: Record<string, string> = {
-  concise: 'short and direct',
-  detailed: 'thorough',
-  simpler: 'plainer language',
-  deeper: 'more advanced',
-  example_first: 'an example',
-  theory_first: 'the principle',
-  direct: 'straight to the point',
-  hints_first: 'hints before answers',
-  discussion: 'by asking questions',
-  drilling: 'by drilling cards',
-  testing: 'by testing yourself',
-}
-
-/**
- * Confidence as a word.
- *
- * A percentage implies a measurement this isn't — 0.62 looks like it was
- * measured to two digits when it is the output of a hand-tuned update rule.
- * A word is honest about the precision and is what the student actually needs
- * to decide whether to correct it.
- */
-function confidenceWord(p: Preference): string {
-  if (p.source === 'explicit') return 'you set this'
-  if (!p.actionable) return 'still guessing'
-  if (p.confidence >= 0.75) return 'confident'
-  if (p.confidence >= 0.5) return 'fairly sure'
-  return 'leaning that way'
 }
 
 /**
@@ -870,11 +814,9 @@ function SectionTabs({ active, onSelect }: { active: Section; onSelect: (s: Sect
 // ── Phones: a grouped list, then one section at a time ─────────────────
 
 const SECTION_ICON: Record<Section, IconName> = {
-  Account: 'user',
+  Learning: 'sparkle',
   Study: 'deck',
-  'How you learn': 'sparkle',
-  'AI & sources': 'doc',
-  Privacy: 'lock',
+  Account: 'user',
   Feedback: 'thumbUp',
   'About & legal': 'seal',
 }
@@ -884,9 +826,16 @@ export function sectionSlug(name: Section): string {
   return name.replace(/\W+/g, '-').replace(/-+$/, '').toLowerCase()
 }
 
+/** Where the sections that were merged away went, so an old link still lands. */
+const OLD_SLUGS: Record<string, Section> = {
+  'how-you-learn': 'Learning',
+  'ai-sources': 'Study',
+  privacy: 'Account',
+}
+
 function sectionFromSlug(slug: string | null): Section | null {
   if (!slug) return null
-  return SECTIONS.find((n) => sectionSlug(n) === slug) ?? null
+  return SECTIONS.find((n) => sectionSlug(n) === slug) ?? OLD_SLUGS[slug] ?? null
 }
 
 /**
@@ -983,10 +932,7 @@ function PhoneSettings({
                   className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left active:bg-line-soft"
                 >
                   <span
-                    className={cn(
-                      'grid h-8 w-8 shrink-0 place-items-center rounded-[9px]',
-                      name === 'Privacy' ? 'bg-coral-soft text-coral-deep' : 'bg-raised text-ink-3',
-                    )}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-raised text-ink-3"
                   >
                     <Icon name={SECTION_ICON[name]} size={15} />
                   </span>

@@ -296,6 +296,12 @@ function Choices({ item }: { item: SummaryItem }) {
       {item.kind === 'multi' && (
         <p className="mt-2 text-[12px] text-faint">Share of people who picked each; they could pick several.</p>
       )}
+      {item.texts.length > 0 && (
+        <div className="mt-4 border-t border-line-soft pt-3">
+          <p className="setcode mb-2 text-faint">What they added</p>
+          <Words item={item} />
+        </div>
+      )}
     </>
   )
 }
@@ -347,6 +353,7 @@ function Words({ item }: { item: SummaryItem }) {
               <span className={cn('rounded-full px-1.5 py-px font-semibold tabular-nums', scoreTone(t.score))}>
                 {t.score === null ? 'no rating' : `rated ${t.score}/5`}
               </span>
+              {t.about && <span className="text-muted">{t.about}</span>}
               {t.created_at && new Date(t.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
             </p>
           </li>

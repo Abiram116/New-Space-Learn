@@ -89,6 +89,7 @@ def _to_question(row: dict[str, Any]) -> FeedbackQuestionOut:
         prompt=row["prompt"],
         kind=row["kind"],
         options=[str(o) for o in (row.get("options") or [])],
+        detail_options=[str(o) for o in (row.get("detail_options") or [])],
         required=bool(row.get("required", True)),
         active=bool(row.get("active", True)),
     )
@@ -114,6 +115,22 @@ def _clean_options(kind: str, options: list[str]) -> list[str]:
     if len(seen) > FEEDBACK_OPTIONS_MAX:
         raise ValidationFailed(f"A question can have at most {FEEDBACK_OPTIONS_MAX} choices.")
     return seen
+
+
+def _clean_detail(options: list[str], detail_options: list[str]) -> list[str]:
+    """The choices that ask for more: only ones that are really choices."""
+    wanted = {str(d).strip() for d in detail_options}
+    return [o for o in options if o in wanted]
+
+
+def _detail(question: dict[str, Any], value: object, text: str | None) -> str | None:
+    """What was typed in the "tell us more" box, if the picked choice has one."""
+    text = (text or "").strip()
+    if not text:
+        return None
+    picked = value if isinstance(value, list) else [value]
+    asks = question.get("detail_options") or []
+    return text if any(p in asks for p in picked) else None
 
 
 def _blank(value: object) -> bool:
@@ -147,7 +164,9 @@ def _check(question: dict[str, Any], value: object) -> int | str | list[str]:
     return text
 
 
-def validate_answers(questions: list[dict[str, Any]], answers: dict[str, object]) -> list[dict[str, Any]]:
+def validate_answers(
+    questions: list[dict[str, Any]], answers: dict[str, object], details: dict[str, str | None] | None = None
+) -> list[dict[str, Any]]:
     """The submission as it will be stored: one entry per answered question,
     with the prompt copied in so it still reads right after the question is
     edited or retired. Raises on a missing required answer or a wrong one."""
@@ -158,9 +177,11 @@ def validate_answers(questions: list[dict[str, Any]], answers: dict[str, object]
             if q.get("required", True):
                 raise ValidationFailed(f"Please answer: “{q['prompt']}”")
             continue
-        stored.append(
-            {"question_id": q["id"], "prompt": q["prompt"], "kind": q["kind"], "value": _check(q, value)}
-        )
+        entry = {"question_id": q["id"], "prompt": q["prompt"], "kind": q["kind"], "value": _check(q, value)}
+        detail = _detail(q, entry["value"], (details or {}).get(q["id"]))
+        if detail:
+            entry["detail"] = detail
+        stored.append(entry)
     return stored
 
 
@@ -203,7 +224,9 @@ async def send_feedback(
         )
 
     answers = validate_answers(
-        await _active_questions(), {a.question_id: a.value for a in body.answers}
+        await _active_questions(),
+        {a.question_id: a.value for a in body.answers},
+        {a.question_id: a.detail for a in body.answers},
     )
     if not answers:
         raise ValidationFailed("There's nothing to send yet.")
@@ -270,6 +293,7 @@ async def create_question(
         "feedback_questions", select="position", order="position.desc", limit=1
     )
     position = (int(existing[0]["position"]) if existing else 0) + 10
+    options = _clean_options(body.kind, body.options)
     row = (
         await supabase.db_insert(
             "feedback_questions",
@@ -277,7 +301,8 @@ async def create_question(
                 "position": position,
                 "prompt": body.prompt.strip(),
                 "kind": body.kind,
-                "options": _clean_options(body.kind, body.options),
+                "options": options,
+                "detail_options": _clean_detail(options, body.detail_options),
                 "required": body.required,
             },
         )
@@ -298,6 +323,12 @@ async def update_question(
         patch["prompt"] = patch["prompt"].strip()
     if "options" in patch:
         patch["options"] = _clean_options(rows[0]["kind"], patch["options"])
+    if "options" in patch or "detail_options" in patch:
+        # A choice that was removed or renamed can no longer ask for more.
+        patch["detail_options"] = _clean_detail(
+            patch.get("options", rows[0].get("options") or []),
+            patch.get("detail_options", rows[0].get("detail_options") or []),
+        )
     if not patch:
         return _to_question(rows[0])
     updated = await supabase.db_update(
