@@ -92,6 +92,18 @@ export const LIMITS = {
   teachingPreference: 400,
   /** `StudentModelIn.exam_context`. */
   examContext: 140,
+
+  /** `FeedbackQuestionCreate.prompt` / `FeedbackQuestionUpdate.prompt` — a
+   *  feedback-form question, typed by an admin. */
+  feedbackPrompt: 200,
+  /** `ProductFeedbackIn.contact_email` — a visitor's reply address. */
+  feedbackEmail: 254,
+  /** `FEEDBACK_SHORT_MAX` — a one-line answer on the feedback form. */
+  feedbackShort: 200,
+  /** `FEEDBACK_LONG_MAX` — a paragraph answer on the feedback form. */
+  feedbackLong: 2000,
+  /** `FEEDBACK_OPTION_MAX` — one choice of a feedback question. */
+  feedbackOption: 60,
 } as const
 
 export type LimitName = keyof typeof LIMITS

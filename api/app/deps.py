@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import Header
+from fastapi import Depends, Header
 
-from .errors import Unauthorized
+from .config import settings
+from .errors import Forbidden, Unauthorized
 from .services import supabase
 
 
@@ -31,6 +32,30 @@ async def get_current_user(authorization: str | None = Header(default=None)) -> 
     if not user_id:
         raise Unauthorized("Sign in required.")
     return CurrentUser(id=user_id, email=claims.get("email"), name=_claimed_name(claims))
+
+
+async def get_optional_user(authorization: str | None = Header(default=None)) -> CurrentUser | None:
+    """The signed-in user, or None for a visitor.
+
+    For the few endpoints a signed-out visitor may call (the feedback form on
+    the landing page). A token that is present but bad is still refused — only
+    its absence means "anonymous".
+    """
+    if not authorization:
+        return None
+    return await get_current_user(authorization)
+
+
+async def require_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """One of the accounts named in `ADMIN_EMAILS`, or a 403.
+
+    Matched on the email in the verified token, never on anything the client
+    sends or the user can edit. Relies on Supabase's "Confirm email" being on,
+    so nobody can hold an address they do not control.
+    """
+    if not user.email or user.email.strip().lower() not in settings.admin_email_set:
+        raise Forbidden("You don't have access to that.")
+    return user
 
 
 def _claimed_name(claims: dict) -> str | None:

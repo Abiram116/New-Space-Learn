@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
@@ -709,3 +709,94 @@ class SettingsUpdate(BaseModel):
 # ── Utility ────────────────────────────────────────────────────────────
 class OkOut(BaseModel):
     ok: bool = True
+
+
+# ── Product feedback (the feedback form) ───────────────────────────────
+#
+# Not `FeedbackIn` above — that is a thumb on one AI answer. This is the form
+# in Settings › Feedback and on the landing page, whose questions the admins
+# edit without a deploy.
+
+QuestionKind = Literal["rating", "scale", "choice", "multi", "short", "long"]
+
+#: Answer length caps, by kind. Mirrored in `web/src/lib/limits.ts`.
+FEEDBACK_SHORT_MAX = 200
+FEEDBACK_LONG_MAX = 2000
+FEEDBACK_OPTION_MAX = 60
+FEEDBACK_OPTIONS_MAX = 12
+
+
+class FeedbackQuestionOut(BaseModel):
+    id: str
+    position: int
+    prompt: str
+    kind: QuestionKind
+    options: list[str] = Field(default_factory=list)
+    required: bool = True
+    active: bool = True
+
+
+class FeedbackQuestionCreate(BaseModel):
+    prompt: str = Field(min_length=3, max_length=200)
+    kind: QuestionKind
+    options: list[str] = Field(default_factory=list)
+    required: bool = True
+
+
+class FeedbackQuestionUpdate(BaseModel):
+    prompt: str | None = Field(default=None, min_length=3, max_length=200)
+    options: list[str] | None = None
+    required: bool | None = None
+    active: bool | None = None
+
+
+class FeedbackReorder(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class FeedbackAnswerIn(BaseModel):
+    question_id: str = Field(min_length=1, max_length=64)
+    #: A number (rating, scale), a choice, several choices, or text — checked
+    #: against the question's kind in the handler. Strict, so `true` is not
+    #: quietly read as the number 1, nor "5" as 5.
+    value: StrictInt | StrictStr | list[StrictStr]
+
+
+class ProductFeedbackIn(BaseModel):
+    source: Literal["landing", "settings"]
+    answers: list[FeedbackAnswerIn] = Field(max_length=60)
+    #: Signed-out visitors only, and only if they want a reply.
+    contact_email: str | None = Field(default=None, max_length=254)
+    page: str | None = Field(default=None, max_length=300)
+    #: A field no person ever sees or fills in. Anything in it means a bot.
+    website: str | None = Field(default=None, max_length=200)
+
+
+class ProductFeedbackOut(BaseModel):
+    id: str
+    created_at: datetime
+    source: str
+    signed_in: bool
+    contact_email: str | None = None
+    page: str | None = None
+    answers: list[dict[str, Any]]
+
+
+class FeedbackSummaryItem(BaseModel):
+    question_id: str
+    prompt: str
+    kind: str
+    responses: int
+    #: Mean, for rating and scale questions.
+    average: float | None = None
+    #: How often each choice was picked, for choice and multi questions.
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class FeedbackSummaryOut(BaseModel):
+    total: int
+    items: list[FeedbackSummaryItem]
+
+
+class AdminOut(BaseModel):
+    admin: bool

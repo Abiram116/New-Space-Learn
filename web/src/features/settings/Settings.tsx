@@ -47,6 +47,7 @@ import { useImmersive } from '../../components/layout/immersive'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { SectionLabel } from '../../components/ui/Bits'
 import { TrustSettingsList } from '../trust/TrustSettingsList'
+import { FeedbackTab } from '../feedback/FeedbackTab'
 // The six labelled-row primitives used to be defined at the bottom of this
 // file. Nothing in them knows what a preference is — they are the generic
 // "row in a grouped list" pattern — so they live in `components/ui/` now and
@@ -61,7 +62,7 @@ import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
 import { StyleIntakeCard } from '../onboarding/StyleIntakeCard'
 import { setBotsEnabled, useBotsEnabled } from '../../lib/botPreference'
 
-const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy', 'About & legal'] as const
+const SECTIONS = ['Account', 'Study', 'How you learn', 'AI & sources', 'Privacy', 'Feedback', 'About & legal'] as const
 type Section = (typeof SECTIONS)[number]
 const PANEL_ID = 'settings-panel'
 const tabId = (name: string) => `settings-tab-${name.replace(/\W+/g, '-').toLowerCase()}`
@@ -538,6 +539,13 @@ export function Settings() {
         </>
       )}
 
+      {active === 'Feedback' && (
+        <>
+          {!phone && <SectionLabel>FEEDBACK</SectionLabel>}
+          <FeedbackTab />
+        </>
+      )}
+
       {active === 'About & legal' && (
         <>
           {!phone && <SectionLabel>ABOUT &amp; LEGAL</SectionLabel>}
@@ -607,6 +615,7 @@ export function Settings() {
           'How you learn': student?.session_length_minutes ? `${student.session_length_minutes}-minute sessions` : '',
           'AI & sources': prefs ? (prefs.answer_only_from_docs ? 'Only from your docs' : 'Docs and general knowledge') : '',
           Privacy: 'Sign out, delete account',
+          Feedback: 'Tell us what to fix or build',
           'About & legal': 'Policies, contact us',
         }}
         deleteDialog={
@@ -866,6 +875,7 @@ const SECTION_ICON: Record<Section, IconName> = {
   'How you learn': 'sparkle',
   'AI & sources': 'doc',
   Privacy: 'lock',
+  Feedback: 'thumbUp',
   'About & legal': 'seal',
 }
 

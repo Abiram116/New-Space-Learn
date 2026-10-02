@@ -71,6 +71,29 @@ async def consume_llm_quota(user_id: str, *, cost: float = 1.0) -> None:
     bucket.tokens -= cost
 
 
+# ── A plain "N per window" limit ───────────────────────────────────────
+#
+# For things that are not model calls and should simply be rare: sending the
+# feedback form. Fixed windows, in memory, same single-worker footing as the
+# buckets above.
+_windows: dict[str, tuple[float, int]] = {}
+
+
+def consume_window(key: str, *, limit: int, window_s: float, message: str) -> None:
+    """Count one use of `key`; raise RateLimited past `limit` per `window_s`."""
+    now = time.monotonic()
+    if len(_windows) > 5000:  # bounded: drop windows that have already ended
+        for stale in [k for k, (start, _) in _windows.items() if now - start > window_s]:
+            del _windows[stale]
+    start, used = _windows.get(key, (now, 0))
+    if now - start > window_s:
+        start, used = now, 0
+    if used >= limit:
+        raise RateLimited(message)
+    _windows[key] = (start, used + 1)
+
+
 def reset() -> None:
     """Test hook — clears all buckets."""
     _buckets.clear()
+    _windows.clear()

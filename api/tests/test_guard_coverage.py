@@ -216,13 +216,30 @@ def test_scanner_catches_a_synthetic_route_missing_a_guard():
     )
 
 
+#: The only routes anyone may call without signing in. Each is here on purpose;
+#: adding to this list is a decision, not a fix for a failing test.
+PUBLIC_ROUTES = (
+    "/health",  # liveness — booleans only
+    "/ready",  # readiness — booleans only; the keep-alive cron calls it
+    "/feedback-form",  # the feedback questions, shown on the landing page
+    "/product-feedback",  # sending that form: rate-limited, bot-trapped, validated
+)
+
+
+def test_the_public_feedback_route_takes_an_optional_user_not_none():
+    """It must still recognise a signed-in sender (and refuse a bad token),
+    rather than ignoring the Authorization header altogether."""
+    from app.routers import product_feedback
+
+    assert "get_optional_user" in inspect.getsource(product_feedback.send_feedback)
+
+
 def test_every_authenticated_route_requires_a_user():
     """A route that forgets `Depends(get_current_user)` is open to the world.
 
-    `/health` and `/ready` are the only deliberate exceptions: the offline
-    banner and cold-start warm-up call them before anyone has signed in, and
-    the keep-alive cron calls `/ready` with no credentials at all. Both
-    return booleans only — no user data.
+    The deliberate exceptions are listed in `PUBLIC_ROUTES`, each with its
+    reason. `/health` and `/ready` return booleans only; the feedback form is
+    public because the landing page shows it to visitors.
     """
     app = create_app()
     public = []
@@ -230,9 +247,11 @@ def test_every_authenticated_route_requires_a_user():
     # Guard the guard: finding only /health and /ready would pass vacuously.
     assert len(routes) > 40, f"route discovery found only {len(routes)} routes"
     for path, route in routes:
-        if path.endswith(("/health", "/ready")):
+        if path.endswith(PUBLIC_ROUTES):
             continue
         source = inspect.getsource(route.endpoint)
-        if "get_current_user" not in source:
+        # `require_admin` is stricter than signed-in: it depends on
+        # `get_current_user` and then also checks the admin list.
+        if "get_current_user" not in source and "require_admin" not in source:
             public.append(f"{path} ({route.endpoint.__name__})")
     assert not public, "These routes don't require authentication:\n  " + "\n  ".join(public)

@@ -9,7 +9,8 @@
  */
 
 import type { ReactNode } from 'react'
-import { FEEDBACK_FORM_URL, SOURCE_URL, TEAM, TEAM_EMAILS, type TeamMember } from './config'
+import { FeedbackForm } from '../feedback/FeedbackForm'
+import { SOURCE_URL, TEAM, TEAM_EMAILS, type TeamMember } from './config'
 import { PersonContact } from './PersonContact'
 import { TRUST_UPDATED, TRUST_VERSION, type TrustSlug } from './pages'
 
@@ -54,22 +55,6 @@ function Mail({ children }: { children?: ReactNode }) {
     </a>
   )
 }
-/** A big, quiet call to action — the email address, or the feedback form. */
-export function ActionRow({ href, label, hint, external }: { href: string; label: string; hint: string; external?: boolean }) {
-  return (
-    <a
-      href={href}
-      {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-      className="group mt-3 flex items-center justify-between gap-3 rounded-2xl border border-line bg-well px-5 py-4 transition-colors hover:border-brand/50 hover:bg-brand/10"
-    >
-      <span className="min-w-0 truncate text-[16px] font-semibold text-ink">{label}</span>
-      <span className="setcode shrink-0 text-brand-deep transition-transform duration-200 group-hover:translate-x-0.5">
-        {hint} →
-      </span>
-    </a>
-  )
-}
-
 function initials(name: string): string {
   return name
     .split(/\s+/)
@@ -204,6 +189,7 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
               <>{strong('Your material')} — the files you upload and the text we extract from them.</>,
               <>{strong('What you create')} — subjects, topics, chats, notes, flashcards, quizzes and your answers.</>,
               <>{strong('How you study')} — card grades, quiz scores, daily activity, settings, and the feedback you give on answers.</>,
+              <>{strong('Feedback you send')} — your answers to the feedback form, and your email if you add one as a visitor. It is linked to your account when you are signed in, and deleted with it.</>,
               <>{strong('Technical logs')} — our hosting providers keep standard request logs (such as IP address and time) for security and fixing errors.</>,
             ]}
           />
@@ -488,36 +474,19 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
   feedback: {
     intro: (
       <P>
-        Space Learn gets better because of what students tell us. What helped? What got in the way?
-        What do you wish it did? Both of us read every message.
+        Space Learn gets better because of what students tell us. A few quick questions, then room to
+        say anything you like. Both of us read every message.
       </P>
     ),
     sections: [
       {
-        id: 'send',
-        title: FEEDBACK_FORM_URL ? 'Share your feedback' : 'Send us a note',
+        id: 'form',
+        title: 'Your feedback',
         wide: true,
-        body: FEEDBACK_FORM_URL ? (
-          <ActionRow href={FEEDBACK_FORM_URL} label="Open the feedback form" hint="Two minutes" external />
-        ) : (
-          <ActionRow
-            href={`mailto:${TEAM_EMAILS}?subject=${encodeURIComponent('Space Learn feedback')}`}
-            label="Email your feedback"
-            hint="Write"
-          />
-        ),
-      },
-      {
-        id: 'useful',
-        title: 'What helps most',
         body: (
-          <List
-            items={[
-              'The moment something felt confusing or slow.',
-              'A feature that would save you time before an exam.',
-              'Anything that felt wrong in an answer, a card or a quiz.',
-            ]}
-          />
+          <div className="mt-2">
+            <FeedbackForm source="landing" />
+          </div>
         ),
       },
     ],

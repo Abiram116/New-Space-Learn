@@ -75,6 +75,7 @@ describe('Settings section switcher (phones and tablets)', () => {
       'How you learn',
       'AI & sources',
       'Privacy',
+      'Feedback',
       'About & legal',
     ])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
