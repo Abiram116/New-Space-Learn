@@ -23,6 +23,7 @@ import { useEffect, type ReactNode } from 'react'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
+import { SCROLL_LOCK_EVENT } from '../../lib/scrollLock'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -65,6 +66,9 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
 
     lenis.on('scroll', ScrollTrigger.update)
     lenisRef.current = lenis
+    // Hold still while something covers the page (a trust page's card).
+    const onLock = (e: Event) => ((e as CustomEvent<boolean>).detail ? lenis.stop() : lenis.start())
+    window.addEventListener(SCROLL_LOCK_EVENT, onLock)
 
     const raf = (time: number) => {
       // GSAP's ticker is in seconds, Lenis expects milliseconds.
@@ -109,6 +113,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     document.fonts?.ready?.then(() => ScrollTrigger.refresh())
 
     return () => {
+      window.removeEventListener(SCROLL_LOCK_EVENT, onLock)
       lenisRef.current = null
       gsap.ticker.remove(raf)
       ScrollTrigger.removeEventListener('refresh', onRefresh)

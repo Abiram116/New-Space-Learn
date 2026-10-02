@@ -447,6 +447,57 @@
   to   { transform: translateX(14px); opacity: 0; }
 }
 
+/* Trust pages (About, Privacy, …): the panel arrives from the right edge, the
+   page behind it dims. Transform/opacity only, so both composite. */
+@keyframes trustIn {
+  from { transform: translateX(48px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes trustFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* The landing page hides its scrollbars (see Landing). `overflow-x: clip`, not
+   `hidden`: it stops the sideways overflow that drew a bottom scrollbar
+   without making <html> a scroll container, which would break sticky and the
+   scroll-driven film. */
+html.no-scrollbars,
+html.no-scrollbars body {
+  scrollbar-width: none;
+  overflow-x: clip;
+}
+html.no-scrollbars::-webkit-scrollbar,
+html.no-scrollbars body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Trust pages from the landing page: the sheet drifts up out of the
+   bottom-right corner (its transform-origin) as it fades in, and glides back
+   the same way. Small distances, long ease — soft rather than snappy. Its
+   content follows a beat later. Transform/opacity only. */
+@keyframes cardIn {
+  from { transform: translate(2.5%, 5%) scale(0.95); opacity: 0; }
+  to   { transform: translate(0, 0) scale(1);        opacity: 1; }
+}
+@keyframes cardOut {
+  from { transform: translate(0, 0) scale(1);        opacity: 1; }
+  to   { transform: translate(2.5%, 5%) scale(0.95); opacity: 0; }
+}
+/* The orange sheen that runs once along the card's top edge as it lands. */
+@keyframes cardSheen {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateX(300%);  opacity: 0; }
+}
+@keyframes trustFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes cardContentIn {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
 @keyframes dockIn {
   from { transform: translateX(14px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }

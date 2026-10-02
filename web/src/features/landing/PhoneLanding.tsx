@@ -15,6 +15,8 @@
  * Every claim is one the product keeps; nothing is invented.
  */
 
+import { TRUST_PAGES, TRUST_SLUGS } from '../trust/pages'
+import { useTrustLinks } from '../trust/useTrustLinks'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
@@ -146,6 +148,10 @@ export function PhoneLanding() {
             Sign in
           </Link>
         </p>
+
+        {/* The trust pages. The desktop landing puts them in the top-right
+            corner; on a phone they sit at the end of the page, thumb-sized. */}
+        <PhoneTrustLinks />
       </div>
 
       {/* The one action, where the thumb rests. */}
@@ -164,3 +170,22 @@ export function PhoneLanding() {
     </div>
   )
 }
+
+/** The five trust pages; each slides in as a card over this page (see TrustLayer). */
+function PhoneTrustLinks() {
+  const { linkProps } = useTrustLinks()
+  return (
+    <nav aria-label="About Space Learn" className="mt-2 flex flex-wrap justify-center gap-x-1">
+      {TRUST_SLUGS.map((slug) => (
+        <Link
+          key={slug}
+          {...linkProps(slug)}
+          className="setcode inline-flex min-h-11 items-center px-2 text-[13px] text-muted active:text-ink"
+        >
+          {TRUST_PAGES[slug].label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+

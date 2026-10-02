@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { RedirectIfAuthed, RequireAuth } from './auth/guards'
 import { AppShell } from './components/layout/AppShell'
 import { Home } from './features/home/Home'
@@ -19,6 +19,9 @@ import {
   Settings,
 } from './routes/lazyRoutes'
 import { NotFound } from './routes/NotFound'
+import { RealLocationContext } from './lib/realLocation'
+import { TrustLayer, type TrustState } from './features/trust/TrustLayer'
+import { TRUST_SLUGS } from './features/trust/pages'
 import { TopicCanonical } from './routes/TopicCanonical'
 import { RootRoute } from './routes/RootRoute'
 import { ChatAliasRoute, SkillsRoute, TopicIndexRoute, TopicSkillsRedirect } from './routes/TopicRoutes'
@@ -67,7 +70,24 @@ const topicRoutes = (
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <AppRoutes />
+      {/* About / Privacy / Terms / … slide in over any page — see features/trust. */}
+      <TrustLayer />
+    </>
+  )
+}
+
+function AppRoutes() {
+  // A trust page opened from the landing page carries the page it was opened
+  // on; keep rendering THAT here, so the landing page stays mounted (scroll,
+  // animation state and all) under the sheet instead of being torn down and
+  // rebuilt behind it. See features/trust/TrustLayer.
+  const location = useLocation()
+  const background = (location.state as TrustState | null)?.background
+  return (
+    <RealLocationContext.Provider value={location}>
+    <Routes location={background ?? location}>
       {/* `/` decides: signed in → the app, signed out → the pitch. */}
       <Route path="/" element={<RootRoute />} />
       {/* Always the pitch, so it stays linkable while signed in. */}
@@ -205,7 +225,24 @@ export default function App() {
         </Route>
       </Route>
 
+      {/* The trust pages' own addresses. Opened from the landing page, the
+          page underneath is that landing page (see `background` above). On a
+          shared link there is none, so the landing page is drawn here for the
+          sheet to rise over. Public, signed in or not, and in the sitemap. */}
+      {TRUST_SLUGS.map((slug) => (
+        <Route
+          key={slug}
+          path={`/${slug}`}
+          element={
+            <Lazy>
+              <Landing />
+            </Lazy>
+          }
+        />
+      ))}
+
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </RealLocationContext.Provider>
   )
 }

@@ -49,3 +49,21 @@ describe('link preview tags', () => {
     expect(readFileSync(resolve(root, 'public/sitemap.xml'), 'utf8')).toContain(`<loc>${site}/</loc>`)
   })
 })
+
+describe('trust pages are public and listed', () => {
+  it('the sitemap lists About, Privacy, Terms, Contact and Feedback', () => {
+    const site = new URL(meta('property', 'og:url')!).origin
+    const sitemap = readFileSync(resolve(root, 'public/sitemap.xml'), 'utf8')
+    for (const slug of ['about', 'privacy', 'terms', 'contact', 'feedback']) {
+      expect(sitemap).toContain(`<loc>${site}/${slug}</loc>`)
+    }
+  })
+
+  it('robots.txt does not block them', () => {
+    const robots = readFileSync(resolve(root, 'public/robots.txt'), 'utf8')
+    for (const slug of ['about', 'privacy', 'terms', 'contact', 'feedback']) {
+      expect(robots).not.toMatch(new RegExp(`^Disallow: /${slug}\\b`, 'm'))
+    }
+  })
+})
+

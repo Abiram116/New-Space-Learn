@@ -13,6 +13,7 @@ import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
 
@@ -199,6 +200,8 @@ export function SignIn() {
             {google}
           </>
         )}
+
+        <TrustAgreement lead="By continuing" />
       </form>
     </AuthShell>
   )

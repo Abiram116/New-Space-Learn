@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
 
@@ -224,10 +225,9 @@ export function SignUp() {
           </>
         )}
 
-        <p className="text-xs text-faint">
-          By signing up you agree that we'll store your uploads to answer your
-          questions. You can delete them anytime from Settings.
-        </p>
+        <TrustAgreement lead="By signing up">
+          We store your uploads to answer your questions; you can delete them anytime from Settings.
+        </TrustAgreement>
       </form>
     </AuthShell>
   )

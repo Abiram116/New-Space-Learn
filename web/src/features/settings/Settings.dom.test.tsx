@@ -75,6 +75,7 @@ describe('Settings section switcher (phones and tablets)', () => {
       'How you learn',
       'AI & sources',
       'Privacy',
+      'About & legal',
     ])
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     // Only the selected tab is in the tab order (roving tabindex).
@@ -109,7 +110,7 @@ describe('Settings section switcher (phones and tablets)', () => {
     expect(screen.getByRole('tab', { name: 'Account' })).toHaveAttribute('aria-selected', 'true')
 
     fireEvent.keyDown(document.activeElement as Element, { key: 'End' })
-    expect(screen.getByRole('tab', { name: 'Privacy' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'About & legal' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('asks for confirmation before deleting the account', async () => {
