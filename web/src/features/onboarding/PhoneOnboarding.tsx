@@ -114,7 +114,7 @@ export function PhoneOnboarding() {
   )
 
   const skipAll = () => {
-    show('You can set these any time in Settings.', 'info')
+    show('You can answer these later in Settings.', 'info')
     markOnboarded(user?.id ?? null)
     navigate('/home', { replace: true })
   }
@@ -189,10 +189,10 @@ export function PhoneOnboarding() {
         {step === 1 && (
           <>
             <h1 ref={headingRef} tabIndex={-1} id="po-ask" className="nameplate text-[clamp(26px,min(8.5vw,9vh),36px)] leading-[1.02] outline-none">
-              How long is a typical session?
+              How long do you usually study in one go?
             </h1>
             <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
-              Today sizes your reviews to fit. Change it any time.
+              Today sizes your reviews to fit. You can change it later.
             </p>
             <div role="radiogroup" aria-labelledby="po-ask" className="mt-6 [@media(max-height:640px)]:mt-3 grid gap-2.5 [@media(max-height:640px)]:gap-2 [@media(min-width:600px)_and_(max-height:500px)]:grid-cols-3">
               {PHONE_SESSIONS.map((o) => {
@@ -237,7 +237,7 @@ export function PhoneOnboarding() {
               What are you working towards?
             </h1>
             <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
-              An exam, a course, a job. Optional.
+              An exam, a course or a job. Optional.
             </p>
             <input
               ref={inputRef}

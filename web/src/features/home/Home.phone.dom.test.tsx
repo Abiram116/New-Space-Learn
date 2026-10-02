@@ -284,7 +284,7 @@ describe('Home on desktop', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Answer them' }))
     await user.click(screen.getByRole('checkbox', { name: /A concrete example/ }))
-    await user.click(screen.getByRole('radio', { name: /Keep it short/ }))
+    await user.click(screen.getByRole('radio', { name: /Just the answer/ }))
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() =>
