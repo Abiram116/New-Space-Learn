@@ -123,7 +123,7 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              <>{strong('Add your material')} to a topic — PDF, CSV, text or a photo of your notes, up to 20 MB each.</>,
+              <>{strong('Add your material')} to a topic — PDF, CSV, text, Markdown or a photo of your notes, up to 20 MB each.</>,
               <>{strong('Ask anything.')} Each answer is written from the passages that match, with numbered citations you can open.</>,
               <>{strong('Keep what matters')} as a note, a deck of flashcards or a quiz, in one click.</>,
               <>{strong('Review at the right time.')} Cards come back just before you would forget them (spaced repetition, FSRS).</>,
@@ -174,8 +174,8 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
       <P>
         Your study material is personal. This page explains, in plain words, what we keep, why, who
         helps us run the service, and how you stay in control. The short version: we use your data
-        only to run Space Learn for you, we never sell it, and you can delete all of it whenever you
-        want.
+        only to run Space Learn for you, we never sell it, and you can delete your account and the
+        data in it whenever you want.
       </P>
     ),
     sections: [
@@ -185,12 +185,12 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              <>{strong('Your account')} — your email address and name, plus your profile picture if you sign in with Google.</>,
-              <>{strong('Your material')} — the files you upload and the text we extract from them.</>,
-              <>{strong('What you create')} — subjects, topics, chats, notes, flashcards, quizzes and your answers.</>,
-              <>{strong('How you study')} — card grades, quiz scores, daily activity, settings, and the feedback you give on answers.</>,
-              <>{strong('Feedback you send')} — your answers to the feedback form, and your email if you add one as a visitor. It is linked to your account when you are signed in, and deleted with it.</>,
-              <>{strong('Technical logs')} — our hosting providers keep standard request logs (such as IP address and time) for security and fixing errors.</>,
+              <>{strong('Your account')} — your email address and name, plus the profile picture your Google account supplies if you sign in with Google (held by our sign-in provider).</>,
+              <>{strong('Your material')} — the files you upload, the text we extract from them, and the numeric search index (embeddings) we build from that text.</>,
+              <>{strong('What you create')} — subjects, topics, chats (with a short running summary of earlier conversation that helps it keep context), notes, flashcards, quizzes and your answers.</>,
+              <>{strong('How you study')} — card grades, quiz scores, daily activity, settings, and the thumbs-up or thumbs-down feedback you give on answers.</>,
+              <>{strong('Feedback you send')} — your answers to the feedback form, and your email if you add one as a visitor. We also record the page you sent it from and your browser&rsquo;s user-agent text. It is linked to your account when you are signed in, and deleted with it.</>,
+              <>{strong('Technical logs')} — our hosting providers keep standard request logs (such as IP address and time) for security and fixing errors, on their own schedule. We don&rsquo;t keep IP addresses in our database; the server only holds them briefly in memory to limit abuse.</>,
             ]}
           />
         ),
@@ -217,11 +217,15 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
             <P>
               PDFs, CSVs and text files are read and indexed on our own server. When you ask a question,
               we send our AI provider ({strong('Groq')}) only what it needs to answer: your question, the
-              matching passages from your material, recent messages in that chat, and a short summary of
-              your study preferences. Photos and images you upload are sent to it so their text can be
-              read.
+              matching passages from your material, recent messages and a running summary of that chat,
+              and a short summary of your study preferences. When you ask it to make notes, flashcards or
+              a quiz, it receives the relevant passages of your material. Photos and images you upload are
+              sent to it so their text can be read.
             </P>
-            <P>We do not use your material to train AI models, and we do not share it with other users.</P>
+            <P>
+              We do not train AI models on your material, and we do not share it with other users. What
+              we send to Groq is handled under Groq&rsquo;s own terms and privacy policy, which we don&rsquo;t control.
+            </P>
           </>
         ),
       },
@@ -231,9 +235,9 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              <>{strong('Supabase')} — sign-in, database and file storage.</>,
+              <>{strong('Supabase')} — sign-in, database and file storage (servers in Seoul, South Korea).</>,
               <>{strong('Groq')} — generates answers, notes, cards and quizzes.</>,
-              <>{strong('Vercel')} and {strong('Render')} — host the website and the server.</>,
+              <>{strong('Vercel')} and {strong('Render')} — host the website and the server (the server runs in Singapore).</>,
               <>{strong('Google')} — only if you choose &ldquo;Continue with Google&rdquo;.</>,
             ]}
           />
@@ -247,7 +251,7 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
             items={[
               'Sell, rent or trade your data.',
               'Show you ads, or share your data for advertising.',
-              'Use analytics or tracking cookies.',
+              'Use analytics, advertising trackers or tracking cookies.',
             ]}
           />
         ),
@@ -258,7 +262,7 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <P>
             We don&rsquo;t use tracking cookies. Your browser stores your sign-in session and a few
-            display preferences (like a collapsed sidebar) so the app works as you left it.
+            small settings (like a collapsed sidebar or that you have finished the welcome questions) so the app works as you left it.
           </P>
         ),
       },
@@ -268,9 +272,9 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <List
             items={[
-              'Delete any file, note, deck, quiz, topic or subject whenever you like.',
+              'Delete any file, note, deck, quiz, topic or subject whenever you like; deleting a file also removes its stored copy and its extracted text.',
               'Reset what the app has learned about your study style in Settings.',
-              <>Delete your account in Settings › Privacy. Everything goes with it, including your uploaded files.</>,
+              <>Delete your account in Settings. Your profile, chats, notes, cards, quizzes, study history, feedback and uploaded files are removed with it.</>,
               <>Ask us for a copy of your data, or for help deleting it, by writing to <Mail />.</>,
             ]}
           />
@@ -282,8 +286,10 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         body: (
           <P>
             We keep your data while your account is open. When you delete something it is removed from
-            our live database straight away; copies in our providers&rsquo; routine backups expire on
-            their own schedule.
+            our live database straight away, and we delete the stored file at the same time. If the
+            storage service is briefly unavailable that clean-up can fail, so a file may linger until we
+            remove it. Copies in our providers&rsquo; routine backups and server logs expire on their own
+            schedule.
           </P>
         ),
       },
@@ -292,8 +298,8 @@ export const TRUST_DOCS: Record<TrustSlug, TrustDoc> = {
         title: 'Security',
         body: (
           <P>
-            Data is encrypted in transit, every request is checked against your account, and you can
-            only ever see your own material. No system is perfect — if something goes wrong that affects
+            Data travels over encrypted connections, every request is checked against your account, and
+            database access rules limit each record to its owner. No system is perfect — if something goes wrong that affects
             your data, we will tell you.
           </P>
         ),

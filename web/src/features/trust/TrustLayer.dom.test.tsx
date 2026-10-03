@@ -190,11 +190,12 @@ describe('trust card (from the landing page)', () => {
   })
 
   it('keeps the corner links on top while the card is open, with the open page marked', async () => {
-    renderAt(['/feedback'])
+    renderAt(['/terms'])
     await panel()
     const corner = screen.getByRole('navigation', { name: 'About Space Learn' })
-    expect(within(corner).getByRole('link', { name: 'Feedback' })).toHaveAttribute('aria-current', 'page')
-    expect(within(corner).getAllByRole('link')).toHaveLength(5)
+    expect(within(corner).getByRole('link', { name: 'Terms' })).toHaveAttribute('aria-current', 'page')
+    expect(within(corner).queryByRole('link', { name: 'Feedback' })).toBeNull()
+    expect(within(corner).getAllByRole('link')).toHaveLength(4)
   })
 
   it('a shared link straight to /terms closes to home', async () => {
