@@ -148,7 +148,13 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
         stored: set[int] = set()
     else:
         existing = await supabase.db_select(
-            "document_chunks", filters={"document_id": f"eq.{doc_id}"}, select="chunk_index"
+            "document_chunks",
+            filters={"document_id": f"eq.{doc_id}"},
+            select="chunk_index",
+            # A stable order: past 1,000 chunks `db_select` pages by offset, and
+            # unordered pages can skip rows — a skipped chunk would be embedded
+            # (and stored) a second time on resume.
+            order="chunk_index.asc",
         )
         stored = {r["chunk_index"] for r in existing}
 

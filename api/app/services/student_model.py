@@ -30,6 +30,7 @@ import asyncio
 import logging
 import statistics
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
@@ -929,6 +930,19 @@ _SNAPSHOT_TTL_S = 20.0
 _SNAPSHOT_MAX_USERS = 500
 _snapshots: dict[str, tuple[float, Snapshot]] = {}
 _building: dict[str, asyncio.Task[Snapshot]] = {}
+#: Set for the life of a request that writes (see `deps.get_current_user`). A
+#: snapshot built inside such a request is read BEFORE that request's own
+#: writes land (a chat turn reads it, then saves the message and bumps today's
+#: activity; quiz generation reads it, then inserts the quiz), so keeping it
+#: would serve the pre-write picture to the next read for the whole TTL.
+_in_write: ContextVar[bool] = ContextVar("student_model_in_write", default=False)
+
+
+def begin_write(user_id: str) -> None:
+    """This request is about to change `user_id`'s data: drop what is cached and
+    do not keep anything this request builds."""
+    invalidate(user_id)
+    _in_write.set(True)
 
 
 def invalidate(user_id: str) -> None:
@@ -948,6 +962,10 @@ def reset_cache() -> None:
 async def snapshot(user_id: str) -> Snapshot:
     """The student's snapshot: a recent one if nothing has changed since,
     otherwise built now. Callers arriving together share one build."""
+    if _in_write.get():
+        # Built for this write request only; never shared, never kept.
+        return await _build_snapshot(user_id)
+
     hit = _snapshots.get(user_id)
     if hit and hit[0] > time.monotonic():
         return hit[1]
