@@ -6,11 +6,11 @@
  * "Keep going: N more" — the next batch, never the whole backlog at once.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { Link, MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
-import { clearCache } from '../../lib/asyncCache'
+import { clearCache, invalidate } from '../../lib/asyncCache'
 import type { Deck, Flashcard, Space, Subspace } from '../../api/types'
 
 const SUB: Subspace = { id: 'sub', subject_id: 'sp', name: 'Attention', last_activity_at: null, counts: {} }
@@ -18,6 +18,13 @@ const SPACE: Space = { id: 'sp', name: 'FSD', tone: 'brand', pinned: false, subs
 vi.mock('../../lib/nav', () => ({
   useActiveSubspace: () => ({ space: SPACE, subspace: SUB, base: '/spaces/sp/sub' }),
 }))
+
+// The views read their topic through `useTopicScope`; here that is simply the
+// topic this file's `lib/nav` mock already provides.
+vi.mock('../../lib/useTopicScope', async () => {
+  const nav = await import('../../lib/nav')
+  return { useTopicScope: () => ({ ...nav.useActiveSubspace(), isGlobal: false }) }
+})
 vi.mock('../spaces/SpacesProvider', () => ({ useSpaces: () => ({ spaces: [SPACE] }) }))
 vi.mock('../../components/celebrate', () => ({
   AmbienceField: () => null,
@@ -150,3 +157,64 @@ describe('?review=due&limit=N', () => {
     expect(screen.getByText('Deck a')).toBeInTheDocument()
   })
 })
+
+describe('the "cards ready" banner', () => {
+  it('has its own Review button that starts the session', async () => {
+    listAllDecks.mockResolvedValue([deck('a', 3), deck('b', 2)])
+    renderAt('')
+    fireEvent.click(await screen.findByRole('button', { name: 'Review 5' }))
+    expect(await screen.findByLabelText('Card 1 of 5')).toBeInTheDocument()
+  })
+
+  it('caps a big backlog at 20 so the button never promises the whole pile', async () => {
+    listAllDecks.mockResolvedValue([deck('a', 30)])
+    renderAt('')
+    expect(await screen.findByRole('button', { name: 'Review 20' })).toBeInTheDocument()
+  })
+})
+
+describe('leaving a session', () => {
+  it('lands on the deck grid with the decks still showing, never the empty state', async () => {
+    // First load answers; every refetch after it hangs, like a slow free-tier API.
+    listAllDecks.mockResolvedValueOnce([deck('a', 3), deck('b', 2)]).mockReturnValue(new Promise(() => {}))
+    renderAt('')
+    fireEvent.click(await screen.findByRole('button', { name: 'Review 5' }))
+    await gradeGood()
+    // What a real grade does: the API client invalidates the deck family.
+    act(() => invalidate('decks:'))
+
+    fireEvent.click(screen.getByRole('button', { name: /End session/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'End this session?' })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'End session' }))
+
+    expect(await screen.findByText('Deck a')).toBeInTheDocument()
+    expect(screen.getByText('Deck b')).toBeInTheDocument()
+    expect(screen.queryByText('No decks yet')).not.toBeInTheDocument()
+  })
+})
+
+describe('the sidebar link for the page you are on', () => {
+  const renderWithNav = () =>
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Link to="/" state={{ nav: true }}>
+            Cards
+          </Link>
+          <FlashcardsView />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+
+  it('takes you from inside a review back to the deck grid', async () => {
+    listAllDecks.mockResolvedValue([deck('a', 3), deck('b', 2)])
+    renderWithNav()
+    fireEvent.click(await screen.findByRole('button', { name: 'Review 5' }))
+    expect(await screen.findByLabelText('Card 1 of 5')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Cards'))
+    expect(await screen.findByText('Deck a')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Card 1 of 5')).not.toBeInTheDocument()
+  })
+})
+

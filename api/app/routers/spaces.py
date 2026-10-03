@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound
 from ..schemas import OkOut, SpaceCreate, SpaceOut, SpaceUpdate
-from ..services import supabase
+from ..services import purge, supabase
 
 router = APIRouter()
 
@@ -82,13 +82,25 @@ async def update_space(
         if not updated:
             raise NotFound("Space not found.")
         row = updated[0]
-    return SpaceOut(id=row["id"], name=row["name"], tone=row["tone"], subspaces=[])
+    return SpaceOut(
+        id=row["id"],
+        name=row["name"],
+        tone=row["tone"],
+        pinned=bool(row.get("pinned", False)),
+        subspaces=[],
+    )
 
 
 @router.delete("/spaces/{space_id}", response_model=OkOut)
 async def delete_space(
     space_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> OkOut:
+    subs = await supabase.db_select(
+        "subspaces",
+        filters={"user_id": f"eq.{user.id}", "subject_id": f"eq.{space_id}"},
+        select="id",
+    )
+    await purge.purge_documents(user.id, subspace_ids=[s["id"] for s in subs])
     await supabase.db_delete(
         "subjects",
         filters={"user_id": f"eq.{user.id}", "id": f"eq.{space_id}"},

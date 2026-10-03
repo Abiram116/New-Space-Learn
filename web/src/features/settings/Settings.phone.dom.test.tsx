@@ -2,7 +2,7 @@
 
 /**
  * Settings on a phone: a grouped list of sections, each opening as its own
- * screen with one back button; Privacy holds Sign out and, apart from it,
+ * screen with one back button; Account holds Sign out and, apart from it,
  * Delete account behind a confirm sheet; skills are named as desktop-only.
  */
 
@@ -17,6 +17,7 @@ vi.mock('../../auth/AuthProvider', () => ({
   useAuth: () => ({
     user: { id: 'u1', email: 'student@example.com', user_metadata: { display_name: 'Sam' } },
     signOut: vi.fn(),
+    setDisplayName: vi.fn(),
   }),
 }))
 vi.mock('../../api/me', () => ({
@@ -80,7 +81,7 @@ describe('Settings on a phone', () => {
   it('is a grouped list, not the tab strip', async () => {
     renderSettings()
     const nav = screen.getByRole('navigation', { name: 'Settings sections' })
-    for (const name of ['Study', 'How you learn', 'AI & sources', 'Privacy']) {
+    for (const name of ['Learning', 'Study', 'Feedback', 'About & legal']) {
       expect(within(nav).getByRole('button', { name: new RegExp(name) })).toBeInTheDocument()
     }
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
@@ -98,7 +99,7 @@ describe('Settings on a phone', () => {
     expect(screen.getByRole('navigation', { name: 'Settings sections' })).toBeInTheDocument()
   })
 
-  it('keeps Sign out and Delete account in Privacy, delete behind a confirm sheet', async () => {
+  it('keeps Sign out and Delete account in Account, delete behind a confirm sheet (an old Privacy link still lands)', async () => {
     renderSettings('/settings?section=privacy')
     const user = userEvent.setup()
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeInTheDocument()
@@ -112,13 +113,13 @@ describe('Settings on a phone', () => {
   })
 
   it('says skills are managed on desktop', async () => {
-    renderSettings('/settings?section=ai-sources')
+    renderSettings('/settings?section=study')
     expect(await screen.findByText('Skills shape the chat tutor and are managed on desktop.')).toBeInTheDocument()
   })
 
   it('never offers the skipped style questions on the phone itself', async () => {
     renderSettings('/settings?section=how-you-learn')
-    expect(await screen.findByText('Learning style')).toBeInTheDocument()
+    expect(await screen.findByText('When something is new to you, what makes it click?')).toBeInTheDocument()
     expect(screen.queryByText('Tell me how you like to learn')).not.toBeInTheDocument()
   })
 })

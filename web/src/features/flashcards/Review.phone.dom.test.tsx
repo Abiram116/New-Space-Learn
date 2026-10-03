@@ -54,7 +54,14 @@ function Harness({ n = 2 }: { n?: number }) {
   })
   latest = mode
   if (mode.kind !== 'review') return <p>done</p>
-  return <Review mode={mode} setMode={setMode} onFinish={vi.fn()} showError={vi.fn()} />
+  return <Review
+      mode={mode}
+      setMode={setMode}
+      onFinish={vi.fn()}
+      onExit={() => setMode({ kind: 'decks' })}
+      title="Deck"
+      showError={vi.fn()}
+    />
 }
 
 let restore: () => void

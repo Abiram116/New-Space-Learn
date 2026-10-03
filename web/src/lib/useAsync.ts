@@ -55,7 +55,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { classifyError, friendlyMessage, type ErrorKind } from '../api/errors'
-import { readCache, subscribe, writeCache } from './asyncCache'
+import { cacheEpoch, dedupe, readCache, subscribe, writeCache } from './asyncCache'
 import { onBackendReady } from './connectivity'
 
 // Named `AsyncResult`, not `AsyncState` — `./AsyncState.tsx` is the wrapper
@@ -107,7 +107,18 @@ export function useAsync<T>(
 
   // Cache first: it is what makes the first paint real. `local` only carries
   // results for un-keyed callers.
-  const data = (cached as T | undefined) ?? local
+  //
+  // After an `invalidate` the entry is gone but the screen still has what it
+  // was showing. Dropping that to `null` made every list on a page blank out
+  // the moment anything was saved ("No decks yet" after a review, an empty
+  // quiz list after a submit) and stay blank until something refetched. So the
+  // last value is kept, for this key, until a fetch replaces it — but never
+  // across `clearCache` (sign-out), which bumps the epoch.
+  const lastKnown = useRef<{ key: string; epoch: number; data: T } | null>(null)
+  if (key && cached !== undefined) lastKnown.current = { key, epoch: cacheEpoch(), data: cached as T }
+  const kept = lastKnown.current
+  const stale = key && kept && kept.key === key && kept.epoch === cacheEpoch() ? kept.data : undefined
+  const data = (cached as T | undefined) ?? local ?? stale
 
   // Tracks the last value this hook actually rendered, kept in sync with
   // `data` on every render — see `updateData` below for why `setData`
@@ -120,7 +131,7 @@ export function useAsync<T>(
     setValidating(true)
     setError(null)
     setErrorKind(null)
-    fnRef.current()
+    ;(key ? dedupe(key, fnRef.current) : fnRef.current())
       .then((result) => {
         if (gen !== generation.current) return
         if (key) writeCache(key, result)

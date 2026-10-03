@@ -25,12 +25,14 @@ from .errors import (
     handle_unexpected,
     handle_validation_error,
 )
+from .middleware import RequestGuard
 from .routers import (
     documents,
     feedback,
     flashcards,
     me,
     notes,
+    product_feedback,
     quizzes,
     skills,
     spaces,
@@ -43,6 +45,10 @@ logging.basicConfig(
     level=settings.log_level.upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+# The HTTP client logs one INFO line per database call, with the full URL — a
+# line of I/O per query on a small server, and every user id written to the
+# logs. Warnings and errors still come through.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("space_learn.main")
 
 
@@ -100,6 +106,12 @@ def create_app() -> FastAPI:
     # but it is the reason to think twice before raising the compression level.
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
+    # Size limits and the student's time zone (see middleware.RequestGuard).
+    # Added before CORS so CORS stays outermost: a refused request still gets
+    # its CORS headers, and the browser shows our message instead of a bare
+    # network error.
+    app.add_middleware(RequestGuard)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -125,6 +137,7 @@ def create_app() -> FastAPI:
     app.include_router(quizzes.router, prefix=prefix, tags=["quizzes"])
     app.include_router(skills.router, prefix=prefix, tags=["skills"])
     app.include_router(feedback.router, prefix=prefix, tags=["feedback"])
+    app.include_router(product_feedback.router, prefix=prefix, tags=["product-feedback"])
 
     @app.get(f"{prefix}/health", tags=["health"])
     async def health() -> dict[str, object]:

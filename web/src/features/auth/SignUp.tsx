@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
 
@@ -121,7 +122,8 @@ export function SignUp() {
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border-[1.5px] border-brand-200 bg-brand-tint px-4 py-3.5 text-sm text-ink-2">
             Open the email from Space Learn and follow the link — it'll bring
-            you straight back here, signed in.
+            you straight back here, signed in. It can take a minute, and it
+            sometimes lands in spam or promotions.
           </div>
           <Button type="button" variant="outline3d" size="lg" disabled={resendBusy} onClick={resend}>
             {resendBusy ? 'Sending…' : "Didn't get it? Resend"}
@@ -223,10 +225,9 @@ export function SignUp() {
           </>
         )}
 
-        <p className="text-xs text-faint">
-          By signing up you agree that we'll store your uploads to answer your
-          questions. You can delete them anytime from Settings.
-        </p>
+        <TrustAgreement lead="By signing up">
+          Your material is used only to answer you, never sold, and you can delete it anytime.
+        </TrustAgreement>
       </form>
     </AuthShell>
   )

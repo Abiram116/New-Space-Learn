@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     # Runtime
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
     log_level: str = "info"
+    # The lock on the admin page: a salted hash of the one shared password,
+    # never the password itself. Make it with
+    # `uv run python -m app.services.admin_gate`. Empty = the admin side is closed.
+    admin_password_hash: str = ""
+
     # OpenAPI docs are a live map of every endpoint and payload shape. Useful
     # locally, needless attack-surface detail in production.
     expose_api_docs: bool = True

@@ -22,7 +22,14 @@ import httpx
 from jose import JWTError, jwt
 
 from ..config import settings
-from ..errors import NotConfigured, Unauthorized, UpstreamUnavailable
+from ..errors import (
+    Forbidden,
+    NotConfigured,
+    NotFound,
+    Unauthorized,
+    UpstreamUnavailable,
+    ValidationFailed,
+)
 
 log = logging.getLogger("space_learn.supabase")
 
@@ -251,6 +258,11 @@ async def _request(method: str, url: str, *, idempotent: bool, **kwargs: Any) ->
     raise AssertionError("unreachable")  # pragma: no cover
 
 
+#: Supabase's PostgREST returns at most this many rows per request, whatever
+#: `limit` asks for — silently. `db_select` pages past it.
+_MAX_ROWS = 1000
+
+
 async def db_select(
     table: str,
     *,
@@ -259,16 +271,34 @@ async def db_select(
     order: str | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
-    params: dict[str, str] = {"select": select}
+    """Rows matching `filters` — all of them, or the first `limit`.
+
+    The server caps every response at `_MAX_ROWS`. A read that asked for more
+    (or set no limit) used to come back truncated with nothing to say so: a
+    student with 1,200 cards had a due forecast built from 1,000 of them. So
+    this fetches in pages of `_MAX_ROWS` until it has what was asked for or the
+    table runs out. The common case — fewer rows than a page — is still exactly
+    one request.
+    """
+    base: dict[str, str] = {"select": select}
     if filters:
-        params.update(filters)
+        base.update(filters)
     if order:
-        params["order"] = order
-    if limit:
-        params["limit"] = str(limit)
-    r = await _request("GET", f"/rest/v1/{table}", idempotent=True, params=params)
-    _raise_if_bad(r)
-    return r.json()
+        base["order"] = order
+
+    rows: list[dict[str, Any]] = []
+    while True:
+        want = _MAX_ROWS if limit is None else min(_MAX_ROWS, limit - len(rows))
+        params = dict(base)
+        params["limit"] = str(want)
+        if rows:
+            params["offset"] = str(len(rows))
+        r = await _request("GET", f"/rest/v1/{table}", idempotent=True, params=params)
+        _raise_if_bad(r)
+        page = r.json()
+        rows.extend(page)
+        if len(page) < want or (limit is not None and len(rows) >= limit):
+            return rows
 
 
 async def db_count(table: str, *, filters: dict[str, str] | None = None) -> int:
@@ -385,6 +415,17 @@ async def storage_delete(path: str) -> None:
     _raise_if_bad(r)
 
 
+async def storage_delete_many(paths: list[str]) -> None:
+    """Bulk delete; Storage accepts a list of keys per request."""
+    client = await get_client()
+    bucket = settings.supabase_storage_bucket
+    for i in range(0, len(paths), 100):
+        r = await client.request(
+            "DELETE", f"/storage/v1/object/{bucket}", json={"prefixes": paths[i : i + 100]}
+        )
+        _raise_if_bad(r)
+
+
 async def storage_download(path: str) -> AsyncIterator[bytes]:
     client = await get_client()
     bucket = settings.supabase_storage_bucket
@@ -404,9 +445,31 @@ def _raise_if_bad(r: httpx.Response) -> None:
         body = r.json()
     except Exception:
         body = {"message": r.text[:200]}
+    if not isinstance(body, dict):
+        body = {"message": str(body)[:200]}
+    # The full body goes to the log. What the person sees is chosen below and
+    # never contains the database's own wording (table names, constraint names,
+    # "duplicate key value violates ...").
     log.warning("supabase %s %s → %s", r.request.method, r.request.url.path, body)
     if r.status_code == 401:
-        raise Unauthorized("Backend credentials are invalid.")
+        # OUR credentials were refused — a server setup problem, not the
+        # student's session. Raising Unauthorized here would sign them out of the
+        # app for something they cannot fix.
+        raise UpstreamUnavailable("The service isn't set up correctly right now. Please try again later.")
     if r.status_code >= 500:
         raise UpstreamUnavailable("Database is unavailable right now.")
-    raise UpstreamUnavailable(str(body.get("message", "Request failed.")))
+
+    code = str(body.get("code") or "")
+    if code == "23505":  # unique violation
+        raise ValidationFailed("That already exists.")
+    if code == "23503":  # foreign key: the thing it points at is gone
+        raise ValidationFailed("That item no longer exists.")
+    if code in {"23502", "23514", "22001", "22003"}:  # null / check / too long / out of range
+        raise ValidationFailed("Some of that input isn't allowed.")
+    if code in {"22P02", "PGRST116"}:  # malformed id / no matching row
+        raise NotFound("We couldn't find that.")
+    if code == "42501" or r.status_code == 403:
+        raise Forbidden("You don't have access to that.")
+    if r.status_code == 404:
+        raise NotFound("We couldn't find that.")
+    raise UpstreamUnavailable("We couldn't save that just now. Please try again.")

@@ -191,7 +191,7 @@ export function Opening({
         </p>
       </div>
       <span data-skip className="setcode absolute bottom-[max(2rem,5vh)] left-1/2 -translate-x-1/2 whitespace-nowrap">
-        Click anywhere to skip
+        Click to skip the intro
       </span>
     </div>
   )

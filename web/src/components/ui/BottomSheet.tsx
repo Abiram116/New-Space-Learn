@@ -24,6 +24,7 @@
  * phone-only UI.
  */
 
+import { moveAcrossActions } from './dialogKeys'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
@@ -112,6 +113,7 @@ export function BottomSheet({
         closeRef.current()
         return
       }
+      if (moveAcrossActions(e)) return
       if (e.key !== 'Tab' || !panel) return
       const focusable = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE))
       if (focusable.length === 0) {
@@ -256,7 +258,7 @@ export function BottomSheet({
         </div>
 
         {footer && (
-          <div className="shrink-0 border-t border-line px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <div data-dialog-actions className="shrink-0 border-t border-line px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
             {footer}
           </div>
         )}

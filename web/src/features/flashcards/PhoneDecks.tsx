@@ -2,12 +2,13 @@
  * The deck library on a phone: rows, not tiles.
  *
  * Edge-to-edge ~64px rows you can hit with a thumb, one primary action pinned
- * at the bottom ("Review 12 due"), and everything else — open, rename-style
+ * at the bottom ("Review 12 due", across decks), and everything else — open, rename-style
  * housekeeping, delete — behind each row's ⋯ sheet. Nothing here depends on
  * hover.
  */
 
 import { useNavigate } from 'react-router-dom'
+import { REVIEW_BATCH } from './model'
 import type { Deck, Tone } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -33,6 +34,7 @@ export function PhoneDecks({
   addMaterialHref,
   onOpen,
   onReview,
+  onReviewDue,
   onDelete,
   onNew,
   onGenerate,
@@ -51,14 +53,14 @@ export function PhoneDecks({
   addMaterialHref: string | null
   onOpen: (id: string) => void
   onReview: (id: string) => void
+  /** Review what is due across every deck (the same capped session as desktop). */
+  onReviewDue: () => void
   onDelete: (id: string) => void
   onNew: () => void
   onGenerate: () => void
 }) {
   const navigate = useNavigate()
   const sheet = useRowSheet<Deck>()
-  const firstDue = decks.find((d) => d.due > 0)
-  const manyDue = decks.filter((d) => d.due > 0).length > 1
   const empty = !loading && !error && decks.length === 0
 
   return (
@@ -163,14 +165,16 @@ export function PhoneDecks({
                     onOpen={() => onOpen(deck.id)}
                     onMore={() => sheet.open(deck)}
                     moreLabel={`More actions for ${deck.name}`}
+                    // Status, not a control: plain text, so it does not read as a
+                    // second "Review" button next to the one at the bottom.
                     trailing={
                       <span
                         className={cn(
-                          'shrink-0 rounded-full px-2.5 py-1 text-[13px] font-bold tabular-nums',
-                          due ? 'bg-brand-soft text-brand-deep' : 'bg-line-soft text-faint',
+                          'shrink-0 text-[13px] font-semibold tabular-nums',
+                          due ? 'text-brand-deep' : 'text-faint',
                         )}
                       >
-                        {due ? `${deck.due} due` : 'Clear'}
+                        {due ? `${deck.due} due` : 'All done'}
                       </span>
                     }
                   >
@@ -192,19 +196,14 @@ export function PhoneDecks({
           </>
         )}
 
-        {!loading && decks.length > 0 && (
+        {/* One primary action: everything due, across decks. With nothing due
+            there is no bar at all — "New deck" is already at the top, and a
+            second copy of it here was the same button twice. */}
+        {!loading && totalDue > 0 && (
           <StickyActionBar>
-            {firstDue ? (
-              <Button size="xl" className="min-h-14 flex-1" onClick={() => onReview(firstDue.id)}>
-                <span className="truncate">
-                  Review {manyDue ? firstDue.due : totalDue} due{manyDue ? ` in ${firstDue.name}` : ''}
-                </span>
-              </Button>
-            ) : (
-              <Button size="xl" className="min-h-14 flex-1" variant="secondary" onClick={onNew}>
-                <Icon name="plus" size={16} /> New deck
-              </Button>
-            )}
+            <Button size="xl" className="min-h-14 flex-1" onClick={onReviewDue}>
+              Review {Math.min(totalDue, REVIEW_BATCH)} due
+            </Button>
           </StickyActionBar>
         )}
       </div>

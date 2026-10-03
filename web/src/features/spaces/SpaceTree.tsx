@@ -9,11 +9,39 @@ import { toneDot, toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
-import { subspacePath } from '../../lib/nav'
+import { resolveTopicSegments, subspacePath } from '../../lib/nav'
 import { useSpaces } from './SpacesProvider'
 
+/**
+ * The row owns its background — hover and "you are here" — so the name and its
+ * `⋯` read as one strip rather than a lit name beside an unlit square. The `⋯`
+ * adds its own, stronger chip on top only when it is the thing under the
+ * pointer (or open), so you can still see which of the two a click will hit.
+ */
+const rowBg = (selected: string | false, editing: boolean) =>
+  editing ? '' : selected ? selected : 'hover:bg-line-soft'
+
+/**
+ * Typing a name in place — rename, or a new topic. The row's own name turned
+ * editable, not a form field dropped into the rail: the same translucent ash
+ * as the hover, the row's own type, and ONE thin accent ring. It used to be a
+ * near-black box with a border inside the row's focus ring — two outlines at
+ * once.
+ */
+const EDIT_FIELD =
+  'min-h-10 min-w-0 rounded-[10px] bg-white/[0.06] px-2.5 text-ink caret-brand outline-none ring-1 ring-brand/70 placeholder:text-faint focus-visible:outline-none'
+
+/**
+ * One focus ring around the whole row — the name and its `⋯` together —
+ * instead of the app-wide ring on whichever half has focus, which drew an
+ * outline that stopped short of the dots. The focused half still shows itself
+ * with a quiet fill, so keyboard users can tell which one Enter will press.
+ */
+const ROW_FOCUS =
+  'rounded-[10px] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand [&_:focus-visible]:outline-none'
+
 export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { spaceId, subspaceId } = useParams()
+  const params = useParams()
   const {
     spaces,
     addSubspace,
@@ -25,6 +53,11 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   } = useSpaces()
   const { show } = useToast()
   const navigate = useNavigate()
+  // The URL carries readable slugs (or, on an old link, ids); everything below
+  // compares against ids, so resolve once here.
+  const active = resolveTopicSegments(spaces, params.spaceId, params.subspaceId)
+  const spaceId = active.space?.id
+  const subspaceId = active.subspace?.id
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [addingIn, setAddingIn] = useState<string | null>(null)
@@ -66,7 +99,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       setAddingIn(null)
       setNewTopic('')
       const parent = spaces.find((s) => s.id === spaceId)
-      navigate(parent ? subspacePath(parent, created) : `/s/${spaceId}/${created.id}`)
+      navigate(parent ? subspacePath(parent, created) : `/${spaceId}/${created.id}`)
     } catch (e) {
       show(friendlyMessage(e), 'error')
     }
@@ -122,7 +155,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
     try {
       await deleteSubspace(id)
       if (subspaceId === id) {
-        // There is no route for a bare `/s/:spaceId` — only `/s/:spaceId/:subspaceId`
+        // There is no route for a bare `/:spaceId` — only `/:spaceId/:subspaceId`
         // — so sending the user there after deleting the topic they were looking at
         // dropped them straight onto NotFound. Land on a sibling topic when the
         // subject still has one, otherwise Home.
@@ -146,7 +179,13 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
         const open = isOpen(space.id)
         return (
           <div key={space.id} className="group/space flex min-w-0 flex-col gap-1">
-            <div className="group/row flex min-w-0 items-center">
+            <div
+              className={cn(
+                'group/row flex min-w-0 items-center transition-colors',
+                renamingSpace !== space.id && ROW_FOCUS,
+                rowBg(space.id === spaceId && 'bg-brand-tint', renamingSpace === space.id),
+              )}
+            >
               {renamingSpace === space.id ? (
                 <input
                   autoFocus
@@ -159,7 +198,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   }}
                   maxLength={LIMITS.spaceName}
                   aria-label={`Rename ${space.name}`}
-                  className="min-h-10 min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-3 text-[15px] font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                  className={cn(EDIT_FIELD, 'flex-1 text-[15px] font-semibold')}
                 />
               ) : (
               <button
@@ -172,10 +211,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   // straight past the rail's `overflow-x-hidden` edge. That
                   // is why the menu appeared on "dfcs" and not on
                   // "Reinforcment Learning": the bug was name length.
-                  'flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2.5 py-2 text-left transition-colors cursor-pointer pointer-coarse:min-h-11',
-                  space.id === spaceId
-                    ? 'bg-brand-tint font-bold text-ink'
-                    : cn('font-semibold hover:bg-line-soft', toneText[space.tone]),
+                  'flex min-h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-2.5 py-2 text-left transition-colors cursor-pointer focus-visible:bg-line-soft pointer-coarse:min-h-11',
+                  space.id === spaceId ? 'font-bold text-ink' : cn('font-semibold', toneText[space.tone]),
                 )}
               >
                 <span
@@ -200,47 +237,56 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   reads as "more actions here", it holds Rename as well as
                   Delete, and it stays legible because it is drawn in a solid
                   colour rather than faded into the background. */}
-              <RowMenu
-                name={space.name}
-                items={[
-                  {
-                    // The label says what the click DOES, not what the current
-                    // state is — "Pin" on an unpinned subject, "Unpin" on a
-                    // pinned one. A menu item labelled with its state makes you
-                    // work out the verb yourself.
-                    label: space.pinned ? 'Unpin' : 'Pin to top',
-                    icon: 'pin',
-                    iconFilled: space.pinned,
-                    onSelect: async () => {
-                      try {
-                        await setPinned(space.id, !space.pinned)
-                      } catch (e) {
-                        show(friendlyMessage(e), 'error')
-                      }
+              {renamingSpace !== space.id && (
+                <RowMenu
+                  name={space.name}
+                  items={[
+                    {
+                      // The label says what the click DOES, not what the current
+                      // state is — "Pin" on an unpinned subject, "Unpin" on a
+                      // pinned one. A menu item labelled with its state makes you
+                      // work out the verb yourself.
+                      label: space.pinned ? 'Unpin' : 'Pin to top',
+                      icon: 'pin',
+                      iconFilled: space.pinned,
+                      onSelect: async () => {
+                        try {
+                          await setPinned(space.id, !space.pinned)
+                        } catch (e) {
+                          show(friendlyMessage(e), 'error')
+                        }
+                      },
                     },
-                  },
-                  {
-                    label: 'Rename',
-                    icon: 'pencil',
-                    onSelect: () => {
-                      setRenamingSpace(space.id)
-                      setRenameText(space.name)
+                    {
+                      label: 'Rename',
+                      icon: 'pencil',
+                      onSelect: () => {
+                        setRenamingSpace(space.id)
+                        setRenameText(space.name)
+                      },
                     },
-                  },
-                  {
-                    label: 'Delete',
-                    icon: 'trash',
-                    destructive: true,
-                    onSelect: () => setConfirmDeleteSpace(space.id),
-                  },
-                ]}
-              />
+                    {
+                      label: 'Delete',
+                      icon: 'trash',
+                      destructive: true,
+                      onSelect: () => setConfirmDeleteSpace(space.id),
+                    },
+                  ]}
+                />
+              )}
             </div>
 
             {open && (
               <div className="ml-[18px] flex min-w-0 flex-col gap-1 border-l border-line pl-2.5">
                 {space.subspaces.map((sub) => (
-                  <div key={sub.id} className="group/row flex min-w-0 items-center">
+                  <div
+                    key={sub.id}
+                    className={cn(
+                      'group/row flex min-w-0 items-center transition-colors',
+                      renamingSubspace !== sub.id && ROW_FOCUS,
+                      rowBg(sub.id === subspaceId && 'bg-brand-soft', renamingSubspace === sub.id),
+                    )}
+                  >
                     {renamingSubspace === sub.id ? (
                       <input
                         autoFocus
@@ -253,7 +299,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         }}
                         maxLength={LIMITS.subspaceName}
                   aria-label={`Rename ${sub.name}`}
-                        className="min-h-10 min-w-0 flex-1 rounded-[10px] border border-brand/50 bg-well px-3 text-[14px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                        className={cn(EDIT_FIELD, 'flex-1 text-[14.5px] font-medium')}
                       />
                     ) : (
                       <NavLink
@@ -261,10 +307,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         onClick={onNavigate}
                         className={({ isActive }) =>
                           cn(
-                            'flex min-h-10 min-w-0 flex-1 items-center rounded-[10px] px-2.5 py-2 text-[14.5px] transition-colors pointer-coarse:min-h-11',
-                            isActive
-                              ? 'bg-brand-soft font-bold text-brand-deep'
-                              : 'font-medium text-ink-2 hover:bg-line-soft hover:text-ink',
+                            'flex min-h-10 min-w-0 flex-1 items-center rounded-[10px] px-2.5 py-2 text-[14.5px] transition-colors focus-visible:bg-line-soft pointer-coarse:min-h-11',
+                            isActive ? 'font-bold text-brand-deep' : 'font-medium text-ink-2 group-hover/row:text-ink',
                           )
                         }
                       >
@@ -277,25 +321,27 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         already existed in the provider with no way to reach
                         it. A destructive action alone on a row also makes the
                         single most dangerous control the easiest to hit. */}
-                    <RowMenu
-                      name={sub.name}
-                      items={[
-                        {
-                          label: 'Rename',
-                          icon: 'pencil',
-                          onSelect: () => {
-                            setRenamingSubspace(sub.id)
-                            setRenameText(sub.name)
+                    {renamingSubspace !== sub.id && (
+                      <RowMenu
+                        name={sub.name}
+                        items={[
+                          {
+                            label: 'Rename',
+                            icon: 'pencil',
+                            onSelect: () => {
+                              setRenamingSubspace(sub.id)
+                              setRenameText(sub.name)
+                            },
                           },
-                        },
-                        {
-                          label: 'Delete',
-                          icon: 'trash',
-                          destructive: true,
-                          onSelect: () => setConfirmDeleteSubspace(sub.id),
-                        },
-                      ]}
-                    />
+                          {
+                            label: 'Delete',
+                            icon: 'trash',
+                            destructive: true,
+                            onSelect: () => setConfirmDeleteSubspace(sub.id),
+                          },
+                        ]}
+                      />
+                    )}
                   </div>
                 ))}
 
@@ -314,7 +360,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     }}
                     maxLength={LIMITS.subspaceName}
                     placeholder="New topic"
-                    className="min-h-10 min-w-0 rounded-[10px] border border-brand/50 bg-well px-3 text-[14px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                    className={cn(EDIT_FIELD, 'text-[14.5px] font-medium')}
                   />
                 ) : (
                   <button
@@ -381,13 +427,21 @@ export type RowAction = {
  * apart in spacing, hit area and keyboard behaviour, which is exactly the
  * duplication that put a 403/404 contradiction in `subspaces.py`.
  */
+/** Menu geometry, shared by placement and drawing. */
+const MENU_W = 176
+const MENU_ITEM_H = 36
+
 function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
   const [open, setOpen] = useState(false)
   // Where the menu sits, in viewport coordinates. It is rendered through a
   // portal with `position: fixed` because the rail's list clips overflow —
   // an absolutely-positioned menu on the last few rows was cut off or forced
   // the list to scroll.
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  // Opened from the keyboard, focus goes to the first item (arrows from there);
+  // opened with the mouse, focus sits on the menu itself, so no item shows a
+  // keyboard ring the moment you click — the arrows still work from there.
+  const byKeyboard = useRef(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -424,18 +478,26 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
   // Focus lands on the first item when the menu opens, so the keyboard flow is
   // trigger -> Enter -> arrows -> Enter, and Escape hands focus back.
   useEffect(() => {
-    if (open && pos) menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    if (!open || !pos) return
+    const menu = menuRef.current
+    if (byKeyboard.current) menu?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+    else menu?.focus({ preventScroll: true })
   }, [open, pos])
 
-  const toggle = () => {
+  const toggle = (e: React.MouseEvent) => {
     if (open) return close(false)
+    byKeyboard.current = e.detail === 0
     const rect = triggerRef.current?.getBoundingClientRect()
     if (rect) {
-      const menuHeight = items.length * 44 + 10
-      const below = rect.bottom + 4
-      // Flip upward when there is no room below (last rows in a short window).
-      const top = below + menuHeight > window.innerHeight - 8 ? Math.max(8, rect.top - 4 - menuHeight) : below
-      setPos({ top, right: Math.max(8, window.innerWidth - rect.right) })
+      // Beside the ⋯, not under it: dropped below, it covered the topics and
+      // the next subjects — the very rows you were looking at. Out to the
+      // right it sits over the page instead, level with its own row. Falls
+      // back to under-and-left-aligned on a screen too narrow for that.
+      const height = items.length * MENU_ITEM_H + 8 + (items.some((i) => i.destructive) ? 9 : 0)
+      const beside = rect.right + 6
+      const left = beside + MENU_W <= window.innerWidth - 8 ? beside : Math.max(8, rect.right - MENU_W)
+      const top = Math.max(8, Math.min(beside === left ? rect.top : rect.bottom + 4, window.innerHeight - 8 - height))
+      setPos({ top, left })
     }
     setOpen(true)
   }
@@ -476,7 +538,11 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
           // delete, so it is never a small target.
           'grid h-10 w-10 place-items-center rounded-[10px] cursor-pointer pointer-coarse:h-11 pointer-coarse:w-11',
           'transition-[opacity,background-color,color] duration-150',
-          open ? 'bg-line-soft text-ink' : 'text-muted hover:bg-line-soft hover:text-ink',
+          // Neutral ash, translucent: it reads as its own chip on the warm row
+          // hover AND on the selected row's tint, where a brown chip vanished.
+          open
+            ? 'bg-white/[0.14] text-ink'
+            : 'text-muted hover:bg-white/10 hover:text-ink focus-visible:bg-white/10 focus-visible:text-ink',
           /* Quiet until you reach for it — but only where "reaching for it"
              exists. `pointer-fine` scopes the hiding to mouse/trackpad; a
              touch screen (coarse pointer) always shows it, which is what
@@ -501,17 +567,21 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
             role="menu"
             aria-label={`Actions for ${name}`}
             onKeyDown={onMenuKey}
-            style={{ top: pos.top, right: pos.right }}
+            tabIndex={-1}
+            style={{ top: pos.top, left: pos.left, width: MENU_W }}
             // Same entrance as every other popover in the app (Select's
             // dropdown, Modal, the note editor's floating panels) — one family
             // for "a small panel now exists here" rather than a silent pop.
-            className="fixed z-50 w-52 rounded-[12px] border border-line bg-raised p-1 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.9)] motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
+            // Frosted rather than solid: the page shows through, blurred, so the
+            // menu feels laid over the app instead of punched into it. The
+            // faint white edge keeps its outline crisp on any background.
+            className="fixed z-50 rounded-[14px] border border-white/10 bg-raised/75 p-1 shadow-[0_18px_44px_-16px_rgba(0,0,0,0.85)] outline-none backdrop-blur-xl backdrop-saturate-150 motion-safe:animate-[dockSwap_140ms_var(--ease-sl)_both]"
           >
             {items.map((item, i) => (
               <div key={item.label}>
                 {/* Destructive item sits behind a rule: it is never adjacent to
                     the everyday actions above it. */}
-                {item.destructive && i > 0 && <div className="mx-1 my-1 border-t border-line" />}
+                {item.destructive && i > 0 && <div className="mx-1 my-1 border-t border-white/[0.08]" aria-hidden />}
                 <button
                   type="button"
                   role="menuitem"
@@ -520,13 +590,15 @@ function RowMenu({ name, items }: { name: string; items: RowAction[] }) {
                     item.onSelect()
                   }}
                   className={cn(
-                    'flex min-h-11 w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left text-[14px] transition-colors cursor-pointer md:min-h-10 pointer-coarse:min-h-11',
+                    // Compact on a pointer (36px rows), thumb-sized on touch; the
+                    // highlight is a fill, never the app-wide outline ring.
+                    'flex h-9 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13.5px] outline-none transition-colors cursor-pointer pointer-coarse:h-11',
                     item.destructive
-                      ? 'text-coral-deep hover:bg-coral-soft focus-visible:bg-coral-soft'
-                      : 'text-ink-2 hover:bg-line-soft hover:text-ink focus-visible:bg-line-soft',
+                      ? 'text-coral-deep hover:bg-coral-soft/70 focus-visible:bg-coral-soft/70'
+                      : 'text-ink-2 hover:bg-white/[0.07] hover:text-ink focus-visible:bg-white/[0.07] focus-visible:text-ink',
                   )}
                 >
-                  <Icon name={item.icon} size={16} filled={item.iconFilled} />
+                  <Icon name={item.icon} size={15} filled={item.iconFilled} />
                   {item.label}
                 </button>
               </div>

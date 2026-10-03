@@ -1,6 +1,10 @@
 /**
  * The right dock: what this topic knows, and what you can do with it.
  *
+ * Three plainly-named sections, top to bottom: **Create from this chat** (the
+ * one-shot Agents), **How the AI answers** (Skills — switched on and off right
+ * here, see DockSkills) and **Your material** (Sources).
+ *
  * The two AI concepts are deliberately given different shapes, because naming
  * them differently was not enough:
  *
@@ -12,10 +16,11 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../../api/documents'
 import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
+import { Modal } from '../../components/ui/Modal'
+import { DockSkills } from './DockSkills'
 import { DockPanelBody, type DockPanel } from './DockPanels'
 import { useDockPanelMotion } from './useDockPanelMotion'
 import { useDockWidth } from './useDockWidth'
@@ -66,46 +71,68 @@ const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
  * the rest of the product goes out of its way to keep separate (see
  * `agents.ts`).
  */
-export function ActiveSkillStrip({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId], `skills:${subspaceId}`)
+export function ActiveSkillStrip({ subspaceId }: { subspaceId: string }) {
+  // Not under a shared cache key: the API client clears every `skills:` entry
+  // after a skill is turned on or off, which would blank this strip. It is
+  // re-read when the dialog closes instead.
+  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
+  const [open, setOpen] = useState(false)
+  const refreshSkills = skills.refresh
 
   if (skills.loading || skills.error) return null
   const list = skills.data ?? []
 
+  // Below `lg:` there is no dock, so turning a skill on or off opens the same
+  // section in a dialog — one implementation, two places to reach it.
+  const change = (label: string) => (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className="setcode ml-auto shrink-0 cursor-pointer font-bold text-brand-deep"
+    >
+      {label}
+    </button>
+  )
+
   return (
-    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
-      {list.length === 0 ? (
-        <>
-          <span className="setcode shrink-0">No skill on</span>
-          <Link
-            to={`${base}/skills`}
-            className="setcode ml-auto shrink-0 font-bold text-brand-deep"
-          >
-            Pick one
-          </Link>
-        </>
-      ) : (
-        <>
-          <span className="setcode shrink-0">Skills on</span>
-          {list.map((skill) => (
-            <span
-              key={skill.id}
-              className={cn(
-                'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold',
-                toneSoft[skill.tone],
-                toneText[skill.tone],
-              )}
-            >
-              <Icon name="skill" size={12} />
-              {skill.name}
-            </span>
-          ))}
-          <Link to={`${base}/skills`} className="setcode ml-auto shrink-0">
-            Manage
-          </Link>
-        </>
-      )}
-    </div>
+    <>
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
+        {list.length === 0 ? (
+          <>
+            <span className="setcode shrink-0">No skill on</span>
+            {change('Turn one on')}
+          </>
+        ) : (
+          <>
+            <span className="setcode shrink-0">Skills on</span>
+            {list.map((skill) => (
+              <span
+                key={skill.id}
+                className={cn(
+                  'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold',
+                  toneSoft[skill.tone],
+                  toneText[skill.tone],
+                )}
+              >
+                <Icon name="skill" size={12} />
+                {skill.name}
+              </span>
+            ))}
+            {change('Change')}
+          </>
+        )}
+      </div>
+      <Modal
+        open={open}
+        onClose={() => {
+          setOpen(false)
+          refreshSkills()
+        }}
+        title="Skills for this topic"
+      >
+        <DockSkills subspaceId={subspaceId} />
+      </Modal>
+    </>
   )
 }
 
@@ -170,7 +197,6 @@ export function ContextDock({
   onClosePanel: () => void
 }) {
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
-  const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId], `skills:${subspaceId}`)
   const { showError } = useToast()
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -186,7 +212,6 @@ export function ContextDock({
   const view = useDockPanelMotion(panel)
 
   const docList = docs.data ?? []
-  const skillList = skills.data ?? []
 
   // Uploads are ingested in the background now, so a new source arrives here
   // as `processing`. Re-check until it's ready — re-armed by each new `data`.
@@ -292,6 +317,8 @@ export function ContextDock({
               subspaceId={subspaceId}
               base={base}
               onRunAgent={onRunAgent}
+              docs={docList}
+              docsLoading={docs.loading}
             />
           </div>
         </div>
@@ -309,8 +336,10 @@ export function ContextDock({
         )}
       >
       {/* ── Actions ── */}
-      <section className="flex flex-col gap-2">
-        <SectionLabel>Do something with this</SectionLabel>
+      <section className="flex flex-col gap-2" aria-labelledby="dock-create-label">
+        <SectionLabel>
+          <span id="dock-create-label">Create from this chat</span>
+        </SectionLabel>
         <div className="flex flex-col gap-1.5">
           {AGENTS.map((key) => (
             <button
@@ -355,61 +384,7 @@ export function ContextDock({
       </section>
 
       {/* ── Skills ── */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <SectionLabel>Skills on</SectionLabel>
-          <Link
-            to={`${base}/skills`}
-            className="setcode ml-auto transition-colors hover:text-brand-deep"
-          >
-            Manage
-          </Link>
-        </div>
-
-        {skills.loading ? (
-          <Skeleton className="h-14 rounded-[10px]" />
-        ) : skillList.length === 0 ? (
-          <DashedCard className="px-2.5 py-3.5 text-center">
-            <p className="text-[11.5px] leading-snug text-muted">
-              No skill on. Answers come back in the default voice.
-            </p>
-            <Link
-              to={`${base}/skills`}
-              className="mt-1.5 inline-block text-[11.5px] font-bold text-brand-deep"
-            >
-              Pick one
-            </Link>
-          </DashedCard>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {skillList.map((skill) => (
-              <div
-                key={skill.id}
-                className={cn(
-                  'cardstock flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 ring-1',
-                  `ring-${skill.tone}/25`,
-                )}
-              >
-                <span
-                  className={cn(
-                    'grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                    toneSoft[skill.tone],
-                    toneText[skill.tone],
-                  )}
-                >
-                  <Icon name="skill" size={14} />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[12.5px] font-bold text-ink">
-                    {skill.name}
-                  </span>
-                  <span className="setcode">Shaping every answer</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <DockSkills subspaceId={subspaceId} />
 
       {/* ── Sources ── */}
       {/* The drop target is the whole section, not just the empty state —
@@ -447,7 +422,7 @@ export function ContextDock({
           }}
         />
         <div className="flex items-center gap-2">
-          <SectionLabel>Sources</SectionLabel>
+          <SectionLabel>Your material</SectionLabel>
           {/* Adding a source is the point of this panel, so it is a button
               here rather than a trip to another page. Uploading already
               worked in the dock — but only from the empty state, so the

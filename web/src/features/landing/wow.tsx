@@ -13,6 +13,7 @@
  * content only.
  */
 
+import { isPageLocked } from '../../lib/scrollLock'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon } from '../../components/ui/Icon'
@@ -70,6 +71,11 @@ export function VelocityTilt({
     let cur = 0
     let raf = 0
     const tick = () => {
+      // Hidden under a trust card: skip the frame, keep the loop.
+      if (isPageLocked()) {
+        raf = requestAnimationFrame(tick)
+        return
+      }
       const now = window.scrollY
       const delta = now - last
       last = now
@@ -221,6 +227,11 @@ export function Parallax({
     }
 
     const tick = () => {
+      // Hidden under a trust card: skip the frame, keep the loop.
+      if (isPageLocked()) {
+        raf = requestAnimationFrame(tick)
+        return
+      }
       // Eased toward the target rather than snapped to it, same smoothing
       // constant as `VelocityTilt` — the layer trails the cursor by a beat,
       // which is what makes it read as a heavy, physical plane rather than

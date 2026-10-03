@@ -33,6 +33,7 @@ export type QuizKeyAction =
   | { type: 'leave' }
 
 const NEXT_KEYS = new Set(['ArrowDown', 'ArrowRight', 'j', 'J'])
+const ADVANCE_KEYS = new Set(['ArrowRight', 'n', 'N'])
 const PREV_KEYS = new Set(['ArrowUp', 'ArrowLeft', 'k', 'K'])
 
 export function isConfirmKey(key: string): boolean {
@@ -47,14 +48,16 @@ export function isConfirmKey(key: string): boolean {
  * - Enter/Space picks the highlighted (or focused) option; with nothing
  *   highlighted it highlights the first one instead of guessing.
  * - 1–4 and A–D pick directly.
- * - Once answered, Enter/Space goes on (next question, or the results).
+ * - Once answered, Enter/Space/→/n goes on (next question, or the results).
  * - Esc asks before leaving.
  */
 export function quizKeyAction(key: string, s: QuizKeyState): QuizKeyAction | null {
   if (key === 'Escape' || key === 'Esc') return { type: 'leave' }
 
   if (s.revealed) {
-    return isConfirmKey(key) ? { type: 'advance' } : null
+    // Enter/Space, but also → and n: "next" in every other reader. Down/j/k stay
+    // unbound here so a stray press can't skip the explanation.
+    return isConfirmKey(key) || ADVANCE_KEYS.has(key) ? { type: 'advance' } : null
   }
 
   const n = s.count
@@ -131,7 +134,19 @@ function isForeignControl(t: EventTarget | null, ownAttr: string): boolean {
   return control !== null && !control.hasAttribute(ownAttr)
 }
 
-/** True while any modal dialog is on screen — it owns the keyboard then. */
+/**
+ * True while a modal dialog is actually on screen — it owns the keyboard then.
+ *
+ * "Actually" matters: the app shell keeps its mobile navigation drawer in the
+ * page at all times, `aria-modal="true"` and all, and hides it with
+ * `aria-hidden` while it is closed. Counting that made this answer "yes" on
+ * every desktop screen, so every study shortcut was silently ignored. A modal
+ * that is `aria-hidden` (itself or via an ancestor) is closed.
+ */
 export function anyModalOpen(): boolean {
-  return typeof document !== 'undefined' && document.querySelector('[aria-modal="true"]') !== null
+  if (typeof document === 'undefined') return false
+  for (const el of document.querySelectorAll('[aria-modal="true"]')) {
+    if (el.closest('[aria-hidden="true"]') === null) return true
+  }
+  return false
 }

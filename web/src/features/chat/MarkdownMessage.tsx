@@ -120,6 +120,7 @@ function MathView({ index }: { index: number }) {
       return katex.renderToString(span.latex, {
         displayMode: span.display,
         throwOnError: false,
+        trust: false,
       })
     } catch {
       return null

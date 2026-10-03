@@ -30,6 +30,13 @@ function readRequired(key: string, hint: string): string {
 /** URL of the FastAPI backend. Falls back to a sane local default. */
 export const API_URL = readOptional('VITE_API_URL') ?? 'http://localhost:8000/api/v1'
 
+/**
+ * The address of the admin page, without the slash. Not linked from anywhere
+ * and kept out of robots.txt; set `VITE_ADMIN_PATH` to move it. The address is
+ * only out of the way — the password is the lock.
+ */
+export const ADMIN_PATH = (readOptional('VITE_ADMIN_PATH') ?? 'lantern-room').replace(/^\/+|\/+$/g, '')
+
 /** True when Supabase env vars are present — auth features gate on this. */
 export const SUPABASE_CONFIGURED =
   Boolean(readOptional('VITE_SUPABASE_URL')) &&

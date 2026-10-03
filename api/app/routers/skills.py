@@ -21,7 +21,7 @@ def _to_skill(row: dict) -> SkillOut:
     return SkillOut(
         id=row["id"],
         name=row["name"],
-        icon=row.get("icon", "🧠"),
+        icon=row.get("icon") or "skill",
         tone=row.get("tone", "brand"),
         description=row.get("description"),
         instructions=row.get("instructions", ""),

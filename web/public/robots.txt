@@ -1,0 +1,17 @@
+# Public pages may be indexed. Everything behind sign-in is an empty shell to a
+# crawler, so keep it out of search results.
+User-agent: *
+Allow: /
+Disallow: /home
+Disallow: /notes
+Disallow: /flashcards
+Disallow: /quizzes
+Disallow: /skills
+Disallow: /profile
+Disallow: /settings
+Disallow: /welcome
+Disallow: /welcome-aboard
+Disallow: /auth
+Disallow: /s/
+
+Sitemap: https://new-space-learn.vercel.app/sitemap.xml

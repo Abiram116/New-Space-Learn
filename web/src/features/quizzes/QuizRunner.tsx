@@ -33,9 +33,9 @@ import { useReducedMotion } from '../../components/ui/motion'
 import { celebrate, useAmbience, useStudySession } from '../../components/celebrate'
 import { clearStatsCache } from '../../lib/briefCache'
 import { cn } from '../../lib/cn'
-import { useAssessmentLock } from '../../lib/assessment'
+import { useAssessmentLock, useUnsavedWork } from '../../lib/assessment'
 import { anyModalOpen, quizKeyAction, stageKeyGate, type QuizKeyAction } from './keys'
-import { KeyHints, StageCount, type KeyHint } from './StageKit'
+import { Kbd, KeyHints, StageCount, type KeyHint } from './StageKit'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizStage } from './PhoneQuiz'
 import { haptic } from './phoneKit'
@@ -49,6 +49,9 @@ import { useImmersive } from '../../components/layout/immersive'
  * question index so it is stable across re-renders — a message that reshuffles
  * while you are reading it is worse than a repeated one.
  */
+/** Shortest time an explanation stays up before a key can move on. */
+const MIN_READ_MS = 250
+
 const NICE = [
   'Correct.',
   'That’s the one.',
@@ -105,6 +108,8 @@ export function QuizRunner({
   const isRevealed = revealed[index]
   const isCorrect = chosen === q.answer_index
   const answeredCount = revealed.filter(Boolean).length
+  // Answers are only sent on "See results"; until then leaving throws them away.
+  useUnsavedWork(answeredCount > 0 && !compact)
   const isLast = index === total - 1
 
   useEffect(() => {
@@ -231,6 +236,11 @@ export function QuizRunner({
     [choose, isLast, busy, finish, goNext, requestLeave],
   )
 
+  const revealedAt = useRef(0)
+  useEffect(() => {
+    if (isRevealed) revealedAt.current = performance.now()
+  }, [isRevealed, index])
+
   // The listener is bound once; it reads the latest state through this.
   const live = useRef({ revealed: isRevealed, highlight, count: q.choices.length, confirmLeave, act })
   useLayoutEffect(() => {
@@ -258,7 +268,11 @@ export function QuizRunner({
       // Handled or swallowed, Space must not scroll and Enter must not also
       // click whatever the browser thinks is focused.
       e.preventDefault()
-      if (gate === 'handle' && action) s.act(action)
+      if (gate !== 'handle' || !action) return
+      // A quick double-tap on Enter (choose, then straight on) would skip the
+      // explanation the answer just revealed. Card review has the same guard.
+      if (action.type === 'advance' && performance.now() - revealedAt.current < MIN_READ_MS) return
+      s.act(action)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -434,17 +448,13 @@ export function QuizRunner({
   }
 
   const letterOf = (i: number) => String.fromCharCode(65 + i)
-  const lastLetter = letterOf(q.choices.length - 1)
+  // Only what the screen does not already say: the options carry their own
+  // A-D, and the Leave button carries its own Esc.
   const hints: KeyHint[] = isRevealed
-    ? [
-        { keys: ['Enter'], label: isLast ? 'See results' : 'Next question' },
-        { keys: ['Esc'], label: 'Leave' },
-      ]
+    ? [{ keys: ['Enter', 'or', 'right'], label: isLast ? 'See results' : 'Next question' }]
     : [
         { keys: ['up', 'down'], label: 'Move' },
         { keys: ['Enter'], label: 'Choose' },
-        { keys: ['1', '–', String(q.choices.length), 'or', 'A', '–', lastLetter], label: 'Answer directly' },
-        { keys: ['Esc'], label: 'Leave' },
       ]
   const stemId = `quiz-stem-${index}`
 
@@ -843,6 +853,9 @@ function StageHeader({
           )}
         >
           <Icon name="arrowLeft" size={14} /> Leave
+          <span className="stage-keys ml-1 text-[0.85em]">
+            <Kbd k="Esc" />
+          </span>
         </button>
         {/* Elapsed, not a countdown: the same information without the
             pressure, and what the study record wants anyway. */}

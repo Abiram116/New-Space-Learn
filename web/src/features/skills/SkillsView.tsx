@@ -1,8 +1,9 @@
 /**
- * Skills: user's personas on the left, editor panel on the right.
+ * Skills: your collection and the library, editor panel on the right.
  *
- * - Toggling a skill's switch activates/deactivates it inside the current
- *   subspace (so the chat prompt reflects it immediately).
+ * This page is account-wide and has no on/off switches and no topic: you add
+ * skills here (from the library, or written yourself) and turn them on for a
+ * topic from the chat sidebar, where the topic is already obvious.
  * - "Library" cards clone the built-in template into the user's own skills so
  *   they can be edited without touching the shared row.
  * - The editor panel is a single form used for both create and update; when
@@ -10,12 +11,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
-  activateSkill,
   createSkill,
-  deactivateSkill,
   deleteSkill,
-  listActiveSkills,
   listLibrarySkills,
   listSkills,
   updateSkill,
@@ -25,12 +24,12 @@ import type { MemoryScope, Skill, Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
-import { Card, DashedCard } from '../../components/ui/Card'
+import { Card } from '../../components/ui/Card'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
 import { Modal, ModalFooter } from '../../components/ui/Modal'
-import { SectionLabel, Toggle } from '../../components/ui/Bits'
+import { SectionLabel } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import {
   LIBRARY_CATEGORY,
@@ -40,11 +39,10 @@ import {
   resolveSkillIcon,
 } from './skillIcon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { useMediaQuery } from '../../lib/useMediaQuery'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { useActiveSubspace } from '../../lib/nav'
-import { toneDot, toneHex, toneSoft, toneText } from '../../lib/tone'
-import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { toneDot, toneSoft, toneText } from '../../lib/tone'
 
 
 const MEMORY_SCOPE_OPTIONS: { value: MemoryScope; label: string; hint: string }[] = [
@@ -66,41 +64,32 @@ const emptyForm = (): SkillInput => ({
   output_format: '',
 })
 
-/**
- * The editor is a persistent side panel at xl and a modal below it. Which one
- * renders has to be a real branch, not a `hidden` class: the panel is portal-
- * free markup, the modal isn't, and rendering both would double the form.
- */
-function useIsWide(query = '(min-width: 1280px)') {
-  const [wide, setWide] = useState(() => window.matchMedia(query).matches)
-  useEffect(() => {
-    const mq = window.matchMedia(query)
-    const sync = () => setWide(mq.matches)
-    sync()
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [query])
-  return wide
-}
+/** The editor is a persistent side panel from `xl:` up and a modal below it. Which
+ *  one renders has to be a real branch, not a `hidden` class: the panel is portal-
+ *  free markup, the modal isn't, and rendering both would double the form. */
+const XL_QUERY = '(min-width: 1280px)'
 
 export function SkillsView() {
-  const { space, subspace } = useActiveSubspace()
-  if (!space || !subspace) return <SubspaceMissing />
-  return <Inner subspaceId={subspace.id} />
-}
-
-function Inner({ subspaceId }: { subspaceId: string }) {
+  // Back is one step of browser history: wherever you came from — a chat's
+  // "Add more", Settings, anywhere — with nothing to store or keep in sync.
+  // Opened directly (bookmark, new tab) there is no "before" in this app,
+  // which the router marks with the "default" key, so it goes Home instead.
+  const navigate = useNavigate()
+  const { key: locationKey } = useLocation()
+  const goBack = useCallback(
+    () => (locationKey === 'default' ? navigate('/home') : navigate(-1)),
+    [locationKey, navigate],
+  )
   const { show, showError } = useToast()
   const [own, setOwn] = useState<Skill[] | null>(null)
   const [library, setLibrary] = useState<Skill[] | null>(null)
-  const [activeIds, setActiveIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [form, setForm] = useState<SkillInput>(emptyForm)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const isWide = useIsWide()
+  const isWide = useMediaQuery(XL_QUERY)
   const [editorOpen, setEditorOpen] = useState(false)
   const [customIconOpen, setCustomIconOpen] = useState(false)
   const outputFormatRef = useRef<HTMLTextAreaElement>(null)
@@ -130,25 +119,21 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     setCustomIconOpen(false)
   }, [])
 
-  const refresh = useCallback(async () => {
+  // Two reads, once: your skills and the library. Nothing here depends on a topic.
+  const loadLists = useCallback(async () => {
     try {
-      const [mine, lib, active] = await Promise.all([
-        listSkills(),
-        listLibrarySkills(),
-        listActiveSkills(subspaceId),
-      ])
+      const [mine, lib] = await Promise.all([listSkills(), listLibrarySkills()])
       setOwn(mine)
       setLibrary(lib)
-      setActiveIds(new Set(active.map((s) => s.id)))
       setError(null)
     } catch (err) {
       setError(friendlyMessage(err))
     }
-  }, [subspaceId])
+  }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    void loadLists()
+  }, [loadLists])
 
   const loading = own === null && !error
 
@@ -200,28 +185,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     }
   }, [editingExisting])
 
-  const toggleActive = async (skill: Skill, next: boolean) => {
-    // Optimistic — flip local state first, roll back on error.
-    setActiveIds((prev) => {
-      const copy = new Set(prev)
-      if (next) copy.add(skill.id)
-      else copy.delete(skill.id)
-      return copy
-    })
-    try {
-      if (next) await activateSkill(subspaceId, skill.id)
-      else await deactivateSkill(subspaceId, skill.id)
-    } catch (err) {
-      setActiveIds((prev) => {
-        const copy = new Set(prev)
-        if (next) copy.delete(skill.id)
-        else copy.add(skill.id)
-        return copy
-      })
-      showError(err)
-    }
-  }
-
   const save = async () => {
     const name = form.name.trim()
     if (!name) return show('Give the skill a name.', 'error')
@@ -260,11 +223,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     try {
       await deleteSkill(confirmDelete)
       setOwn((prev) => (prev ? prev.filter((s) => s.id !== confirmDelete) : prev))
-      setActiveIds((prev) => {
-        const copy = new Set(prev)
-        copy.delete(confirmDelete)
-        return copy
-      })
       if (selectedId === confirmDelete) {
         setSelectedId(null)
         setEditorOpen(false)
@@ -307,7 +265,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
   }
 
   /* One form, two containers. Rendered into the side panel at xl and into a
-     modal below it — see useIsWide. */
+     modal below it — see XL_QUERY. */
   const editorBody = (
     <>
       <Input
@@ -487,21 +445,28 @@ function Inner({ subspaceId }: { subspaceId: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <SubspaceHeader
         title="Skills"
+        breadcrumb={false}
         actions={
-          <Button onClick={() => openEditor(null)}>
-            <Icon name="plus" size={15} /> New skill
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={goBack}>
+              <Icon name="arrowLeft" size={14} /> Back
+            </Button>
+            <Button onClick={() => openEditor(null)}>
+              <Icon name="plus" size={15} /> New skill
+            </Button>
+          </>
         }
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
           <p className="text-[14px] leading-relaxed text-muted">
-            Skills are reusable instructions the AI applies inside this space —
-            think of them as tutor personas with their own rules and tools.
+            Skills change how the AI talks — tutor personas with their own rules.
+            Add some from the library or write your own. You turn them on for a
+            topic from the sidebar in that topic&rsquo;s chat.
           </p>
 
-          <SectionLabel>ACTIVE IN THIS SPACE</SectionLabel>
+          <SectionLabel>YOUR SKILLS</SectionLabel>
 
           {loading && (
             <div className="grid gap-3 md:grid-cols-2">
@@ -529,28 +494,17 @@ function Inner({ subspaceId }: { subspaceId: string }) {
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {own.map((skill) => {
-                    const active = activeIds.has(skill.id)
                     return (
                     <Card
                       key={skill.id}
-                      className={cn(
-                        'group flex flex-col gap-2 border-l-[3px] p-3.5 transition-[transform,border-color] duration-200 hover:-translate-y-0.5',
-                        !active && 'border-l-transparent',
-                      )}
-                      // This section shows every skill you own, active or
-                      // not — the switch was the only thing saying which is
-                      // which. A left edge in the skill's own colour, present
-                      // only while it's actually affecting this space, reads
-                      // at a glance without requiring the switch's state to
-                      // be parsed first.
-                      style={active ? { borderLeftColor: toneHex[skill.tone] } : undefined}
+                      className="group flex flex-col gap-2 p-3.5 transition-transform duration-200 hover:-translate-y-0.5"
                     >
                       <div className="flex items-center gap-2">
                         <span
                           className={cn(
                             'grid h-8 w-8 shrink-0 place-items-center rounded-[10px]',
-                            active ? toneSoft[skill.tone] : 'bg-line-soft',
-                            active ? toneText[skill.tone] : 'text-faint',
+                            toneSoft[skill.tone],
+                            toneText[skill.tone],
                           )}
                         >
                           <Icon name={resolveSkillIcon(skill.icon)} size={16} />
@@ -564,11 +518,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                         >
                           {skill.name}
                         </button>
-                        <Toggle
-                          checked={active}
-                          onChange={(next) => toggleActive(skill, next)}
-                          label={`Enable ${skill.name}`}
-                        />
                       </div>
                       {skill.description && (
                         <p className="text-[13px] text-muted line-clamp-2">
@@ -595,18 +544,6 @@ function Inner({ subspaceId }: { subspaceId: string }) {
                     </Card>
                     )
                   })}
-                  <DashedCard
-                    onClick={() => openEditor(null)}
-                    // self-start: without it, Grid's default row-stretch
-                    // matches this to the tallest real skill card sharing
-                    // its row, leaving the centered "+" floating in a box
-                    // far bigger than the deliberately compact 100px this
-                    // was designed at.
-                    className="flex min-h-[100px] flex-col items-center justify-center gap-1.5 self-start p-3.5 text-[13px] text-muted transition-colors cursor-pointer hover:border-brand/50 hover:text-brand-deep"
-                  >
-                    <Icon name="plus" size={18} />
-                    Write your own skill
-                  </DashedCard>
                 </div>
               )}
             </>
@@ -681,7 +618,7 @@ function Inner({ subspaceId }: { subspaceId: string }) {
 
         {/* At xl the editor is a panel that lives beside the list; below xl
             it's a modal instead. Either way it only exists once you've
-            actually asked for it — "Write your own skill", "+ New skill",
+            actually asked for it — "+ New skill" in the header (or the empty state's button),
             or opening an existing one to edit. A form sitting open with
             nothing to fill in yet read as unfinished, not helpful. */}
         {editorOpen && (isWide ? (

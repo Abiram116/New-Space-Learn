@@ -27,6 +27,16 @@ type Entry = { data: unknown; at: number }
 
 const store = new Map<string, Entry>()
 const listeners = new Map<string, Set<() => void>>()
+/** Requests in flight, by key, so two screens asking at once share one. */
+const inflight = new Map<string, Promise<unknown>>()
+
+/**
+ * Bumped by `clearCache` (sign-out). `useAsync` keeps showing a screen's last
+ * data after an `invalidate` until its next fetch lands — but never across a
+ * clear, so one account's data cannot linger on screen for the next.
+ */
+let epoch = 0
+export const cacheEpoch = (): number => epoch
 
 /** Cap on retained keys — a study session can visit a lot of subspaces. */
 const MAX_ENTRIES = 120
@@ -62,6 +72,22 @@ export function subscribe(key: string, fn: () => void): () => void {
 }
 
 /**
+ * One request per key at a time: a caller arriving while the same request is
+ * in flight gets that promise instead of starting a second one. On a free-tier
+ * API the duplicate is pure cost (Home and Today, say, both mounting
+ * `quizzes:all`).
+ */
+export function dedupe<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const running = inflight.get(key)
+  if (running) return running as Promise<T>
+  const p: Promise<T> = fn().finally(() => {
+    if (inflight.get(key) === p) inflight.delete(key)
+  })
+  inflight.set(key, p)
+  return p
+}
+
+/**
  * Drop cached entries after a mutation.
  *
  * Prefix-matched, because the keys are namespaced (`notes:<subspace>`), and a
@@ -69,10 +95,17 @@ export function subscribe(key: string, fn: () => void): () => void {
  * pass the family: creating a note invalidates `notes:`, not every key in the
  * app.
  *
- * Listeners are notified so a mounted screen refetches rather than sitting on
- * data it has just been told is wrong.
+ * Listeners are notified, and a mounted screen keeps what it is showing until
+ * its own next fetch replaces it (`useAsync`) — it does not refetch by itself.
+ * That is deliberate: a review session invalidates `decks:` on every graded
+ * card, and a list nobody is looking at must not cost a request per card. The
+ * flows that return to a list call `refresh()` on the way back.
+ *
+ * A request already in flight for the family is forgotten too, so a refresh
+ * after the mutation cannot be handed the pre-mutation answer.
  */
 export function invalidate(prefix: string): void {
+  for (const key of [...inflight.keys()]) if (key.startsWith(prefix)) inflight.delete(key)
   for (const key of [...store.keys()]) {
     if (key.startsWith(prefix)) {
       store.delete(key)
@@ -83,6 +116,8 @@ export function invalidate(prefix: string): void {
 
 /** Everything, for sign-out — the next account must not inherit this one's data. */
 export function clearCache(): void {
+  epoch++
+  inflight.clear()
   store.clear()
   listeners.forEach((set) => set.forEach((fn) => fn()))
 }

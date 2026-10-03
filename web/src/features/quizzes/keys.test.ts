@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { directChoice, quizKeyAction, stageKeyGate, type QuizKeyState } from './keys'
+import { anyModalOpen, directChoice, quizKeyAction, stageKeyGate, type QuizKeyState } from './keys'
 
 const fresh: QuizKeyState = { revealed: false, highlight: -1, count: 4 }
 
@@ -141,3 +141,45 @@ describe('stageKeyGate', () => {
     expect(stageKeyGate({ ...base, target: icon }, opts)).toBe('handle')
   })
 })
+
+describe('after an answer, "next" works the way it does everywhere else', () => {
+  const answered = { ...fresh, revealed: true, highlight: 2 }
+  it('→ and n go on, as do Enter and Space', () => {
+    for (const key of ['ArrowRight', 'n', 'N', 'Enter', ' ']) {
+      expect(quizKeyAction(key, answered)).toEqual({ type: 'advance' })
+    }
+  })
+  it('but a stray down / j / k cannot skip the explanation', () => {
+    for (const key of ['ArrowDown', 'j', 'k']) expect(quizKeyAction(key, answered)).toBeNull()
+  })
+})
+
+describe('anyModalOpen', () => {
+  const mount = (html: string) => {
+    document.body.innerHTML = html
+  }
+
+  it('is false for the always-mounted, closed navigation drawer', () => {
+    // Exactly how AppShell renders it while closed.
+    mount('<div role="dialog" aria-modal="true" aria-hidden="true" aria-label="Navigation"></div>')
+    expect(anyModalOpen()).toBe(false)
+  })
+
+  it('is false when the modal is inside a hidden subtree', () => {
+    mount('<div aria-hidden="true"><div role="dialog" aria-modal="true"></div></div>')
+    expect(anyModalOpen()).toBe(false)
+  })
+
+  it('is true for a dialog that is on screen', () => {
+    mount('<div role="dialog" aria-modal="true" aria-label="Leave quiz?"></div>')
+    expect(anyModalOpen()).toBe(true)
+  })
+
+  it('is true when an open dialog sits beside the closed drawer', () => {
+    mount(
+      '<div role="dialog" aria-modal="true" aria-hidden="true"></div><div role="dialog" aria-modal="true"></div>',
+    )
+    expect(anyModalOpen()).toBe(true)
+  })
+})
+

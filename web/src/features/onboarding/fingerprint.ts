@@ -585,13 +585,13 @@ function options(id: string): Option[] {
 export function legend(a: Answers): LegendRow[] {
   const rows: LegendRow[] = []
   const name = a.name.trim()
-  if (name) rows.push({ key: 'seed', label: 'Seed', text: `Grown from “${name}”` })
+  if (name) rows.push({ key: 'seed', label: 'Name', text: `Grown from “${name}”` })
   const styles = options('style').filter((o) => a.styles.includes(o.value))
-  if (styles.length) rows.push({ key: 'core', label: 'Flow', text: styles.map((o) => o.hint).join(' · ') })
+  if (styles.length) rows.push({ key: 'core', label: 'Style', text: styles.map((o) => o.hint).join(' · ') })
   const depth = options('depth').find((o) => o.value === a.depth)
-  if (depth) rows.push({ key: 'rings', label: 'Layers', text: depth.hint })
+  if (depth) rows.push({ key: 'rings', label: 'Depth', text: depth.hint })
   const session = options('session').find((o) => o.value === a.session)
-  if (session) rows.push({ key: 'orbit', label: 'Orbit', text: `${session.label} — ${session.hint.toLowerCase()}` })
+  if (session) rows.push({ key: 'orbit', label: 'Session', text: `${session.label} — ${session.hint.toLowerCase()}` })
   const goal = a.goal.trim()
   if (goal) rows.push({ key: 'star', label: 'North star', text: goal })
   return rows

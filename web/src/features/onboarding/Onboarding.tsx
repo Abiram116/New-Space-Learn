@@ -435,7 +435,7 @@ function DesktopOnboarding() {
   const skipAll = useCallback(() => {
     // Say where it went: leaving without being told the questions still exist
     // makes it look like a one-time door you just closed.
-    show('You can set these any time — Settings → How you learn.', 'info')
+    show('You can answer these later in Settings → Learning.', 'info')
     void leave()
   }, [leave, show])
 
@@ -702,7 +702,7 @@ function StepView(p: StepViewProps) {
   if (!s) return <Ending {...p} />
 
   // Greets them once there is a name to greet them by.
-  const eyebrow = s.id === 'style' && p.first ? `Good to meet you, ${p.first}.` : s.id === 'goal' ? (p.first ? `Last one, ${p.first}.` : 'Last one.') : null
+  const eyebrow = s.id === 'style' && p.first ? `Nice to meet you, ${p.first}.` : s.id === 'goal' ? (p.first ? `Last one, ${p.first}.` : 'Last one.') : null
 
   return (
     <div className="flex flex-col">
@@ -731,7 +731,7 @@ function StepView(p: StepViewProps) {
             Skip this one
           </button>
         )}
-        {s.kind === 'choice' && <span className="setcode ml-auto hidden lg:inline">Keys 1–{s.options.length}</span>}
+        {s.kind === 'choice' && <span className="setcode ml-auto hidden lg:inline">Press 1–{s.options.length}</span>}
       </div>
     </div>
   )
@@ -928,7 +928,7 @@ function Ending({ answers, first, onBack, onFinish }: StepViewProps) {
         {first ? <Letters text={`${first}.`} className="text-brand-300" /> : <Words text="so far." />}
       </h1>
       <p data-beat className={cn('mt-[clamp(12px,1.8vh,22px)] max-w-[34em] leading-relaxed text-ink-3', ASIDE)}>
-        Alive, and made only of what you just told us. The rest, the app learns as you study — and all of it can be changed in Settings.
+        Made only from what you just told us. The app learns the rest as you study, and you can change any of it in Settings.
       </p>
 
       {rows.length > 0 && (

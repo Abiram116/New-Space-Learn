@@ -111,7 +111,7 @@ describe('chooseTodayAction', () => {
     const plan = planReview({ due: 12, daysAway: 0 })
     const a = chooseTodayAction({ topics, stats: { cards_due: 12 }, suggestion: null, plan })
     expect(a).toMatchObject({ kind: 'review', label: 'Review 12 cards', detail: '~4 min' })
-    expect(a?.href).toBe('/s/sp/sp-t/flashcards?review=due')
+    expect(a?.href).toBe('/sp/sp-t/flashcards?review=due')
   })
 
   it('welcomes back with a manageable first chunk', () => {
@@ -141,16 +141,16 @@ describe('chooseTodayAction', () => {
       suggestion: { label: 'Continue Cells', route: '/s/sp/sp-t', action: 'continue' },
       plan: noPlan,
     })
-    expect(a).toMatchObject({ kind: 'quiz', label: 'Take a quick quiz', href: '/s/sp/sp-t/quizzes' })
+    expect(a).toMatchObject({ kind: 'quiz', label: 'Take a quick quiz', href: '/sp/sp-t/quizzes' })
   })
 
   it('falls back to notes, then to adding material', () => {
     expect(
       chooseTodayAction({ topics: topicsByRecency([space({ notes: 3 })]), stats: null, suggestion: null, plan: noPlan }),
-    ).toMatchObject({ kind: 'notes', href: '/s/sp/sp-t/notes' })
+    ).toMatchObject({ kind: 'notes', href: '/sp/sp-t/notes' })
     expect(
       chooseTodayAction({ topics: topicsByRecency([space({})]), stats: null, suggestion: null, plan: noPlan }),
-    ).toMatchObject({ kind: 'material', label: 'Add material', href: '/s/sp/sp-t/docs?add=1' })
+    ).toMatchObject({ kind: 'material', label: 'Add material', href: '/sp/sp-t/docs?add=1' })
   })
 
   it('has nothing to offer without a topic', () => {
@@ -164,6 +164,17 @@ describe('phoneRoute (shared with the phone shell)', () => {
     expect(phoneRoute('/s/a/b', 'due_cards')).toBe('/s/a/b/flashcards')
     expect(phoneRoute('/s/a/b/skills')).toBe('/s/a/b')
     expect(phoneRoute('/home')).toBe('/home')
+  })
+
+  it('understands the current address as well as the old /s/ one', () => {
+    expect(phoneRoute('/fsd/transformer', 'due_cards')).toBe('/fsd/transformer/flashcards')
+    expect(phoneRoute('/fsd/transformer/chat')).toBe('/fsd/transformer')
+    expect(phoneRoute('/fsd/transformer/notes')).toBe('/fsd/transformer/notes')
+  })
+
+  it('does not mistake a page for a topic', () => {
+    expect(phoneRoute('/auth/callback')).toBe('/auth/callback')
+    expect(phoneRoute('/notes/anything')).toBe('/notes/anything')
   })
 })
 

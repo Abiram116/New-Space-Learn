@@ -5,19 +5,25 @@
  */
 
 import type { Space, Subspace } from '../../api/types'
+import { RESERVED_ROOTS } from '../../lib/slug'
 
 export type PhoneTab = 'today' | 'cards' | 'quizzes' | 'notes' | 'you'
 
 export type PhoneSection = 'flashcards' | 'quizzes' | 'notes' | 'docs' | 'skills' | 'chat'
 
-const TOPIC_PATH = /^\/s\/([^/]+)\/([^/]+)(?:\/([^/]+))?\/?$/
+// `/<subject>/<topic>[/<section>]`, or the old `/s/<subject>/<topic>[/<section>]`.
+const TOPIC_PATH = /^\/(?:s\/)?([^/]+)\/([^/]+)(?:\/([^/]+))?\/?$/
 
-/** `{spaceId, subspaceId, section}` for a topic URL, else null. `section` is null at the topic root. */
+/**
+ * `{spaceId, subspaceId, section}` for a topic URL, else null. `section` is null
+ * at the topic root. A path whose first segment is a page of its own
+ * (`/auth/callback`, a bare `/s/x`) is not a topic.
+ */
 export function topicFromPath(
   pathname: string,
 ): { spaceId: string; subspaceId: string; section: string | null } | null {
   const m = TOPIC_PATH.exec(pathname)
-  if (!m) return null
+  if (!m || RESERVED_ROOTS.has(m[1])) return null
   return { spaceId: decodeURIComponent(m[1]), subspaceId: decodeURIComponent(m[2]), section: m[3] ?? null }
 }
 
@@ -87,7 +93,7 @@ export function phoneBackFor(pathname: string, search = ''): string | null {
   if (path === '/settings') return '/profile'
   const topic = topicFromPath(path)
   if (topic && (topic.section === 'docs' || topic.section === 'skills' || topic.section === 'chat')) {
-    return `/s/${encodeURIComponent(topic.spaceId)}/${encodeURIComponent(topic.subspaceId)}`
+    return `/${encodeURIComponent(topic.spaceId)}/${encodeURIComponent(topic.subspaceId)}`
   }
   return null
 }

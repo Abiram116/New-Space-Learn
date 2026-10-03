@@ -325,6 +325,51 @@
     transform: translateX(60%);
   }
 
+  /* Rainbow-on-hover lettering — the same band of foil colour the wordmark
+     carries, sliding left to right across the glyphs, but ONLY while the
+     pointer is over the element. The element needs `data-text` equal to its
+     own text; the band is a copy of that text painted over it.
+
+     Costs nothing at rest (no animation exists until :hover), and is limited
+     to devices that can really hover: on a touch screen a tap would otherwise
+     leave it running. Hidden entirely under reduced motion (see below). */
+  .rainbow-hover {
+    position: relative;
+  }
+  @media (hover: hover) {
+    .rainbow-hover::after {
+      content: attr(data-text);
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      color: transparent;
+      background-image: linear-gradient(
+        100deg,
+        transparent 30%,
+        rgba(255, 91, 60, 0.95) 38%,
+        rgba(255, 197, 61, 0.95) 44%,
+        rgba(46, 230, 214, 0.95) 50%,
+        rgba(255, 61, 139, 0.95) 56%,
+        transparent 64%
+      );
+      background-size: 260% 100%;
+      background-position: 150% 0;
+      -webkit-background-clip: text;
+      background-clip: text;
+      transition: opacity 160ms ease-out;
+    }
+    :is(a, button):hover > .rainbow-hover::after,
+    .rainbow-hover:hover::after {
+      opacity: 1;
+      animation: rainbowSweep 1.7s linear infinite;
+    }
+  }
+  @keyframes rainbowSweep {
+    from { background-position: 150% 0; }
+    to   { background-position: -50% 0; }
+  }
+
   /* ── The three materials ───────────────────────────────────────────────
      One-line test: cardstock is a thing you HAVE; a leaf is a thing you're
      INSIDE; a ledger is a thing you're MEASURED AGAINST. */
@@ -402,13 +447,81 @@
   to   { transform: translateX(14px); opacity: 0; }
 }
 
+/* Trust pages (About, Privacy, …): the panel arrives from the right edge, the
+   page behind it dims. Transform/opacity only, so both composite. */
+/* The feedback desk's hello (features/admin/Welcome): emoji thrown out from the
+   middle, the words popping in, then the whole thing lifting away. */
+@keyframes deskSplat {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(0deg); }
+  60% { opacity: 1; transform: translate(calc(-50% + var(--x) * 1.06), calc(-50% + var(--y) * 1.06)) scale(1.25) rotate(var(--r)); }
+  100% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1) rotate(var(--r)); }
+}
+@keyframes deskHello {
+  0% { opacity: 0; transform: scale(0.4) rotate(-8deg); }
+  60% { opacity: 1; transform: scale(1.12) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-2deg); }
+}
+@keyframes deskAway {
+  to { opacity: 0; transform: scale(1.06); visibility: hidden; }
+}
+
+@keyframes trustIn {
+  from { transform: translateX(48px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes trustFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* The landing page hides its scrollbars (see Landing). `overflow-x: clip`, not
+   `hidden`: it stops the sideways overflow that drew a bottom scrollbar
+   without making <html> a scroll container, which would break sticky and the
+   scroll-driven film. */
+html.no-scrollbars,
+html.no-scrollbars body {
+  scrollbar-width: none;
+  overflow-x: clip;
+}
+html.no-scrollbars::-webkit-scrollbar,
+html.no-scrollbars body::-webkit-scrollbar {
+  display: none;
+}
+
+/* Trust pages from the landing page: the sheet drifts up out of the
+   bottom-right corner (its transform-origin) as it fades in, and glides back
+   the same way. Small distances, long ease — soft rather than snappy. Its
+   content follows a beat later. Transform/opacity only. */
+@keyframes cardIn {
+  from { transform: translate(2.5%, 5%) scale(0.95); opacity: 0; }
+  to   { transform: translate(0, 0) scale(1);        opacity: 1; }
+}
+@keyframes cardOut {
+  from { transform: translate(0, 0) scale(1);        opacity: 1; }
+  to   { transform: translate(2.5%, 5%) scale(0.95); opacity: 0; }
+}
+/* The orange sheen that runs once along the card's top edge as it lands. */
+@keyframes cardSheen {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translateX(300%);  opacity: 0; }
+}
+@keyframes trustFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes cardContentIn {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
 @keyframes dockIn {
   from { transform: translateX(14px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .foil::after {
+  .foil::after,
+  .rainbow-hover::after {
     display: none;
   }
   *,

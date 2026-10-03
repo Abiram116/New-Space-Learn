@@ -54,6 +54,15 @@ class ValidationFailed(ApiError):
     message = "Some of the input isn't valid."
 
 
+class PayloadTooLarge(ApiError):
+    """The request body is bigger than this endpoint will read (see
+    `middleware.RequestGuard`). Refused before it is held in memory."""
+
+    code = "payload_too_large"
+    status = 413
+    message = "That's too large to send. Try a smaller file or less text."
+
+
 class RateLimited(ApiError):
     code = "rate_limited"
     status = 429
@@ -104,6 +113,18 @@ async def handle_api_error(_: Request, exc: ApiError) -> JSONResponse:
     return _envelope(exc.code, exc.message, exc.status)
 
 
+#: What each status says to a person. FastAPI's own detail strings ("Not Found",
+#: "Method Not Allowed") are developer text, not something to put on a screen.
+_HTTP_MESSAGES = {
+    401: "Please sign in again.",
+    403: "You don't have access to that.",
+    404: "We couldn't find that.",
+    405: "That action isn't available here.",
+    413: "That's too large to upload.",
+    429: "Slow down for a moment and try again.",
+}
+
+
 async def handle_http_exception(_: Request, exc: StarletteHTTPException) -> JSONResponse:
     # Map generic HTTPExceptions to our envelope so clients see one shape.
     code = {
@@ -113,17 +134,54 @@ async def handle_http_exception(_: Request, exc: StarletteHTTPException) -> JSON
         405: "method_not_allowed",
         429: "rate_limited",
     }.get(exc.status_code, "http_error")
-    message = str(exc.detail) if exc.detail else "Request failed."
+    message = _HTTP_MESSAGES.get(exc.status_code, "That request didn't work. Please try again.")
     return _envelope(code, message, exc.status_code)
 
 
+def _field_label(loc: tuple[Any, ...]) -> str:
+    """"body_md" -> "Body md", from the last part of where the error was found."""
+    name = next((str(p) for p in reversed(loc) if isinstance(p, str) and p != "body"), "")
+    return name.replace("_", " ").strip().capitalize() or "That field"
+
+
+def friendly_validation_message(errors: list[dict[str, Any]]) -> str:
+    """One plain sentence for the first thing wrong with a request.
+
+    Pydantic's own text ("String should have at least 1 character", "Input
+    should be a valid integer, unable to parse string as an integer") is written
+    for developers. This says what to change, in terms of the field.
+    """
+    if not errors:
+        return "Some of the input isn't valid."
+    first = errors[0]
+    field = _field_label(tuple(first.get("loc", ())))
+    kind = str(first.get("type", ""))
+    ctx = first.get("ctx") or {}
+    if kind == "missing":
+        return f"{field} is required."
+    if kind == "string_too_short":
+        minimum = ctx.get("min_length", 1)
+        return f"{field} can't be empty." if minimum <= 1 else f"{field} is too short (at least {minimum} characters)."
+    if kind == "string_too_long":
+        return f"{field} is too long (at most {ctx.get('max_length', '?')} characters)."
+    if kind == "too_long":
+        return f"{field} has too many items (at most {ctx.get('max_length', '?')})."
+    if kind == "too_short":
+        return f"{field} needs at least {ctx.get('min_length', 1)} item(s)."
+    if kind in {"greater_than", "greater_than_equal", "less_than", "less_than_equal"}:
+        return f"{field} is outside the allowed range."
+    if kind in {"int_parsing", "int_type", "float_parsing", "float_type", "bool_parsing"}:
+        return f"{field} has to be a number."
+    if kind == "literal_error":
+        return f"{field} isn't one of the allowed choices."
+    if kind in {"json_invalid", "model_attributes_type", "dict_type"}:
+        return "That request couldn't be read. Please try again."
+    return "Some of the input isn't valid."
+
+
 async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-    # Return the first field message so users see actionable text, not a JSON dump.
-    first = exc.errors()[0] if exc.errors() else None
-    msg = "Please check the highlighted fields."
-    if first and first.get("msg"):
-        msg = str(first["msg"])
-    return _envelope("validation_error", msg, 422, extra=exc.errors()[:5])
+    errors = exc.errors()
+    return _envelope("validation_error", friendly_validation_message(errors), 422, extra=errors[:5])
 
 
 async def handle_unexpected(_: Request, exc: Exception) -> JSONResponse:

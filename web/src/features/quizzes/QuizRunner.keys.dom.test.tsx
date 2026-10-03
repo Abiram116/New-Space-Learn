@@ -5,7 +5,7 @@
  */
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import { QuizRunner } from './QuizRunner'
 import { AssessmentProvider } from '../../lib/assessment'
@@ -31,6 +31,8 @@ function renderRunner(props: Partial<ComponentProps<typeof QuizRunner>> = {}) {
   return render(
     <AssessmentProvider>
       <input aria-label="elsewhere" />
+      {/* AppShell keeps this in the page, closed, on every screen. */}
+      <div role="dialog" aria-modal="true" aria-hidden="true" aria-label="Navigation" />
       <QuizRunner quiz={quiz()} onFinished={vi.fn()} onExit={vi.fn()} {...props} />
     </AssessmentProvider>,
   )
@@ -39,6 +41,9 @@ function renderRunner(props: Partial<ComponentProps<typeof QuizRunner>> = {}) {
 /** keydown on whatever holds focus (bubbling to the window listener).
  *  Returns false when the stage called preventDefault. */
 function press(key: string, init: Partial<KeyboardEventInit> = {}) {
+  // A person takes a moment to read between presses; `advanceClock = false`
+  // is the double-tap case the explanation guard exists for.
+  if (!init.repeat && advanceClock) now += 400
   let notPrevented = true
   act(() => {
     notPrevented = fireEvent.keyDown(document.activeElement ?? document.body, { key, ...init })
@@ -46,9 +51,19 @@ function press(key: string, init: Partial<KeyboardEventInit> = {}) {
   return notPrevented
 }
 
+let now = 0
+let advanceClock = true
+
 const option = (name: RegExp) => screen.getByRole('radio', { name })
 
+beforeEach(() => {
+  now = 1000
+  advanceClock = true
+  vi.spyOn(performance, 'now').mockImplementation(() => now)
+})
+
 afterEach(() => {
+  vi.restoreAllMocks()
   cleanup()
   vi.clearAllMocks()
 })
@@ -136,6 +151,20 @@ describe('quiz keyboard', () => {
     expect(onExit).toHaveBeenCalledTimes(1)
   })
 
+  it('in the leave dialog ← / → move between Cancel and Leave, stopping at the ends', () => {
+    renderRunner()
+    press('Escape')
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const leave = screen.getByRole('button', { name: 'Leave quiz' })
+    expect(cancel).toHaveFocus()
+    expect(press('ArrowRight')).toBe(false) // handled, not left to scroll anything
+    expect(leave).toHaveFocus()
+    press('ArrowRight')
+    expect(leave).toHaveFocus() // an end is an end
+    press('ArrowLeft')
+    expect(cancel).toHaveFocus()
+  })
+
   it('on the last question Enter submits once, however often it is pressed', async () => {
     let resolve: (v: unknown) => void = () => {}
     submitQuiz.mockReturnValue(new Promise((r) => (resolve = r)))
@@ -164,5 +193,18 @@ describe('quiz keyboard', () => {
     renderRunner({ compact: true })
     press('1')
     expect(screen.queryByText('Not this time.')).not.toBeInTheDocument()
+  })
+
+  it('a double-tap cannot skip the explanation, but → and n go on once it has been read', () => {
+    renderRunner()
+    press('ArrowDown')
+    press('Enter') // choose
+    expect(screen.getByText(/Question number 1\?/)).toBeTruthy()
+    advanceClock = false
+    press('Enter') // straight away: too quick to have read anything
+    expect(screen.getByText(/Question number 1\?/)).toBeTruthy()
+    advanceClock = true
+    press('ArrowRight')
+    expect(screen.getByText(/Question number 2\?/)).toBeTruthy()
   })
 })

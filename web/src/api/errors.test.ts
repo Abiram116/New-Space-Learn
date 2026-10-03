@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './errors'
-import { classifyError, friendlyMessage, isAuthError } from './errors'
+import { classifyError, friendlyMessage, isAuthError, isReadable } from './errors'
 
 describe('classifyError', () => {
   it('is "auth" for a 401, same as isAuthError', () => {
@@ -70,5 +70,48 @@ describe('friendlyMessage exhaustiveness', () => {
       const message = friendlyMessage(new ApiError(code, '', 0))
       expect(message.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('isReadable', () => {
+  it.each([
+    ['', false],
+    ['{}', false],
+    ['{"error":"x"}', false],
+    ['[object Object]', false],
+    ['undefined', false],
+    ['TypeError: x is not a function', false],
+    ['AuthRetryableFetchError: {}', false],
+    ['Failed to fetch', false],
+    ['Unexpected token < in JSON at position 0', false],
+    ['duplicate key value violates unique constraint "notes_pkey"', false],
+    ['at Object.run (http://localhost:5173/src/main.tsx:12:5)', false],
+    ['x'.repeat(300), false],
+    ['Password should be at least 8 characters.', true],
+    ['report.pdf is over 4MB — resize it first.', true],
+    ['An account with that email already exists.', true],
+  ])('%j → %s', (text, expected) => {
+    expect(isReadable(text)).toBe(expected)
+  })
+})
+
+describe('friendlyMessage never shows unreadable text', () => {
+  it('replaces a server message that is not a sentence with the code\'s own', () => {
+    const err = new ApiError('upstream_unavailable', '{}', 500)
+    expect(friendlyMessage(err)).toBe('A service we depend on is offline. Try again shortly.')
+  })
+
+  it('keeps a server sentence that is readable', () => {
+    expect(friendlyMessage(new ApiError('validation_error', 'Name is required.', 422))).toBe('Name is required.')
+  })
+
+  it('turns the browser\'s network failure into one plain sentence', () => {
+    expect(friendlyMessage(new TypeError('Failed to fetch'))).toMatch(/can.t reach the server/i)
+  })
+
+  it('shows an Error written for the screen, and hides one that is not', () => {
+    expect(friendlyMessage(new Error('big.png is over 4MB — resize it first.'))).toContain('over 4MB')
+    expect(friendlyMessage(new Error('Cannot read properties of undefined'))).toBe('Something went wrong.')
+    expect(friendlyMessage('a string')).toBe('Something went wrong.')
   })
 })

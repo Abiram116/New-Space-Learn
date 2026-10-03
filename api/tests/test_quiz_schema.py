@@ -136,3 +136,44 @@ def test_an_old_quiz_with_none_of_the_new_fields_still_parses():
     assert q.kind is None
     assert q.misconceptions is None
     assert q.prerequisites is None
+
+
+# ── Generated questions must be answerable ─────────────────────────────
+
+
+def _raw(*items: dict) -> str:
+    import json
+
+    return json.dumps(list(items))
+
+
+def _q(**over) -> dict:
+    base = {"q": "What is 2+2?", "choices": ["1", "2", "3", "4"], "answer_index": 3}
+    base.update(over)
+    return base
+
+
+def test_unanswerable_generated_questions_are_dropped():
+    from app.routers.quizzes import _safe_parse_questions
+
+    raw = _raw(
+        _q(),
+        _q(answer_index=4),  # past the end
+        _q(answer_index=-1),
+        _q(choices=["a", "b", "c"]),  # too few
+        _q(choices=["a", "b", "c", "d", "e"]),  # too many
+        _q(choices=["a", "a", "b", "c"]),  # duplicates
+        _q(choices=["a", " ", "b", "c"]),  # blank
+        _q(q="  "),
+        "not an object",
+    )
+    got = _safe_parse_questions(raw, want=10)
+    assert len(got) == 1 and got[0].answer_index == 3
+
+
+def test_want_counts_only_valid_questions():
+    from app.routers.quizzes import _safe_parse_questions
+
+    raw = _raw(_q(answer_index=9), _q(q="a"), _q(q="b"), _q(q="c"))
+    assert [x.q for x in _safe_parse_questions(raw, want=2)] == ["a", "b"]
+

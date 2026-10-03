@@ -17,7 +17,7 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, ValidationFailed
 from ..guards import assert_space, assert_subspace
 from ..schemas import OkOut, SubspaceCreate, SubspaceLinkCreate, SubspaceOut, SubspaceUpdate
-from ..services import supabase
+from ..services import purge, supabase
 
 router = APIRouter()
 
@@ -74,6 +74,7 @@ async def delete_subspace(
     subspace_id: str, user: CurrentUser = Depends(get_current_user)
 ) -> OkOut:
     await assert_subspace(user.id, subspace_id)
+    await purge.purge_documents(user.id, subspace_ids=[subspace_id])
     await supabase.db_delete(
         "subspaces",
         filters={"user_id": f"eq.{user.id}", "id": f"eq.{subspace_id}"},

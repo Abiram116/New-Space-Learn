@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
@@ -132,15 +132,21 @@ class NoteOut(BaseModel):
     subject_name: str | None = None
 
 
+# Images live inside a note as data URLs (the editor allows 4MB each), so this is
+# a payload ceiling, not a writing limit. It only stops an unbounded body from
+# being written to the database and re-read on every snapshot.
+NOTE_BODY_MAX = 5_000_000
+
+
 class NoteCreate(BaseModel):
     title: str = Field(min_length=1, max_length=140)
-    body_md: str = ""
+    body_md: str = Field(default="", max_length=NOTE_BODY_MAX)
     origin: Literal["user", "agent", "doc"] = "user"
 
 
 class NoteUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=140)
-    body_md: str | None = None
+    body_md: str | None = Field(default=None, max_length=NOTE_BODY_MAX)
     # Set by the editor on the one PATCH that immediately follows accepting
     # an `/ai` inline suggestion into the note — every other save (ordinary
     # typing) leaves this unset. Never clears `touched_by_user`: a student
@@ -241,6 +247,9 @@ class FlashcardCreate(BaseModel):
 
 class GradeIn(BaseModel):
     grade: Grade
+    #: A one-time id the client makes up per grade, so it can safely re-send a
+    #: grade whose reply it never received: the server applies each id once.
+    review_id: str | None = Field(default=None, min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class FlashcardUpdate(BaseModel):
@@ -409,7 +418,7 @@ class SkillOut(BaseModel):
 
 class SkillCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    icon: str = "🧠"
+    icon: str = "skill"  # an Icon name in the frontend set, never an emoji
     tone: Tone = "brand"
     description: str | None = None
     instructions: str = Field(min_length=1, max_length=4000)
@@ -702,7 +711,152 @@ class OkOut(BaseModel):
     ok: bool = True
 
 
-class ErrorEnvelope(BaseModel):
-    """Kept for OpenAPI docs — the real serializer lives in errors.py."""
+# ── Product feedback (the feedback form) ───────────────────────────────
+#
+# Not `FeedbackIn` above — that is a thumb on one AI answer. This is the form
+# in Settings › Feedback and on the landing page, whose questions the admins
+# edit without a deploy.
 
-    error: dict[str, Any]
+QuestionKind = Literal["rating", "scale", "choice", "multi", "short", "long"]
+
+#: Answer length caps, by kind. Mirrored in `web/src/lib/limits.ts`.
+FEEDBACK_SHORT_MAX = 200
+FEEDBACK_LONG_MAX = 2000
+FEEDBACK_OPTION_MAX = 60
+FEEDBACK_OPTIONS_MAX = 12
+
+
+class FeedbackQuestionOut(BaseModel):
+    id: str
+    position: int
+    prompt: str
+    kind: QuestionKind
+    options: list[str] = Field(default_factory=list)
+    #: The choices that open a "tell us more" box when picked.
+    detail_options: list[str] = Field(default_factory=list)
+    required: bool = True
+    active: bool = True
+
+
+class FeedbackQuestionCreate(BaseModel):
+    prompt: str = Field(min_length=3, max_length=200)
+    kind: QuestionKind
+    options: list[str] = Field(default_factory=list)
+    detail_options: list[str] = Field(default_factory=list)
+    required: bool = True
+
+
+class FeedbackQuestionUpdate(BaseModel):
+    prompt: str | None = Field(default=None, min_length=3, max_length=200)
+    options: list[str] | None = None
+    detail_options: list[str] | None = None
+    required: bool | None = None
+    active: bool | None = None
+
+
+class FeedbackReorder(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=100)
+
+
+class FeedbackAnswerIn(BaseModel):
+    question_id: str = Field(min_length=1, max_length=64)
+    #: A number (rating, scale), a choice, several choices, or text — checked
+    #: against the question's kind in the handler. Strict, so `true` is not
+    #: quietly read as the number 1, nor "5" as 5.
+    value: StrictInt | StrictStr | list[StrictStr]
+    #: The "tell us more" text, for a choice that asks for it. Kept only when
+    #: the picked choice really does ask (checked in the handler).
+    detail: str | None = Field(default=None, max_length=500)
+
+
+class ProductFeedbackIn(BaseModel):
+    source: Literal["landing", "settings"]
+    answers: list[FeedbackAnswerIn] = Field(max_length=60)
+    #: Signed-out visitors only, and only if they want a reply.
+    contact_email: str | None = Field(default=None, max_length=254)
+    page: str | None = Field(default=None, max_length=300)
+    #: A field no person ever sees or fills in. Anything in it means a bot.
+    website: str | None = Field(default=None, max_length=200)
+
+
+class ProductFeedbackOut(BaseModel):
+    id: str
+    created_at: datetime
+    source: str
+    signed_in: bool
+    contact_email: str | None = None
+    page: str | None = None
+    answers: list[dict[str, Any]]
+
+
+class FeedbackTextAnswer(BaseModel):
+    text: str
+    #: For a "tell us more" answer: the choice it was written about.
+    about: str | None = None
+    created_at: datetime | None = None
+    #: The same person's overall rating (1–5), when they gave one — so a
+    #: comment can be read knowing whether a happy or unhappy person wrote it.
+    score: int | None = None
+
+
+class FeedbackKeyword(BaseModel):
+    word: str
+    count: int
+
+
+class FeedbackSummaryItem(BaseModel):
+    question_id: str
+    prompt: str
+    kind: str
+    responses: int
+    #: Rating and scale questions.
+    average: float | None = None
+    median: float | None = None
+    #: The same average over the period before this one, to show the direction.
+    previous_average: float | None = None
+    #: How many gave each number, every number present ("1".."5" or "0".."10").
+    distribution: dict[str, int] = Field(default_factory=dict)
+    #: Rating: the share (0–100) who gave 4 or 5.
+    positive_share: int | None = None
+    #: Scale: promoters (9–10) minus detractors (0–6), as a percentage, −100..100.
+    nps: int | None = None
+    promoters: int = 0
+    passives: int = 0
+    detractors: int = 0
+    #: Choice and multi questions: how often each choice was picked.
+    counts: dict[str, int] = Field(default_factory=dict)
+    #: Short and long questions: the words that keep coming up, and the answers.
+    keywords: list[FeedbackKeyword] = Field(default_factory=list)
+    texts: list[FeedbackTextAnswer] = Field(default_factory=list)
+
+
+class FeedbackDay(BaseModel):
+    date: str
+    count: int
+
+
+class FeedbackSummaryOut(BaseModel):
+    #: The period in days; 0 means everything.
+    days: int
+    total: int
+    #: Responses in the period of the same length just before; None for "all".
+    previous_total: int | None = None
+    by_day: list[FeedbackDay] = Field(default_factory=list)
+    sources: dict[str, int] = Field(default_factory=dict)
+    signed_in: int = 0
+    visitors: int = 0
+    #: Visitors who left an address and are owed a reply.
+    want_reply: int = 0
+    #: The findings in plain sentences, most important first.
+    takeaways: list[str] = Field(default_factory=list)
+    items: list[FeedbackSummaryItem] = Field(default_factory=list)
+
+
+class AdminUnlockIn(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class AdminUnlockOut(BaseModel):
+    token: str
+    #: Epoch seconds.
+    expires_at: int

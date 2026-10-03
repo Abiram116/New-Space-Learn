@@ -5,6 +5,7 @@
  *   Space / Enter   flip the card; once flipped, confirm the highlighted grade
  *   ← → / ↑ ↓       move the highlighted grade (starts on Good each card)
  *   1 – 4           grade directly (once flipped)
+ *   Esc             end the session (progress is saved per card)
  */
 
 import { isConfirmKey } from '../quizzes/keys'
@@ -23,11 +24,13 @@ export type ReviewKeyAction =
   | { type: 'flip' }
   | { type: 'highlight'; index: number }
   | { type: 'grade'; index: number }
+  | { type: 'leave' }
 
 /** Good — the honest default for "I knew it". */
 export const DEFAULT_GRADE_HIGHLIGHT = 2
 
 export function reviewKeyAction(key: string, s: ReviewKeyState): ReviewKeyAction | null {
+  if (key === 'Escape' || key === 'Esc') return { type: 'leave' }
   if (!s.flipped) {
     // Before the flip only the flip exists. Grading a card you haven't seen
     // the back of is a guess, not a recall.

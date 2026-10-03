@@ -19,7 +19,7 @@
  * screen (it's an account-wide library now, see NotesView's own top-level
  * comment), so `SubspaceHeader`'s five-tab strip — "which of THIS topic's
  * screens am I on" — became actively misleading here and was deliberately
- * turned off (`tabs={false}`). The breadcrumb/title/actions row it still
+ * turned off (`breadcrumb={false}`). The breadcrumb/title/actions row it still
  * renders is what this file actually needs to keep proving.
  */
 
@@ -46,6 +46,13 @@ vi.mock('../../lib/nav', () => ({
     base: '/spaces/space-1/subspace-1',
   }),
 }))
+
+// The views read their topic through `useTopicScope`; here that is simply the
+// topic this file's `lib/nav` mock already provides.
+vi.mock('../../lib/useTopicScope', async () => {
+  const nav = await import('../../lib/nav')
+  return { useTopicScope: () => ({ ...nav.useActiveSubspace(), isGlobal: false }) }
+})
 
 // NotesView reads the sidebar's already-loaded space list to resolve each
 // note's subject/tone — mocked the same way `useActiveSubspace` is, rather

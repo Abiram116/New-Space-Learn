@@ -20,7 +20,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/errors'
 import { useAsync } from './useAsync'
-import { invalidate, readCache, writeCache } from './asyncCache'
+import { clearCache, invalidate, readCache, writeCache } from './asyncCache'
 import { notifyBackendReady } from './connectivity'
 
 afterEach(() => {
@@ -190,3 +190,58 @@ describe('reconnection', () => {
     expect(result.current.data).toBe('fine')
   })
 })
+
+describe('a mounted screen keeps its data when a save invalidates it', () => {
+  const settle = () => act(async () => {
+    await Promise.resolve()
+  })
+
+  it('shows the last value (not null, not "loading") until its next fetch replaces it', async () => {
+    const key = `test-list:${Math.random()}`
+    let answer = ['a', 'b']
+    const { result } = renderHook(() => useAsync(() => Promise.resolve(answer), [], key))
+    await settle()
+    expect(result.current.data).toEqual(['a', 'b'])
+
+    act(() => invalidate('test-list:'))
+    expect(result.current.data).toEqual(['a', 'b'])
+    expect(result.current.loading).toBe(false)
+
+    answer = ['a', 'b', 'c']
+    act(() => result.current.refresh())
+    await settle()
+    expect(result.current.data).toEqual(['a', 'b', 'c'])
+  })
+
+  it('does not refetch by itself on invalidation (no request per graded card)', async () => {
+    const key = `test-quiet:${Math.random()}`
+    const fn = vi.fn(() => Promise.resolve(1))
+    renderHook(() => useAsync(fn, [], key))
+    await settle()
+    expect(fn).toHaveBeenCalledTimes(1)
+    act(() => invalidate('test-quiet:'))
+    await settle()
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it('never keeps data across a sign-out', async () => {
+    const key = `test-private:${Math.random()}`
+    const { result } = renderHook(() => useAsync(() => new Promise<string[]>(() => {}), [], key))
+    act(() => writeCache(key, ['someone else\'s note']))
+    expect(result.current.data).toEqual(["someone else's note"])
+    act(() => clearCache())
+    expect(result.current.data).toBeNull()
+  })
+
+  it('two screens asking for the same key at once make one request', async () => {
+    const key = `test-shared:${Math.random()}`
+    const fn = vi.fn(() => Promise.resolve('x'))
+    renderHook(() => {
+      useAsync(fn, [], key)
+      useAsync(fn, [], key)
+    })
+    await settle()
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+})
+

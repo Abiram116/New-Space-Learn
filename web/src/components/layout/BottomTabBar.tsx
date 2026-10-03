@@ -13,11 +13,8 @@ import { Icon, type IconName } from '../ui/Icon'
  * above it can never scroll underneath and nothing needs to guess its height.
  */
 export function BottomTabBar({
-  topicBase,
   dueCount,
 }: {
-  /** The current topic's `/s/:space/:sub`, so the section tabs open inside it. */
-  topicBase: string | null
   /** Cards due, for the badge. Null when unknown — no badge rather than a guess. */
   dueCount: number | null
 }) {
@@ -27,12 +24,11 @@ export function BottomTabBar({
   const name =
     (user?.user_metadata?.display_name as string | undefined) || user?.email?.split('@')[0] || 'You'
 
-  const section = (s: string) => (topicBase ? `${topicBase}/${s}` : `/${s}`)
   const tabs: { key: PhoneTab; to: string; label: string; icon: IconName | 'avatar'; badge?: string | null }[] = [
     { key: 'today', to: '/home', label: 'Today', icon: 'home' },
-    { key: 'cards', to: section('flashcards'), label: 'Cards', icon: 'deck', badge: badgeText(dueCount) },
-    { key: 'quizzes', to: section('quizzes'), label: 'Quizzes', icon: 'quiz' },
-    { key: 'notes', to: section('notes'), label: 'Notes', icon: 'note' },
+    { key: 'cards', to: '/flashcards', label: 'Cards', icon: 'deck', badge: badgeText(dueCount) },
+    { key: 'quizzes', to: '/quizzes', label: 'Quizzes', icon: 'quiz' },
+    { key: 'notes', to: '/notes', label: 'Notes', icon: 'note' },
     { key: 'you', to: '/profile', label: 'You', icon: 'avatar' },
   ]
 

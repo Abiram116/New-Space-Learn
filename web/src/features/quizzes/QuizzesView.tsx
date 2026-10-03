@@ -25,26 +25,31 @@ import { PageSpinner } from '../../components/ui/PageSpinner'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { SlowBot } from '../../components/mascot/SlowBot'
 import { useToast } from '../../components/ui/Toast'
-import { useActiveSubspace } from '../../lib/nav'
+import { useSlugParam } from '../../lib/useSlugParam'
+import { useTopicScope } from '../../lib/useTopicScope'
 import { toneBar } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { cn } from '../../lib/cn'
 import { useSpaces } from '../spaces/SpacesProvider'
-import { SubspaceMissing } from '../spaces/SubspaceMissing'
+import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
+import { TopicSelect } from '../spaces/TopicSelect'
 import { StudyAmbience } from '../../components/celebrate'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizzes } from './PhoneQuizzes'
 import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
+/** A quiz is named by its topic line ("Policy Iteration Basics"); `?q=` shows that, not the id. */
+const quizName = (q: { topic: string | null }) => q.topic
+
 export function QuizzesView() {
-  const { space, subspace, base } = useActiveSubspace()
-  if (!space || !subspace) return <SubspaceMissing />
+  const { space, subspace, base, isGlobal } = useTopicScope()
+  if (!space || !subspace) return <TopicScopeFallback isGlobal={isGlobal} section="quizzes" />
   return <Inner subspaceId={subspace.id} base={base} />
 }
 
 function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const [params, setParams] = useSearchParams()
+  const [, setParams] = useSearchParams()
   const { show, showError } = useToast()
   const isMobile = useIsMobile()
   // Global on purpose — see the identical note on `listAllNotes` in
@@ -65,32 +70,30 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
       ),
     [spaces, quizzes.data, subspaceToSpace],
   )
-  const [activeId, setActiveId] = useState<string | null>(params.get('q'))
   const [generating, setGenerating] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
 
-  useEffect(() => {
-    setActiveId(params.get('q'))
-  }, [params])
+  // The open quiz IS the `?q=` value, read as a name or an id (see `useSlugParam`).
+  const quizParam = useSlugParam('q', quizzes.data, quizName, 'quiz', !quizzes.validating)
+  const activeId = quizParam.id
+  const slugForQuiz = quizParam.slugFor
 
   const startQuiz = useCallback(
     (id: string) => {
-      setActiveId(id)
-      setParams({ q: id }, { replace: true })
+      setParams({ q: slugForQuiz(id) }, { replace: true })
     },
-    [setParams],
+    [setParams, slugForQuiz],
   )
 
   const back = useCallback(() => {
-    setActiveId(null)
     setParams({}, { replace: true })
   }, [setParams])
 
   const generate = useCallback(
-    async (topic: string, count: number) => {
+    async (topicId: string, topic: string, count: number) => {
       setGenerating(true)
       try {
-        const quiz = await generateQuiz(subspaceId, { topic: topic || undefined, count })
+        const quiz = await generateQuiz(topicId, { topic: topic || undefined, count })
         setGenOpen(false)
         await quizzes.refresh()
         startQuiz(quiz.id)
@@ -100,8 +103,11 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         setGenerating(false)
       }
     },
-    [quizzes, startQuiz, subspaceId, showError],
+    [quizzes, startQuiz, showError],
   )
+
+  // A readable link needs the list to say which quiz it means; an id doesn't.
+  if (quizParam.pending) return <PageSpinner label="Opening quiz…" />
 
   if (activeId && isMobile) {
     // No page header: the quiz stage brings its own slim top row, and the
@@ -127,8 +133,8 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <SubspaceHeader
-          title="Quizzes"
-          tabs={false}
+          title={quizzes.data?.find((q) => q.id === activeId)?.topic || 'Quiz'}
+          breadcrumb={false}
           actions={
             <Button variant="secondary" onClick={back}>
               All quizzes
@@ -182,6 +188,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         />
         <GenerateQuizModal
           open={genOpen}
+          defaultTopicId={subspaceId}
           busy={generating}
           onClose={() => setGenOpen(false)}
           onGenerate={generate}
@@ -196,7 +203,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
         title="Quizzes"
         // Quizzes is an account-wide library now (2026-08 audit) — see the
         // identical note on NotesView's own SubspaceHeader call.
-        tabs={false}
+        breadcrumb={false}
         actions={
           <Button onClick={() => setGenOpen(true)} disabled={generating}>
             <Icon name="sparkle" size={14} />
@@ -238,6 +245,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
 
       <GenerateQuizModal
         open={genOpen}
+        defaultTopicId={subspaceId}
         busy={generating}
         onClose={() => setGenOpen(false)}
         onGenerate={generate}
@@ -320,6 +328,12 @@ function QuizList({
                 <Icon name="quiz" size={13} />
               </span>
               <span className="setcode">Quiz</span>
+              {/* The verb. The whole card is the button, but nothing on it said
+                  so, and a quiz you have already taken reads differently from
+                  one you haven't. Decoration only — the button keeps its name. */}
+              <span aria-hidden className="setcode ml-auto text-sky-deep">
+                {q.best_score != null ? 'Retake' : 'Start'} →
+              </span>
             </div>
             <div className="nameplate text-[19px] leading-tight text-ink">
               {q.topic || 'Untitled topic'}
@@ -394,11 +408,18 @@ function QuizSession({
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
+    // Opening another quiz while one is still loading must not let the slow
+    // answer overwrite the one now on screen.
+    let current = true
     setQuiz(null)
     setFinished(null)
+    setError(null)
     getQuiz(quizId)
-      .then(setQuiz)
-      .catch((err) => setError(friendlyMessage(err)))
+      .then((q) => current && setQuiz(q))
+      .catch((err) => current && setError(friendlyMessage(err)))
+    return () => {
+      current = false
+    }
   }, [quizId])
 
   if (error) {
@@ -446,29 +467,38 @@ function QuizSession({
 
 function GenerateQuizModal({
   open,
+  defaultTopicId,
   busy,
   onClose,
   onGenerate,
 }: {
   open: boolean
+  /** Whose material the quiz draws on, unless another topic is picked. */
+  defaultTopicId: string
   busy: boolean
   onClose: () => void
-  onGenerate: (topic: string, count: number) => void
+  onGenerate: (topicId: string, focus: string, count: number) => void
 }) {
+  const [topicId, setTopicId] = useState(defaultTopicId)
   const [topic, setTopic] = useState('')
   const [count, setCount] = useState(5)
+  // Each time it opens it starts from the current topic again.
+  useEffect(() => {
+    if (open) setTopicId(defaultTopicId)
+  }, [open, defaultTopicId])
 
   return (
     <Modal open={open} onClose={onClose} title="Generate a quiz" width="sm">
       <div className="flex flex-col gap-4">
+        <TopicSelect value={topicId} onChange={setTopicId} />
         <Input
-          label="Topic (optional)"
+          label="Focus (optional)"
           className="pointer-coarse:text-base"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           maxLength={LIMITS.quizTopic}
           placeholder="Attention basics"
-          hint="Leave blank to cover the whole subspace."
+          hint="Leave blank to cover everything in the topic above."
         />
         <Input
           label="Questions"
@@ -483,7 +513,7 @@ function GenerateQuizModal({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={() => onGenerate(topic.trim(), count)} disabled={busy}>
+          <Button onClick={() => onGenerate(topicId, topic.trim(), count)} disabled={busy}>
             {busy ? 'Generating…' : 'Generate'}
           </Button>
         </div>

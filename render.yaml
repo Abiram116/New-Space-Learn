@@ -74,5 +74,8 @@ services:
         value: "false"
       - key: CORS_ORIGINS
         sync: false
+      # A hash, never the password: `uv run python -m app.services.admin_gate`.
+      - key: ADMIN_PASSWORD_HASH
+        sync: false
       - key: LOG_LEVEL
         value: info

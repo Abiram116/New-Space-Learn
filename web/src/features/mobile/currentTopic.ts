@@ -12,7 +12,7 @@
 import { useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { Space, Subspace } from '../../api/types'
-import { subspacePath } from '../../lib/nav'
+import { resolveTopicSegments, subspacePath } from '../../lib/nav'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { resolveTopic, topicFromPath } from './phoneNav'
 
@@ -46,7 +46,11 @@ export type CurrentTopic = {
 export function useCurrentTopic(): CurrentTopic {
   const { pathname } = useLocation()
   const { spaces, loading } = useSpaces()
-  const urlId = topicFromPath(pathname)?.subspaceId ?? null
+  // The URL names the topic by slug (or an old id); `resolveTopic` works in ids.
+  const urlTopic = topicFromPath(pathname)
+  const urlId = urlTopic
+    ? (resolveTopicSegments(spaces, urlTopic.spaceId, urlTopic.subspaceId).subspace?.id ?? null)
+    : null
 
   const resolved = useMemo(() => resolveTopic(spaces, urlId, readRemembered()), [spaces, urlId])
 

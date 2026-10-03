@@ -374,13 +374,36 @@ def _safe_parse_questions(raw: str, *, want: int) -> list[QuizQuestion]:
         data = loads_lenient(raw[start : end + 1])
     except json.JSONDecodeError:
         return []
+    if not isinstance(data, list):
+        return []
     out: list[QuizQuestion] = []
-    for item in data[:want]:
+    for item in data:
+        if len(out) >= want:
+            break
         try:
-            out.append(QuizQuestion(**item))
+            question = QuizQuestion(**item)
         except Exception:
             continue
+        if _is_answerable(question):
+            out.append(question)
     return out
+
+
+def _is_answerable(q: QuizQuestion) -> bool:
+    """A model-written question the student can actually answer.
+
+    Checked here rather than on `QuizQuestion` so quizzes already stored (and
+    read back through that model) are never rejected. Four distinct, non-empty
+    choices, and an answer that points at one of them — otherwise the quiz
+    would mark every attempt wrong, or crash the shuffle."""
+    choices = [c.strip() for c in q.choices]
+    return (
+        bool(q.q.strip())
+        and len(choices) == 4
+        and all(choices)
+        and len(set(choices)) == 4
+        and 0 <= q.answer_index < 4
+    )
 
 
 def _stub_questions(topic: str | None, count: int) -> list[QuizQuestion]:

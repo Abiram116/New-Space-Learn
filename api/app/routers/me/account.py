@@ -18,8 +18,8 @@ from ...schemas import (
     StudentModelIn,
     StudentModelOut,
 )
+from ...services import purge, supabase
 from ...services import student_model as student_model_service
-from ...services import supabase
 from ._common import _ensure_settings_row
 
 router = APIRouter()
@@ -29,7 +29,9 @@ router = APIRouter()
 async def delete_me(user: CurrentUser = Depends(get_current_user)) -> dict:
     """Irreversible — the frontend must confirm before ever calling this.
     Every table's `on delete cascade user_id → auth.users` FK does the
-    per-table cleanup; nothing else to do here."""
+    per-table cleanup, but uploaded files live in Storage, so those are
+    removed first (while `documents.storage_path` still exists)."""
+    await purge.purge_documents(user.id)
     await supabase.delete_auth_user(user.id)
     return {"ok": True}
 

@@ -22,7 +22,12 @@ vi.mock('../../components/celebrate', () => ({
   useStudySession: () => {},
 }))
 vi.mock('../../components/layout/SubspaceHeader', () => ({
-  SubspaceHeader: ({ actions }: { actions?: ReactNode }) => <div>{actions}</div>,
+  SubspaceHeader: ({ title, actions }: { title?: string; actions?: ReactNode }) => (
+    <div>
+      <h1>{title}</h1>
+      {actions}
+    </div>
+  ),
 }))
 
 import { Review } from './Review'
@@ -56,7 +61,14 @@ function Harness() {
   })
   latest = mode
   if (mode.kind !== 'review') return <p>done</p>
-  return <Review mode={mode} setMode={setMode} onFinish={vi.fn()} showError={vi.fn()} />
+  return <Review
+      mode={mode}
+      setMode={setMode}
+      onFinish={vi.fn()}
+      onExit={() => setMode({ kind: 'decks' })}
+      title="Deck"
+      showError={vi.fn()}
+    />
 }
 
 let now = 1000
@@ -74,10 +86,19 @@ const gradeButton = (label: string) =>
   screen.getByRole('button', { name: new RegExp(`^${label} —`), hidden: true })
 
 beforeEach(() => {
+  // AppShell keeps its closed mobile drawer in the page on every screen. It
+  // once made the keyboard gate think a modal was open, silencing every key.
+  const drawer = document.createElement('div')
+  drawer.setAttribute('role', 'dialog')
+  drawer.setAttribute('aria-modal', 'true')
+  drawer.setAttribute('aria-hidden', 'true')
+  drawer.dataset.testDrawer = ''
+  document.body.appendChild(drawer)
   now = 1000
   vi.spyOn(performance, 'now').mockImplementation(() => now)
 })
 afterEach(() => {
+  document.querySelector('[data-test-drawer]')?.remove()
   cleanup()
   vi.restoreAllMocks()
   gradeCard.mockClear()
@@ -85,6 +106,61 @@ afterEach(() => {
 })
 
 describe('review keyboard', () => {
+  it('a keyboard-made click right after a graded key is an echo, not a flip', () => {
+    render(<Harness />)
+    press(' ') // flip a
+    read()
+    press('Enter') // grade a -> b arrives face-up
+    expect(screen.getByText('front b')).toBeInTheDocument()
+    // The browser's own click as the key is released: detail 0, same instant.
+    fireEvent.click(screen.getByRole('button', { name: 'Show answer' }), { detail: 0 })
+    expect(screen.getByRole('button', { name: 'Show answer' })).toBeInTheDocument() // still face-up
+    // A real mouse click always counts.
+    fireEvent.click(screen.getByRole('button', { name: 'Show answer' }), { detail: 1 })
+    expect(screen.getByRole('button', { name: 'Show question' })).toBeInTheDocument()
+  })
+
+  it('headlines the deck being reviewed', () => {
+    render(<Harness />)
+    expect(screen.getByRole('heading', { name: 'Deck' })).toBeInTheDocument()
+  })
+
+  it('Esc before anything is graded ends the session straight away', () => {
+    render(<Harness />)
+    press(' ')
+    press('Escape')
+    expect(latest?.kind).toBe('decks')
+    expect(gradeCard).not.toHaveBeenCalled()
+  })
+
+  it('Esc after grading asks first, says nothing is lost, and Cancel keeps you in', () => {
+    render(<Harness />)
+    press(' ')
+    read()
+    press('Enter') // grade card a
+    press('Escape')
+    const dialog = screen.getByRole('dialog', { name: 'End this session?' })
+    expect(dialog).toHaveTextContent(/reviewed 1 card/)
+    expect(dialog).toHaveTextContent(/grades are saved/)
+    expect(latest?.kind).toBe('review')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(latest?.kind).toBe('review')
+  })
+
+  it('confirming ends the session; the keys are ignored while the dialog is up', () => {
+    render(<Harness />)
+    press(' ')
+    read()
+    press('Enter')
+    press('Escape')
+    press(' ') // the stage must not flip a card underneath the dialog
+    expect(screen.getByRole('dialog', { name: 'End this session?' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'End session', hidden: false }))
+    expect(latest?.kind).toBe('decks')
+  })
+
   it('Space flips, and never scrolls', () => {
     render(<Harness />)
     expect(press(' ')).toBe(false)

@@ -83,13 +83,21 @@ export function uploadDocument(
         return
       }
       let code = 'unknown'
-      let message = `Upload failed (${xhr.status}).`
+      // Empty unless the server explained: friendlyMessage then has the status's own
+      // sentence, and a 413 from a proxy still says the file was too big.
+      let message = xhr.status === 413 ? 'That file is too large to upload (the limit is 20 MB).' : ''
       try {
         const body = JSON.parse(xhr.responseText)
         if (body?.error?.code) code = body.error.code
         if (body?.error?.message) message = body.error.message
       } catch {
         /* swallow */
+      }
+      if (code === 'unknown') {
+        if (xhr.status >= 500) code = 'upstream_unavailable'
+        else if (xhr.status === 429) code = 'rate_limited'
+        else if (xhr.status === 401) code = 'unauthorized'
+        else if (xhr.status === 413 || xhr.status === 422) code = 'validation_error'
       }
       reject(new ApiError(code as never, message, xhr.status))
     }

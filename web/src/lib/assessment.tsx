@@ -35,6 +35,10 @@ type Ctx = {
   reason: 'quiz' | 'review' | null
   begin: (reason: 'quiz' | 'review') => void
   end: (reason: 'quiz' | 'review') => void
+  /** True while a quiz holds answers that are not saved yet (they are only
+   *  sent on "See results"), so leaving the page would throw them away. */
+  unsaved: boolean
+  markUnsaved: (delta: 1 | -1) => void
 }
 
 const AssessmentCtx = createContext<Ctx | null>(null)
@@ -49,6 +53,11 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
     setCounts((c) => ({ ...c, [reason]: c[reason] + 1 }))
   }, [])
 
+  const [unsavedCount, setUnsavedCount] = useState(0)
+  const markUnsaved = useCallback((delta: 1 | -1) => {
+    setUnsavedCount((n) => Math.max(0, n + delta))
+  }, [])
+
   const end = useCallback((reason: 'quiz' | 'review') => {
     // Floored at zero so a double-unmount (StrictMode, a fast route change)
     // cannot drive the count negative and leave the app permanently locked.
@@ -57,10 +66,29 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(() => {
     const reason = counts.quiz > 0 ? 'quiz' : counts.review > 0 ? 'review' : null
-    return { assessing: reason !== null, reason, begin, end }
-  }, [counts, begin, end])
+    return { assessing: reason !== null, reason, begin, end, unsaved: unsavedCount > 0, markUnsaved }
+  }, [counts, unsavedCount, begin, end, markUnsaved])
 
   return <AssessmentCtx.Provider value={value}>{children}</AssessmentCtx.Provider>
+}
+
+/** Like `useAssessment`, but `null` outside the provider (the shell and its tests). */
+export function useAssessmentOptional(): Ctx | null {
+  return useContext(AssessmentCtx)
+}
+
+/**
+ * Declare unsaved quiz answers for as long as `active` is true, so the shell
+ * can ask before a click takes the student away from them.
+ */
+export function useUnsavedWork(active: boolean): void {
+  const ctx = useContext(AssessmentCtx)
+  const mark = ctx?.markUnsaved
+  useEffect(() => {
+    if (!active || !mark) return
+    mark(1)
+    return () => mark(-1)
+  }, [active, mark])
 }
 
 export function useAssessment(): Ctx {

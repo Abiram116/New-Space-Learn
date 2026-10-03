@@ -5,6 +5,9 @@ export type Tone = 'brand' | 'sky' | 'mint' | 'sun' | 'coral' | 'azure' | 'jade'
 export type Space = {
   id: string
   name: string
+  /** URL segment derived from `name` (see `lib/slug.ts`). Absent on objects
+   *  that never went through `withSlugs`; routing then falls back to `id`. */
+  slug?: string
   tone: Tone
   /** Pinned subjects sort to the top of the rail. Server-ordered. */
   pinned: boolean
@@ -15,6 +18,8 @@ export type Subspace = {
   id: string
   subject_id: string
   name: string
+  /** URL segment, unique within its subject. See `Space.slug`. */
+  slug?: string
   last_activity_at: string | null
   counts: { docs?: number; notes?: number; quizzes?: number; cards?: number }
 }

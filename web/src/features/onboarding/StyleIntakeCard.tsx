@@ -113,8 +113,8 @@ function Offer({ model, onUpdated, className }: CardProps) {
           </h2>
           <p className="mt-0.5 text-[13.5px] leading-relaxed text-muted">
             You skipped {pending.length === 2 ? 'two questions' : 'one question'} when you signed
-            up on your phone. {pending.length === 2 ? 'They shape' : 'It shapes'} how the tutor
-            explains things — optional, and about twenty seconds.
+            up on your phone. {pending.length === 2 ? 'They tell' : 'It tells'} the tutor how to
+            explain things to you. It takes about 20 seconds.
           </p>
           {!open && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -186,7 +186,7 @@ function Offer({ model, onUpdated, className }: CardProps) {
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
               Cancel
             </Button>
-            <span className="ml-auto text-[12.5px] text-faint">Change any of it later in Settings.</span>
+            <span className="ml-auto text-[12.5px] text-faint">You can change this later in Settings.</span>
           </div>
         </div>
       )}
@@ -194,7 +194,8 @@ function Offer({ model, onUpdated, className }: CardProps) {
   )
 }
 
-function Choice({
+/** One choice as a tappable card — also what Settings › Learning is built from. */
+export function Choice({
   on,
   role,
   label,

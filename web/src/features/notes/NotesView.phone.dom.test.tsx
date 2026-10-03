@@ -14,6 +14,13 @@ const SPACE: Space = { id: 'sp', name: 'CS', tone: 'brand', pinned: false, subsp
 vi.mock('../../lib/nav', () => ({
   useActiveSubspace: () => ({ space: SPACE, subspace: SUB, base: '/spaces/sp/sub' }),
 }))
+
+// The views read their topic through `useTopicScope`; here that is simply the
+// topic this file's `lib/nav` mock already provides.
+vi.mock('../../lib/useTopicScope', async () => {
+  const nav = await import('../../lib/nav')
+  return { useTopicScope: () => ({ ...nav.useActiveSubspace(), isGlobal: false }) }
+})
 vi.mock('../spaces/SpacesProvider', () => ({ useSpaces: () => ({ spaces: [SPACE] }) }))
 
 const note = (id: string, title: string, o: Partial<Note> = {}): Note => ({

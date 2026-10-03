@@ -76,7 +76,7 @@ describe('phone onboarding', () => {
     await user.type(screen.getByRole('textbox'), 'Asha')
     await user.click(screen.getByRole('button', { name: /Continue/ }))
 
-    expect(screen.getByRole('heading', { name: 'How long is a typical session?' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'How long do you usually study in one go?' })).toBeInTheDocument()
     const radios = screen.getAllByRole('radio')
     expect(radios.map((r) => r.textContent)).toEqual([
       expect.stringContaining('15 minutes'),

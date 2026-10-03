@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearCache, invalidate, readCache, subscribe, writeCache } from './asyncCache'
+import { cacheEpoch, clearCache, dedupe, invalidate, readCache, subscribe, writeCache } from './asyncCache'
 
 beforeEach(() => {
   clearCache()
@@ -121,3 +121,33 @@ describe('bounded growth', () => {
     expect(readCache('keep')?.data).toBe(49)
   })
 })
+
+describe('dedupe', () => {
+  it('shares one in-flight request per key, and starts a new one once it settles', async () => {
+    let calls = 0
+    const fn = () => {
+      calls++
+      return Promise.resolve(calls)
+    }
+    const [a, b] = await Promise.all([dedupe('d:1', fn), dedupe('d:1', fn)])
+    expect([a, b, calls]).toEqual([1, 1, 1])
+    expect(await dedupe('d:1', fn)).toBe(2)
+  })
+
+  it('an invalidation forgets the in-flight request, so a refresh after a save is fresh', async () => {
+    let resolveOld: (v: string) => void = () => {}
+    const old = dedupe('d:2', () => new Promise<string>((r) => (resolveOld = r)))
+    invalidate('d:')
+    const fresh = dedupe('d:2', () => Promise.resolve('after save'))
+    resolveOld('before save')
+    expect(await old).toBe('before save')
+    expect(await fresh).toBe('after save')
+  })
+
+  it('a sign-out bumps the epoch', () => {
+    const before = cacheEpoch()
+    clearCache()
+    expect(cacheEpoch()).toBe(before + 1)
+  })
+})
+

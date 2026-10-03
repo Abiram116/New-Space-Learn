@@ -14,13 +14,12 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, UpstreamUnavailable, ValidationFailed
 from ..guards import assert_subspace
 from ..schemas import DocumentOut, OkOut
-from ..services import ingest, supabase
+from ..services import ingest, supabase, uploads
 from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.docs")
 router = APIRouter()
 
-MAX_BYTES = 20 * 1024 * 1024  # 20 MB — free-tier friendly
 
 
 @router.get("/subspaces/{subspace_id}/documents", response_model=list[DocumentOut])
@@ -50,18 +49,20 @@ async def upload_document(
     user: CurrentUser = Depends(get_current_user),
 ) -> DocumentOut:
     await assert_subspace(user.id, subspace_id)
-    # Images are transcribed by the vision model during processing, so an
-    # image upload is an LLM call and is metered like one.
-    if "image" in (file.content_type or "").lower():
-        await consume_llm_quota(user.id, cost=2)
-
     if not file.filename:
         raise ValidationFailed("Choose a file to upload.")
-    data = await file.read()
+    uploads.assert_supported(file.filename, file.content_type)
+    # Every upload is metered: it costs storage and embedding time on a small
+    # shared server. An image costs more — it is transcribed by the vision
+    # model during processing, so it is an LLM call as well.
+    image = uploads.is_image(file.filename, file.content_type)
+    await consume_llm_quota(user.id, cost=2 if image else 1)
+
+    data = await uploads.read_capped(file)
     if not data:
         raise ValidationFailed("The file is empty.")
-    if len(data) > MAX_BYTES:
-        raise ValidationFailed("File is larger than the 20 MB limit.")
+    name = uploads.display_name(file.filename)
+    mime = uploads.content_type(file.filename, file.content_type)
 
     # Insert the row eagerly so the client sees the doc immediately.
     row = (
@@ -70,8 +71,8 @@ async def upload_document(
             {
                 "user_id": user.id,
                 "subspace_id": subspace_id,
-                "name": file.filename,
-                "mime_type": file.content_type,
+                "name": name,
+                "mime_type": mime,
                 "size_bytes": len(data),
                 "status": "uploading",
             },
@@ -79,10 +80,10 @@ async def upload_document(
     )[0]
 
     # Storage first: it is what makes the job resumable after a restart.
-    storage_path = f"{user.id}/{row['id']}/{file.filename}"
+    storage_path = f"{user.id}/{row['id']}/{uploads.storage_name(file.filename)}"
     try:
         await supabase.storage_upload(
-            storage_path, data, content_type=file.content_type or "application/octet-stream"
+            storage_path, data, content_type=mime
         )
         row = (
             await supabase.db_update(
@@ -124,6 +125,11 @@ async def reprocess(
 
     if ingest.is_running(doc["id"]):
         return _to_doc(doc)  # a second tap mustn't start a second job
+
+    # Metered like the upload it repeats — re-reading an image is another
+    # vision-model call, and this endpoint was a free way to make them.
+    image = uploads.is_image(doc.get("name") or "", doc.get("mime_type"))
+    await consume_llm_quota(user.id, cost=2 if image else 1)
 
     # A doc still at `processing` resumes where it stopped; a ready or failed
     # one is re-ingested from scratch.

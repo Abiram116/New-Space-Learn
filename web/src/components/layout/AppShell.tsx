@@ -9,11 +9,12 @@ import { Sidebar } from './Sidebar'
 import { MobileBar } from './MobileBar'
 import { OfflineBanner } from './OfflineBanner'
 import { PhoneShell } from './PhoneShell'
+import { UnsavedQuizGuard } from './UnsavedQuizGuard'
 
 /**
  * Two layouts, one tree.
  *
- * ≥ md: the sidebar is a persistent 264px rail, as designed.
+ * ≥ md: the sidebar is a persistent 232px rail (60px collapsed).
  * < md: the rail would eat two-thirds of a phone screen, so it moves into an
  * off-canvas drawer opened from a compact top bar. Same component either way —
  * only the container changes.
@@ -29,7 +30,12 @@ const COLLAPSE_KEY = 'sl:rail-collapsed'
  */
 export function AppShell() {
   const mobile = useIsMobile()
-  return <SpacesProvider>{mobile ? <PhoneShell /> : <DesktopShell />}</SpacesProvider>
+  return (
+    <SpacesProvider>
+      {mobile ? <PhoneShell /> : <DesktopShell />}
+      <UnsavedQuizGuard />
+    </SpacesProvider>
+  )
 }
 
 function DesktopShell() {
@@ -83,7 +89,7 @@ function DesktopShell() {
           <div
             className={cn(
               'hidden h-full min-h-0 shrink-0 border-r border-line transition-[width] duration-200 ease-out md:block',
-              collapsed ? 'w-[68px]' : 'w-[264px]',
+              collapsed ? 'w-[60px]' : 'w-[232px]',
             )}
           >
             <Sidebar collapsed={collapsed} onToggleCollapse={toggleCollapse} />

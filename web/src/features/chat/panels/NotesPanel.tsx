@@ -1,15 +1,10 @@
 /**
  * Notes, in the dock — all of them, and editable here.
  *
- * Two things were wrong with the version this replaces.
+ * Things that were wrong with the version this replaces.
  *
- * **It only showed the current topic's notes.** That is a restriction the data
- * never justified: reading your Deadlock note while chatting about Virtual
- * Memory is a completely ordinary thing to want, and scoping the list to
- * wherever you happen to be standing made it a three-click round trip through
- * another page. The scope toggle defaults to this topic — that is the common
- * case — but "Everything" is one tap away and carries the subject name on each
- * row so you can tell two similarly-titled notes apart.
+ * **The list is this topic's notes only.** Notes from every subject live on the
+ * account-wide Notes page, so a scope toggle here only duplicated it.
  *
  * **Opening a note left the conversation.** Every row was a link to `/notes`,
  * which is exactly the cost the dock exists to remove. A note now opens *here*,
@@ -21,13 +16,12 @@
  */
 
 import { lazy, Suspense, useCallback, useState } from 'react'
-import { deleteNote, listAllNotes, listNotes } from '../../../api/notes'
+import { deleteNote, listNotes } from '../../../api/notes'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
-import { cn } from '../../../lib/cn'
 import { useAsync } from '../../../lib/useAsync'
 import type { AgentKey } from '../agents'
 
@@ -42,8 +36,6 @@ const NoteEditor = lazy(() =>
   import('../../notes/NoteEditor').then((m) => ({ default: m.NoteEditor })),
 )
 
-type Scope = 'topic' | 'all'
-
 export function NotesPanel({
   subspaceId,
   base,
@@ -56,16 +48,12 @@ export function NotesPanel({
    *  below for why this panel no longer runs its own. */
   onRunAgent: (agent: AgentKey, argument?: string) => void
 }) {
-  const [scope, setScope] = useState<Scope>('topic')
   const [openId, setOpenId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const { show, showError } = useToast()
-  const notes = useAsync(
-    () => (scope === 'all' ? listAllNotes() : listNotes(subspaceId)),
-    [scope, subspaceId],
-    scope === 'all' ? 'notes:all' : `notes:${subspaceId}`,
-  )
+  // This topic's notes only. Every topic's notes live on the Notes page.
+  const notes = useAsync(() => listNotes(subspaceId), [subspaceId], `notes:${subspaceId}`)
   const list = notes.data ?? []
   const open = list.find((n) => n.id === openId) ?? null
 
@@ -147,25 +135,6 @@ export function NotesPanel({
         Write one from this chat
       </button>
 
-      <div className="flex items-center gap-1">
-        {(['topic', 'all'] as Scope[]).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setScope(s)}
-            className={cn(
-              'rounded-full px-2.5 py-1 text-[11.5px] transition-colors cursor-pointer',
-              scope === s
-                ? 'bg-brand-soft font-bold text-brand-deep'
-                : 'text-muted hover:bg-line-soft hover:text-ink-3',
-            )}
-          >
-            {s === 'topic' ? 'This topic' : 'Everything'}
-          </button>
-        ))}
-        <span className="setcode ml-auto">{list.length}</span>
-      </div>
-
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
         {notes.loading ? (
           <>
@@ -174,7 +143,7 @@ export function NotesPanel({
           </>
         ) : list.length === 0 ? (
           <p className="text-[12px] text-muted">
-            {scope === 'all' ? 'No notes anywhere yet.' : 'No notes in this topic yet.'}
+            No notes in this topic yet.
           </p>
         ) : (
           <Stagger step={18} max={140}>
@@ -200,14 +169,7 @@ export function NotesPanel({
                       />
                     </span>
                   )}
-                  {/* Where it lives, but only when that isn't obvious — in
-                      topic scope every row is from here, and repeating it on
-                      every line is noise. */}
-                  {scope === 'all' && n.subspace_name
-                    ? `${n.subject_name ? `${n.subject_name} · ` : ''}${n.subspace_name}`
-                    : n.origin === 'user'
-                      ? 'Written by me'
-                      : 'Written by AI'}
+                  {n.origin === 'user' ? 'Written by me' : 'Written by AI'}
                 </div>
               </button>
             ))}

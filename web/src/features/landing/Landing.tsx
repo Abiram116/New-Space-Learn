@@ -41,6 +41,8 @@ import { SmoothScroll } from './SmoothScroll'
 import { attractor, CTA, DraftingCursor, SourceDrift } from './wow'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneLanding } from './PhoneLanding'
+import { TrustCornerLinks } from '../trust/TrustCornerLinks'
+import { isPageLocked } from '../../lib/scrollLock'
 
 /**
  * Phones get a plain native-scroll page with the same identity (see
@@ -48,6 +50,15 @@ import { PhoneLanding } from './PhoneLanding'
  * is not touched by that split.
  */
 export function Landing() {
+  // No scrollbars on the landing page, on any axis: it is a scroll-driven film,
+  // and the bars (and a stray horizontal one) read as browser chrome over it.
+  // Scrolling still works by wheel, trackpad, keys and touch. Scoped to this
+  // page by a class on <html>, removed again when you leave it.
+  useEffect(() => {
+    const root = document.documentElement
+    root.classList.add('no-scrollbars')
+    return () => root.classList.remove('no-scrollbars')
+  }, [])
   return useIsMobile() ? <PhoneLanding /> : <DesktopLanding />
 }
 
@@ -145,6 +156,11 @@ function Lamp() {
       ty = (e.clientY / window.innerHeight) * 100
     }
     const tick = () => {
+      // Under a trust card nobody sees the lamp; don't repaint it.
+      if (isPageLocked()) {
+        raf = requestAnimationFrame(tick)
+        return
+      }
       // Lag the light behind the cursor. Instant tracking reads as a gimmick;
       // trailing reads as a lamp with mass.
       cx += (tx - cx) * 0.045
@@ -263,6 +279,11 @@ function Dust() {
     }
 
     const draw = () => {
+      // Under a trust card the dust is hidden; skip the frame, keep the loop.
+      if (isPageLocked()) {
+        raf = requestAnimationFrame(draw)
+        return
+      }
       ctx.clearRect(0, 0, w, h)
       for (const m of motes) {
         // When the page is producing something from the source passage, the
@@ -815,6 +836,10 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
           Source on GitHub
         </a>
       </div>
+      {/* The trust pages, mirroring the licence credit in the opposite corner,
+          above the figure. Real links (`/about`, …) so they are crawlable and
+          shareable; each opens as a card over this page (features/trust). */}
+      <TrustCornerLinks className="absolute right-0 top-16 z-30 px-5 sm:px-8" />
     </div>
   )
 })
