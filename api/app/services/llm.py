@@ -238,6 +238,7 @@ class GroqLLM:
             "messages": messages,
             "temperature": temperature,
             "stream": True,
+            **_reply_budget(model),
         }
         try:
             async with client.stream("POST", "/chat/completions", json=payload) as r:
@@ -270,6 +271,21 @@ class GroqLLM:
             ) from e
         except httpx.HTTPError as e:
             raise _Retryable(UpstreamUnavailable("The AI service didn't respond.")) from e
+
+
+def _reply_budget(model: str) -> dict[str, Any]:
+    """How long a reply may be and, for a reasoning model, how hard it thinks.
+
+    Without this a GPT-OSS model thinks at medium effort inside Groq's default
+    reply budget, and a long reply (a quiz, a deck) is cut off once the
+    thinking has used most of it. Only GPT-OSS takes `reasoning_effort` and
+    `include_reasoning`; other models get the length cap alone."""
+    budget: dict[str, Any] = {"max_completion_tokens": settings.groq_max_completion_tokens}
+    if "gpt-oss" in model:
+        budget["reasoning_effort"] = settings.groq_reasoning_effort
+        # The thinking is not shown to anyone; don't stream it.
+        budget["include_reasoning"] = False
+    return budget
 
 
 def _classify(status: int, body: bytes, retry_after: str | None) -> Exception:

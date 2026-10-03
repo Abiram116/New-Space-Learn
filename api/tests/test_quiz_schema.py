@@ -154,26 +154,20 @@ def _q(**over) -> dict:
 
 
 def test_unanswerable_generated_questions_are_dropped():
-    from app.routers.quizzes import _safe_parse_questions
+    from app.services.quiz_agent import _usable, parse_items
 
+    good = _q(explanation="Two and two make four.", source=1)
     raw = _raw(
-        _q(),
-        _q(answer_index=4),  # past the end
-        _q(answer_index=-1),
-        _q(choices=["a", "b", "c"]),  # too few
-        _q(choices=["a", "b", "c", "d", "e"]),  # too many
-        _q(choices=["a", "a", "b", "c"]),  # duplicates
-        _q(choices=["a", " ", "b", "c"]),  # blank
-        _q(q="  "),
+        good,
+        {**good, "answer_index": 4},  # past the end
+        {**good, "answer_index": -1},
+        {**good, "choices": ["a", "b", "c"]},  # too few
+        {**good, "choices": ["a", "b", "c", "d", "e"]},  # too many
+        {**good, "choices": ["a", "a", "b", "c"]},  # duplicates
+        {**good, "choices": ["a", " ", "b", "c"]},  # blank
+        {**good, "q": "  "},
         "not an object",
     )
-    got = _safe_parse_questions(raw, want=10)
-    assert len(got) == 1 and got[0].answer_index == 3
-
-
-def test_want_counts_only_valid_questions():
-    from app.routers.quizzes import _safe_parse_questions
-
-    raw = _raw(_q(answer_index=9), _q(q="a"), _q(q="b"), _q(q="c"))
-    assert [x.q for x in _safe_parse_questions(raw, want=2)] == ["a", "b"]
-
+    kept, trace = _usable(parse_items(raw), 1, [])
+    assert len(kept) == 1 and kept[0]["answer_index"] == 3
+    assert trace == {"malformed": 7, "repeats": 0}

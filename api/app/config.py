@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     groq_model_fast: str = "openai/gpt-oss-20b"    # short, low-stakes prompts
     groq_model_vision: str = "qwen/qwen3.8-27b"    # only image-capable model here
     groq_base_url: str = "https://api.groq.com/openai/v1"
+    # GPT-OSS models think before they answer, and the thinking counts against
+    # the reply's token budget. At Groq's defaults (medium effort, a 3,072-token
+    # reply) a quiz spent ~2,300 tokens thinking and was cut off mid-JSON —
+    # unreadable, so the quiz failed. Low effort thinks in tens of tokens, the
+    # reply fits, and a call costs ~3,800 tokens instead of ~5,300 of the free
+    # tier's 8,000 a minute. Measured 2026-10-03; see services/llm.py.
+    groq_reasoning_effort: str = "low"
+    groq_max_completion_tokens: int = 4096
     groq_timeout_s: float = 60.0
     # Resilience. Retries happen only BEFORE the first token reaches the
     # client — once a stream has started, retrying would duplicate text the

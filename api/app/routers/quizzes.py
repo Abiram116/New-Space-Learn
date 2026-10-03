@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
 from fastapi import APIRouter, Depends
@@ -13,13 +12,11 @@ from ..deps import CurrentUser, get_current_user
 from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
 from ..guards import assert_subspace, subspace_label
 from ..schemas import QuizGenerate, QuizOut, QuizQuestion, QuizResultOut, QuizSubmit
-from ..services import activity, personalization, rag, student_model, supabase
+from ..services import activity, coverage, personalization, quiz_agent, rag, student_model, supabase
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import extract_title_line, get_llm, loads_lenient
 from ..services.quiz_shuffle import balance_answer_positions
 from ..services.ratelimit import consume_llm_quota
 from ..services.student_model import difficulty_mix
-from ..services.voice import QUIZ_AGENT_VOICE
 
 log = logging.getLogger("space_learn.quiz")
 router = APIRouter()
@@ -120,22 +117,11 @@ async def generate_quiz(
     subspace = await assert_subspace(user.id, subspace_id)
     await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
 
-    # Linked subspaces first — retrieval needs the ids before it can run, the
-    # same shape as subspace_chat.send_chat.
-    linked_ids = await rag.linked_subspace_ids(user.id, subspace_id)
-    # Three independent reads, gathered. Retrieval, history and the student
-    # model share no inputs, so running them in sequence spent three round
-    # trips to a remote Postgres before the (much slower) model call even
-    # started — pure latency the student waits through.
-    #
-    # `student_model.snapshot` rather than `personalization.build`: the
-    # difficulty mix below needs this topic's raw mastery number, which
-    # `build`'s rendered text doesn't expose — and reading the snapshot
-    # directly here costs no extra round trip (`build` would have done the
-    # exact same one-RPC read internally, just for a return value this
-    # function couldn't reuse).
-    retrieved, history, snap = await asyncio.gather(
-        rag.retrieve_with_links(subspace_id, body.topic or "core concepts", linked_ids, k=6),
+    # Linked topics, what earlier quizzes covered, the conversation and the
+    # student model are independent reads, so they share one round trip.
+    linked_ids, (used, earlier), history, snap = await asyncio.gather(
+        rag.linked_subspace_ids(user.id, subspace_id),
+        coverage.ledger(user.id, subspace_id),
         recent_history(user.id, subspace_id),
         student_model.snapshot(user.id),
     )
@@ -144,62 +130,19 @@ async def generate_quiz(
         (t.mastery for t in snap.topics if t.subspace_id == subspace_id), None
     )
     mix = difficulty_mix(topic_mastery, body.count)
-    # A conversation IS the student's material. This used to require indexed
-    # documents specifically, which blocked the most natural case in the
-    # product: talk through a topic in chat, then ask to be tested on it.
-    # The inconsistency was visible in this very function — `history` was
-    # already loaded and already passed to the model below, so the code
-    # treated chat as usable material while the gate above it did not.
-    # `notes.py` had it right; flashcards and quizzes did not.
-    if not retrieved and not history and settings.llm_configured:
-        raise NothingIndexed()
-    context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
-    label = subspace_label(subspace)
-    recent = format_history(history) or "(no prior chat in this space)"
-    prompt = (
-        f"Write {body.count} multiple-choice questions about "
-        f"'{body.topic or 'the key concepts in this material'}', within the "
-        f"subject '{label}' — resolve any ambiguity in the topic name using "
-        f"that subject, not a generic reading of the words. "
-        "Use ONLY the material and conversation below — both are the "
-        "student's own, and when there are no indexed documents the "
-        "conversation is the whole of it. Do not draw on outside knowledge; "
-        "if neither source covers something, leave it out.\n\n"
-        f"Indexed material:\n{context}\n\n"
-        f"Recent conversation in this space:\n{recent}\n\n"
-        "Return a JSON array; each item has fields: "
-        '{"q": str, "choices": [str, str, str, str], "answer_index": 0-3, '
-        '"source": str, "subtopic": str, "explanation": str, "difficulty": str, '
-        '"kind": str, "misconceptions": [str|null, ...], "prerequisites": [str, ...]}. '
-        "subtopic is the specific concept this question tests, narrower than "
-        "the overall topic (e.g. 'Policy Iteration', not 'Reinforcement "
-        "Learning'). "
-        # Shown the instant the student answers, so it has to teach rather than
-        # justify — naming why the tempting wrong choice is tempting is what
-        # turns a wrong answer into the most useful moment in the quiz.
-        "explanation is 1-2 sentences saying WHY the correct answer is correct "
-        "and, where there is an obvious trap, why the most tempting wrong "
-        "choice is wrong. Write it to the student, in second person. "
-        f'difficulty is "easy", "medium" or "hard". Write {mix["easy"]} easy, '
-        f'{mix["medium"]} medium and {mix["hard"]} hard questions — this mix '
-        "targets roughly a 75% success rate for this student on this topic "
-        "right now, so match it rather than making every question the same "
-        'difficulty. kind is "recall" (asks for a fact or definition) or '
-        '"apply" (asks the student to use it, e.g. on a new example). '
-        "misconceptions is one entry per choice, same order as choices: for "
-        "each WRONG choice, a short phrase (5 words or fewer) naming the "
-        "specific misconception it represents, e.g. 'confuses Q-learning with "
-        "SARSA' — null for the correct choice. prerequisites is 0-2 short "
-        "concept names (2-4 words each) this question depends on — a concept "
-        "a student would need to already know to answer it, e.g. "
-        "'Bellman equation' for a question on policy iteration. "
-        "Before the array, on its own line, write a title for this quiz: "
-        "'TITLE: ' followed by 3-6 words naming what it actually covers "
-        "(e.g. 'TITLE: Policy Iteration Basics'), not a generic label like "
-        "'Quiz' or 'Chat Review' — this is the only place the student will "
-        "see what the quiz is about before opening it. "
-        "Then the JSON array — no other prose, no code fences."
+    sources = await coverage.plan(
+        subspace_id=subspace_id,
+        linked_subspace_ids=linked_ids,
+        topic=body.topic,
+        questions=body.count,
+        used=used,
+        weak_concepts=[c.label for c in snap.concepts_in(subspace_id) if c.is_weak],
     )
+    # A conversation IS the student's material: talk a topic through in chat,
+    # then ask to be tested on it. Only a topic with neither is refused.
+    if not sources and not history and settings.llm_configured:
+        raise NothingIndexed()
+    label = subspace_label(subspace)
 
     generated_title: str | None = None
     if not settings.llm_configured:
@@ -208,24 +151,16 @@ async def generate_quiz(
         questions = _stub_questions(body.topic, body.count)
     else:
         try:
-            raw_parts: list[str] = []
-            async for delta in get_llm().stream_chat(
-                [
-                    {
-                        "role": "system",
-                        "content": QUIZ_AGENT_VOICE
-                        + (f"\n\n{student_context}" if student_context else ""),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                model=settings.groq_model,
-                temperature=0.3,
-            ):
-                raw_parts.append(delta)
-            raw = "".join(raw_parts).strip()
-            generated_title = extract_title_line(raw)
-            # The model puts the right answer first far too often; spread it.
-            questions = balance_answer_positions(_safe_parse_questions(raw, want=body.count))
+            draft = await quiz_agent.write_quiz(
+                count=body.count,
+                topic=body.topic,
+                label=label,
+                mix=mix,
+                sources=sources,
+                conversation=format_history(history),
+                earlier=earlier,
+                student_context=student_context,
+            )
         except ApiError:
             # Already a friendly, typed error (rate limit, upstream down) — let
             # it surface so the user knows to retry rather than being handed
@@ -234,11 +169,12 @@ async def generate_quiz(
         except Exception as e:
             log.exception("quiz generation failed")
             raise UpstreamUnavailable("Couldn't generate a quiz just now.") from e
-
+        log.info("quiz written subspace=%s sources=%d %s", subspace_id, len(sources), draft.trace)
+        generated_title = draft.title
+        # The model puts the right answer first far too often; spread it.
+        questions = balance_answer_positions(draft.questions)
         if not questions:
-            raise UpstreamUnavailable(
-                "The quiz came back in an unexpected format. Try again."
-            )
+            raise UpstreamUnavailable("The quiz came back in an unexpected format. Try again.")
 
     # The student rarely types a topic — "Quiz me on this chat" never asks for
     # one — so falling back to the model's own title (or, failing that, the
@@ -361,48 +297,6 @@ def _to_quiz(row: dict, results: dict[str, list[dict]] | None = None) -> QuizOut
         topic=row.get("topic"),
         questions=[QuizQuestion(**q) for q in (row.get("questions") or [])],
         created_at=row["created_at"],
-    )
-
-
-def _safe_parse_questions(raw: str, *, want: int) -> list[QuizQuestion]:
-    # Tolerate stray text around the JSON.
-    start = raw.find("[")
-    end = raw.rfind("]")
-    if start == -1 or end == -1 or end <= start:
-        return []
-    try:
-        data = loads_lenient(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(data, list):
-        return []
-    out: list[QuizQuestion] = []
-    for item in data:
-        if len(out) >= want:
-            break
-        try:
-            question = QuizQuestion(**item)
-        except Exception:
-            continue
-        if _is_answerable(question):
-            out.append(question)
-    return out
-
-
-def _is_answerable(q: QuizQuestion) -> bool:
-    """A model-written question the student can actually answer.
-
-    Checked here rather than on `QuizQuestion` so quizzes already stored (and
-    read back through that model) are never rejected. Four distinct, non-empty
-    choices, and an answer that points at one of them — otherwise the quiz
-    would mark every attempt wrong, or crash the shuffle."""
-    choices = [c.strip() for c in q.choices]
-    return (
-        bool(q.q.strip())
-        and len(choices) == 4
-        and all(choices)
-        and len(set(choices)) == 4
-        and 0 <= q.answer_index < 4
     )
 
 

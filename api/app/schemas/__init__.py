@@ -278,7 +278,15 @@ class QuizQuestion(BaseModel):
     q: str
     choices: list[str]
     answer_index: int
+    #: Where the question came from, as the student sees it ("notes.pdf · p. 4 · Momentum").
     source: str | None = None
+    #: The chunk it was written from. What later quizzes read to cover new
+    #: ground instead of the same pages again (`services/coverage.py`).
+    source_chunk: str | None = None
+    #: True when a second model confirmed the answer is supported by that
+    #: source and is the only right choice; False when that check could not be
+    #: made. None on quizzes from before it existed.
+    checked: bool | None = None
     subtopic: str | None = None
     # Why the right answer is right, shown the moment the student commits to a
     # choice rather than at the end of the quiz. Optional because every quiz
@@ -310,7 +318,7 @@ class QuizQuestion(BaseModel):
     def _normalize_optional_fields(cls, data: Any) -> Any:
         """Defensive normalization for the fields an LLM fills in: a bad
         value drops just that field rather than failing the whole question
-        (the caller, `quizzes._safe_parse_questions`, already drops a
+        (the caller, `quiz_agent`'s checks, already drops a
         question outright on a genuinely broken `q`/`choices`/`answer_index`
         — this is for the softer, additive fields only)."""
         if not isinstance(data, dict):
