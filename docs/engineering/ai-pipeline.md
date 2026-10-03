@@ -24,7 +24,7 @@ numbers, not SLAs, until someone times them for real.
 ### Pipeline overview
 
 ```
-Upload → Parse → Chunk → Embed → Retrieve → [Hybrid Search: not built] → Context Build
+Upload → Parse → Chunk → Embed → Retrieve (resolve → hybrid search → fuse → judge → select) → Context Build
    → Reason → [Citation Validation: partially built] → Artifact Generation
    → Learning State Update → [Scheduling] → Response
 ```
@@ -59,51 +59,54 @@ stage — see §11 for why.
 
 ### 2. Parsing
 
-**Code:** `api/app/services/embeddings.py::extract_pdf_text`,
-`api/app/routers/documents.py::_extract_csv_text`, `_extract_image_text`
+**Code:** `api/app/services/extract.py::read_document`,
+`api/app/services/pdf_layout.py::read_pdf`, `api/app/services/chunking.py::read_text`
 
-- **Purpose:** turn arbitrary file bytes into plain text, preserving enough
-  structure (page numbers) to cite later.
+- **Purpose:** turn a file into lines of text that know their structure — the
+  page each is on and whether it is a heading — so chunks can follow sections
+  and citations can name a page.
 - **Input:** raw bytes + MIME type.
-- **Output:** a single text blob, PDFs tagged inline with `[p.N]` markers so
-  chunk locators can reference a real page.
-- **Latency:** PDF text extraction (`pypdf`) — **estimated 50–300ms** for a
-  typical lecture-length PDF, pure CPU, no network. Image transcription is
-  categorically different: it's a **vision-model LLM call**
-  (`GROQ_MODEL_VISION`), so it inherits that stage's latency and cost (§9),
-  not this one's.
-- **Cost:** $0 for PDF/CSV/text. Image parsing costs one vision-model call —
-  metered identically to a chat turn (`consume_llm_quota(cost=2)` in
-  `upload_document`).
-- **Alternatives rejected:** OCR for scanned (non-text) PDFs isn't built —
-  `pypdf`'s `extract_text()` returns empty for a scanned page, and that
-  document fails with "no readable text found" rather than silently
-  producing garbage. Adding OCR (e.g. via the vision model, page-by-page) is
-  a real, scoped future feature, not a gap in this stage's design — it needs
-  its own cost/latency budget because it'd be one vision call per page, not
-  per document.
+- **Output:** a list of `Line(text, page, level)`. Every file type has a
+  reader that returns this, and nothing downstream knows what the file was.
+- **PDFs** are read run by run with each run's font and position. A heading is
+  a line set larger than the body text, or wholly bold and short; its level
+  comes from its size. Headings are put back above the text they head — PDFs
+  printed from a web page draw a page's headings *after* its body. Wrapped
+  titles are merged, figure labels and sideways margin stamps are not
+  headings, and running headers and footers are dropped.
+- **Markdown and text:** `#` headings, numbered titles ("2.1 Learning rate")
+  and short lines in capitals. **CSV:** a line per row. **Images:** one
+  vision-model call transcribes and describes them.
+- **Scanned PDFs** (pages but almost no text) fail with a message saying so
+  and what to upload instead. OCR is still not built: it would be one vision
+  call per page.
+- **Latency:** pure CPU for everything but images, run in a worker thread —
+  a few seconds for a lecture-length PDF on the free instance.
+- **Cost:** $0 for PDF/CSV/text; one vision call for an image.
 
 ### 3. Chunking
 
-**Code:** `api/app/services/embeddings.py::chunk_text`
+**Code:** `api/app/services/chunking.py::chunk`
 
-- **Purpose:** split extracted text into windows small enough to embed
-  meaningfully and cite precisely, without cutting mid-sentence.
-- **Input:** the full extracted text.
-- **Output:** a list of `Chunk(index, content, locator)` — 900 characters
-  (~200 tokens) per window, 120-character overlap, snapped to the nearest
-  paragraph or sentence boundary within 40% of the window size.
-- **Latency:** pure string operations — **estimated <10ms** for a typical
-  document, irrelevant next to any other stage.
-- **Cost:** $0.
-- **Alternatives rejected:** token-based chunking (via a real tokenizer)
-  would size windows more precisely against the embedding model's actual
-  token limit, but pulls in tokenizer weights at cold start on a
-  memory-constrained free-tier process — the character-based approximation
-  costs a little chunking precision to keep the backend's cold-start light,
-  a trade this codebase already makes consciously (`embeddings.py`'s own
-  comment). Revisit only if chunk-boundary quality is ever measured as a
-  real retrieval problem, not preemptively.
+- **Purpose:** cut the document into pieces small enough to embed and cite,
+  along its own structure.
+- **Output:** `Chunk(index, content, embed_text, locator, page_start,
+  page_end, section)`.
+- **How:** a chunk never runs from one section into the next. Sections under
+  300 characters join the one after. A long section is cut at about 900
+  characters, at a sentence or paragraph end, with a line or two repeated
+  across the cut.
+- **What is embedded is not what is stored.** `embed_text` is the heading
+  path ("Gradient descent › Momentum") followed by the content, so a
+  paragraph that only says "it converges faster" is still found by a question
+  naming the method. `content` is the document's own words.
+- **Locator:** "p. 4 · Satisfying 2NF".
+- **Limits:** 1,200 chunks per document (about 400 pages); the rest is left
+  out and the document says so.
+- **Versioned.** `documents.index_version` records which chunker built a
+  document; `scripts/reembed_documents.py --outdated` rebuilds the ones
+  behind.
+- **Latency / cost:** milliseconds, $0.
 
 ### 4. Embedding — real, local, and live
 
@@ -153,77 +156,74 @@ stage — see §11 for why.
 
 ### 5. Retrieval
 
-**Code:** `api/app/services/rag.py::retrieve`, `retrieve_with_links`
+**Code:** `api/app/services/retrieval.py` (the pipeline),
+`query_resolver.py` (follow-ups), `rag.py::search` / `retrieve` (the doors
+chat and the generators use), migration `20261002160000_hybrid_search.sql`
 
-- **Purpose:** given a question, find the chunks most likely to answer it.
-- **Input:** the question text, a `subspace_id`, optionally a list of linked
-  subspace ids.
-- **Output:** top-k `Retrieved` objects (`document_id`, `document_name`,
-  `content`, `locator`, `similarity`) — `k=4` for chat, `k=6` for
-  quiz/flashcard generation.
-- **Latency:** one embedding call (question only — small, fast even once
-  real) + one `match_document_chunks` RPC (a single indexed Postgres query)
-  + one `documents` lookup for names. **Measured pattern elsewhere in this
-  codebase puts one warm Supabase round trip at ~150–257ms**; this stage is
-  2–3 such round trips run sequentially (deliberately — see
-  `docs/engineering/architecture.md`'s note on why `asyncio.gather` is *slower*
-  against this specific remote Postgres).
-- **Cost:** $0 beyond the embedding call this stage depends on — pgvector
-  search itself has no metered cost on Supabase's free tier.
-- **Alternatives rejected:** a dedicated vector database — see
-  `docs/engineering/architecture.md`. Rejected on the same grounds: no measurable
-  latency win at this data volume, and a second free-tier account to run out
-  of.
+One pipeline for chat and every generator, in five stages:
 
-### 5a. Real-corpus retrieval evaluation (2026-08 hardening pass)
+1. **Resolve.** A follow-up ("why does that happen?") has no subject to
+   search for. A check in code decides whether the question leans on the
+   conversation; only then is the small fast model asked to rewrite it, with a
+   2.5-second timeout and a fallback that needs no model.
+2. **Search.** One call to the `search_chunks` SQL function returns the
+   closest chunks by meaning (pgvector, exact, the question embedded with
+   BGE's query prefix) and the best by keyword (PostgreSQL full-text search,
+   matching any of the question's words), across the topic and its linked
+   topics.
+3. **Fuse.** Reciprocal rank fusion merges the two rankings.
+4. **Judge.** Do the documents cover this? Judged on the best similarity and
+   the best rarity-weighted keyword coverage: "none" passes no sources
+   (small talk, or a subject the topic never mentions), "weak" passes them
+   with a warning to the model, "good" passes them normally.
+5. **Select.** Up to six chunks within 4,200 characters; a candidate that
+   directly continues a chosen chunk is promoted.
 
-**Code:** `api/scripts/bench_real_corpus.py`
+- **Configuration, not code.** Every number above is a default of
+  `RetrievalConfig`, set by the benchmark. A test pins the defaults.
+- **Latency:** one local embedding + one SQL call (about 9 ms on the
+  benchmark's 563 chunks, locally) + one lookup for document names; plus one
+  small-model call on follow-ups only.
+- **Cost:** $0 for the search; the follow-up rewrite uses the small model's
+  own allowance.
+- **Trace.** Each assistant message's `meta.retrieval` records the rewritten
+  query, the confidence and the top candidates with their ranks and scores.
 
-§4 and §5 above are real and live, not stubbed or projected — but a single
-retrieval query proves the pipe isn't broken, not that retrieval quality is
-good. This closes that gap with a small, honest, real-corpus measurement:
-18 hand-written questions, each checked by a human against the real, stored
-`document_chunks` content for the one `chunk_index` that actually answers
-it, run through the real production path
-(`app.services.rag.retrieve` → the real `match_document_chunks` RPC, scoped
-to the real `subspace_id` — not an offline cosine-similarity proxy).
+### 5a. Retrieval benchmark
 
-**Corpus, as measured:** 3 real, fully processed documents, 80 real chunks —
-a Java variables/typecasting lecture (13 chunks), a reinforcement-learning
-lecture (15 chunks), and "Attention Is All You Need" (52 chunks). Model:
-BGE-small-en-v1.5, 384-dim, real embeddings (§4).
+**Code:** `api/eval/` — see its README. Results: `api/eval/RESULTS.md`,
+`api/eval/ABLATION.md`.
 
-**Result:** Recall@5 = 0.944, Recall@10 = 0.944, MRR = 0.713 (n=18).
-17/18 questions found their gold chunk in the top 5; one missed the top 10
-entirely — a question about the Transformer's positional-encoding *formula*
-retrieved the two chunks immediately surrounding it (which discuss the
-concept but not the equation itself) instead of the chunk with the formula.
-That's a real, honest miss, not a fabricated one — recorded rather than
-excluded.
+Six documents in three topics, 114 questions in six kinds (direct, reworded,
+follow-up, exact term, cross-section, unanswerable), with ground truth as
+quotes from the documents rather than chunk numbers, and a held-out test
+half. It runs the production pipeline against the real SQL function on a
+throwaway local PostgreSQL.
 
-**Limitations, stated plainly:** n=18 over 80 chunks is a smoke-eval, not a
-statistically powered benchmark — it answers "does retrieval work at all, on
-real content, through the real path," not "how does retrieval degrade at
-scale." Re-run `bench_real_corpus.py` (or extend its `CASES`) as the real
-document corpus grows. Full per-question results:
-`api/scripts/bench_real_corpus_results.json`.
+| All 98 answerable questions | First measured | Now |
+|---|---|---|
+| Right chunk ranked first | 48% | 64% |
+| In the top 5 | 80% | 88% |
+| Answer reached the model | 72% | 93% |
+| …follow-ups | 50% | 83% |
+| …exact terms | 80% | 92% |
 
-### 6. Hybrid search — not built, and here's the actual reasoning
+Held-out test half, answer reached the model: 78% → 89%. Removing any one
+stage costs between 2 and 9 points (`ABLATION.md`).
 
-Combining vector similarity with keyword/full-text search (e.g. Postgres
-`tsvector` + rank fusion) catches exact-term matches a pure embedding search
-sometimes misses — genuinely useful at scale. **Still not worth building —
-the reasoning has changed, not the conclusion.** This section originally
-deferred the decision until real embeddings existed and retrieval quality
-could be measured (§4 was stubbed when this was written). That measurement
-now exists (§5a): Recall@5 0.944, MRR 0.713 on real content through the real
-path. That doesn't change the call — a `tsvector` generated column plus a
-weighted-union query is still real, if genuinely small, implementation cost,
-and nothing in §5a's one honest miss (a formula the embedding search placed
-adjacent to, not on) looks like something exact-keyword matching would have
-caught either. Revisit if the real corpus grows and a future real-corpus eval
-shows a *specific, recurring* failure pattern keyword search would fix —
-not on effort grounds alone.
+**Limits, stated plainly.** The corpus is six Wikipedia articles, not student
+lecture notes. Graded answers are a sample of 36 judged by a second model:
+correct went 88% → 92%, which is within noise. Refusing questions the
+documents do not cover did not improve at the answer level, and citation
+precision is about 70%. An earlier 18-question check reported Recall@5 of
+0.944; on this broader set the same pipeline scored 0.80.
+
+### 6. Hybrid search — built
+
+This section used to argue against it. The benchmark changed the call:
+keyword search beside vector search is the single largest retrieval gain
+measured (the answer reaching the model falls from 93% to 84% without it,
+and exact-term questions from 92% to 80%). See §5.
 
 ### 7. Reranking — not built, same class of reasoning
 
@@ -420,11 +420,11 @@ codebase uses instead (tagged evidence rows, not a unified object).
 | Stage | Built? | Latency (measured/estimated) | Marginal cost |
 |---|---|---|---|
 | Upload | Yes | ~200–800ms (est.) | $0 |
-| Parsing | Yes (text); vision path costs an LLM call | 50–300ms text / LLM-call latency for images | $0 text / metered for images |
-| Chunking | Yes | <10ms (est.) | $0 |
+| Parsing | Yes — structure-aware (headings, pages); vision path costs an LLM call | seconds of CPU for a lecture PDF on the free instance / LLM-call latency for images | $0 text / metered for images |
+| Chunking | Yes — section-bounded | milliseconds | $0 |
 | Embedding | Local (BGE-small ONNX) wired; **flag off pending the vector(384) migration** | µs (stub) / ~10ms/chunk (real, measured) | $0, permanently |
-| Retrieval | Yes | ~300–700ms (2–3 sequential round trips, est.) | $0 |
-| Hybrid search | **Not built — sequenced after real embeddings** | — | — |
+| Retrieval | Yes — resolve → hybrid search → fuse → judge → select | one SQL call (~9ms locally) + a names lookup; + one small-model call on follow-ups | $0 |
+| Hybrid search | **Built** — vector + PostgreSQL full-text, rank-fused | `services/retrieval.py`, `search_chunks` | `eval/RESULTS.md` |
 | Reranking | **Not built — not justified at current scale** | — | — |
 | Context building | Yes | <5ms | $0 |
 | Reasoning | Yes | 300–600ms TTFT + streaming (est.) | Priced in `docs/operations/performance-and-cost.md` |
