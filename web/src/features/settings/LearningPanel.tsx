@@ -8,14 +8,14 @@
  * should be something you can see and undo.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
+import type { IconName } from '../../components/ui/Icon'
+import { Rise } from '../../components/ui/motion'
 import type { Preference } from '../../api/feedback'
 import type { StudentModel } from '../../api/types'
 import { Button } from '../../components/ui/Button'
-import { NumberInput, RowWithText, SavedTick, SavingDot } from '../../components/ui/Row'
 import { cn } from '../../lib/cn'
 import { LIMITS } from '../../lib/limits'
-import { Choice } from '../onboarding/StyleIntakeCard'
 import {
   composeStyles,
   DEPTH,
@@ -23,10 +23,10 @@ import {
   OWN_STYLE_MAX,
   parseStyles,
   SESSION,
-  SESSION_MINUTES,
   STYLE,
   TEACHING_PREFERENCE_MAX,
 } from './learning'
+import { OptionCard, Pill, SaveTell, Segmented, SessionDial, SettingsCard, Stepper } from './parts'
 
 type Props = {
   student: StudentModel
@@ -42,7 +42,7 @@ type Props = {
 }
 
 const field =
-  'w-full rounded-[10px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25'
+  'w-full rounded-[12px] border border-line bg-well px-3 py-2.5 text-[14px] text-ink outline-none transition-colors placeholder:text-faint focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/25'
 const link = 'cursor-pointer self-start text-[13px] text-brand-deep hover:underline'
 
 export function LearningPanel({ student, savingKey, savedKey, save, saveText, learned, resetting, onResetLearned }: Props) {
@@ -56,22 +56,21 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
   const [writing, setWriting] = useState(Boolean(student.teaching_preference?.trim()) && depth === null)
 
   const minutes = student.session_length_minutes ?? 20
+  const depthIndex = DEPTH.options.findIndex((o) => o.value === depth)
   const inferred = learned.filter((p) => p.source !== 'explicit')
-  const tell = (key: string) => (savingKey === key ? <SavingDot /> : savedKey === key ? <SavedTick /> : null)
+  const tell = (key: string) => <SaveTell saving={savingKey === key} saved={savedKey === key} />
 
   return (
     <>
-      <p className="text-[13.5px] text-muted">How the AI explains things to you. It saves as you go.</p>
-
-      <div className="flex flex-col gap-4">
-      <Card title={STYLE.ask} hint={STYLE.aside} tell={tell('learning_style')}>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {STYLE.options.map((o) => {
+      <Rise className="col-span-full"><SettingsCard tone="hero" icon="sparkle" title={STYLE.ask} hint={STYLE.aside} tell={tell('learning_style')}>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
+          {STYLE.options.map((o, i) => {
             const on = styles.picked.includes(o.value)
             return (
-              <Choice
+              <OptionCard
                 key={o.value}
                 on={on}
+                icon={STYLE_ICON[i] ?? 'sparkle'}
                 role="checkbox"
                 label={o.label}
                 hint={o.hint}
@@ -101,94 +100,97 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
             + Add something in your own words
           </button>
         )}
-      </Card>
+      </SettingsCard></Rise>
 
-      <Card title={DEPTH.ask} hint={DEPTH.aside} tell={tell('teaching_preference')}>
-        <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label={DEPTH.ask}>
-          {DEPTH.options.map((o) => (
-            <Choice
-              key={o.value}
-              on={!writing && depth === o.value}
-              role="radio"
-              label={o.label}
-              hint={o.hint}
-              onClick={() => {
-                setWriting(false)
-                save('teaching_preference', { teaching_preference: depth === o.value && !writing ? null : o.value })
-              }}
-            />
-          ))}
-        </div>
-        {writing ? (
-          <textarea
-            value={student.teaching_preference ?? ''}
-            maxLength={TEACHING_PREFERENCE_MAX}
-            rows={3}
-            onChange={(e) => saveText('teaching_preference', { teaching_preference: e.target.value || null })}
-            placeholder="e.g. Explain it like I’m new to this, then show me the exam version."
-            aria-label="How to explain things, in your own words"
-            className={cn(field, 'resize-none')}
+      <Rise delay={50} className="h-full">
+        <SettingsCard icon="listOrdered" title={DEPTH.ask} hint={DEPTH.aside} tell={tell('teaching_preference')}>
+          <Segmented
+            label={DEPTH.ask}
+            options={DEPTH.options.map((o) => ({ value: o.value, label: o.label }))}
+            value={writing ? -1 : DEPTH.options.findIndex((o) => o.value === depth)}
+            onPick={(v) => {
+              setWriting(false)
+              save('teaching_preference', { teaching_preference: depth === v && !writing ? null : v })
+            }}
           />
-        ) : (
-          <button type="button" onClick={() => setWriting(true)} className={link}>
-            + Write it in your own words instead
-          </button>
-        )}
-      </Card>
-
-      <Card title={SESSION.ask} hint={SESSION.aside} tell={tell('session_length_minutes')}>
-        <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={SESSION.ask}>
-          {SESSION.options.map((o) => {
-            const on = minutes === Number(o.value)
-            return (
-              <button
-                key={o.value}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                onClick={() => save('session_length_minutes', { session_length_minutes: Number(o.value) })}
-                className={cn(
-                  'min-h-10 cursor-pointer rounded-full border px-4 text-[13.5px] transition-colors max-md:min-h-11',
-                  on ? 'border-brand/60 bg-brand-soft font-semibold text-brand-deep' : 'border-line bg-raised text-ink-2 hover:border-line-dash',
-                )}
-              >
-                {o.label}
+          {!writing && depthIndex >= 0 && (
+            <div key={depthIndex} className="mt-3 rounded-xl bg-well px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wider text-faint">{DEPTH.options[depthIndex].hint}</div>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-ink-2">{DEPTH_SAMPLE[depthIndex]}</p>
+            </div>
+          )}
+          <div className="mt-3">
+            {writing ? (
+              <textarea
+                value={student.teaching_preference ?? ''}
+                maxLength={TEACHING_PREFERENCE_MAX}
+                rows={3}
+                onChange={(e) => saveText('teaching_preference', { teaching_preference: e.target.value || null })}
+                placeholder="e.g. Explain it like I’m new to this, then show me the exam version."
+                aria-label="How to explain things, in your own words"
+                className={cn(field, 'resize-none')}
+              />
+            ) : (
+              <button type="button" onClick={() => setWriting(true)} className={link}>
+                + Write it in your own words instead
               </button>
-            )
-          })}
-          <label className="ml-auto flex items-center gap-2 text-[13px] text-muted">
-            <span className={cn(SESSION_MINUTES.includes(minutes) && 'max-sm:sr-only')}>or exactly</span>
-            <NumberInput
-              value={minutes}
-              min={5}
-              max={180}
-              label="Session length in minutes"
-              onCommit={(n) => save('session_length_minutes', { session_length_minutes: n })}
-            />
-            min
-          </label>
-        </div>
-      </Card>
+            )}
+          </div>
+        </SettingsCard>
+      </Rise>
 
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
-        <RowWithText
-          label="Working towards"
-          hint="An exam, a course or a job. Answers lean towards it."
-          placeholder="e.g. GATE 2027"
-          maxLength={LIMITS.examContext}
-          value={student.exam_context}
-          onChange={(v) => saveText('exam_context', { exam_context: v })}
-          saving={savingKey === 'exam_context'}
-          saved={savedKey === 'exam_context'}
-          last
-        />
-      </div>
+      <Rise delay={100} className="h-full">
+        <SettingsCard icon="clock" title={SESSION.ask} hint={SESSION.aside} tell={tell('session_length_minutes')}>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+            <SessionDial minutes={minutes} />
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label={SESSION.ask}>
+                {SESSION.options.map((o) => (
+                  <Pill
+                    key={o.value}
+                    on={minutes === Number(o.value)}
+                    onClick={() => save('session_length_minutes', { session_length_minutes: Number(o.value) })}
+                  >
+                    {o.label}
+                  </Pill>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-muted">
+                <span>or exactly</span>
+                <Stepper
+                  value={minutes}
+                  min={5}
+                  max={180}
+                  step={5}
+                  unit="min"
+                  label="Session length in minutes"
+                  onCommit={(n) => save('session_length_minutes', { session_length_minutes: n })}
+                />
+              </div>
+            </div>
+          </div>
+        </SettingsCard>
+      </Rise>
+
+      <Rise delay={150} className="h-full">
+        <SettingsCard icon="target" title="Working towards" hint="An exam, a course or a job. Answers lean towards it." tell={tell('exam_context')}>
+          <input
+            type="text"
+            value={student.exam_context ?? ''}
+            maxLength={LIMITS.examContext}
+            aria-label="Working towards"
+            placeholder="e.g. GATE 2027"
+            onChange={(e) => saveText('exam_context', { exam_context: e.target.value || null })}
+            className={field}
+          />
+        </SettingsCard>
+      </Rise>
 
       {/* Only what the app worked out by itself. What the student chose is
           already on this page as the choice they made; listing it again here
           as "learned" said nothing and buried the part that is new. */}
       {inferred.length > 0 && (
-        <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+        <div className="col-span-full rounded-2xl border border-line bg-surface p-4 text-[14px]">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-ink">Picked up from your 👍 and 👎</div>
@@ -220,7 +222,7 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
           the student said, and putting them in an editable box would show
           someone a sentence they never wrote as if they had. */}
       {student.observed_habits.length > 0 && (
-        <div className="rounded-xl border border-line bg-surface p-4 text-[14px]">
+        <div className="col-span-full rounded-2xl border border-line bg-surface p-5 text-[14px]">
           <div className="mb-2 font-semibold text-ink">What I’ve noticed</div>
           <ul className="flex flex-col gap-1.5 text-ink-2">
             {student.observed_habits.map((h) => (
@@ -232,25 +234,19 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
         </div>
       )}
 
-      </div>
     </>
   )
 }
 
-function Card({ title, hint, tell, children }: { title: string; hint: string; tell: ReactNode; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <h3 className="text-[14.5px] font-semibold text-ink">{title}</h3>
-          {tell}
-        </div>
-        <p className="mt-0.5 text-[12.5px] text-faint">{hint}</p>
-      </div>
-      {children}
-    </section>
-  )
-}
+/** One icon per first-run style choice, in the choices' own order. */
+const STYLE_ICON: IconName[] = ['listTodo', 'sparkle', 'quote', 'table']
+
+/** What each depth sounds like — one neutral illustration, not the student's data. */
+const DEPTH_SAMPLE = [
+  'Entropy measures disorder: how many ways a system can be arranged.',
+  'Entropy counts the arrangements a system can take. Start with two gases in a box, see why mixing wins by sheer numbers, then connect it to temperature and heat.',
+  'A quick question gets a line. A hard one gets the whole walk-through, step by step.',
+]
 
 /** Preference keys read as sentences, not dotted paths. */
 const PREF_LABEL: Record<string, string> = {

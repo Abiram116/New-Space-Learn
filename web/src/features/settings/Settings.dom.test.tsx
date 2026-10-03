@@ -139,6 +139,26 @@ describe('Settings section switcher (phones and tablets)', () => {
   })
 })
 
+describe('Settings chrome', () => {
+  it('slides the nav indicator to the active tab and keeps tab/tabpanel roles', async () => {
+    const user = userEvent.setup()
+    renderSettings()
+    const indicator = screen.getByTestId('nav-indicator')
+    expect(indicator).toHaveAttribute('data-index', '0')
+    await user.click(screen.getByRole('tab', { name: 'Account' }))
+    expect(indicator).toHaveAttribute('data-index', '2')
+    expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-label', 'Account')
+    expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument()
+  })
+
+  it('previews the student’s own session length', async () => {
+    renderSettings()
+    const box = await screen.findByRole('spinbutton', { name: 'Session length in minutes' })
+    expect(box).toHaveValue('20')
+    expect(screen.getByRole('radio', { name: '30 minutes' })).toHaveAttribute('aria-checked', 'false')
+  })
+})
+
 describe('Settings › Learning', () => {
   it('shows the first-run choices and saves a pick as the sentence the AI reads', async () => {
     updateStudentModel.mockImplementation(async (patch: object) => ({ ...STUDENT, ...patch }))
