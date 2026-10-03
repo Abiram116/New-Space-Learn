@@ -77,6 +77,11 @@ async def consume_llm_quota(user_id: str, *, cost: float = 1.0) -> None:
 # feedback form. Fixed windows, in memory, same single-worker footing as the
 # buckets above.
 _windows: dict[str, tuple[float, int]] = {}
+#: Past this many live windows, a key we have not seen is refused outright.
+#: The keys include a client-supplied address (`X-Forwarded-For` can be forged),
+#: so without a hard ceiling someone rotating it could add an entry per request
+#: for as long as the window lasts — unbounded memory on a 512 MB worker.
+_MAX_WINDOWS = 10_000
 
 
 def consume_window(key: str, *, limit: int, window_s: float, message: str) -> None:
@@ -85,6 +90,8 @@ def consume_window(key: str, *, limit: int, window_s: float, message: str) -> No
     if len(_windows) > 5000:  # bounded: drop windows that have already ended
         for stale in [k for k, (start, _) in _windows.items() if now - start > window_s]:
             del _windows[stale]
+    if key not in _windows and len(_windows) >= _MAX_WINDOWS:
+        raise RateLimited(message)
     start, used = _windows.get(key, (now, 0))
     if now - start > window_s:
         start, used = now, 0

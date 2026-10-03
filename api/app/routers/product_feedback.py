@@ -263,6 +263,19 @@ _UNLOCK_WINDOW_S = 900.0
 _UNLOCK_BUSY = "Too many tries. Wait a few minutes and try again."
 
 
+#: One password check at a time. Each scrypt run holds ~16 MB; the attempt
+#: limit is counted before hashing, so a burst of concurrent guesses would
+#: otherwise run as many at once as the thread pool allows — on a 512 MB worker
+#: that also holds the embedding model.
+_verifying = asyncio.Lock()
+
+
+async def _verify(password: str) -> bool:
+    async with _verifying:
+        # Off the event loop: the hash is deliberately slow.
+        return await asyncio.to_thread(admin_gate.verify_password, password)
+
+
 @router.post("/admin/unlock", response_model=AdminUnlockOut)
 async def unlock(body: AdminUnlockIn, request: Request) -> AdminUnlockOut:
     """The shared password, exchanged for a token that opens the admin side."""
@@ -271,8 +284,7 @@ async def unlock(body: AdminUnlockIn, request: Request) -> AdminUnlockOut:
         limit=_UNLOCK_PER_ADDRESS, window_s=_UNLOCK_WINDOW_S, message=_UNLOCK_BUSY,
     )
     consume_window("admin:all", limit=_UNLOCK_TOTAL, window_s=_UNLOCK_WINDOW_S, message=_UNLOCK_BUSY)
-    # Off the event loop: the hash is deliberately slow.
-    if not admin_gate.configured() or not await asyncio.to_thread(admin_gate.verify_password, body.password):
+    if not admin_gate.configured() or not await _verify(body.password):
         log.warning("admin unlock refused")
         raise Forbidden("That's not the password.")
     token, expires_at = admin_gate.issue_token()

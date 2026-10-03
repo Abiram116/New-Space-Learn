@@ -28,9 +28,11 @@ class _Store:
         self.chunks: list[dict[str, Any]] = []
         self.doc_patches: list[dict[str, Any]] = []
         self.embedded: list[str] = []
+        self.select_orders: list[str | None] = []
 
     async def db_select(self, table, *, filters=None, select="*", order=None, limit=None):
         assert table == "document_chunks"
+        self.select_orders.append(order)
         return [{"chunk_index": c["chunk_index"]} for c in self.chunks]
 
     async def db_insert(self, table, rows):
@@ -123,6 +125,8 @@ async def test_a_resume_skips_chunks_already_stored(store):
 
     assert len(store.embedded) == N_CHUNKS - ingest.SAVE_EVERY
     assert sorted(c["chunk_index"] for c in store.chunks) == list(range(N_CHUNKS))
+    # Past 1,000 chunks the read pages by offset, which only holds with an order.
+    assert store.select_orders == ["chunk_index.asc"]
 
 
 async def test_a_reprocess_starts_clean(store):

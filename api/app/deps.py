@@ -41,7 +41,7 @@ async def get_current_user(
     # its short-lived cache for this user is dropped before the handler runs.
     # One rule here covers every write endpoint, including ones written later.
     if request.method not in _READ_METHODS:
-        student_model.invalidate(user.id)
+        student_model.begin_write(user.id)
     return user
 
 

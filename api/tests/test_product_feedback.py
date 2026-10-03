@@ -410,3 +410,33 @@ def test_validate_answers_skips_an_optional_blank():
     assert [a["question_id"] for a in stored] == ["q-rate", "q-pick", "q-many", "q-nps", "q-next"]
     with pytest.raises(ValidationFailed):
         pf.validate_answers(Q, {})
+
+
+async def test_password_checks_run_one_at_a_time(monkeypatch):
+    """Each scrypt check holds ~16 MB; a burst of guesses must not run them all
+    at once on a 512 MB worker."""
+    import asyncio
+    import threading
+    import time as _time
+
+    from app.routers import product_feedback
+
+    running = 0
+    peak = 0
+    guard = threading.Lock()
+
+    def slow_verify(_password: str) -> bool:
+        nonlocal running, peak
+        with guard:
+            running += 1
+            peak = max(peak, running)
+        _time.sleep(0.02)
+        with guard:
+            running -= 1
+        return False
+
+    monkeypatch.setattr(admin_gate, "verify_password", slow_verify)
+    monkeypatch.setattr(product_feedback, "_verifying", asyncio.Lock())
+    results = await asyncio.gather(*(product_feedback._verify("x") for _ in range(5)))  # noqa: SLF001
+    assert results == [False] * 5
+    assert peak == 1

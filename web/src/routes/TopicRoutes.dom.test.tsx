@@ -44,7 +44,7 @@ vi.mock('../features/chat/ChatView', () => ({ ChatView: () => <div>desktop chat<
 vi.mock('../features/skills/SkillsView', () => ({ SkillsView: () => <div>desktop skills</div> }))
 
 import { useTopicScope } from '../lib/useTopicScope'
-import { ChatAliasRoute, SkillsRoute, TopicIndexRoute } from './TopicRoutes'
+import { ChatAliasRoute, SkillsRoute, TopicIndexRoute, TopicSkillsRedirect } from './TopicRoutes'
 
 /** Stands in for Notes / Cards / Quizzes: shows which topic the screen would work in. */
 function ScopeProbe() {
@@ -183,4 +183,37 @@ describe('account-wide list URLs', () => {
       await screen.findByText('in-topic · Markov decision processes · /sp/sub'),
     ).toBeInTheDocument()
   })
+})
+
+/** The App's real wiring for skills: a topic's `…/skills` forwards to the
+ *  account-wide `/skills`, which is chat furniture on a phone. */
+function renderSkillsAt(path: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <Routes>
+          <Route path="/skills" element={<SkillsRoute />} />
+          <Route path="/:spaceId/:subspaceId/skills" element={<TopicSkillsRedirect />} />
+          <Route path="/s/:spaceId/:subspaceId/skills" element={<TopicSkillsRedirect />} />
+        </Routes>
+      </ToastProvider>
+    </MemoryRouter>,
+  )
+}
+
+describe('skills addresses as the app wires them', () => {
+  for (const path of ['/skills', '/sp/sub/skills', '/s/sp/sub/skills']) {
+    it(`${path} never shows the skills screen on a phone`, async () => {
+      setViewport(true)
+      renderSkillsAt(path)
+      expect(await screen.findByRole('heading', { name: 'Skills live with chat' })).toBeInTheDocument()
+      expect(screen.queryByText('desktop skills')).toBeNull()
+    })
+
+    it(`${path} shows Skills on desktop`, async () => {
+      setViewport(false)
+      renderSkillsAt(path)
+      expect(await screen.findByText('desktop skills')).toBeInTheDocument()
+    })
+  }
 })

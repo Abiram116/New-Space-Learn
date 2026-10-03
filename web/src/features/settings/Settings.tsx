@@ -27,7 +27,7 @@
  * was a second path to the same place, not a setting.
  */
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deleteAccount,
@@ -48,7 +48,6 @@ import { Modal, ModalFooter } from '../../components/ui/Modal'
 import { BottomSheet } from '../../components/ui/BottomSheet'
 import { useImmersive } from '../../components/layout/immersive'
 import { PageSpinner } from '../../components/ui/PageSpinner'
-import { SectionLabel } from '../../components/ui/Bits'
 import { TrustSettingsList } from '../trust/TrustSettingsList'
 import { trustOverlayHref } from '../trust/TrustLayer'
 import { FeedbackTab } from '../feedback/FeedbackTab'
@@ -56,22 +55,22 @@ import { FeedbackTab } from '../feedback/FeedbackTab'
 // file. Nothing in them knows what a preference is — they are the generic
 // "row in a grouped list" pattern — so they live in `components/ui/` now and
 // this file is ~150 lines shorter for it.
-import { RowWithNumber, RowWithToggle } from '../../components/ui/Row'
+import { Rise } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { writeCache } from '../../lib/asyncCache'
-import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
 import { NAME_MAX } from '../onboarding/steps'
 import { LearningPanel } from './LearningPanel'
 import { Shortcuts } from './Shortcuts'
+import { Pill, SaveTell, SettingRow, SettingsCard, SpringSwitch, StreakDots, GoalRing, Stepper } from './parts'
+import { PANEL_ID, SettingsHeader, SettingsNav, TabSwap } from './SettingsChrome'
 import { setBotsEnabled, useBotsEnabled } from '../../lib/botPreference'
 
 const SECTIONS = ['Learning', 'Study', 'Account', 'Feedback', 'About & legal'] as const
 type Section = (typeof SECTIONS)[number]
-const PANEL_ID = 'settings-panel'
-const tabId = (name: string) => `settings-tab-${name.replace(/\W+/g, '-').toLowerCase()}`
+const GOAL_PRESETS = [10, 20, 40, 80]
 
 /** Free-text fields debounce their PATCH instead of firing one per
  *  keystroke — typing "Amazon OA next week" used to be six or seven network
@@ -89,6 +88,11 @@ export function Settings() {
   const phone = useIsMobile()
   const botsOn = useBotsEnabled()
   const [active, setActive] = useState<Section>('Learning')
+  const [dir, setDir] = useState(0)
+  const select = (next: Section) => {
+    setDir(Math.sign(SECTIONS.indexOf(next) - SECTIONS.indexOf(active)))
+    setActive(next)
+  }
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [student, setStudent] = useState<StudentModel | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -330,12 +334,16 @@ export function Settings() {
   const panel = (active: Section) => (
     <>
       {error && (
-        <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
+        <div className="col-span-full rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
           {error}
         </div>
       )}
 
-      {!prefs && !error && <PageSpinner label="Loading preferences…" />}
+      {!prefs && !error && (
+        <div className="col-span-full">
+          <PageSpinner label="Loading preferences…" />
+        </div>
+      )}
 
       {student && active === 'Learning' && (
         <LearningPanel
@@ -352,190 +360,238 @@ export function Settings() {
 
       {prefs && active === 'Study' && (
         <>
-          <div className="rounded-xl border border-line bg-surface overflow-hidden">
-            <RowWithNumber
-              label="Daily goal"
-              hint="Cards to review each day."
-              suffix="cards"
-              value={prefs.daily_goal}
-              onChange={(n) => patch('daily_goal', { daily_goal: n })}
-              saving={savingKey === 'daily_goal'}
-              saved={savedKey === 'daily_goal'}
-              min={1}
-              max={500}
-            />
-            <RowWithToggle
-              label="Streak freeze"
-              hint="Miss one day without breaking your streak."
-              checked={prefs.streak_freeze_enabled}
-              onChange={(v) =>
-                patch('streak_freeze_enabled', { streak_freeze_enabled: v })
-              }
-              saved={savedKey === 'streak_freeze_enabled'}
-              last
-            />
-          </div>
+          <Rise>
+            <SettingsCard
+              icon="target"
+              title="Daily goal"
+              hint="How many cards you aim to review each day."
+              tell={<SaveTell saving={savingKey === 'daily_goal'} saved={savedKey === 'daily_goal'} />}
+            >
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
+                <GoalRing goal={prefs.daily_goal} />
+                <div className="flex min-w-0 flex-1 flex-col gap-3">
+                  <Stepper
+                    value={prefs.daily_goal}
+                    min={1}
+                    max={500}
+                    step={5}
+                    unit="cards"
+                    label="Cards per day"
+                    onCommit={(n) => patch('daily_goal', { daily_goal: n })}
+                  />
+                  <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Quick goals">
+                    {GOAL_PRESETS.map((n) => (
+                      <Pill key={n} on={prefs.daily_goal === n} onClick={() => patch('daily_goal', { daily_goal: n })}>
+                        {n}
+                      </Pill>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </SettingsCard>
+          </Rise>
 
-          <div className="rounded-xl border border-line bg-surface overflow-hidden">
-            <RowWithToggle
-              label="Answer only from my docs"
-              hint="If your documents don’t cover it, the tutor says so instead of guessing."
-              checked={prefs.answer_only_from_docs}
-              onChange={(v) =>
-                patch('answer_only_from_docs', { answer_only_from_docs: v })
-              }
-              saved={savedKey === 'answer_only_from_docs'}
-            />
-            <RowWithToggle
-              label="Always show citations"
-              hint="Marks which part of your documents each answer came from."
-              checked={prefs.always_show_citations}
-              onChange={(v) =>
-                patch('always_show_citations', { always_show_citations: v })
-              }
-              saved={savedKey === 'always_show_citations'}
-              last={phone}
-            />
-            {!phone && (
-            <RowWithToggle
-              label="Show the agent bots"
-              hint="Nova and the crew, while the AI works. Saved on this device."
-              checked={botsOn}
-              onChange={setBotsEnabled}
-              last
-            />
-            )}
-          </div>
+          <Rise delay={50}>
+            <SettingsCard icon="flame" title="Streak" hint="Keep it going, even when life gets in the way.">
+              <div className="mb-3 flex items-center gap-4 rounded-xl bg-well px-4 py-4">
+                <div className="leading-none">
+                  <span className="font-display text-[40px] font-semibold tabular-nums text-ink">{student?.streak_days ?? 0}</span>
+                  <span className="ml-1.5 text-[13px] text-muted">{student?.streak_days === 1 ? 'day' : 'days'}</span>
+                </div>
+                <div className="ml-auto">
+                  <StreakDots days={student?.streak_days ?? 0} freeze={prefs.streak_freeze_enabled} />
+                </div>
+              </div>
+              <SettingRow
+                label="Streak freeze"
+                hint="Miss one day without breaking your streak."
+                saved={savedKey === 'streak_freeze_enabled'}
+                last
+              >
+                <SpringSwitch
+                  label="Streak freeze"
+                  checked={prefs.streak_freeze_enabled}
+                  onChange={(v) => patch('streak_freeze_enabled', { streak_freeze_enabled: v })}
+                />
+              </SettingRow>
+            </SettingsCard>
+          </Rise>
+
+          <Rise delay={100}>
+            <SettingsCard icon="doc" title="Your documents" hint="How answers lean on what you have uploaded.">
+              <SettingRow
+                label="Answer only from my docs"
+                hint="If your documents don’t cover it, the tutor says so instead of guessing."
+                saved={savedKey === 'answer_only_from_docs'}
+              >
+                <SpringSwitch
+                  label="Answer only from my docs"
+                  checked={prefs.answer_only_from_docs}
+                  onChange={(v) => patch('answer_only_from_docs', { answer_only_from_docs: v })}
+                />
+              </SettingRow>
+              <SettingRow
+                label="Always show citations"
+                hint="Marks which part of your documents each answer came from."
+                saved={savedKey === 'always_show_citations'}
+                last={phone}
+              >
+                <SpringSwitch
+                  label="Always show citations"
+                  checked={prefs.always_show_citations}
+                  onChange={(v) => patch('always_show_citations', { always_show_citations: v })}
+                />
+              </SettingRow>
+              {!phone && (
+                <SettingRow label="Show the agent bots" hint="Nova and the crew, while the AI works. Saved on this device." last>
+                  <SpringSwitch label="Show the agent bots" checked={botsOn} onChange={setBotsEnabled} />
+                </SettingRow>
+              )}
+            </SettingsCard>
+          </Rise>
           {phone ? (
-            <p className="flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
+            <p className="col-span-full flex items-start gap-2 px-1 text-[13.5px] leading-relaxed text-muted">
               <Icon name="skill" size={15} className="mt-0.5 shrink-0 text-mint" />
               Skills shape the chat tutor and are managed on desktop.
             </p>
           ) : (
-            <Shortcuts />
+            <div className="col-span-full">
+              <Shortcuts />
+            </div>
           )}
         </>
       )}
 
       {active === 'Account' && (
         <>
-          <form
-            className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void saveName()
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span aria-hidden className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[13px] bg-coral-soft text-[13px] font-semibold text-coral-deep">
-                {initials}
-              </span>
-              <div className="min-w-0 flex-1">
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={NAME_MAX}
-                  placeholder="Your name"
-                  autoComplete="name"
-                  aria-label="Your name"
-                />
+          <Rise className="col-span-full">
+            <SettingsCard tone="hero" icon="user" title="Profile" hint={email}>
+              <form
+                className="flex items-center gap-3"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveName()
+                }}
+              >
+                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] bg-brand-soft text-[13px] font-semibold text-brand-deep">
+                  {initials}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={NAME_MAX}
+                    placeholder="Your name"
+                    autoComplete="name"
+                    aria-label="Your name"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  disabled={nameBusy || !name.trim() || name.trim() === savedName}
+                  className="min-w-20 shrink-0"
+                >
+                  {nameBusy ? 'Saving…' : 'Save'}
+                </Button>
+              </form>
+            </SettingsCard>
+          </Rise>
+
+          <Rise delay={50}>
+            {hasPassword ? (
+              <SettingsCard icon="lock" title="Change password" hint="At least 8 characters.">
+                <form
+                  className="flex flex-col gap-3"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    void changePassword()
+                  }}
+                >
+                  <Input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New password"
+                    autoComplete="new-password"
+                    aria-label="New password"
+                  />
+                  {/* Same label while busy so the button does not change width. */}
+                  <Button
+                    type="submit"
+                    disabled={passwordBusy || newPassword.length === 0}
+                    className="w-full min-w-40 sm:w-auto sm:self-start"
+                  >
+                    {passwordBusy ? 'Updating…' : 'Update password'}
+                  </Button>
+                </form>
+              </SettingsCard>
+            ) : (
+              <SettingsCard icon="lock" title="Password">
+                <p className="text-[14px] text-muted">You sign in with Google, so there is no password to change here.</p>
+              </SettingsCard>
+            )}
+          </Rise>
+
+          <Rise delay={100}>
+            <SettingsCard icon="settings" title="Sessions">
+              <div className="flex flex-col gap-3 text-[14px]">
+                <p className="text-muted">
+                  Signing out keeps everything in your account.{' '}
+                  <Link to={trustOverlayHref(location, 'privacy')} className="text-brand-deep hover:underline">
+                    What we keep and why
+                  </Link>
+                </p>
+                {/* Signing out is reversible, so both are ordinary secondary
+                    buttons — coral is reserved for things that cannot be undone. */}
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto">
+                    Sign out
+                  </Button>
+                  <Button
+                    onClick={() => void signOutOthers()}
+                    variant="secondary"
+                    disabled={othersBusy}
+                    title="Other devices are asked to sign in again within the hour"
+                    className="w-full min-w-52 sm:w-auto"
+                  >
+                    {othersBusy ? 'Signing out…' : 'Sign out of other devices'}
+                  </Button>
+                </div>
               </div>
-              <Button
-                type="submit"
-                variant="secondary"
-                disabled={nameBusy || !name.trim() || name.trim() === savedName}
-                className="min-w-20 shrink-0"
-              >
-                {nameBusy ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-            <div className="truncate text-[13px] text-muted">{email}</div>
-          </form>
+            </SettingsCard>
+          </Rise>
 
-          {hasPassword ? (
-          <form
-            className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void changePassword()
-            }}
-          >
-            <div className="text-[15px] font-semibold text-ink">Change password</div>
-            <Input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="New password"
-              autoComplete="new-password"
-              aria-label="New password"
-              hint="At least 8 characters."
-            />
-            {/* Directly under the field it submits. Same label while busy
-                so the button does not change width. */}
-            <Button
-              type="submit"
-              disabled={passwordBusy || newPassword.length === 0}
-              className="w-full min-w-40 sm:w-auto sm:self-start"
-            >
-              {passwordBusy ? 'Updating…' : 'Update password'}
-            </Button>
-          </form>
-          ) : (
-            <p className="rounded-xl border border-line bg-surface p-4 text-[14px] text-muted">
-              You sign in with Google, so there is no password to change here.
-            </p>
-          )}
-
-          <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4 text-[14px]">
-            <p className="text-muted">
-              Signing out keeps everything in your account.{' '}
-              <Link to={trustOverlayHref(location, 'privacy')} className="text-brand-deep hover:underline">
-                What we keep and why
-              </Link>
-            </p>
-            {/* Signing out is reversible, so both are ordinary secondary
-                buttons — coral is reserved for things that cannot be undone. */}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button onClick={doSignOut} variant="secondary" className="w-full sm:w-auto">
-                Sign out
-              </Button>
-              <Button
-                onClick={() => void signOutOthers()}
-                variant="secondary"
-                disabled={othersBusy}
-                title="Other devices are asked to sign in again within the hour"
-                className="w-full min-w-52 sm:w-auto"
-              >
-                {othersBusy ? 'Signing out…' : 'Sign out of other devices'}
-              </Button>
-            </div>
-          </div>
-
-          <SectionLabel className="mt-6">DANGER ZONE</SectionLabel>
-          <div className="flex flex-col gap-3 rounded-xl border border-coral/30 bg-surface p-4 text-[14px]">
-            <p className="text-muted">
-              Permanently delete your account and everything in it — every
-              subject, document, chat, note, deck, and quiz. This can't be
-              undone.
-            </p>
-            <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:self-start">
-              Delete account
-            </Button>
-          </div>
+          <Rise delay={150} className="col-span-full mt-4 border-t border-dashed border-coral/30 pt-7">
+            <SettingsCard icon="alert" title="Danger zone" tone="danger">
+              <div className="flex flex-col gap-4 text-[14px] sm:flex-row sm:items-center sm:justify-between">
+                <p className="max-w-xl text-muted">
+                  Permanently delete your account and everything in it — every
+                  subject, document, chat, note, deck, and quiz. This can't be
+                  undone.
+                </p>
+                <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:shrink-0">
+                  Delete account
+                </Button>
+              </div>
+            </SettingsCard>
+          </Rise>
         </>
       )}
 
       {active === 'Feedback' && (
         <>
-          {!phone && <SectionLabel>FEEDBACK</SectionLabel>}
-          <FeedbackTab />
+          <div className="col-span-full max-w-4xl">
+            <FeedbackTab />
+          </div>
         </>
       )}
 
       {active === 'About & legal' && (
         <>
-          {!phone && <SectionLabel>ABOUT &amp; LEGAL</SectionLabel>}
-          <TrustSettingsList />
+          <div className="col-span-full max-w-4xl">
+            <TrustSettingsList />
+          </div>
         </>
       )}
     </>
@@ -588,6 +644,15 @@ export function Settings() {
     </Modal>
   )
 
+  const summary: Record<Section, string> = {
+    Learning: student?.session_length_minutes ? `How you’re taught · ${student.session_length_minutes}-minute sessions` : 'How you’re taught',
+    Study: prefs ? `${prefs.daily_goal} cards a day` : '',
+    Account: 'Name, password, sign out',
+    Feedback: 'Tell us what to fix or build',
+    'About & legal': 'Policies, contact us',
+  }
+  const navItems = SECTIONS.map((name) => ({ name, icon: SECTION_ICON[name], summary: summary[name] }))
+
   if (phone) {
     return (
       <PhoneSettings
@@ -595,13 +660,7 @@ export function Settings() {
         displayName={displayName}
         initials={initials}
         email={email}
-        summary={{
-          Learning: student?.session_length_minutes ? `How you’re taught · ${student.session_length_minutes}-minute sessions` : 'How you’re taught',
-          Study: prefs ? `${prefs.daily_goal} cards a day` : '',
-          Account: 'Name, password, sign out',
-          Feedback: 'Tell us what to fix or build',
-          'About & legal': 'Policies, contact us',
-        }}
+        summary={summary}
         deleteDialog={
           /* Phones confirm in a sheet from the bottom edge, where the thumb
              already is; the destructive button sits last, full width, apart
@@ -658,155 +717,28 @@ export function Settings() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-      {/* Desktop: a left rail. It appears at `lg`, not `sm` — beside the app's
-          own 264px sidebar a tablet has no room for a third column. */}
-      <nav
-        aria-label="Settings sections"
-        className="hidden w-[208px] shrink-0 flex-col gap-1 border-r border-line bg-surface p-3 lg:flex"
-      >
-        <h1 className="mb-2 px-2.5 pt-1 font-display text-[18px] font-semibold text-ink">Settings</h1>
-        {SECTIONS.map((name) => (
-          <button
-            key={name}
-            type="button"
-            onClick={() => setActive(name)}
-            aria-current={active === name ? 'page' : undefined}
-            className={cn(
-              'min-h-10 rounded-[10px] px-3 py-2 text-left text-[14px] transition-colors cursor-pointer',
-              active === name
-                ? 'bg-brand-soft font-bold text-brand-deep'
-                : 'text-ink-3 hover:bg-line-soft hover:text-ink',
-            )}
-          >
-            {name}
-          </button>
-        ))}
-      </nav>
-
-      {/* Below `lg`: the same sections as a pinned, scrollable tab strip. It
-          sits outside the scrolling pane, so it stays put while the page moves. */}
-      <div className="shrink-0 border-b border-line bg-surface lg:hidden">
-        <h1 className="px-4 pt-3 font-display text-[18px] font-semibold text-ink sm:px-6">Settings</h1>
-        <SectionTabs active={active} onSelect={setActive} />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div
-          role="tabpanel"
-          id={PANEL_ID}
-          aria-label={active}
-          // Beside the rail, not floating in the middle: the column starts where
-          // the rail ends and stops at a width a line of text is still readable at.
-          className="flex w-full flex-col gap-4 px-4 py-6 max-lg:mx-auto max-lg:max-w-3xl sm:px-7 lg:max-w-[1040px] lg:px-10"
-        >
-          {panel(active)}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="w-full max-w-[1920px] px-4 pb-16 pt-6 sm:px-7 lg:px-8 lg:pt-9">
+        <SettingsHeader
+          name={displayName}
+          initials={initials}
+          email={email}
+          streak={student ? student.streak_days : null}
+          goal={prefs ? prefs.daily_goal : null}
+        />
+        <div className="mt-6 flex flex-col gap-4 lg:mt-9 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-8">
+          {/* Pinned: the chip strip below `lg`, the rail beside the content above it. */}
+          <div className="sticky top-0 z-20 bg-canvas max-lg:-mx-4 sm:max-lg:-mx-7 lg:top-6 lg:bg-transparent">
+            <SettingsNav items={navItems} active={active} onSelect={select} />
+          </div>
+          <div role="tabpanel" id={PANEL_ID} aria-label={active} className="min-w-0">
+            <TabSwap id={active} dir={dir}>
+              {panel(active)}
+            </TabSwap>
+          </div>
         </div>
       </div>
-
       {deleteDialog}
-    </div>
-  )
-}
-
-/**
- * The phone/tablet section switcher.
- *
- * A real tablist: one tab in the tab order at a time, arrow keys move between
- * them, and the active chip is scrolled into view so it is never hiding off the
- * edge. Edge fades appear only on the side that still has more chips, which is
- * what tells a thumb "swipe me" — a strip that just stops at the screen edge
- * reads as five items of which the rest do not exist.
- */
-function SectionTabs({ active, onSelect }: { active: Section; onSelect: (s: Section) => void }) {
-  const stripRef = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ start: false, end: true })
-
-  const measure = useCallback(() => {
-    const el = stripRef.current
-    if (!el) return
-    setEdges({
-      start: el.scrollLeft > 4,
-      end: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
-    })
-  }, [])
-
-  // Keep the current chip on screen whenever the section changes, however it
-  // changed (tap, arrow key, or the initial render).
-  useEffect(() => {
-    const chip = stripRef.current?.querySelector<HTMLElement>('[aria-selected="true"]')
-    chip?.scrollIntoView?.({ inline: 'center', block: 'nearest', behavior: 'smooth' })
-    measure()
-  }, [active, measure])
-
-  useEffect(() => {
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [measure])
-
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const i = SECTIONS.indexOf(active)
-    let next = i
-    if (e.key === 'ArrowRight') next = (i + 1) % SECTIONS.length
-    else if (e.key === 'ArrowLeft') next = (i - 1 + SECTIONS.length) % SECTIONS.length
-    else if (e.key === 'Home') next = 0
-    else if (e.key === 'End') next = SECTIONS.length - 1
-    else return
-    e.preventDefault()
-    onSelect(SECTIONS[next])
-    stripRef.current
-      ?.querySelector<HTMLElement>(`#${tabId(SECTIONS[next])}`)
-      ?.focus()
-  }
-
-  return (
-    <div className="relative">
-      <div
-        ref={stripRef}
-        role="tablist"
-        aria-label="Settings sections"
-        onScroll={measure}
-        onKeyDown={onKeyDown}
-        className="flex snap-x snap-proximity gap-2 overflow-x-auto scroll-px-4 px-4 py-2.5 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden"
-      >
-        {SECTIONS.map((name) => {
-          const selected = active === name
-          return (
-            <button
-              key={name}
-              id={tabId(name)}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              aria-controls={PANEL_ID}
-              tabIndex={selected ? 0 : -1}
-              onClick={() => onSelect(name)}
-              className={cn(
-                'min-h-11 shrink-0 snap-start whitespace-nowrap rounded-full border px-4 text-[14px] transition-colors cursor-pointer',
-                selected
-                  ? 'border-brand/40 bg-brand-soft font-bold text-brand-deep'
-                  : 'border-line bg-raised font-medium text-ink-3 hover:border-line-dash hover:text-ink',
-              )}
-            >
-              {name}
-            </button>
-          )
-        })}
-      </div>
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface to-transparent t-move duration-150',
-          edges.start ? 'opacity-100' : 'opacity-0',
-        )}
-      />
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-surface to-transparent t-move duration-150',
-          edges.end ? 'opacity-100' : 'opacity-0',
-        )}
-      />
     </div>
   )
 }
@@ -932,7 +864,7 @@ function PhoneSettings({
                   className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left active:bg-line-soft"
                 >
                   <span
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-raised text-ink-3"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] bg-brand-soft text-brand-deep"
                   >
                     <Icon name={SECTION_ICON[name]} size={15} />
                   </span>

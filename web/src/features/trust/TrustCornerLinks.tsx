@@ -6,7 +6,7 @@ import { useTrustLinks } from './useTrustLinks'
 /** Two short lines, like the licence credit opposite: the everyday pages, then the formal ones. */
 const ROWS: TrustSlug[][] = [
   ['about', 'contact'],
-  ['privacy', 'terms', 'feedback'],
+  ['privacy', 'terms'],
 ]
 
 /**

@@ -256,3 +256,50 @@ def test_every_authenticated_route_requires_a_user():
         if "get_current_user" not in source and "require_admin" not in source:
             public.append(f"{path} ({route.endpoint.__name__})")
     assert not public, "These routes don't require authentication:\n  " + "\n  ".join(public)
+
+
+def _depends_on(dependant, call) -> bool:
+    return any(d.call is call or _depends_on(d, call) for d in dependant.dependencies)
+
+
+def _admin_routes() -> list[tuple[str, APIRoute]]:
+    return [
+        (path, route)
+        for path, route in _api_routes(create_app().routes)
+        if "/admin/" in path and not path.endswith("/admin/unlock")
+    ]
+
+
+def test_every_admin_route_depends_on_the_admin_gate():
+    """By the real dependency graph, not a substring: a handler that merely
+    mentions `require_admin` in a comment would pass the text check above."""
+    from app.deps import require_admin
+
+    routes = _admin_routes()
+    assert len(routes) >= 7, f"admin route discovery found only {len(routes)}"
+    ungated = [f"{sorted(r.methods)} {p}" for p, r in routes if not _depends_on(r.dependant, require_admin)]
+    assert not ungated, "Admin routes without require_admin:\n  " + "\n  ".join(ungated)
+
+
+def test_every_admin_route_refuses_a_caller_without_the_token(monkeypatch):
+    """Called for real, with the password configured: no token, a forged token
+    and a student's bearer token are all a 403 before any handler work runs."""
+    from fastapi.testclient import TestClient
+
+    from app.config import settings
+    from app.services import admin_gate, supabase
+
+    async def boom(*_a, **_k):
+        raise AssertionError("an admin handler ran without the token")
+
+    for name in ("db_select", "db_insert", "db_update", "db_delete"):
+        monkeypatch.setattr(supabase, name, boom)
+    monkeypatch.setattr(settings, "admin_password_hash", admin_gate.hash_password("correct horse battery"))
+    client = TestClient(create_app())
+    for path, route in _admin_routes():
+        url = re.sub(r"\{\w+\}", "00000000-0000-0000-0000-000000000000", path)
+        for method in route.methods - {"HEAD", "OPTIONS"}:
+            body = {} if method in ("POST", "PATCH", "PUT") else None
+            for headers in ({}, {"X-Admin-Token": "9999999999.forged"}, {"Authorization": "Bearer student"}):
+                r = client.request(method, url, json=body, headers=headers)
+                assert r.status_code == 403, f"{method} {url} with {headers} → {r.status_code}"

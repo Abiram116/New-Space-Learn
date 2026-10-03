@@ -171,12 +171,12 @@ export function PhoneLanding() {
   )
 }
 
-/** The five trust pages; each slides in as a card over this page (see TrustLayer). */
+/** The trust pages (Feedback lives inside the app); each slides in as a card over this page (see TrustLayer). */
 function PhoneTrustLinks() {
   const { linkProps } = useTrustLinks()
   return (
     <nav aria-label="About Space Learn" className="mt-2 flex flex-wrap justify-center gap-x-1">
-      {TRUST_SLUGS.map((slug) => (
+      {TRUST_SLUGS.filter((slug) => slug !== 'feedback').map((slug) => (
         <Link
           key={slug}
           {...linkProps(slug)}

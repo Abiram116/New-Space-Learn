@@ -93,3 +93,36 @@ def test_any_write_through_the_api_clears_that_users_snapshot(monkeypatch):
     client.delete("/api/v1/notes/00000000-0000-0000-0000-000000000000", headers=auth)
     assert cleared == [OWNER]  # a write clears it, whatever it then does
     assert get_current_user is not None
+
+
+async def test_a_snapshot_built_inside_a_write_request_is_not_kept(builds):
+    """A chat turn or quiz generation reads the snapshot and THEN writes. What
+    it read must not be served to the next read as if it were current."""
+
+    async def write_request():
+        student_model.begin_write("u1")
+        return await student_model.snapshot("u1")
+
+    # A fresh context, like a separate request.
+    await asyncio.ensure_future(write_request())
+    await student_model.snapshot("u1")
+    assert builds == ["u1", "u1"]
+    # ...and the read after it is kept as usual.
+    await student_model.snapshot("u1")
+    assert builds == ["u1", "u1"]
+
+
+def test_a_write_request_does_not_leave_the_cache_disabled_for_later_reads(builds):
+    async def write_then_reads():
+        await asyncio.ensure_future(_as_write("u1"))
+        a = await student_model.snapshot("u1")
+        b = await student_model.snapshot("u1")
+        return a, b
+
+    a, b = asyncio.run(write_then_reads())
+    assert a is b
+
+
+async def _as_write(user_id: str):
+    student_model.begin_write(user_id)
+    return await student_model.snapshot(user_id)
