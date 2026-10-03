@@ -100,7 +100,11 @@ async def test_a_scanned_pdf_fails_with_words_a_student_can_act_on(store, monkey
     async def scanned(data, mime):
         return ingest_extract.Document([], scanned=True)
 
+    async def unreadable(data, *, user_id):
+        return [], 0, 3
+
     monkeypatch.setattr(ingest, "read_document", scanned)
+    monkeypatch.setattr(ingest.ocr, "transcribe", unreadable)
     ingest.schedule(DOC, b"%PDF")
     await _finish()
     last = store.doc_patches[-1]
@@ -168,3 +172,22 @@ async def test_cancel_stops_the_job_and_leaves_it_resumable(store):
     assert not ingest.is_running("doc-1")
     # Never marked failed or ready — a restart would resume it.
     assert all(p.get("status") not in {"failed", "ready"} for p in store.doc_patches)
+
+
+async def test_a_scan_is_read_page_by_page_and_says_when_it_stopped_at_the_cap(store, monkeypatch):
+    from app.services.chunking import Line
+
+    async def scanned(data, mime):
+        return ingest_extract.Document([], scanned=True)
+
+    async def transcribe(data, *, user_id):
+        assert user_id == "user-1"
+        return [Line("Photosynthesis", page=1, level=1), Line("Plants make sugar from light. " * 20, page=1)], 12, 30
+
+    monkeypatch.setattr(ingest, "read_document", scanned)
+    monkeypatch.setattr(ingest.ocr, "transcribe", transcribe)
+    ingest.schedule(DOC, b"%PDF")
+    await _finish()
+    done = store.doc_patches[-1]
+    assert done["status"] == "ready" and done["error"] == "This is a scan, so only its first 12 of 30 pages were read."
+    assert store.chunks and store.chunks[0]["page_start"] == 1 and store.chunks[0]["section"] == "Photosynthesis"

@@ -33,9 +33,9 @@ import logging
 from datetime import UTC, datetime
 
 from ..errors import UpstreamUnavailable
-from . import chunking, supabase
+from . import chunking, ocr, supabase
 from .embeddings import embed_texts
-from .extract import read_document
+from .extract import Document, UnreadablePdf, read_document
 
 log = logging.getLogger("space_learn.ingest")
 
@@ -121,6 +121,12 @@ async def _run(doc: dict, data: bytes | None, *, fresh: bool) -> None:
             await _ingest(doc, data, fresh=fresh)
     except asyncio.CancelledError:
         raise  # shutdown: leave it at `processing` for resume_pending()
+    except UnreadablePdf as e:
+        log.warning("pdf %s could not be read safely: %s", doc_id, e)
+        await _set(
+            doc_id,
+            {"status": "failed", "error": "We couldn't read this PDF. It may be damaged; try saving it again and re-uploading."},
+        )
     except _NoText as e:
         await _set(doc_id, {"status": "failed", "error": str(e) or "No readable text found."})
     except UpstreamUnavailable as e:
@@ -146,11 +152,18 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
         data = bytes(buf)
 
     document = await read_document(data, doc.get("mime_type") or "")
+    note: str | None = None
     if document.scanned:
-        raise _NoText(
-            "This PDF is a scan (pictures of pages), so there is no text to read. "
-            "Upload a text PDF, or photos of the pages as images."
-        )
+        # Pictures of pages: the vision model reads them, up to a page cap.
+        lines, read, total = await ocr.transcribe(data, user_id=doc["user_id"])
+        if not any(line.text.strip() for line in lines):
+            raise _NoText(
+                "This PDF is a scan (pictures of pages) and its pages couldn't be read. "
+                "Upload a text PDF, or clearer photos of the pages as images."
+            )
+        document = Document(lines)
+        if read < total:
+            note = f"This is a scan, so only its first {read} of {total} pages were read."
     if document.empty:
         raise _NoText
     # Off the event loop with the parsing: cheap, but not free on a tenth of a CPU.
@@ -210,7 +223,7 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
         {
             "status": "ready",
             # Shown under the document's name; not a failure.
-            "error": TRUNCATED_NOTE if truncated else None,
+            "error": TRUNCATED_NOTE if truncated else note,
             "ready_at": datetime.now(UTC).isoformat(),
             "index_version": chunking.INDEX_VERSION,
         },

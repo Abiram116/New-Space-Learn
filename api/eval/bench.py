@@ -99,6 +99,14 @@ def run(name: str, n_answers: int) -> dict:
         "retrieval": metrics.report(rows),
         "rows": rows,
     }
+    saved = RESULTS / f"{name}.json"
+    if not n_answers and saved.exists():
+        # A retrieval-only re-run keeps the graded answers of the last full
+        # run rather than throwing them away.
+        before = json.loads(saved.read_text())
+        for key in ("answers", "answer_rows"):
+            if key in before:
+                out[key] = before[key]
     if n_answers:
         by_id = {q.id: (q, r) for q, r in zip(qs, results, strict=True)}
         chosen = answers.sample(qs, n_answers)

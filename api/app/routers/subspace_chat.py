@@ -36,6 +36,7 @@ from ..services import (
     retrieval,
     student_model,
     supabase,
+    usage,
 )
 from ..services.chat_context import recent_history
 from ..services.llm import get_llm
@@ -188,12 +189,13 @@ async def send_chat(
             # is smaller than the 70B used for text, so attaching a screenshot
             # buys sight at the cost of reasoning. Routing every turn through it
             # "for consistency" would quietly make every text answer worse.
-            async for delta in get_llm().stream_chat(
-                messages,
-                model=settings.groq_model_vision if images else None,
-            ):
-                buffer.append(delta)
-                yield _sse("token", {"delta": delta})
+            with usage.task("chat"):
+                async for delta in get_llm().stream_chat(
+                    messages,
+                    model=settings.groq_model_vision if images else None,
+                ):
+                    buffer.append(delta)
+                    yield _sse("token", {"delta": delta})
             assistant_text = "".join(buffer).strip() or "(no reply)"
             # The model was told to cite only the sources it was given, but an
             # instruction isn't a guarantee. A marker pointing at a source that
@@ -208,6 +210,12 @@ async def send_chat(
                     dropped,
                     len(citations_meta),
                 )
+            # A marker pointing at a source that doesn't contain its sentence,
+            # when another source plainly does, is moved there. Like the line
+            # above, the client reconciles to the stored `content` on "done".
+            assistant_text, moved = rag.repoint_citations(assistant_text, [r.content for r in retrieved])
+            if moved:
+                log.info("moved %d citation marker(s) to the source that supports them", moved)
             # The retrieval audit trail. `chat_messages.citations` is the
             # user-facing record (doc, locator, snippet, kept forever on the
             # row) — this is the operator-facing one: which chunks the vector

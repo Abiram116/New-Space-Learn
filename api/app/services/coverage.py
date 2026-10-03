@@ -19,6 +19,7 @@ step with them.
 
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -144,23 +145,29 @@ async def plan(
         )
         return _number([(c.id, c.document_name, c.locator, c.content) for c in found.chunks])
 
-    chosen: list[str] = []
-    for concept in list(weak_concepts)[:WEAK_CONCEPTS]:
-        found = await retrieval.retrieve(
-            concept,
-            subspace_id=subspace_id,
-            linked_subspace_ids=linked_subspace_ids,
-            config=replace(retrieval.GENERATION, max_chunks=1),
-        )
-        chosen += [c.id for c in found.chunks if c.id not in chosen]
-
-    rows = await supabase.db_select(
-        "document_chunks",
-        filters={"subspace_id": f"in.({','.join(subspaces)})"},
-        select="id,document_id,chunk_index,section",
-        order="document_id.asc,chunk_index.asc",
-        limit=MAX_CHUNK_ROWS,
+    # The weak-concept searches and the topic's chunk list are independent:
+    # one round trip's wait for all of them, not one each.
+    *weak_found, rows = await asyncio.gather(
+        *(
+            retrieval.retrieve(
+                concept,
+                subspace_id=subspace_id,
+                linked_subspace_ids=linked_subspace_ids,
+                config=replace(retrieval.GENERATION, max_chunks=1),
+            )
+            for concept in list(weak_concepts)[:WEAK_CONCEPTS]
+        ),
+        supabase.db_select(
+            "document_chunks",
+            filters={"subspace_id": f"in.({','.join(subspaces)})"},
+            select="id,document_id,chunk_index,section",
+            order="document_id.asc,chunk_index.asc",
+            limit=MAX_CHUNK_ROWS,
+        ),
     )
+    chosen: list[str] = []
+    for found in weak_found:
+        chosen += [c.id for c in found.chunks if c.id not in chosen]
     pool = [
         _Row(str(r["id"]), str(r["document_id"]), int(r["chunk_index"]), r.get("section"))
         for r in rows

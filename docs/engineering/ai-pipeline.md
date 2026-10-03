@@ -77,9 +77,13 @@ stage — see §11 for why.
 - **Markdown and text:** `#` headings, numbered titles ("2.1 Learning rate")
   and short lines in capitals. **CSV:** a line per row. **Images:** one
   vision-model call transcribes and describes them.
-- **Scanned PDFs** (pages but almost no text) fail with a message saying so
-  and what to upload instead. OCR is still not built: it would be one vision
-  call per page.
+- **Scanned PDFs** (pages but almost no text) are read by the vision model,
+  page by page (`services/ocr.py`): each page's picture is taken straight out
+  of the PDF, shrunk to 1,280 px and sent as JPEG. Only the first 12 pages are
+  read, and the document says so when there were more. Each page costs one
+  unit of the student's quota. The vision model allows ~7,000 input tokens a
+  minute on the free tier (~2,000 a page), so a rate-limited page waits and
+  retries instead of being skipped.
 - **Latency:** pure CPU for everything but images, run in a worker thread —
   a few seconds for a lecture-length PDF on the free instance.
 - **Cost:** $0 for PDF/CSV/text; one vision call for an image.
@@ -182,8 +186,14 @@ One pipeline for chat and every generator, in five stages:
 - **Configuration, not code.** Every number above is a default of
   `RetrievalConfig`, set by the benchmark. A test pins the defaults.
 - **Latency:** one local embedding + one SQL call (about 9 ms on the
-  benchmark's 563 chunks, locally) + one lookup for document names; plus one
-  small-model call on follow-ups only.
+  benchmark's 563 chunks, locally; it returns the document names itself, so
+  there is no second round trip); plus one small-model call on follow-ups
+  only.
+- **Storage:** embeddings are `halfvec(384)`, half the bytes of `vector`. The
+  benchmark scores identically at half precision (`v2-6-halfvec`).
+- **Citations** a model attaches to a source that doesn't contain the
+  sentence, while another source plainly does, are moved there in code
+  after the answer (`rag.repoint_citations`). Measured: 2 of 48 citations.
 - **Cost:** $0 for the search; the follow-up rewrite uses the small model's
   own allowance.
 - **Trace.** Each assistant message's `meta.retrieval` records the rewritten
@@ -202,14 +212,16 @@ throwaway local PostgreSQL.
 
 | All 98 answerable questions | First measured | Now |
 |---|---|---|
-| Right chunk ranked first | 48% | 64% |
-| In the top 5 | 80% | 88% |
-| Answer reached the model | 72% | 93% |
+| Right chunk ranked first | 48% | 68% |
+| In the top 5 | 80% | 91% |
+| Answer reached the model | 72% | 94% |
 | …follow-ups | 50% | 83% |
 | …exact terms | 80% | 92% |
 
 Held-out test half, answer reached the model: 78% → 89%. Removing any one
-stage costs between 2 and 9 points (`ABLATION.md`).
+stage costs between 2 and 9 points (`ABLATION.md`). (The "now" column is on
+pypdf 6.19, which reads these PDFs slightly better than 5.9 did; the ablation
+was measured on 5.9.)
 
 **Limits, stated plainly.** The corpus is six Wikipedia articles, not student
 lecture notes. Graded answers are a sample of 36 judged by a second model:
@@ -344,29 +356,35 @@ types generically. Each artifact keeps its own table and its own lifecycle.
 See `docs/engineering/ai-pipeline.md` for the actual single-source-of-truth model this
 codebase uses instead (tagged evidence rows, not a unified object).
 
-### 12. Artifact generation
+### 12. Artifact generation — quizzes and decks
 
-**Code:** `api/app/routers/flashcards.py::generate_cards`,
-`quizzes.py::generate_quiz`, `notes.py` (inline `/ai`)
+**Code:** `services/coverage.py` (what to write from), `services/quiz_agent.py`,
+`services/card_writer.py`, `services/question_checks.py`
 
-- **Purpose:** turn a chat session or a topic into something the student can
-  study from directly.
-- **Input:** a `subspace_id`, real retrieved context (`rag.retrieve`), recent
-  chat history, the Student Model's context — never a bare topic string
-  handed to the model on faith (`docs/plan.md` §2's grounding fix).
-- **Output:** a full deck (N flashcards), a full quiz (N questions, each with
-  `answer_index`, `source`, `subtopic`), or an inline note edit.
-- **Latency:** one LLM call at the `groq_model` (70B) tier — reasoning over
-  real context is treated as genuinely different work from the brief's
-  template-filling, and deliberately not downgraded to the fast tier for
-  cost reasons without checking output quality first (`docs/plan.md`'s
-  explicit note).
-- **Cost:** metered at `cost=2` (double a chat turn) via
-  `consume_llm_quota` — priced in `docs/operations/performance-and-cost.md` §3.
-- **Alternatives rejected:** generating one card per chat reply (the
-  original behavior) was rejected and replaced with whole-deck generation —
-  "an agent asked for cards should produce a deck," per `PRODUCT.md`'s own
-  documented deficiency list.
+- **Plan, in code.** A typed topic gets the hybrid search for it. No topic
+  gets one chunk per section across the topic, least-used sections first,
+  documents taking turns, plus up to two chunks on concepts the student keeps
+  getting wrong. "Least used" is read back from the source chunk each earlier
+  question and card recorded. Five quizzes in a row on the benchmark topics
+  drew on 35 of 78, 35 of 61 and 29 of 29 sections; before, every one used
+  the same few chunks.
+- **Write.** One call, a couple more items than asked for, each naming its
+  numbered source; at most 15 questions per call. The writer is shown recent
+  questions and cards and told not to repeat them.
+- **Check, in code.** Well formed, a real source, not a repeat by wording or,
+  for questions on the same concept, by meaning (local embeddings).
+- **Verify (quizzes only).** One call to the small model for the whole quiz,
+  with the reply forced to be a JSON object: is each answer supported by its
+  source and the only right choice? Asked without forcing, it replied `[]`
+  on some material.
+- **Repair (quizzes only).** If too few survived and under 16 s have passed,
+  one more call for the shortfall.
+- **Cost:** a quiz is two calls, three at worst; a deck is one. Verify and
+  repair are optional and never fail a quiz; unverified questions say so
+  (`QuizQuestion.checked`).
+- **Reply budget.** Every call sends `max_completion_tokens` and, to the GPT-OSS
+  models, `reasoning_effort=low`. At Groq's defaults a quiz spent ~2,300 of a
+  3,072-token reply thinking and was cut off mid-JSON.
 
 ### 13. Learning state
 
@@ -916,3 +934,31 @@ above:
   budget is exceeded. This is not a failure; treating it as one would tell
   a student to re-upload a file that's actually fine and just needs a
   second, cheaper pass.
+
+## Part 5 — What each model call costs
+
+Every call is counted by the task it serves (`services/usage.py`): Groq
+reports a call's prompt, reply, reasoning and cached tokens in the last chunk
+of its stream, and each call site tags itself (`with usage.task("quiz.verify")`,
+or `@usage.tagged(...)` on a function). The tag is read when the call begins,
+so a streamed chat reply is counted under `chat` however late it ends.
+
+| Task | Model | Where |
+|---|---|---|
+| `chat` | large (vision when an image is attached) | `routers/subspace_chat.py` |
+| `chat.resolve` | small | `services/query_resolver.py` |
+| `chat.memory` | small | `services/chat_memory.py` |
+| `notes.write`, `notes.edit` | large | `routers/notes.py` |
+| `brief` | small | `routers/me/brief.py` |
+| `quiz.write`, `quiz.repair` | large | `services/quiz_agent.py` |
+| `quiz.verify` | small | `services/quiz_agent.py` |
+| `cards.write` | large | `services/card_writer.py` |
+| `ocr.page`, `image.read` | vision | `services/ocr.py`, `services/extract.py` |
+
+Per model it also keeps today's total (the free tier allows 200,000 tokens a
+day per model, and that limit only ever shows up as a refusal), the latest
+per-minute headers, and refusals split into "minute" and "day". Counts only,
+in memory; a restart starts again. The admin page's **AI usage** tab reads
+them (`GET /admin/usage`), and each call is also logged on one line
+(`llm usage task=… prompt=… cached=…`) so the history survives in the host's
+logs. Every token-saving change is judged against these numbers.

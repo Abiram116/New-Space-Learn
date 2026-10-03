@@ -59,3 +59,24 @@ def test_a_pdf_with_pages_but_no_text_is_a_scan(monkeypatch):
     monkeypatch.setattr(extract, "read_pdf", lambda data: ([], 12))
     doc = extract._read_sync(b"%PDF", "application/pdf")  # noqa: SLF001
     assert doc.scanned is True and doc.empty
+
+
+def test_a_pdf_is_read_in_its_own_process_and_matches_reading_it_here():
+    from app.services.pdf_layout import read_pdf as in_process
+
+    here, pages = in_process(PDF.read_bytes())
+    there, worker_pages = extract.read_pdf(PDF.read_bytes())
+    assert pages == worker_pages and [(x.text, x.page, x.level) for x in here] == [(x.text, x.page, x.level) for x in there]
+
+
+def test_a_file_that_is_not_a_pdf_fails_cleanly_instead_of_crashing():
+    with pytest.raises(extract.UnreadablePdf):
+        extract.read_pdf(b"%PDF-1.7 this is not really a pdf")
+
+
+def test_a_parse_that_runs_too_long_is_stopped(monkeypatch):
+    from app.services import pdf_worker
+
+    monkeypatch.setattr(pdf_worker, "TIMEOUT_S", 0.001)
+    with pytest.raises(extract.UnreadablePdf, match="too long"):
+        extract.read_pdf(PDF.read_bytes())

@@ -22,7 +22,7 @@ from app.services.retrieval import Candidate, candidate_from_row
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
 #: The migrations that define search. Applied in order, exactly as written.
-SEARCH_MIGRATIONS = ("20261002160000_hybrid_search.sql",)
+SEARCH_MIGRATIONS = ("20261002160000_hybrid_search.sql", "20261003100000_search_returns_names.sql")
 
 _NAMESPACE = uuid.UUID("5a5a5a5a-0000-4000-8000-5a5a5a5a5a5a")
 
@@ -34,6 +34,8 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 create extension if not exists vector;
 drop table if exists public.document_chunks cascade;
+drop table if exists public.documents cascade;
+create table public.documents (id uuid primary key, name text not null);
 create table public.document_chunks (
   id uuid primary key default gen_random_uuid(),
   document_id uuid not null,
@@ -81,7 +83,6 @@ class PgStore:
         self.con.execute(_SCHEMA)
         for name in SEARCH_MIGRATIONS:
             self.con.execute((MIGRATIONS / name).read_text(encoding="utf-8"))
-        self.names: dict[str, str] = {}
 
     def load(self, rows: list[dict]) -> None:
         """`rows`: topic, document, index, content, locator, section, pages, vector."""
@@ -98,7 +99,11 @@ class PgStore:
                     for r in rows
                 ],
             )
-        self.names = {document_id(r["document"]): r["document"] for r in rows}
+        with self.con.cursor() as cur:
+            cur.executemany(
+                "insert into public.documents (id, name) values (%s, %s) on conflict do nothing",
+                sorted({(document_id(r["document"]), r["document"]) for r in rows}),
+            )
         self.con.execute("analyze public.document_chunks")
 
     async def search(
@@ -109,9 +114,4 @@ class PgStore:
             (str(list(map(float, embedding))), text, list(subspaces), limit),
         )
         columns = [d.name for d in cur.description]
-        out = []
-        for values in cur.fetchall():
-            c = candidate_from_row(dict(zip(columns, values, strict=True)))
-            c.document_name = self.names.get(c.document_id, "source")
-            out.append(c)
-        return out
+        return [candidate_from_row(dict(zip(columns, values, strict=True))) for values in cur.fetchall()]

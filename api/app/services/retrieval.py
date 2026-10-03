@@ -100,7 +100,8 @@ class Store(Protocol):
 
 
 class SupabaseStore:
-    """The real one: the `search_chunks` SQL function, then the documents' names."""
+    """The real one: the `search_chunks` SQL function, which also returns each
+    chunk's document name — one round trip per search."""
 
     async def search(
         self, *, embedding: list[float], text: str, subspaces: Sequence[str], limit: int
@@ -115,17 +116,9 @@ class SupabaseStore:
             },
             read_only=True,
         )
-        if not isinstance(rows, list) or not rows:
+        if not isinstance(rows, list):
             return []
-        candidates = [candidate_from_row(r) for r in rows]
-        doc_ids = sorted({c.document_id for c in candidates})
-        docs = await supabase.db_select(
-            "documents", filters={"id": f"in.({','.join(doc_ids)})"}, select="id,name"
-        )
-        names = {d["id"]: d["name"] for d in docs}
-        for c in candidates:
-            c.document_name = names.get(c.document_id, "source")
-        return candidates
+        return [candidate_from_row(r) for r in rows]
 
 
 def candidate_from_row(r: dict[str, Any]) -> Candidate:
@@ -143,6 +136,7 @@ def candidate_from_row(r: dict[str, Any]) -> Candidate:
         vector_rank=r.get("vector_rank"),
         keyword_rank=r.get("keyword_rank"),
         keyword_coverage=float(r.get("keyword_coverage") or 0.0),
+        document_name=r.get("document_name") or "source",
     )
 
 
@@ -287,6 +281,7 @@ async def retrieve(
     embed: Embed = embed_texts,
     complete: query_resolver.Complete | None = None,
 ) -> Retrieval:
+    question = question.replace("\x00", "")  # PostgreSQL text cannot hold it
     if config.resolve_followups and history:
         query = await query_resolver.resolve(question, history, topic=topic, complete=complete)
     else:

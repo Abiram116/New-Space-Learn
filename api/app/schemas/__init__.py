@@ -92,6 +92,16 @@ class ChatSend(BaseModel):
     #: only the redundant restatement of the question is skipped.
     regenerate: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def _no_nul(cls, data: Any) -> Any:
+        """PostgreSQL text cannot hold a NUL character: a message containing
+        one (a paste from a binary file, a malformed client) failed to save and
+        the student saw an error. Removed rather than refused."""
+        if isinstance(data, dict) and isinstance(data.get("text"), str) and "\x00" in data["text"]:
+            return {**data, "text": data["text"].replace("\x00", "")}
+        return data
+
 
 # ── Documents ──────────────────────────────────────────────────────────
 DocStatus = Literal["uploading", "processing", "ready", "failed"]

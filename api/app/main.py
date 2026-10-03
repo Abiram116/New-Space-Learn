@@ -27,6 +27,7 @@ from .errors import (
 )
 from .middleware import RequestGuard
 from .routers import (
+    admin_usage,
     documents,
     feedback,
     flashcards,
@@ -138,6 +139,7 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix=prefix, tags=["skills"])
     app.include_router(feedback.router, prefix=prefix, tags=["feedback"])
     app.include_router(product_feedback.router, prefix=prefix, tags=["product-feedback"])
+    app.include_router(admin_usage.router, prefix=prefix, tags=["admin"])
 
     @app.get(f"{prefix}/health", tags=["health"])
     async def health() -> dict[str, object]:

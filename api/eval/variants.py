@@ -159,7 +159,7 @@ class Pipeline(Variant):
                 topic=TOPIC_NAMES[question.topic],
                 config=self.config,
                 store=self.store,
-                embed=self.embedder.aembed,
+                embed=getattr(self, "_embed_query", self.embedder.aembed),
                 complete=rewrites.complete,
             )
         )
@@ -214,6 +214,34 @@ class Final(Pipeline):
     config = _ON
 
 
+class HalfPrecision(Final):
+    """Production, with every vector stored and searched at half precision —
+    what `halfvec(384)` keeps. The local test Postgres predates halfvec, so the
+    rounding is done here, to exactly the values halfvec would hold."""
+
+    name = "v2-6-halfvec"
+    description = "Production with vectors at half precision (halfvec), half the vector storage."
+
+    def index(self, docs: list[Document], embedder: Embedder) -> None:
+        import numpy as np
+
+        real = embedder.embed
+
+        def rounded(texts, kind="passage"):
+            return real(texts, kind).astype(np.float16).astype(np.float32)
+
+        embedder.embed = rounded  # type: ignore[method-assign]
+        try:
+            super().index(docs, embedder)
+        finally:
+            embedder.embed = real  # type: ignore[method-assign]
+
+        async def embed_query(texts: list[str]) -> list[list[float]]:
+            return [list(np.asarray(v, dtype=np.float16).astype(np.float32)) for v in await embedder.aembed(texts)]
+
+        self._embed_query = embed_query
+
+
 VARIANTS: dict[str, type[Variant]] = {
-    v.name: v for v in (Baseline, ChunksV2, Prefix, Hybrid, Resolve, Select, Final)
+    v.name: v for v in (Baseline, ChunksV2, Prefix, Hybrid, Resolve, Select, Final, HalfPrecision)
 }

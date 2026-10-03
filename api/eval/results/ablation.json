@@ -108,5 +108,382 @@
    "followup": 0.8333,
    "exact": 0.88
   }
+ },
+ "warning": {
+  "with the warning": {
+   "rows": [
+    {
+     "id": "re05",
+     "category": "reworded",
+     "context": "19fcff21864a6b65",
+     "answer": "The posterior odds equal the prior odds multiplied by the Bayes factor (the likelihood ratio).  \n\n## Why it works\n- **Prior odds** are \\(\\frac{P(A)}{P(\\neg A)}\\), the ratio of belief in a hypothesis before seeing evidence.  \n- **Likelihoods** are \\(P(E\\mid A)\\) and \\(P(E\\mid \\neg A)\\), the probabilities of the evidence under each hypothesis.  \n- Dividing the two Bayes‑rule equations for \\(P(A\\mid E)\\) and \\(P(\\neg A\\mid E)\\) cancels the unknown posterior probability, leaving  \n\n\\[\n\\frac{P(A\\mid E)}{P(\\neg A\\mid E)}=\n\\frac{P(A)}{P(\\neg A)}\\times\\frac{P(E\\mid A)}{P(E\\mid \\neg A)}.\n\\]\n\nThe second fraction is the **Bayes factor** (or likelihood ratio) [[1]].\n\n## Example (medical test)\n- Prevalence = 1 % ⇒ prior odds \\(=0.01/0.99\\approx0.0101\\).  \n- Test sensitivity = 0.99, specificity = 0.99 ⇒ likelihood ratio  \n\n\\[\n\\frac{P(\\text{positive}\\mid\\text{disease})}{P(\\text{positive}\\mid\\text{no disease})}\n=\\frac{0.99}{0.01}=99.\n\\]\n\n- Posterior odds = \\(0.0101 \\times 99 \\approx 1\\), i.e., odds of 1 : 1, which corresponds to a 50 % posterior probability [[2]].\n\n**Key takeaway:** Multiply the prior odds by the likelihood ratio to update beliefs after observing evidence.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "re11",
+     "category": "reworded",
+     "context": "cd0071d51476d86a",
+     "answer": "You can’t record a newly hired teacher without a class because the table’s design forces a **course code** (a non‑null foreign key) to be present in every row, creating an insertion anomaly. If the teacher has no assigned course, the row would have to store a null course code, which the schema doesn’t allow, so the teacher’s information can’t be inserted. [[1]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re12",
+     "category": "reworded",
+     "context": "c7ac9f2258da54cb",
+     "answer": "**In practice you usually stop at 3NF (or BCNF); the higher normal forms are mostly of academic interest.**  \n\n## What’s used day‑to‑day  \n- **1NF, 2NF, 3NF** – these eliminate duplicate rows, ensure scalar columns, and remove most insertion, update, and deletion anomalies. A relation in 3NF is commonly called “normalized” and is sufficient for the majority of commercial applications.  \n- **BCNF** – often applied when a table still has functional dependencies that violate 3NF’s stricter rule about superkeys. It is a practical extension of 3NF for many designs.\n\n## What’s mostly theory  \n- **4NF and above (5NF, 6NF, etc.)** – these address more exotic dependency types (multivalued, join, domain‑key) that rarely appear in typical business data. The literature notes that normal forms beyond 4NF are “mainly of academic interest, as the problems they exist to solve rarely appear in practice” [[1]].\n\n**Key takeaway:** Aim for 3NF (or BCNF when needed); higher normal forms are useful mainly for specialized or research‑oriented scenarios.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "ex13",
+     "category": "exact",
+     "context": "ddd9bd7b8bbbe8ef",
+     "answer": "**Domain‑Key Normal Form (DKNF)**.  \n\nIt is the highest normal form in the hierarchy, requiring that every constraint on a relation be a logical consequence of its domain constraints and key constraints【4】.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo09",
+     "category": "followup",
+     "context": "a32cab66c386c859",
+     "answer": "The main downside of **sixth normal form (6NF)** is the explosion of tables: a single logical entity that has N non‑key attributes must be split into N separate tables, each holding the primary key plus one attribute. This proliferation makes multi‑attribute updates, inserts, and deletes require multiple statements across many tables, increasing query complexity and overhead—especially problematic for OLTP workloads.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "re15",
+     "category": "reworded",
+     "context": "6199bb5e6c864f39",
+     "answer": "TCP is not a good fit for voice calls because it guarantees in‑order, reliable delivery, which forces the sender to wait for retransmissions of lost packets before continuing. This can introduce delays of seconds, unsuitable for real‑time audio where timely delivery is more important than perfect order [[1]] [[5]].\n\n**Key takeaway:** Voice over IP typically uses UDP or protocols built on top of it to avoid the latency introduced by TCP’s retransmission and ordering guarantees.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "re18",
+     "category": "reworded",
+     "context": "db43c99e35bf931f",
+     "answer": "Leaves appear green because chlorophyll pigments absorb light in the blue (≈ 450 nm) and red (≈ 680 nm) portions of the spectrum but reflect and transmit green light (≈ 530 nm). The reflected green light is what our eyes detect, giving leaves their characteristic color. Chlorophyll is the primary pigment in photosynthetic membranes, and other accessory pigments (carotenes, xanthophylls) absorb other wavelengths but do not dominate the visual spectrum, so the green band remains most visible [[1]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re19",
+     "category": "reworded",
+     "context": "c5c333e45d8370b7",
+     "answer": "Cacti use **crassulacean acid metabolism (CAM)**: they open their stomata at night to take in CO₂, fix it into malate, and store it in vacuoles. During the hot day the stomata stay closed, and the stored malate is decarboxylated inside the leaf to release CO₂ for the Calvin cycle, keeping water loss minimal. This temporal separation of CO₂ uptake and fixation allows cacti to photosynthesize efficiently while conserving water.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un02",
+     "category": "unanswerable",
+     "context": "5b1c355785f49935",
+     "answer": "The provided sources do not discuss Dijkstra’s shortest‑path algorithm, so I can’t give a citation‑based answer.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un03",
+     "category": "unanswerable",
+     "context": "a66362a03322b92d",
+     "answer": "The material you provided does not cover red‑black tree insertion. I can’t answer that from the given sources.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un04",
+     "category": "unanswerable",
+     "context": "3ab19e23f12ba573",
+     "answer": "The student’s material on algorithms and machine learning does not cover the central limit theorem, so I can’t provide an answer based on the given sources.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un06",
+     "category": "unanswerable",
+     "context": "c0e4ee328da7eb87",
+     "answer": "The material you provided does not cover that information.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un07",
+     "category": "unanswerable",
+     "context": "e886188decee1748",
+     "answer": "The material you’ve provided does not cover SQL syntax for a LEFT OUTER JOIN across three tables. I can’t pull a citation from the sources you listed for that. If you need help writing the query, let me know the table names and columns, and I’ll walk you through it.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un08",
+     "category": "unanswerable",
+     "context": "c8ed4a0e1c52bf36",
+     "answer": "The CAP theorem is not covered in the material you have provided.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un09",
+     "category": "unanswerable",
+     "context": "6189731e03fb50f3",
+     "answer": "The material you provided does not cover how BGP selects the best route.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un10",
+     "category": "unanswerable",
+     "context": "6097b6b00394c914",
+     "answer": "I’m not seeing any of the provided sources covering B+ trees or how they speed up queries, so I can’t give you an answer based on your material. If you have other notes or a textbook that discusses B+ trees, let me know and I can help explain it.",
+     "judged": true,
+     "correct": false,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un11",
+     "category": "unanswerable",
+     "context": "7ac65dc9d920ff58",
+     "answer": "I’m sorry, but the sources provided do not cover how DNS resolves a domain name to an IP address.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un12",
+     "category": "unanswerable",
+     "context": "1f70f3433e73998e",
+     "answer": "The provided sources focus on photosynthesis and related topics; they do not cover mitosis. Therefore, I cannot answer this question based on the available material.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un14",
+     "category": "unanswerable",
+     "context": "4441a08db46d71a3",
+     "answer": "The provided sources do not cover the mechanism of neuronal signal transmission across a synapse.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo11",
+     "category": "followup",
+     "context": "cbd0e64e61b23e82",
+     "answer": "Most designers stop at **third normal form (3NF)**, because it removes the common insertion, update, and deletion anomalies while keeping the schema practical to implement and maintain. 3NF is often called the “sweet spot” for everyday database design.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un13",
+     "category": "unanswerable",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "un15",
+     "category": "unanswerable",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "un16",
+     "category": "unanswerable",
+     "context": "bddb8882e273b159",
+     "answer": "The provided sources don’t include information on the ATP yield of the Krebs (citric acid) cycle per glucose.",
+     "judged": true,
+     "correct": false,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    }
+   ]
+  },
+  "without it": {
+   "rows": [
+    {
+     "id": "re05",
+     "category": "reworded",
+     "error": "Event loop is closed"
+    },
+    {
+     "id": "re11",
+     "category": "reworded",
+     "context": "cd0071d51476d86a",
+     "answer": "You can’t record a newly hired teacher without a class because the table’s design creates an **insertion anomaly**: the teacher’s information is only stored when a non‑null Course Code is present, so a teacher with no assigned courses has no row to hold their data [[1]]. \n\n### Why the anomaly occurs\n- The relation combines teacher attributes (ID, name, hire date) with a course attribute (Course Code) in a single table.  \n- The primary key includes the Course Code, so a row cannot exist unless that field has a value.  \n- If a teacher isn’t teaching any course, the only way to insert a row is to set Course Code to NULL, which the schema disallows for key fields.\n\n### Consequence\nAttempting to insert the teacher forces either:\n1. **Null Course Code** – violates the key constraint, or  \n2. **No row at all** – the teacher’s data is lost until they are assigned a class.\n\n**Key takeaway:** The table’s structure ties teacher existence to course assignment, producing an insertion anomaly that prevents storing teachers without classes. Consider normalizing the schema into separate Teacher and Course tables linked by a foreign key.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re12",
+     "category": "reworded",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "ex13",
+     "category": "exact",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "fo09",
+     "category": "followup",
+     "context": "a32cab66c386c859",
+     "answer": "The main downside of **sixth normal form (6NF)** is the explosion of tables: a single logical entity that has N non‑key attributes becomes N separate tables, so any insert, update, or delete that logically touches one record must be performed on many tables. This leads to higher maintenance overhead, more complex queries, and poorer performance for typical OLTP workloads. [[4]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re15",
+     "category": "reworded",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "re18",
+     "category": "reworded",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "re19",
+     "category": "reworded",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "un02",
+     "category": "unanswerable",
+     "context": "5b1c355785f49935",
+     "answer": "The sources provided do not discuss Dijkstra’s algorithm, so I can’t give a citation‑based answer from them. In general, the time complexity depends on the data structure used for the priority queue: with a binary heap it is \\(O((V+E)\\log V)\\), and with a Fibonacci heap it can be reduced to \\(O(E + V\\log V)\\).",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un03",
+     "category": "unanswerable",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "un04",
+     "category": "unanswerable",
+     "context": "3ab19e23f12ba573",
+     "answer": "The **central limit theorem** states that the sum (or average) of a large number of independent, identically distributed random variables—regardless of their original distribution—converges in distribution to a normal (Gaussian) distribution, provided the variables have finite mean and variance.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un06",
+     "category": "unanswerable",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    },
+    {
+     "id": "un07",
+     "category": "unanswerable",
+     "context": "e886188decee1748",
+     "answer": "**Answer**\n\nUse a chain of `LEFT JOIN`s, each one joining the previous result to the next table on the appropriate key.  \n```sql\nSELECT  a.col1,\n        b.col2,\n        c.col3\nFROM    TableA AS a\nLEFT JOIN TableB AS b\n       ON a.key = b.key\nLEFT JOIN TableC AS c\n       ON b.key = c.key;\n```\n\n**Explanation**\n\n1. `TableA` is the leftmost (driving) table.  \n2. The first `LEFT JOIN` brings in `TableB`. If a row in `TableA` has no matching row in `TableB`, the columns from `TableB` are `NULL`.  \n3. The second `LEFT JOIN` attaches `TableC` to the already‑joined result. It preserves all rows from the previous join, adding `NULL`s where `TableC` has no match.\n\n**Tip**  \nIf the join condition for `TableC` should reference a column from `TableA` instead of `TableB`, adjust the `ON` clause accordingly. The order of the joins matters only for the columns you want to keep when no match exists.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un08",
+     "category": "unanswerable",
+     "error": "The AI is at capacity right now. Try again in a moment."
+    }
+   ]
+  }
  }
 }

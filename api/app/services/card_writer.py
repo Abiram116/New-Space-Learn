@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from ..config import settings
-from . import question_checks
+from . import question_checks, usage
 from .coverage import Source
 from .llm import extract_title_line
 from .quiz_agent import Complete, _complete, _sources_block, material, parse_items
@@ -112,14 +112,15 @@ async def write_deck(
 ) -> Deck:
     items = material(sources, conversation)
     system = CARDS_AGENT_VOICE + (f"\n\n{student_context}" if student_context else "")
-    raw = await complete(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": write_prompt(count=count + SPARE, topic=topic, label=label, items=items, earlier=earlier)},
-        ],
-        settings.groq_model,
-        0.3,
-    )
+    with usage.task("cards.write"):
+        raw = await complete(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": write_prompt(count=count + SPARE, topic=topic, label=label, items=items, earlier=earlier)},
+            ],
+            settings.groq_model,
+            0.3,
+        )
     kept, trace = usable(parse_items(raw), len(items), earlier)
     cards: list[Card] = []
     for it in kept[:count]:

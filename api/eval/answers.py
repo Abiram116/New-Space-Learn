@@ -70,11 +70,12 @@ def sample(questions: list[Question], n: int, seed: int = 7) -> list[Question]:
     return chosen
 
 
-async def _complete(messages: list[dict], model: str, temperature: float) -> str:
+async def _complete(messages: list[dict], model: str, temperature: float, *, json_object: bool = False) -> str:
+    extra = {"json_object": True} if json_object else {}
     for attempt in range(RETRIES + 1):
         try:
             parts: list[str] = []
-            async for delta in get_llm().stream_chat(messages, model=model, temperature=temperature):
+            async for delta in get_llm().stream_chat(messages, model=model, temperature=temperature, **extra):
                 parts.append(delta)
             return "".join(parts).strip()
         except ApiError:
@@ -125,6 +126,7 @@ async def answer_one(question: Question, result: Result) -> dict:
         ],
         settings.groq_model_fast,
         0.0,
+        json_object=True,
     )
     await asyncio.sleep(PAUSE_S)
     match = re.search(r"\{.*\}", verdict_raw, re.DOTALL)

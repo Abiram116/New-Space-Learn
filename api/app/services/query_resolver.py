@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from ..config import settings
+from . import usage
 from .llm import get_llm
 
 log = logging.getLogger("space_learn.resolver")
@@ -83,6 +84,7 @@ def leans_on_history(question: str, history: list[dict[str, str]]) -> bool:
     return len(_POINTING.findall(question)) * 6 >= len(words)
 
 
+@usage.tagged("chat.resolve")
 async def _ask_model(prompt: str) -> str:
     parts: list[str] = []
     async for delta in get_llm().stream_chat(

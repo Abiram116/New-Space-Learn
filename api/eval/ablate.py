@@ -93,7 +93,7 @@ def warning_check() -> dict:
         for q, r in doubted:
             found = replace(r.found, confidence=confidence)
             pairs.append((q, Result(ranking=r.ranking, context=r.context, found=found)))
-        rows = asyncio.run(answers.run(pairs, earlier.get(label, {}).get("rows")))
+        rows = asyncio.run(_resumable(label, pairs, earlier.get(label, {}).get("rows") or []))
         judged = [r for r in rows if r.get("judged")]
         no = [r for r in judged if not by_id[r["id"]].answerable]
         yes = [r for r in judged if by_id[r["id"]].answerable]
@@ -106,6 +106,24 @@ def warning_check() -> dict:
         }
         print(label, {k: v for k, v in out[label].items() if k != "rows"})
     return out
+
+
+async def _resumable(label: str, pairs: list, done: list[dict]) -> list[dict]:
+    """Grade each pair, saving after every one, so a stopped run resumes
+    where it stopped instead of starting again."""
+    rows = {r["id"]: r for r in done if r.get("judged")}
+    for question, result in pairs:
+        if question.id in rows:
+            continue
+        try:
+            rows[question.id] = await answers.answer_one(question, result)
+        except Exception as e:  # noqa: BLE001
+            rows[question.id] = {"id": question.id, "category": question.category, "error": str(e)[:200]}
+        data = _load()
+        data.setdefault("warning", {}).setdefault(label, {})["rows"] = list(rows.values())
+        OUT.write_text(json.dumps(data, indent=1, ensure_ascii=False))
+        print(f"  {label}: {len(rows)}/{len(pairs)}", flush=True)
+    return [rows[q.id] for q, _ in pairs if q.id in rows]
 
 
 def write(data: dict) -> None:

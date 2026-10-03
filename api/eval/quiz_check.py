@@ -68,7 +68,7 @@ def coverage_check() -> dict:
 
 _GRADE = """You are grading quiz questions against the material they were written from.
 For each question reply whether the marked answer is SUPPORTED by the material, and whether it is the ONLY right choice.
-Reply with a JSON array only: [{{"n": 1, "supported": true, "only_right": true}}].
+Reply with a JSON object only: {{"grades": [{{"n": 1, "supported": true, "only_right": true}}]}}.
 
 Material:
 {material}
@@ -86,9 +86,14 @@ async def _grade(sources: list[Source], questions) -> list[dict]:
         [{"role": "user", "content": _GRADE.format(material=quiz_agent._sources_block(sources), questions="\n\n".join(lines))}],
         settings.groq_model,
         0.0,
+        json_object=True,
     )
     await asyncio.sleep(PAUSE_S)
-    return quiz_agent.parse_items(raw)
+    try:
+        data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
+        return [g for g in data.get("grades", []) if isinstance(g, dict)]
+    except (ValueError, AttributeError):
+        return []
 
 
 async def _questions_check() -> dict:

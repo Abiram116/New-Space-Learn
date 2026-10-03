@@ -188,7 +188,7 @@ being unsure about them."*
 | | |
 |---|---|
 | **Security** | 38 owned-id routes, every one ownership-checked, anti-enumeration 404s |
-| **Retrieval** | Local BGE-small, hybrid vector + keyword search — answer reaches the model for 93% of 98 benchmark questions (72% before) |
+| **Retrieval** | Local BGE-small, hybrid vector + keyword search — answer reaches the model for 94% of 98 benchmark questions (72% before) |
 | **Performance** | ~699ms chat time-to-first-token, ~158KB entry bundle |
 | **Correctness** | SM-2 implemented twice, kept honest by a 480-case parity test |
 | **Cost** | $0 infra — Vercel + Render + Supabase free tiers; inference scales with usage |
@@ -410,8 +410,8 @@ Request → Ownership → Retrieval → Grounding → Skills → Personalization
   over-refusing tutor is both a worse product *and* a worse safety outcome in
   an education context.
 - **Measured retrieval quality**: on a 114-question benchmark over six
-  documents, the right chunk is in the top 5 for **88%** of answerable
-  questions and reaches the model for **93%** ([results](api/eval/RESULTS.md)).
+  documents, the right chunk is in the top 5 for **91%** of answerable
+  questions and reaches the model for **94%** ([results](api/eval/RESULTS.md)).
 
 ## The student model & personalization
 
@@ -574,7 +574,7 @@ Measured against the live app, not estimated — full detail in
 |---|---|---|
 | Chat time-to-first-token | **~699ms** (retrieval 512ms + Groq TTFT 187ms) | < 1.5s |
 | Retrieval (`k=4`, 10-run median) | **512–521ms** | — |
-| Retrieval quality (114-question benchmark) | **Recall@5 0.88, answer reaches the model 93%** | — |
+| Retrieval quality (114-question benchmark) | **Recall@5 0.91, answer reaches the model 94%** | — |
 | Document reprocess (52 chunks) | **~6.0s median** | < 8s target, 25s hard cap |
 | First-load JS bundle (entry) | **~158KB gzipped** (down from 451KB pre-split) | 250KB self-imposed ceiling |
 | Cost per student / month | **well under $1** (20 sessions, 10 turns each) | — |

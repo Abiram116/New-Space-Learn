@@ -38,7 +38,7 @@ class Script:
         self.replies = list(replies)
         self.calls: list[tuple[str, str]] = []
 
-    async def __call__(self, messages, model, temperature):
+    async def __call__(self, messages, model, temperature, json_object=False):
         self.calls.append((model, messages[-1]["content"]))
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
@@ -51,7 +51,7 @@ def written(*items, title="Momentum Basics") -> str:
 
 
 def verdicts(*failed: int, n: int) -> str:
-    return json.dumps([{"n": i, "supported": i not in failed, "correct": True} for i in range(1, n + 1)])
+    return json.dumps({"verdicts": [{"n": i, "supported": i not in failed, "correct": True} for i in range(1, n + 1)]})
 
 
 async def no_embed(texts):
@@ -112,7 +112,7 @@ async def test_a_verifier_that_fails_or_rambles_never_fails_the_quiz(failure):
 
 
 async def test_a_question_the_verifier_did_not_mention_is_kept():
-    script = Script(written(*QUESTIONS[:3]), json.dumps([{"n": 1, "supported": False, "correct": True}]))
+    script = Script(written(*QUESTIONS[:3]), json.dumps({"verdicts": [{"n": 1, "supported": False, "correct": True}]}))
     draft = await run(script, count=2)
     assert [x.q for x in draft.questions] == [QUESTIONS[1]["q"], QUESTIONS[2]["q"]]
 

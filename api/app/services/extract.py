@@ -26,15 +26,27 @@ import logging
 from dataclasses import dataclass
 
 from ..config import settings
+from . import usage
 from .chunking import Line, read_text
 from .llm import get_llm
-from .pdf_layout import read_pdf
+from .pdf_worker import UnreadablePdf, read_text_lines
 
 log = logging.getLogger("space_learn.extract")
 
 #: Fewer characters than this per page, on average, and the PDF is pictures of
 #: pages rather than text.
 SCAN_CHARS_PER_PAGE = 25
+
+
+def read_pdf(data: bytes) -> tuple[list[Line], int]:
+    """The PDF's lines and page count, read in a separate process with time
+    and memory limits (`pdf_worker`): an untrusted file can fail its own
+    upload, never stall or crash the server."""
+    rows, pages = read_text_lines(data)
+    return [Line(text, page, level) for text, page, level in rows], pages
+
+
+__all__ = ["Document", "UnreadablePdf", "read_document", "read_pdf"]
 
 
 @dataclass(slots=True)
@@ -76,6 +88,7 @@ def _extract_csv_text(data: bytes) -> str:
     return "\n".join(" | ".join(cell.strip() for cell in row) for row in rows[:2000])
 
 
+@usage.tagged("image.read")
 async def _extract_image_text(data: bytes, mime_type: str) -> str:
     if not settings.llm_configured:
         return ""

@@ -172,3 +172,15 @@ def test_the_production_config_is_what_the_benchmark_measured():
         keyword_weight=0.5, judge=True, none_similarity=0.60, none_coverage=0.15, weak_similarity=0.71,
         weak_coverage=0.55, max_chunks=6, budget_chars=4200, relative_floor=0.0, adjacent=True,
     ) == ON
+
+
+def test_a_nul_character_never_reaches_the_database():
+    from app.schemas import ChatSend
+
+    assert ChatSend(text="what\x00 is this").text == "what is this"
+
+
+async def test_nul_is_stripped_before_searching():
+    store = FakeStore([])
+    await retrieval.retrieve("bad\x00text", subspace_id="main", store=store, embed=fake_embed)
+    assert store.calls[0]["text"] == "badtext"

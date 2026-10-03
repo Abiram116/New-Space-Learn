@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 
 from ..config import settings
 from ..schemas import QuizQuestion
-from . import question_checks
+from . import question_checks, usage
 from .coverage import Source
 from .embeddings import embed_texts
 from .llm import extract_title_line, get_llm, loads_lenient
@@ -54,7 +54,9 @@ VERIFY_TIMEOUT_S = 12.0
 #: Earlier questions shown to the writer as "don't ask these again".
 SHOW_EARLIER = 12
 
-Complete = Callable[[list[dict], str, float], Awaitable[str]]
+#: (messages, model, temperature) -> reply; `json_object=True` when the reply
+#: must be a JSON object (see `llm.stream_chat`).
+Complete = Callable[..., Awaitable[str]]
 
 
 @dataclass(slots=True)
@@ -65,9 +67,11 @@ class Draft:
     trace: dict = field(default_factory=dict)
 
 
-async def _complete(messages: list[dict], model: str, temperature: float) -> str:
+async def _complete(messages: list[dict], model: str, temperature: float, *, json_object: bool = False) -> str:
     parts: list[str] = []
-    async for delta in get_llm().stream_chat(messages, model=model, temperature=temperature):
+    # Only passed when asked for, so a plain call looks exactly as it always did.
+    extra = {"json_object": True} if json_object else {}
+    async for delta in get_llm().stream_chat(messages, model=model, temperature=temperature, **extra):
         parts.append(delta)
     return "".join(parts).strip()
 
@@ -135,7 +139,8 @@ def verify_prompt(items: Sequence[Source], questions: Sequence[dict]) -> str:
         "You check quiz questions against the material they were written from. For each question:\n"
         '- "supported": true only if its own source states the fact the marked answer depends on.\n'
         '- "correct": true only if the marked answer is right according to that source AND no other choice is also right.\n'
-        'Reply with a JSON array only, one item per question: [{"n": 1, "supported": true, "correct": true}].\n\n'
+        'Reply with a JSON object only, one verdict per question: '
+        '{"verdicts": [{"n": 1, "supported": true, "correct": true}]}.\n\n'
         f"Material:\n{_sources_block(items)}\n\nQuestions:\n" + "\n\n".join(lines)
     )
 
@@ -150,6 +155,19 @@ def parse_items(raw: str) -> list[dict]:
     except (json.JSONDecodeError, ValueError):
         return []
     return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
+
+
+def parse_verdicts(raw: str) -> list[dict]:
+    """The verifier's verdicts: `{"verdicts": [...]}`, or a bare array."""
+    start, end = raw.find("{"), raw.rfind("}")
+    if start != -1 and end > start:
+        try:
+            data = loads_lenient(raw[start : end + 1])
+        except (json.JSONDecodeError, ValueError):
+            data = None
+        if isinstance(data, dict) and isinstance(data.get("verdicts"), list):
+            return [v for v in data["verdicts"] if isinstance(v, dict)]
+    return parse_items(raw)
 
 
 def failed_checks(verdicts: list[dict], count: int) -> set[int] | None:
@@ -199,7 +217,8 @@ async def write_quiz(
         ]
 
     # write
-    raw = await complete(ask(min(count + SPARE, WRITE_MAX), earlier), settings.groq_model, 0.3)
+    with usage.task("quiz.write"):
+        raw = await complete(ask(min(count + SPARE, WRITE_MAX), earlier), settings.groq_model, 0.3)
     title = extract_title_line(raw)
     kept, trace = _usable(parse_items(raw), len(items_), earlier)
     trace["written"] = len(parse_items(raw))
@@ -210,11 +229,20 @@ async def write_quiz(
     # verify
     verified = False
     if kept:
-        reply = await _safely(
-            asyncio.wait_for(complete([{"role": "user", "content": verify_prompt(items_, kept)}], settings.groq_model_fast, 0.0), VERIFY_TIMEOUT_S),
-            "",
-        )
-        failed = failed_checks(parse_items(reply), len(kept))
+        with usage.task("quiz.verify"):
+            reply = await _safely(
+                asyncio.wait_for(
+                    complete(
+                        [{"role": "user", "content": verify_prompt(items_, kept)}],
+                        settings.groq_model_fast,
+                        0.0,
+                        json_object=True,
+                    ),
+                    VERIFY_TIMEOUT_S,
+                ),
+                "",
+            )
+        failed = failed_checks(parse_verdicts(reply), len(kept))
         if failed is not None:
             verified = True
             trace["unsupported"] = len(failed)
@@ -227,7 +255,8 @@ async def write_quiz(
     short = count - len(kept)
     trace["repaired"] = 0
     if short > 0 and clock() - started < REPAIR_BEFORE_S:
-        raw = await _safely(complete(ask(short, [*kept, *earlier]), settings.groq_model, 0.3), "")
+        with usage.task("quiz.repair"):
+            raw = await _safely(complete(ask(short, [*kept, *earlier]), settings.groq_model, 0.3), "")
         extra, _ = _usable(parse_items(raw), len(items_), [*kept, *earlier])
         for it in extra[:short]:
             it["_checked"] = False

@@ -208,3 +208,23 @@ def test_doubtful_sources_are_passed_with_a_warning_and_good_ones_without():
     warning = "may not be about this question"
     assert warning in doubtful[0]["content"]
     assert warning not in sure[0]["content"] and warning not in nothing[0]["content"]
+
+
+def test_a_citation_on_the_wrong_source_is_moved_to_the_one_that_says_it():
+    sources = [
+        "Plants convert light into sugar inside chloroplasts during photosynthesis.",
+        "Global photosynthesis captures roughly 130 terawatts of solar power.",
+    ]
+    text = "Global photosynthesis captures roughly 130 terawatts of power [[1]]. Chloroplasts convert light into sugar [[1]]."
+    fixed, moved = rag.repoint_citations(text, sources)
+    assert fixed == "Global photosynthesis captures roughly 130 terawatts of power [[2]]. Chloroplasts convert light into sugar [[1]]."
+    assert moved == 1
+
+
+def test_a_doubtful_case_is_left_alone():
+    sources = ["Momentum adds a fraction of the last update.", "Learning rates control the step size."]
+    text = "Both ideas change how fast training settles [[1]]."  # neither source clearly says it
+    assert rag.repoint_citations(text, sources) == (text, 0)
+    # A sentence already citing the right source loses the wrong extra marker.
+    double = "Learning rates control the step size of each update [[1]][[2]]."
+    assert rag.repoint_citations(double, sources) == ("Learning rates control the step size of each update [[2]].", 1)
