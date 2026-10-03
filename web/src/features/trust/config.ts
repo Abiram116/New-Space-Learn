@@ -17,8 +17,8 @@ export type TeamMember = {
 
 // The two people who build Space Learn.
 export const TEAM: TeamMember[] = [
-  { name: 'Abiram Mandava', email: 'sreeabirammandava@gmail.com' },
-  { name: 'Nandhitha Yedugani', email: 'ys.nandhitha@gmail.com' },
+  { name: 'Abiram', email: 'sreeabirammandava@gmail.com', link: 'https://github.com/Abiram116' },
+  { name: 'Nandhitha', email: 'ys.nandhitha@gmail.com', link: 'https://github.com/nandhithr6' },
 ]
 
 /** Every address at once — "write to either of us" links go to both. */
