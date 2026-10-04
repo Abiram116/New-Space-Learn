@@ -8,7 +8,6 @@ the two in sync.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -28,11 +27,20 @@ from ..schemas import (
     GradeIn,
     OkOut,
 )
-from ..services import activity, fsrs, locks, personalization, rag, supabase
+from ..services import (
+    activity,
+    card_writer,
+    coverage,
+    fsrs,
+    locks,
+    personalization,
+    rag,
+    student_model,
+    supabase,
+)
 from ..services.chat_context import format_history, recent_history
-from ..services.llm import extract_title_line, get_llm, loads_lenient
+from ..services.coverage import Source
 from ..services.ratelimit import consume_llm_quota
-from ..services.voice import CARDS_AGENT_VOICE
 
 log = logging.getLogger("space_learn.cards")
 router = APIRouter()
@@ -278,37 +286,58 @@ async def generate_cards(
     """
 
     subspace = await assert_subspace(user.id, subspace_id)
-    await consume_llm_quota(user.id, cost=2)
+    await consume_llm_quota(user.id, cost=2, daily=True)
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
-    context = body.source_text or ""
-    # Gathered, like quizzes and notes. Retrieval is skipped entirely when the
-    # caller supplied `source_text` (generating from the answer you just read),
-    # so it is conditional here rather than unconditionally fetched and thrown
-    # away — the one case in the three where a read is genuinely avoidable.
-    history, student_context, retrieved = await asyncio.gather(
+    linked_ids, (used, earlier), history, snap = await asyncio.gather(
+        rag.linked_subspace_ids(user.id, subspace_id),
+        card_writer.ledger(user.id, subspace_id),
         recent_history(user.id, subspace_id),
-        personalization.build(user.id, "cards", subspace_id=subspace_id),
-        _retrieve_with_links(user.id, subspace_id, topic) if not context else _nothing(),
+        student_model.snapshot(user.id),
     )
-    if not context:
+    student_context = personalization.render(snap, "cards", subspace_id=subspace_id)
+    if body.source_text and body.source_text.strip():
+        # A deck from the answer the student just read: that answer is the
+        # material, and nothing else is searched.
+        sources = [Source(1, "", "The answer you were reading", "", body.source_text.strip())]
+        conversation = ""
+    else:
+        sources = await coverage.plan(
+            subspace_id=subspace_id,
+            linked_subspace_ids=linked_ids,
+            topic=body.topic,
+            questions=body.count,
+            used=used,
+            weak_concepts=[c.label for c in snap.concepts_in(subspace_id) if c.is_weak],
+        )
         # Chat counts as material — see the note in quizzes.generate_quiz.
-        # `history` is passed to `_generate_pairs` below either way, so
-        # refusing here while using it there was the same contradiction.
-        if not retrieved and not history:
+        if not sources and not history:
             raise NothingIndexed()
-        context = "\n\n".join(f"- {r.content}" for r in retrieved) or "(no indexed material yet)"
+        conversation = format_history(history)
 
     generated_title: str | None = None
+    cards: list[card_writer.Card] = []
     if settings.llm_configured:
-        pairs, generated_title = await _generate_pairs(
-            topic, label, context, history, student_context, body.count
-        )
-    else:
-        pairs = []
+        try:
+            deck_draft = await card_writer.write_deck(
+                count=body.count,
+                topic=topic,
+                label=label,
+                sources=sources,
+                conversation=conversation,
+                earlier=earlier,
+                student_context=student_context,
+            )
+        except ApiError:
+            raise
+        except Exception as e:
+            log.exception("card generation failed")
+            raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
+        log.info("deck written subspace=%s sources=%d %s", subspace_id, len(sources), deck_draft.trace)
+        cards, generated_title = deck_draft.cards, deck_draft.title
 
-    if not pairs:
+    if not cards:
         raise UpstreamUnavailable(
             "Couldn't write cards from this material yet. Upload a document or "
             "add a card yourself."
@@ -344,11 +373,12 @@ async def generate_cards(
             {
                 "user_id": user.id,
                 "deck_id": deck["id"],
-                "front": p["front"][:500],
-                "back": p["back"][:2000],
-                "source": p.get("source"),
+                "front": c.front,
+                "back": c.back,
+                "source": c.source,
+                "source_chunk": c.source_chunk,
             }
-            for p in pairs
+            for c in cards
         ],
     )
     await activity.touch_subspace(subspace_id)
@@ -455,92 +485,6 @@ def _to_card(row: dict) -> FlashcardOut:
 def _deck_name(topic: str) -> str:
     clean = topic.strip().rstrip('.')
     return (clean[:1].upper() + clean[1:])[:80] or 'New deck'
-
-
-async def _nothing() -> list:
-    """An already-satisfied awaitable, so the gather above can stay one shape
-    whether or not retrieval is needed. Cheaper to read than branching the
-    gather into two arms."""
-    return []
-
-
-async def _retrieve_with_links(user_id: str, subspace_id: str, topic: str) -> list[rag.Retrieved]:
-    """Same linked-subspace-aware retrieval chat uses (`rag.retrieve_with_links`)
-    — a linked topic should feed a generated deck exactly as it feeds an
-    answer, not just chat."""
-    linked_ids = await rag.linked_subspace_ids(user_id, subspace_id)
-    return await rag.retrieve_with_links(subspace_id, topic, linked_ids, k=6)
-
-
-async def _generate_pairs(
-    topic: str,
-    label: str,
-    context: str,
-    history: list[dict[str, str]],
-    student_context: str,
-    count: int,
-) -> tuple[list[dict], str | None]:
-    """Ask for `count` Q/A pairs as JSON, plus a real deck title. Returns
-    `([], None)` rather than raising on a malformed reply, so the caller
-    owns the user-facing message."""
-
-    material = context.strip()
-    recent = format_history(history) or "(no prior chat in this space)"
-    prompt = (
-        f"Write {count} flashcards about '{topic}', within the subject "
-        f"'{label}' — resolve any ambiguity in the topic name using that "
-        f"subject, not a generic reading of the words.\n\n"
-        f"Recent conversation in this space (for context on what's actually "
-        f"being studied — do not quote it directly):\n{recent}\n\n"
-        f"Material:\n{material}\n\n"
-        "Before the array, on its own line, write a name for this deck: "
-        "'TITLE: ' followed by 3-6 words naming what it actually covers "
-        "(e.g. 'TITLE: Loop of Henle Basics') — not a generic label like "
-        "'Flashcards' or 'Chat Review', and not the raw topic text above, "
-        "which may be a stray sentence rather than a name. This is the only "
-        "place the student will see what the deck is about before opening "
-        "it.\n\n"
-        'Then the JSON array — no other prose, no code fences. Each item: '
-        '{"front": str, "back": str}. front is a single question. back is a '
-        "complete but compact answer, 2-3 sentences at most. Plain sentences "
-        "only — no markdown, no asterisks, no headings, no numbering."
-    )
-    system = CARDS_AGENT_VOICE + (f"\n\n{student_context}" if student_context else "")
-    try:
-        parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            model=settings.groq_model,
-            temperature=0.3,
-        ):
-            parts.append(delta)
-        raw = "".join(parts)
-    except ApiError:
-        raise
-    except Exception as e:
-        log.exception("card generation failed")
-        raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
-
-    title = extract_title_line(raw)
-    start, end = raw.find("["), raw.rfind("]")
-    if start == -1 or end <= start:
-        return [], title
-    try:
-        data = loads_lenient(raw[start : end + 1])
-    except json.JSONDecodeError:
-        return [], title
-
-    out: list[dict] = []
-    for item in data[:count]:
-        if not isinstance(item, dict):
-            continue
-        front, back = str(item.get("front", "")).strip(), str(item.get("back", "")).strip()
-        if front and back:
-            out.append({"front": front, "back": back, "source": item.get("source")})
-    return out, title
 
 
 def _to_dt(v: str | datetime) -> datetime:

@@ -20,15 +20,22 @@ weight, which is not a design.
 from __future__ import annotations
 
 from app.services import rag
-from app.services.voice import DIAGRAM_RULE, RESPONSE_SHAPE
+from app.services.voice import (
+    DIAGRAM_RULE,
+    DIAGRAM_SHORT,
+    RESPONSE_SHAPE,
+    SHAPE_SHORT,
+    is_simple_question,
+    wants_diagram,
+)
 
 
-def _system(skills: list[str] | None = None) -> str:
+def _system(skills: list[str] | None = None, question: str = "Explain how a page fault is handled") -> str:
     messages, _ = rag.build_prompt(
         subspace_name="Operating Systems",
         active_skill_instructions=skills or [],
         history=[],
-        question="What is a page fault?",
+        question=question,
         retrieved=[],
         answer_only_from_docs=False,
         always_show_citations=False,
@@ -43,7 +50,7 @@ def test_style_guidance_comes_before_the_skill() -> None:
     """A Skill saying "prose only" should beat the default "a comparison wants
     a table". Formatting is the student's call; honesty is not."""
     skill = "Never use tables or lists. Flowing prose only."
-    text = _system(skills=[skill])
+    text = _system(skills=[skill], question="Draw the lifecycle of a process")
     assert text.index(RESPONSE_SHAPE) < text.index(skill)
     assert text.index(DIAGRAM_RULE) < text.index(skill)
 
@@ -154,7 +161,7 @@ def test_preference_lines_land_after_the_shape_guidance() -> None:
         subspace_name="Operating Systems",
         active_skill_instructions=[],
         history=[],
-        question="What is a page fault?",
+        question="Explain how a page fault is handled",
         retrieved=[],
         answer_only_from_docs=False,
         always_show_citations=False,
@@ -181,7 +188,7 @@ def test_citation_instructions_survive_the_new_style_guidance() -> None:
         subspace_name="Operating Systems",
         active_skill_instructions=[],
         history=[],
-        question="What is a page fault?",
+        question="Explain how a page fault is handled",
         retrieved=retrieved,
         answer_only_from_docs=True,
         always_show_citations=True,
@@ -192,3 +199,83 @@ def test_citation_instructions_survive_the_new_style_guidance() -> None:
     assert "Answer only using the Sources below" in text
     assert text.index(RESPONSE_SHAPE) < text.index("[[n]]")
     assert meta[0]["marker"] == 1
+
+
+def test_doubtful_sources_are_passed_with_a_warning_and_good_ones_without():
+    """Retrieval's "weak" verdict reaches the model as an instruction to check
+    the sources before leaning on them — and only then."""
+    source = [rag.Retrieved(document_id="d", document_name="notes.pdf", content="Plants make sugar.", locator="p. 1", similarity=0.6)]
+    common = dict(
+        subspace_name="Biology", active_skill_instructions=[], history=[], question="What is mitosis?",
+        answer_only_from_docs=True, always_show_citations=True,
+    )
+    doubtful, _ = rag.build_prompt(retrieved=source, sources_doubtful=True, **common)
+    sure, _ = rag.build_prompt(retrieved=source, **common)
+    nothing, _ = rag.build_prompt(retrieved=[], sources_doubtful=True, **common)
+    warning = "may not be about this question"
+    assert warning in doubtful[0]["content"]
+    assert warning not in sure[0]["content"] and warning not in nothing[0]["content"]
+
+
+def test_a_citation_on_the_wrong_source_is_moved_to_the_one_that_says_it():
+    sources = [
+        "Plants convert light into sugar inside chloroplasts during photosynthesis.",
+        "Global photosynthesis captures roughly 130 terawatts of solar power.",
+    ]
+    text = "Global photosynthesis captures roughly 130 terawatts of power [[1]]. Chloroplasts convert light into sugar [[1]]."
+    fixed, moved = rag.repoint_citations(text, sources)
+    assert fixed == "Global photosynthesis captures roughly 130 terawatts of power [[2]]. Chloroplasts convert light into sugar [[1]]."
+    assert moved == 1
+
+
+def test_a_doubtful_case_is_left_alone():
+    sources = ["Momentum adds a fraction of the last update.", "Learning rates control the step size."]
+    text = "Both ideas change how fast training settles [[1]]."  # neither source clearly says it
+    assert rag.repoint_citations(text, sources) == (text, 0)
+    # A sentence already citing the right source loses the wrong extra marker.
+    double = "Learning rates control the step size of each update [[1]][[2]]."
+    assert rag.repoint_citations(double, sources) == ("Learning rates control the step size of each update [[2]].", 1)
+
+
+# ── The diagram rule is loaded when the question has a shape ───────────
+
+
+def test_a_definition_question_gets_the_short_diagram_line_not_the_whole_rule() -> None:
+    text = _system(question="What is a page fault?")
+    assert DIAGRAM_SHORT in text
+    assert DIAGRAM_RULE not in text
+
+
+def test_a_question_about_structure_gets_the_whole_rule() -> None:
+    for q in ("Draw the TCP handshake", "Explain the architecture of a transformer", "How does a page table work?"):
+        assert DIAGRAM_RULE in _system(question=q), q
+        assert DIAGRAM_SHORT not in _system(question=q), q
+
+
+def test_the_cue_is_generous_rather_than_clever() -> None:
+    assert wants_diagram("what's the life cycle of a thread")
+    assert not wants_diagram("define thrashing")
+
+
+# ── The shape guidance is as long as the question needs ────────────────
+
+
+def test_a_plainly_simple_question_gets_the_short_shape_and_a_real_one_gets_the_full_shape():
+    simple = _system(question="What is a page fault?")
+    assert SHAPE_SHORT in simple and RESPONSE_SHAPE not in simple
+    full = _system(question="Explain how a page fault is handled")
+    assert RESPONSE_SHAPE in full and SHAPE_SHORT not in full
+
+
+def test_the_short_shape_keeps_what_breaks_rendering_if_forgotten():
+    short = SHAPE_SHORT.lower()
+    for kept in ("direct answer", "code blocks", "latex", "overrides this"):
+        assert kept in short, kept
+
+
+def test_what_counts_as_simple_is_narrow():
+    assert is_simple_question("Define thrashing")
+    assert is_simple_question("Who proposed the transformer?")
+    for q in ("Explain paging", "Why do deadlocks happen?", "How does TCP work?", "Compare TCP and UDP", "What are the steps of a handshake?", "Write a quicksort in Python"):
+        assert not is_simple_question(q), q
+    assert not is_simple_question("What is the relationship between the page table and the translation lookaside buffer in a modern CPU?")

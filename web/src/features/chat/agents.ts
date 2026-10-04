@@ -14,14 +14,14 @@ export type AgentKey = 'notes' | 'quiz' | 'flashcards'
 export const AGENT_LABELS: Record<AgentKey, string> = {
   notes: 'Save a note',
   quiz: 'Make a quiz',
-  flashcards: 'Make cards',
+  flashcards: 'Make flashcards',
 }
 
 /** What each one produces — the promise, in the product's own words. */
 export const AGENT_RESULT: Record<AgentKey, string> = {
-  notes: 'Turns the last answer into a note you can edit.',
-  quiz: 'Writes multiple-choice questions from this topic.',
-  flashcards: 'Drafts a deck of question-and-answer cards.',
+  notes: 'Keep the last answer as a note.',
+  quiz: 'Questions to test yourself.',
+  flashcards: 'Practice cards from your files.',
 }
 
 export const AGENT_ICON: Record<AgentKey, IconName> = {

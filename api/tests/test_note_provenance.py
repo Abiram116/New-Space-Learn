@@ -97,7 +97,7 @@ async def test_generate_note_endpoint_marks_agent_creation(db, monkeypatch):
     monkeypatch.setattr(notes_router, "get_llm", lambda: _FakeLLM())
     monkeypatch.setattr(notes_router.settings, "groq_api_key", "test-key")
     monkeypatch.setattr(
-        notes_router.rag, "retrieve", lambda *a, **k: _async_list([_Retrieved()])
+        notes_router.rag, "retrieve_with_links", lambda *a, **k: _async_list([_Retrieved()])
     )
     monkeypatch.setattr(
         notes_router, "recent_history", lambda *a, **k: _async_list([])

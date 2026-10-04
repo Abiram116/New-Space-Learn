@@ -1,0 +1,90 @@
+{
+ "coverage": {
+  "cs": {
+   "sections": 78,
+   "covered_now": 35,
+   "covered_before": "the same \u22647 chunks each time"
+  },
+  "systems": {
+   "sections": 61,
+   "covered_now": 35,
+   "covered_before": "the same \u22647 chunks each time"
+  },
+  "bio": {
+   "sections": 29,
+   "covered_now": 29,
+   "covered_before": "the same \u22647 chunks each time"
+  }
+ },
+ "cs / one prompt": {
+  "questions": 5,
+  "graded": 5,
+  "sound": 5,
+  "trace": {
+   "written": 5,
+   "kept": 5
+  }
+ },
+ "cs / workflow": {
+  "questions": 5,
+  "graded": 5,
+  "sound": 5,
+  "trace": {
+   "malformed": 0,
+   "repeats": 0,
+   "written": 7,
+   "unsupported": 1,
+   "verified": true,
+   "repaired": 0,
+   "kept": 5,
+   "seconds": 44.3
+  }
+ },
+ "systems / one prompt": {
+  "questions": 5,
+  "graded": 5,
+  "sound": 0,
+  "trace": {
+   "written": 5,
+   "kept": 5
+  }
+ },
+ "systems / workflow": {
+  "questions": 5,
+  "graded": 0,
+  "sound": 0,
+  "trace": {
+   "malformed": 0,
+   "repeats": 0,
+   "written": 7,
+   "verified": false,
+   "repaired": 0,
+   "kept": 5,
+   "seconds": 44.0
+  }
+ },
+ "bio / one prompt": {
+  "questions": 5,
+  "graded": 5,
+  "sound": 5,
+  "trace": {
+   "written": 5,
+   "kept": 5
+  }
+ },
+ "bio / workflow": {
+  "questions": 5,
+  "graded": 5,
+  "sound": 5,
+  "trace": {
+   "malformed": 0,
+   "repeats": 0,
+   "written": 7,
+   "unsupported": 0,
+   "verified": true,
+   "repaired": 0,
+   "kept": 5,
+   "seconds": 43.1
+  }
+ }
+}

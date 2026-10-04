@@ -42,6 +42,10 @@ export type CelebrateOptions = {
   bar?: ElementLike
   /** Dock density. */
   compact?: boolean
+  /** The effects without the spoken line (and the bot that speaks it). For
+   *  screens where a companion already says something about the same moment —
+   *  two speech bubbles for one quiz is one too many. */
+  quiet?: boolean
 }
 
 const RECENT_VARIANTS = 'sl:celebrate:recent:v1'
@@ -83,7 +87,7 @@ async function play(occasion: Occasion, options: CelebrateOptions): Promise<void
     writeJSON(kv, RECENT_VARIANTS, remember(recent, plan.main))
   }
 
-  const key = lineKey(occasion, facts)
+  const key = options.quiet ? null : lineKey(occasion, facts)
   let text: string | null = null
   if (key) {
     const seen = readJSON<string[]>(kv, RECENT_LINES, [])

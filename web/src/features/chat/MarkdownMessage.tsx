@@ -22,6 +22,7 @@ export function MarkdownMessage({
   citations = [],
   base,
   streaming = false,
+  onCite,
 }: {
   content: string
   /** Resolves a `[[n]]` marker to the document it cites, so the badge can
@@ -32,13 +33,15 @@ export function MarkdownMessage({
   base?: string
   /** True on the live bubble: turns on the block reveal animation. */
   streaming?: boolean
+  /** Opens the cited passage. Without it a badge falls back to a link into Docs. */
+  onCite?: (citation: Citation) => void
 }) {
   const { text: withCiteLinks, math } = useMemo(() => extractMath(content), [content])
   const byMarker = useMemo(() => new Map(citations.map((c) => [String(c.marker), c])), [citations])
   // Stable across frames: a new `components` identity would remount every
   // link and code block on each streamed frame. Math travels via context for
   // the same reason.
-  const components = useMemo(() => buildComponents(byMarker, base), [byMarker, base])
+  const components = useMemo(() => buildComponents(byMarker, base, onCite), [byMarker, base, onCite])
   const rehypePlugins = useHighlighter(HAS_CODE_FENCE.test(content))
   return (
     <MathContext.Provider value={math}>
@@ -173,7 +176,7 @@ function useHighlighter(needed: boolean): PluggableList {
   return (needed && plugins) || NO_PLUGINS
 }
 
-function buildComponents(byMarker: Map<string, Citation>, base?: string): Components {
+function buildComponents(byMarker: Map<string, Citation>, base?: string, onCite?: (citation: Citation) => void): Components {
   return {
     a({ href, children, ...props }) {
       if (href?.startsWith('#math-')) {
@@ -188,6 +191,18 @@ function buildComponents(byMarker: Map<string, Citation>, base?: string): Compon
         // model occasionally emits `[[n]]` for an `n` outside the list it
         // was given) or `base` isn't known yet (the streaming bubble) —
         // still shown as the same badge, just not clickable.
+        if (citation && onCite) {
+          return (
+            <button
+              type="button"
+              onClick={() => onCite(citation)}
+              title={`${citation.document_name} · ${citation.locator}`}
+              className={cn(badgeClass, 'cursor-pointer transition-colors hover:bg-brand/30')}
+            >
+              {children}
+            </button>
+          )
+        }
         if (citation && base) {
           return (
             <Link

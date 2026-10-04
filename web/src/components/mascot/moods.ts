@@ -19,6 +19,10 @@ export type BotMood =
   | 'waking'
   | 'oops'
   | 'lookaround'
+  | 'sad'
+  | 'awe'
+  | 'love'
+  | 'done'
 
 export const BOT_MOODS: readonly BotMood[] = [
   'idle',
@@ -35,12 +39,16 @@ export const BOT_MOODS: readonly BotMood[] = [
   'waking',
   'oops',
   'lookaround',
+  'sad',
+  'awe',
+  'love',
+  'done',
 ]
 
 export type Eyes = 'open' | 'happy' | 'star' | 'closed'
 export type Mouth = 'smile' | 'grin' | 'o' | 'wobble' | 'yawn' | 'smug' | 'tongue'
 export type Brows = 'none' | 'worried' | 'raised' | 'focus'
-export type Fx = 'none' | 'spark' | 'zzz' | 'sweat' | 'dots' | 'orbit'
+export type Fx = 'none' | 'spark' | 'zzz' | 'sweat' | 'dots' | 'orbit' | 'tear' | 'bits'
 
 export interface Pose {
   eyes: Eyes
@@ -102,8 +110,12 @@ export const POSES: Record<BotMood, Pose> = {
   encouraging: p({ eyes: 'happy', mouth: 'smile', ar: -118, reach: 1.3, thumb: true, tilt: 4, cheek: 0.75 }),
   sleepy: p({ eyes: 'closed', mouth: 'o', fx: 'zzz', al: 8, ar: -8, tilt: 7, lift: 2, cheek: 0.3, glow: 0.18 }),
   waking: p({ mouth: 'smile', cheek: 0.5 }),
+  sad: p({ mouth: 'wobble', brows: 'worried', fx: 'tear', es: 0.95, lid: 0.22, al: 8, ar: -8, tilt: -6, lift: 2, gy: 2, cheek: 0.25, glow: 0.22 }),
+  awe: p({ eyes: 'star', mouth: 'o', brows: 'raised', fx: 'spark', al: 72, ar: -72, reach: 1.2, lift: -2, cheek: 0.8, glow: 1 }),
+  love: p({ eyes: 'happy', mouth: 'smile', fx: 'bits', al: 24, ar: -24, tilt: 6, cheek: 1, glow: 0.9 }),
+  done: p({ eyes: 'happy', mouth: 'grin', al: 60, ar: -60, reach: 1.15, lift: -2, cheek: 0.85, glow: 1 }),
   oops: p({ mouth: 'wobble', brows: 'worried', fx: 'sweat', es: 0.92, al: 36, ar: -36, gy: 1, cheek: 0.2, glow: 0.35 }),
 }
 
 /** Moods where idle eyes may follow the pointer. */
-export const FOLLOW_MOODS: ReadonlySet<string> = new Set<BotMood>(['idle', 'wave', 'happy', 'curious', 'encouraging', 'proud'])
+export const FOLLOW_MOODS: ReadonlySet<string> = new Set<BotMood>(['idle', 'wave', 'happy', 'curious', 'encouraging', 'proud', 'love'])

@@ -130,6 +130,10 @@ export const LINES: Record<string, Pool> = {
       'Taking the scenic route through the galaxy. Nearly there.',
       'Thanks for waiting. Still going!',
     ],
+    tutor: ['Still reading your pages. Thanks for waiting.'],
+    notes: ['Still writing. Neat takes a moment.', 'Pen’s moving, almost there.'],
+    cards: ['Still shuffling… nearly dealt!', 'Cutting the deck. One more second.'],
+    quiz: ['Still cooking up questions. Hang tight!', 'Warming up the buzzers. Almost go time.'],
   },
   error: {
     any: [
@@ -138,19 +142,23 @@ export const LINES: Record<string, Pool> = {
       'Something broke on my end, not yours. Try again?',
       'That didn’t go through. Retry when you’re ready.',
     ],
+    tutor: ['Hmm, I lost my place. Shall we try that again?'],
+    notes: ['Ink smudged on that one. Mind trying again?', 'Margin note: that didn’t save. Retry?'],
+    cards: ['Dropped the deck! Give it another shuffle?', 'Misdeal. Let’s try that hand again.'],
+    quiz: ['Oof, fumbled that one! Go again?', 'Buzzer’s stuck. Try that round again?'],
   },
   success: {
     any: ['Done! Take a look.', 'All set. Hope it helps!'],
-    tutor: ['There you go!'],
-    cards: ['Your deck is ready: {count:card:cards}.', 'Fresh deck, dealt!'],
-    quiz: ['Quiz ready: {count:question:questions}.', 'Your quiz is ready. Good luck!'],
-    notes: ['Your note is ready.', 'All written up. Have a look!'],
+    tutor: ['There you go!', 'All yours. Anything unclear, just ask.'],
+    cards: ['Fresh deck: {count:card:cards}. Dealt!', 'Deck’s ready. Flip when you are.'],
+    quiz: ['Quiz is up: {count:question:questions}. Good luck!', 'Your quiz is live. Buzzers ready!'],
+    notes: ['Noted. All written up.', 'Your note is ready. Neat and tidy.'],
   },
   generating: {
     tutor: ['Reading through your docs…', 'Thinking this through.', 'Finding the right page.'],
     cards: ['Shuffling up {count:card:cards}…', 'Dealing you a fresh deck.', 'Turning this into flashcards.'],
-    quiz: ['Writing {count:question:questions}…', 'Cooking up a quiz from your material.', 'Picking questions worth asking.'],
-    notes: ['Jotting it all down…', 'Tidying this into a note.', 'Writing up the good bits.'],
+    quiz: ['Writing {count:question:questions}…', 'Cooking up some questions.', 'Picking questions worth asking.'],
+    notes: ['Jotting it down…', 'Tidying this into a note.', 'Margins and bullets, coming up.'],
   },
   streak: {
     any: [
@@ -165,15 +173,22 @@ export const LINES: Record<string, Pool> = {
   },
   quizGreat: {
     any: ['{score}%! You really know this.', 'Stellar, {name}. {score}% is a great score.', 'Brilliant run. That material stuck!'],
+    quiz: ['{score}%! Confetti cannon, fire!', 'Boom, {name}! {score}% and the crowd goes wild.', 'Champion move! That material really stuck.'],
   },
   quizOk: {
     any: ['{score}%, solid! A quick review will lock in the rest.', 'Good work. The ones you missed are worth another look.'],
+    quiz: ['{score}%, nice round! The misses are easy points next time.', 'Solid! Catch the ones that slipped and you’re golden.'],
   },
   quizRough: {
     any: [
       '{score}% this time. That’s what practice is for.',
       'Tough one! The misses show exactly what to review next.',
       'Every miss is a map. Want to go over them together?',
+    ],
+    quiz: [
+      '{score}% this round. Shake it off, rematch?',
+      'Tough set! The misses tell us exactly what to drill.',
+      'Everyone whiffs sometimes. Let’s turn these into points.',
     ],
   },
   welcomeBack: {
@@ -208,6 +223,7 @@ export const LINES: Record<string, Pool> = {
   },
   sessionEnd: {
     any: ['Nice session, {name}. See you next time!', '{count:card:cards} reviewed. That’s real progress.', 'Good work today. Rest counts too.', 'That’s a wrap! Come back whenever you’re ready.'],
+    cards: ['{count:card:cards} flipped. Clean deal!', 'Deck done, {name}. Shuffle you later!', 'All flipped. Nice work today.'],
   },
   nudge: {
     any: [
@@ -216,6 +232,7 @@ export const LINES: Record<string, Pool> = {
       'Got a few minutes? A short review goes a long way.',
       'Your cards are ready when you are. No pressure, they’re very patient.',
     ],
+    cards: ['{count:card is:cards are} due. Quick flip?', 'A few cards want a turn. No rush!', 'Your deck’s waiting. It’s very patient.'],
   },
 }
 

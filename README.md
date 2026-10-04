@@ -188,7 +188,7 @@ being unsure about them."*
 | | |
 |---|---|
 | **Security** | 38 owned-id routes, every one ownership-checked, anti-enumeration 404s |
-| **Retrieval** | Local BGE-small + pgvector — Recall@5 0.944, MRR 0.713 |
+| **Retrieval** | Local BGE-small, hybrid vector + keyword search — answer reaches the model for 94% of 98 benchmark questions (72% before) |
 | **Performance** | ~699ms chat time-to-first-token, ~158KB entry bundle |
 | **Correctness** | SM-2 implemented twice, kept honest by a 480-case parity test |
 | **Cost** | $0 infra — Vercel + Render + Supabase free tiers; inference scales with usage |
@@ -344,7 +344,7 @@ sequenceDiagram
     U->>A: POST /subspaces/{id}/chat
     A->>D: assert_subspace(user, id)
     A->>A: consume_llm_quota(user)
-    A->>D: match_document_chunks RPC
+    A->>D: search_chunks RPC (vector + keyword)
     A-->>U: SSE: citation
     A->>G: stream_chat(messages)
     G-->>A: token deltas
@@ -373,17 +373,20 @@ Request → Ownership → Retrieval → Grounding → Skills → Personalization
 > No evidence → no fake certainty. A failed retrieval stays a handled state,
 > not a hallucinated answer.
 
-- **Chunking**: 900-char windows (~200 tokens), 120-char overlap, boundary-aware
-  — prefers a paragraph break, falls back to sentence-ish punctuation, so a
-  chunk never cuts mid-word.
+- **Chunking**: structure-aware — headings are read from a PDF's fonts and
+  layout, a chunk never crosses a section, and each one records its pages and
+  heading path, so a citation reads "p. 4 · Satisfying 2NF".
 - **Embeddings**: local BGE-small-en-v1.5, quantized ONNX via `fastembed` —
   no external embedding API, ~170–230MB resident. `vector(384)` storage
   (~1.5KB/row) fits roughly **210,000 chunks** — ~4,200 lecture PDFs — before
   Supabase's 500MB free-tier ceiling.
-- **Retrieval**: `retrieve()` embeds the question, calls the
-  `match_document_chunks` RPC (cosine similarity, top-k=4), and
-  `retrieve_with_links()` additively pulls from any explicitly **linked**
-  subspaces the student has connected — never automatic, always opt-in.
+- **Retrieval**: one staged pipeline (`services/retrieval.py`) — follow-ups
+  are rewritten into standalone questions, vector and keyword search run in
+  one SQL call and are rank-fused, coverage is judged (nothing is passed for
+  small talk; doubtful sources carry a warning), and up to six chunks are
+  selected. Explicitly **linked** subspaces are searched alongside — never
+  automatic, always opt-in. Measured by a 114-question benchmark
+  ([`api/eval`](api/eval/README.md)).
 - **Prompt assembly order is deliberate, not incidental**: voice → topic →
   response-shape → diagram rule → citation-format instruction → *"answer
   only from documents"* → the sandboxed Skill block → student personalization
@@ -406,8 +409,9 @@ Request → Ownership → Retrieval → Grounding → Skills → Personalization
   (pathogens, drugs, exploits, historical atrocities), because an
   over-refusing tutor is both a worse product *and* a worse safety outcome in
   an education context.
-- **Measured retrieval quality** (real corpus, not synthetic): **Recall@5
-  0.944, MRR 0.713**.
+- **Measured retrieval quality**: on a 114-question benchmark over six
+  documents, the right chunk is in the top 5 for **91%** of answerable
+  questions and reaches the model for **94%** ([results](api/eval/RESULTS.md)).
 
 ## The student model & personalization
 
@@ -570,7 +574,7 @@ Measured against the live app, not estimated — full detail in
 |---|---|---|
 | Chat time-to-first-token | **~699ms** (retrieval 512ms + Groq TTFT 187ms) | < 1.5s |
 | Retrieval (`k=4`, 10-run median) | **512–521ms** | — |
-| Retrieval quality (real corpus) | **Recall@5 0.944, MRR 0.713** | — |
+| Retrieval quality (114-question benchmark) | **Recall@5 0.91, answer reaches the model 94%** | — |
 | Document reprocess (52 chunks) | **~6.0s median** | < 8s target, 25s hard cap |
 | First-load JS bundle (entry) | **~158KB gzipped** (down from 451KB pre-split) | 250KB self-imposed ceiling |
 | Cost per student / month | **well under $1** (20 sessions, 10 turns each) | — |

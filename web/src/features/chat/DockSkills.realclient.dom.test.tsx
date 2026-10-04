@@ -65,16 +65,16 @@ describe('DockSkills over the real api client', () => {
       </MemoryRouter>,
     )
     await screen.findByText('Compare')
-    await user.click(screen.getByRole('button', { name: /Turn on a skill/ }))
+    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
     await screen.findByText('Feynman')
 
     await user.click(screen.getAllByRole('button', { name: 'Turn on' })[0])
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Turn off Feynman' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Turn off Feynman' })).toBeInTheDocument())
 
     // The write succeeded and cleared the client's caches. The picker must still
     // be open, still listing the skills that are not on yet — until Hide.
     await new Promise((r) => setTimeout(r, 50))
-    expect(screen.getByRole('button', { name: /Hide skills/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Close/ })).toBeInTheDocument()
     expect(screen.getByText('Exam Cram')).toBeInTheDocument()
     expect(screen.getByText('Mistake Analyst')).toBeInTheDocument()
     expect(screen.queryByText(/haven.t added any skills/)).not.toBeInTheDocument()
@@ -91,7 +91,7 @@ describe('DockSkills over the real api client', () => {
     )
     await screen.findByText('Compare')
 
-    await user.click(screen.getByRole('button', { name: 'Turn off Compare' }))
+    await user.click(screen.getByRole('switch', { name: 'Turn off Compare' }))
     await waitFor(() => expect(screen.queryByText('Compare')).not.toBeInTheDocument())
 
     // The write succeeded and cleared the client's caches. The other skill must

@@ -1,0 +1,699 @@
+{
+ "retrieval": {
+  "(nothing removed: production)": {
+   "all": {
+    "hit@1": 0.6429,
+    "hit@5": 0.8776,
+    "context_hit": 0.9286,
+    "context_full": 0.9082,
+    "context_chars": 3974
+   },
+   "test": {
+    "hit@1": 0.6389,
+    "hit@5": 0.8333,
+    "context_hit": 0.8889,
+    "context_full": 0.8611,
+    "context_chars": 3996
+   },
+   "followup": 0.8333,
+   "exact": 0.92
+  },
+  "query prefix": {
+   "all": {
+    "hit@1": 0.6224,
+    "hit@5": 0.8673,
+    "context_hit": 0.9082,
+    "context_full": 0.8878,
+    "context_chars": 3980
+   },
+   "test": {
+    "hit@1": 0.6389,
+    "hit@5": 0.8056,
+    "context_hit": 0.8611,
+    "context_full": 0.8333,
+    "context_chars": 3952
+   },
+   "followup": 0.8333,
+   "exact": 0.92
+  },
+  "keyword search": {
+   "all": {
+    "hit@1": 0.6224,
+    "hit@5": 0.898,
+    "context_hit": 0.8367,
+    "context_full": 0.8061,
+    "context_chars": 3950
+   },
+   "test": {
+    "hit@1": 0.5833,
+    "hit@5": 0.9167,
+    "context_hit": 0.8889,
+    "context_full": 0.8611,
+    "context_chars": 3988
+   },
+   "followup": 0.7222,
+   "exact": 0.8
+  },
+  "follow-up rewrite": {
+   "all": {
+    "hit@1": 0.6122,
+    "hit@5": 0.8673,
+    "context_hit": 0.8776,
+    "context_full": 0.8571,
+    "context_chars": 3968
+   },
+   "test": {
+    "hit@1": 0.6111,
+    "hit@5": 0.8333,
+    "context_hit": 0.8611,
+    "context_full": 0.8333,
+    "context_chars": 3972
+   },
+   "followup": 0.5556,
+   "exact": 0.92
+  },
+  "adjacent promotion": {
+   "all": {
+    "hit@1": 0.6429,
+    "hit@5": 0.8776,
+    "context_hit": 0.898,
+    "context_full": 0.8776,
+    "context_chars": 3942
+   },
+   "test": {
+    "hit@1": 0.6389,
+    "hit@5": 0.8333,
+    "context_hit": 0.8611,
+    "context_full": 0.8333,
+    "context_chars": 3980
+   },
+   "followup": 0.7222,
+   "exact": 0.92
+  },
+  "six chunks (back to four)": {
+   "all": {
+    "hit@1": 0.6429,
+    "hit@5": 0.8776,
+    "context_hit": 0.8571,
+    "context_full": 0.8469,
+    "context_chars": 2768
+   },
+   "test": {
+    "hit@1": 0.6389,
+    "hit@5": 0.8333,
+    "context_hit": 0.8333,
+    "context_full": 0.8333,
+    "context_chars": 2782
+   },
+   "followup": 0.8333,
+   "exact": 0.88
+  }
+ },
+ "warning": {
+  "with the warning": {
+   "refused_uncovered": [
+    12,
+    13
+   ],
+   "unsupported_uncovered": [
+    0,
+    13
+   ],
+   "correct_covered": [
+    9,
+    9
+   ],
+   "refused_covered": [
+    0,
+    9
+   ],
+   "rows": [
+    {
+     "id": "re05",
+     "category": "reworded",
+     "context": "19fcff21864a6b65",
+     "answer": "The posterior odds equal the prior odds multiplied by the Bayes factor (the likelihood ratio).  \n\n## Why it works\n- **Prior odds** are \\(\\frac{P(A)}{P(\\neg A)}\\), the ratio of belief in a hypothesis before seeing evidence.  \n- **Likelihoods** are \\(P(E\\mid A)\\) and \\(P(E\\mid \\neg A)\\), the probabilities of the evidence under each hypothesis.  \n- Dividing the two Bayes‑rule equations for \\(P(A\\mid E)\\) and \\(P(\\neg A\\mid E)\\) cancels the unknown posterior probability, leaving  \n\n\\[\n\\frac{P(A\\mid E)}{P(\\neg A\\mid E)}=\n\\frac{P(A)}{P(\\neg A)}\\times\\frac{P(E\\mid A)}{P(E\\mid \\neg A)}.\n\\]\n\nThe second fraction is the **Bayes factor** (or likelihood ratio) [[1]].\n\n## Example (medical test)\n- Prevalence = 1 % ⇒ prior odds \\(=0.01/0.99\\approx0.0101\\).  \n- Test sensitivity = 0.99, specificity = 0.99 ⇒ likelihood ratio  \n\n\\[\n\\frac{P(\\text{positive}\\mid\\text{disease})}{P(\\text{positive}\\mid\\text{no disease})}\n=\\frac{0.99}{0.01}=99.\n\\]\n\n- Posterior odds = \\(0.0101 \\times 99 \\approx 1\\), i.e., odds of 1 : 1, which corresponds to a 50 % posterior probability [[2]].\n\n**Key takeaway:** Multiply the prior odds by the likelihood ratio to update beliefs after observing evidence.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "re11",
+     "category": "reworded",
+     "context": "cd0071d51476d86a",
+     "answer": "You can’t record a newly hired teacher without a class because the table’s design forces a **course code** (a non‑null foreign key) to be present in every row, creating an insertion anomaly. If the teacher has no assigned course, the row would have to store a null course code, which the schema doesn’t allow, so the teacher’s information can’t be inserted. [[1]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re12",
+     "category": "reworded",
+     "context": "c7ac9f2258da54cb",
+     "answer": "**In practice you usually stop at 3NF (or BCNF); the higher normal forms are mostly of academic interest.**  \n\n## What’s used day‑to‑day  \n- **1NF, 2NF, 3NF** – these eliminate duplicate rows, ensure scalar columns, and remove most insertion, update, and deletion anomalies. A relation in 3NF is commonly called “normalized” and is sufficient for the majority of commercial applications.  \n- **BCNF** – often applied when a table still has functional dependencies that violate 3NF’s stricter rule about superkeys. It is a practical extension of 3NF for many designs.\n\n## What’s mostly theory  \n- **4NF and above (5NF, 6NF, etc.)** – these address more exotic dependency types (multivalued, join, domain‑key) that rarely appear in typical business data. The literature notes that normal forms beyond 4NF are “mainly of academic interest, as the problems they exist to solve rarely appear in practice” [[1]].\n\n**Key takeaway:** Aim for 3NF (or BCNF when needed); higher normal forms are useful mainly for specialized or research‑oriented scenarios.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "ex13",
+     "category": "exact",
+     "context": "ddd9bd7b8bbbe8ef",
+     "answer": "**Domain‑Key Normal Form (DKNF)**.  \n\nIt is the highest normal form in the hierarchy, requiring that every constraint on a relation be a logical consequence of its domain constraints and key constraints【4】.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo09",
+     "category": "followup",
+     "context": "a32cab66c386c859",
+     "answer": "The main downside of **sixth normal form (6NF)** is the explosion of tables: a single logical entity that has N non‑key attributes must be split into N separate tables, each holding the primary key plus one attribute. This proliferation makes multi‑attribute updates, inserts, and deletes require multiple statements across many tables, increasing query complexity and overhead—especially problematic for OLTP workloads.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo11",
+     "category": "followup",
+     "context": "cbd0e64e61b23e82",
+     "answer": "Most designers stop at **third normal form (3NF)**, because it removes the common insertion, update, and deletion anomalies while keeping the schema practical to implement and maintain. 3NF is often called the “sweet spot” for everyday database design.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "re15",
+     "category": "reworded",
+     "context": "6199bb5e6c864f39",
+     "answer": "TCP is not a good fit for voice calls because it guarantees in‑order, reliable delivery, which forces the sender to wait for retransmissions of lost packets before continuing. This can introduce delays of seconds, unsuitable for real‑time audio where timely delivery is more important than perfect order [[1]] [[5]].\n\n**Key takeaway:** Voice over IP typically uses UDP or protocols built on top of it to avoid the latency introduced by TCP’s retransmission and ordering guarantees.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "re18",
+     "category": "reworded",
+     "context": "db43c99e35bf931f",
+     "answer": "Leaves appear green because chlorophyll pigments absorb light in the blue (≈ 450 nm) and red (≈ 680 nm) portions of the spectrum but reflect and transmit green light (≈ 530 nm). The reflected green light is what our eyes detect, giving leaves their characteristic color. Chlorophyll is the primary pigment in photosynthetic membranes, and other accessory pigments (carotenes, xanthophylls) absorb other wavelengths but do not dominate the visual spectrum, so the green band remains most visible [[1]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re19",
+     "category": "reworded",
+     "context": "c5c333e45d8370b7",
+     "answer": "Cacti use **crassulacean acid metabolism (CAM)**: they open their stomata at night to take in CO₂, fix it into malate, and store it in vacuoles. During the hot day the stomata stay closed, and the stored malate is decarboxylated inside the leaf to release CO₂ for the Calvin cycle, keeping water loss minimal. This temporal separation of CO₂ uptake and fixation allows cacti to photosynthesize efficiently while conserving water.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un02",
+     "category": "unanswerable",
+     "context": "5b1c355785f49935",
+     "answer": "The provided sources do not discuss Dijkstra’s shortest‑path algorithm, so I can’t give a citation‑based answer.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un03",
+     "category": "unanswerable",
+     "context": "a66362a03322b92d",
+     "answer": "The material you provided does not cover red‑black tree insertion. I can’t answer that from the given sources.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un04",
+     "category": "unanswerable",
+     "context": "3ab19e23f12ba573",
+     "answer": "The student’s material on algorithms and machine learning does not cover the central limit theorem, so I can’t provide an answer based on the given sources.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un06",
+     "category": "unanswerable",
+     "context": "c0e4ee328da7eb87",
+     "answer": "The material you provided does not cover that information.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un07",
+     "category": "unanswerable",
+     "context": "e886188decee1748",
+     "answer": "The material you’ve provided does not cover SQL syntax for a LEFT OUTER JOIN across three tables. I can’t pull a citation from the sources you listed for that. If you need help writing the query, let me know the table names and columns, and I’ll walk you through it.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un08",
+     "category": "unanswerable",
+     "context": "c8ed4a0e1c52bf36",
+     "answer": "The CAP theorem is not covered in the material you have provided.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un09",
+     "category": "unanswerable",
+     "context": "6189731e03fb50f3",
+     "answer": "The material you provided does not cover how BGP selects the best route.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un10",
+     "category": "unanswerable",
+     "context": "6097b6b00394c914",
+     "answer": "I’m not seeing any of the provided sources covering B+ trees or how they speed up queries, so I can’t give you an answer based on your material. If you have other notes or a textbook that discusses B+ trees, let me know and I can help explain it.",
+     "judged": true,
+     "correct": false,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un11",
+     "category": "unanswerable",
+     "context": "7ac65dc9d920ff58",
+     "answer": "I’m sorry, but the sources provided do not cover how DNS resolves a domain name to an IP address.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un12",
+     "category": "unanswerable",
+     "context": "1f70f3433e73998e",
+     "answer": "The provided sources focus on photosynthesis and related topics; they do not cover mitosis. Therefore, I cannot answer this question based on the available material.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un13",
+     "category": "unanswerable",
+     "context": "504d88454b50bd27",
+     "answer": "The provided sources focus on photosynthesis, chloroplast origins, and related cellular processes; they do not contain information on DNA replication. If you need an explanation of DNA replication, let me know and I can give a concise overview based on general biology knowledge.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un14",
+     "category": "unanswerable",
+     "context": "4441a08db46d71a3",
+     "answer": "The provided sources do not cover the mechanism of neuronal signal transmission across a synapse.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un15",
+     "category": "unanswerable",
+     "error": "The AI took too long to respond. Try again."
+    },
+    {
+     "id": "un16",
+     "category": "unanswerable",
+     "context": "bddb8882e273b159",
+     "answer": "The provided sources don’t include information on the ATP yield of the Krebs (citric acid) cycle per glucose.",
+     "judged": true,
+     "correct": false,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    }
+   ]
+  },
+  "without it": {
+   "refused_uncovered": [
+    2,
+    14
+   ],
+   "unsupported_uncovered": [
+    12,
+    14
+   ],
+   "correct_covered": [
+    9,
+    9
+   ],
+   "refused_covered": [
+    0,
+    9
+   ],
+   "rows": [
+    {
+     "id": "re05",
+     "category": "reworded",
+     "context": "d856ba8cd853a2db",
+     "answer": "The posterior odds equal the prior odds multiplied by the Bayes factor (the likelihood ratio).  \n\n## Why this works\n- **Prior odds** are \\( \\frac{P(A)}{P(\\neg A)} \\), the ratio of belief in a hypothesis before evidence.  \n- **Likelihoods** are \\( P(E\\mid A) \\) and \\( P(E\\mid \\neg A) \\), the probabilities of the evidence under each hypothesis.  \n\nDividing the Bayes‑updated probabilities for \\(A\\) and \\(\\neg A\\) cancels the unknown \\(P(E)\\) and leaves  \n\n\\[\n\\frac{P(A\\mid E)}{P(\\neg A\\mid E)} \\;=\\; \\frac{P(A)}{P(\\neg A)} \\times \\frac{P(E\\mid A)}{P(E\\mid \\neg A)} .\n\\]\n\nThe second fraction is the **Bayes factor** (or likelihood ratio) [[1](#)].  \n\n## Practical example\nA disease prevalence of 1 % gives prior odds  \n\n\\[\n\\frac{0.01}{0.99}=1{:}99 .\n\\]\n\nA test that is 99 % accurate yields  \n\n\\[\n\\text{Bayes factor} = \\frac{P(\\text{positive}\\mid\\text{disease})}{P(\\text{positive}\\mid\\text{no disease})}\n= \\frac{0.99}{0.01}=99 .\n\\]\n\nPosterior odds = prior odds × Bayes factor  \n\n\\[\n1{:}99 \\times 99 = 1{:}1 ,\n\\]\n\nso the posterior probability is 50 % [[2](#)].\n\n**Key takeaway:** to update odds after evidence, multiply the prior odds by the likelihood ratio of the evidence under the two competing hypotheses.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "re11",
+     "category": "reworded",
+     "context": "cd0071d51476d86a",
+     "answer": "You can’t record a newly hired teacher without a class because the table’s design creates an **insertion anomaly**: the teacher’s information is only stored when a non‑null Course Code is present, so a teacher with no assigned courses has no row to hold their data [[1]]. \n\n### Why the anomaly occurs\n- The relation combines teacher attributes (ID, name, hire date) with a course attribute (Course Code) in a single table.  \n- The primary key includes the Course Code, so a row cannot exist unless that field has a value.  \n- If a teacher isn’t teaching any course, the only way to insert a row is to set Course Code to NULL, which the schema disallows for key fields.\n\n### Consequence\nAttempting to insert the teacher forces either:\n1. **Null Course Code** – violates the key constraint, or  \n2. **No row at all** – the teacher’s data is lost until they are assigned a class.\n\n**Key takeaway:** The table’s structure ties teacher existence to course assignment, producing an insertion anomaly that prevents storing teachers without classes. Consider normalizing the schema into separate Teacher and Course tables linked by a foreign key.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re12",
+     "category": "reworded",
+     "context": "150fe5df8305a1b8",
+     "answer": "**In practice you usually stop at 3NF (or BCNF); higher normal forms are mostly of academic interest.**  \n\n## What’s used day‑to‑day  \n- **1NF, 2NF, 3NF** – these eliminate duplicate rows, ensure scalar columns, and remove most insertion, update, and deletion anomalies. Most production systems consider a schema “normalized” once it reaches 3NF [[3]].  \n- **BCNF** – often applied when 3NF still leaves functional dependencies that violate a superkey rule; many designers adopt it as a safe extension of 3NF.  \n\n## What’s largely theoretical  \n- **4NF and above (5NF, 6NF, etc.)** – the additional constraints (multivalued dependencies, join dependencies, domain‑key constraints) address problems that rarely arise in typical applications. The literature notes that normal forms beyond 4NF are “mainly of academic interest, as the problems they exist to solve rarely appear in practice” [[1]].  \n\n**Key takeaway:** Aim for 3NF (or BCNF) in most real‑world databases; higher normal forms are useful mainly for specialized or research‑oriented scenarios.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "ex13",
+     "category": "exact",
+     "context": "b1898752ed12de97",
+     "answer": "**DKNF stands for *Domain‑Key Normal Form**【4】.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo09",
+     "category": "followup",
+     "context": "a32cab66c386c859",
+     "answer": "The main downside of **sixth normal form (6NF)** is the explosion of tables: a single logical entity that has N non‑key attributes becomes N separate tables, so any insert, update, or delete that logically touches one record must be performed on many tables. This leads to higher maintenance overhead, more complex queries, and poorer performance for typical OLTP workloads. [[4]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "fo11",
+     "category": "followup",
+     "context": "cbd0e64e61b23e82",
+     "answer": "**Third normal form (3NF)** is generally regarded as sufficient for most practical relational designs. It eliminates most insertion, update, and deletion anomalies while keeping the schema manageable. [[3]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re15",
+     "category": "reworded",
+     "context": "e79013a800863e3d",
+     "answer": "TCP’s reliability mechanisms (in‑order delivery, acknowledgment‑driven retransmissions, and congestion control) introduce latency and jitter that exceed the tight timing requirements of voice‑over‑IP streams.  \n\n### Why TCP hurts voice quality\n- **Delay from retransmission** – Lost packets trigger a timeout or fast‑retransmit before the next segment can be delivered, adding seconds of wait time [[1]].\n- **Head‑of‑line blocking** – The receiver cannot process any data that follows a missing segment until the lost one is recovered, causing gaps in the audio stream [[2]].\n- **Congestion‑induced slow‑start** – Spurious timeouts or duplicate ACKs can shrink the sending window, further slowing delivery and increasing jitter [[1],[2]].\n\nThese effects make it hard to maintain the steady, low‑latency packet flow that real‑time voice codecs need; protocols that tolerate loss (e.g., UDP + RTP) are preferred.  \n\n**Key takeaway:** TCP’s emphasis on perfect, ordered delivery trades off the timeliness essential for voice calls.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
+    },
+    {
+     "id": "re18",
+     "category": "reworded",
+     "context": "db43c99e35bf931f",
+     "answer": "Leaves appear green because **chlorophyll** in their cells absorbs light most efficiently in the red and blue regions of the spectrum while reflecting and transmitting the green wavelengths, which our eyes perceive as green[[1]].  \n\n### Pigment absorption\n- **Chlorophyll a & b**: peak absorption around 430 nm (blue) and 660 nm (red); minimal absorption near 500–570 nm (green).  \n- **Accessory pigments** (carotenes, xanthophylls) broaden the range of absorbed light but also reflect green, reinforcing the overall green hue[[1]].\n\n### Why green isn’t used for photosynthesis\n- The energy of green photons is intermediate; using chlorophyll’s absorption peaks (higher‑energy blue and lower‑energy red) maximizes the efficiency of converting light energy into chemical energy during the light‑dependent reactions.\n\n**Key takeaway:** The green color of leaves results from chlorophyll’s selective absorption of non‑green light and the consequent reflection of green wavelengths.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "re19",
+     "category": "reworded",
+     "context": "e14794b9622492f9",
+     "answer": "Cacti use **Crassulacean Acid Metabolism (CAM)**: they open stomata at night to absorb CO₂, store it as malic acid, and release it internally for the Calvin cycle during the hot daytime while keeping stomata closed.  \n\n## Night‑time CO₂ uptake  \n- Stomata open when temperatures are low and humidity is higher.  \n- CO₂ is fixed by **PEP carboxylase** into oxaloacetate, then reduced to malate and stored in vacuoles as malic acid [[3]].\n\n## Day‑time carbon use without water loss  \n- Stomata remain closed, preventing transpiration.  \n- Malic acid is decarboxylated, releasing CO₂ inside the leaf.  \n- The released CO₂ is fixed by **RuBisCO** in the Calvin cycle, producing 3‑phosphoglycerate [[3]].\n\n## Why this limits water loss  \n- Night‑time gas exchange occurs when vapor pressure deficit is low, so transpiration is minimal.  \n- Day‑time photosynthesis proceeds with internal CO₂, eliminating the need for open stomata and thus conserving water in the extreme heat.\n\n**Key takeaway:** By shifting CO₂ uptake to the cooler night and storing it as malic acid, cacti decouple carbon fixation from water loss, enabling photosynthesis during daytime heat without opening stomata.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
+     "id": "un02",
+     "category": "unanswerable",
+     "context": "5b1c355785f49935",
+     "answer": "The sources provided do not discuss Dijkstra’s algorithm, so I can’t give a citation‑based answer from them. In general, the time complexity depends on the data structure used for the priority queue: with a binary heap it is \\(O((V+E)\\log V)\\), and with a Fibonacci heap it can be reduced to \\(O(E + V\\log V)\\).",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un03",
+     "category": "unanswerable",
+     "context": "47d862735ce18cbe",
+     "answer": "The provided sources discuss binary search trees and external path lengths but do not cover red‑black trees or their insertion algorithm. I can explain the general steps for inserting into a red‑black tree, but that information isn’t supported by the given references.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un04",
+     "category": "unanswerable",
+     "context": "3ab19e23f12ba573",
+     "answer": "The **central limit theorem** states that the sum (or average) of a large number of independent, identically distributed random variables—regardless of their original distribution—converges in distribution to a normal (Gaussian) distribution, provided the variables have finite mean and variance.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un06",
+     "category": "unanswerable",
+     "context": "c0e4ee328da7eb87",
+     "answer": "Thomas Bayes never received the Turing Award; the prize was established long after his death.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un07",
+     "category": "unanswerable",
+     "context": "e886188decee1748",
+     "answer": "**Answer**\n\nUse a chain of `LEFT JOIN`s, each one joining the previous result to the next table on the appropriate key.  \n```sql\nSELECT  a.col1,\n        b.col2,\n        c.col3\nFROM    TableA AS a\nLEFT JOIN TableB AS b\n       ON a.key = b.key\nLEFT JOIN TableC AS c\n       ON b.key = c.key;\n```\n\n**Explanation**\n\n1. `TableA` is the leftmost (driving) table.  \n2. The first `LEFT JOIN` brings in `TableB`. If a row in `TableA` has no matching row in `TableB`, the columns from `TableB` are `NULL`.  \n3. The second `LEFT JOIN` attaches `TableC` to the already‑joined result. It preserves all rows from the previous join, adding `NULL`s where `TableC` has no match.\n\n**Tip**  \nIf the join condition for `TableC` should reference a column from `TableA` instead of `TableB`, adjust the `ON` clause accordingly. The order of the joins matters only for the columns you want to keep when no match exists.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un08",
+     "category": "unanswerable",
+     "context": "7419349de11dac5b",
+     "answer": "The **CAP theorem** states that a distributed data system can provide at most two of the following three guarantees simultaneously:\n\n* **Consistency** – all nodes see the same data at the same time.  \n* **Availability** – every request receives a (non‑error) response, without guarantee that it contains the most recent write.  \n* **Partition tolerance** – the system continues to operate despite arbitrary network partitions between nodes.  \n\nBecause network partitions are unavoidable in real‑world distributed environments, designers must choose a trade‑off between consistency and availability.  \n\n**Key takeaway:** In practice, a system must sacrifice either consistency or availability when a partition occurs.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un09",
+     "category": "unanswerable",
+     "context": "ae1745d720d66d5a",
+     "answer": "BGP selects the best route by applying its path‑selection algorithm, which evaluates attributes such as local preference, AS‑path length, origin type, MED, and tie‑breakers like router ID.  \n\n**Key steps in the decision process**\n\n1. **Highest local preference** – prefers routes advertised with a larger local‑preference value.  \n2. **Shortest AS‑path** – chooses the route with the fewest autonomous system numbers.  \n3. **Lowest origin type** – prefers IGP‑originated routes over EGP, then over incomplete.  \n4. **Lowest MED (Multi‑Exit Discriminator)** – selects the route with the smallest MED when routes come from the same neighboring AS.  \n5. **eBGP over iBGP** – prefers routes learned via eBGP over those learned via iBGP.  \n6. **Lowest IGP cost to the next hop** – uses the internal routing metric to the next‑hop router.  \n7. **Oldest route** – prefers the route that has been in the BGP table longest.  \n8. **Lowest router ID** – final tie‑breaker using the BGP speaker’s router identifier.\n\nIf none of these attributes differentiate the routes, BGP may fall back to additional tie‑breakers such as the lowest neighbor address.  \n\n**Key takeaway:** BGP’s best‑path selection is a deterministic, ordered evaluation of path attributes, ensuring consistent routing decisions across the network.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un10",
+     "category": "unanswerable",
+     "context": "02429077c9a06ece",
+     "answer": "A **B+ tree index** is a balanced, multi‑level tree structure where all searchable records reside in the leaf nodes and the internal nodes contain only key values that guide the search.\n\n### How it speeds up queries\n- **Logarithmic search depth** – Because the tree is balanced, the number of levels grows with log N (N = rows). Finding a key requires traversing only a few pages, not scanning the whole table.\n- **Range scans** – Leaf nodes are linked in order, so once the start key is located the engine can read successive leaves sequentially without additional index lookups, making `BETWEEN`, `>`, `<` and prefix searches fast.\n- **Reduced I/O** – Each node (often a whole disk page) holds many keys, so a single I/O brings in many entries. This minimizes the number of disk reads compared with a linear scan.\n\nIn practice, the database uses the index to locate the relevant leaf page, then reads the matching rows directly, avoiding full‑table scans and dramatically cutting query latency.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un11",
+     "category": "unanswerable",
+     "context": "8a7b4375d57dd1d1",
+     "answer": "DNS resolution isn’t covered by the provided sources, so I can’t detail the process from this material. If you need a description of how a recursive resolver queries root, TLD, and authoritative servers, let me know and I can explain it using general knowledge.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un12",
+     "category": "unanswerable",
+     "context": "06704001164d338a",
+     "answer": "Mitosis proceeds through four sequential phases:\n\n1. **Prophase** – chromosomes condense, the nuclear envelope breaks down, and the spindle apparatus begins to form.  \n2. **Metaphase** – chromosomes align at the cell’s equatorial plate, attached to spindle fibers at their kinetochores.  \n3. **Anaphase** – sister chromatids separate and are pulled toward opposite poles of the cell.  \n4. **Telophase** – nuclear envelopes re‑form around each set of chromosomes, which decondense, and the spindle disassembles.  \n\n(These phases are followed by cytokinesis, which physically divides the cytoplasm.)",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un13",
+     "category": "unanswerable",
+     "context": "504d88454b50bd27",
+     "answer": "DNA replication copies the entire genome before cell division by using each original strand as a template to synthesize a new complementary strand.\n\n**Key steps**\n\n1. **Initiation** – Replication begins at specific origins where initiator proteins unwind the double helix and recruit helicase, which creates replication forks.\n2. **Primer synthesis** – Primase lays down short RNA primers on each template strand, providing a 3’‑OH for DNA polymerase to extend.\n3. **Elongation** – DNA polymerase adds nucleotides to the 3’ end of each primer, synthesizing the leading strand continuously and the lagging strand discontinuously as Okazaki fragments.\n4. **Proofreading** – The polymerase’s exonuclease activity removes misincorporated bases, allowing correction before extension continues.\n5. **Fragment joining** – DNA ligase seals the nicks between adjacent Okazaki fragments, forming a continuous lagging strand.\n6. **Termination** – Replication forks meet, and any remaining RNA primers are removed and replaced with DNA, completing the double‑stranded molecules.\n\nThe coordinated action of these enzymes ensures high fidelity and rapid duplication of the genome.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un14",
+     "category": "unanswerable",
+     "context": "4441a08db46d71a3",
+     "answer": "Neurons transmit signals across a synapse by releasing neurotransmitter molecules from the presynaptic terminal, which then bind to receptors on the postsynaptic membrane, converting the chemical signal back into an electrical response.  \n\n**Key steps**  \n1. **Action potential arrival** – depolarization opens voltage‑gated Ca²⁺ channels in the presynaptic membrane.  \n2. **Calcium influx** – Ca²⁺ entry triggers vesicles containing neurotransmitter to fuse with the membrane (exocytosis).  \n3. **Neurotransmitter diffusion** – released molecules cross the synaptic cleft (≈20 nm) and bind to specific receptors on the postsynaptic cell.  \n4. **Postsynaptic response** – receptor activation opens ion channels or initiates second‑messenger cascades, producing either depolarization (excitatory) or hyperpolarization (inhibitory).  \n5. **Signal termination** – neurotransmitter is removed by reuptake, enzymatic degradation, or diffusion away from the cleft.  \n\n**Key takeaway:** The synaptic signal is converted from an electrical impulse to a chemical messenger and back to an electrical change in the next neuron.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un15",
+     "category": "unanswerable",
+     "context": "d40e56d655e2d9dc",
+     "answer": "Hemoglobin is a tetrameric protein composed of four polypeptide subunits—two α (alpha) chains and two β (beta) chains—arranged symmetrically around a central cavity. Each subunit binds one heme prosthetic group, a planar iron‑containing porphyrin ring that coordinates an oxygen molecule. The overall quaternary structure forms a roughly spherical complex (~64 kDa) with the heme groups positioned near the interior of the protein, allowing cooperative binding and release of O₂.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un16",
+     "category": "unanswerable",
+     "context": "bddb8882e273b159",
+     "answer": "I don’t have source material here that covers the ATP yield of the Krebs cycle per glucose, so I can’t provide that figure from the provided references.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    }
+   ]
+  }
+ }
+}

@@ -36,7 +36,10 @@
  *
  * ── Moods ─────────────────────────────────────────────────────────────────
  *   idle · lookaround · wave · happy · celebrate · proud · cheer · thinking ·
- *   working · curious · encouraging · sleepy · waking · oops
+ *   working · curious · encouraging · sleepy · waking · oops · sad · awe · love
+ *   Props for crowded screens: `calm` (still at rest, a few beats then hold),
+ *   `attn` (each one's own "look at me": Nova glances, Flip flips, Pop puts a hand
+ *   up, Jot scribbles), `boop` (giggles when the pointer arrives).
  *   Pose changes tween (eyes squash into their next shape, arms swing, head
  *   tilts); loops pause offscreen; under prefers-reduced-motion every mood is
  *   a still key pose.
@@ -72,6 +75,8 @@
  */
 export { Bot, loadBotFace, type BotProps } from './Bot'
 export { BotSays, type BotSaysProps } from './BotSays'
+export { Reaction } from './Reaction'
+export { scoreArc, type Arc } from './arcs'
 export { BotProgress, formatElapsed, type BotProgressProps } from './BotProgress'
 export { SlowBot } from './SlowBot'
 export { useBotLine } from './useBotLine'

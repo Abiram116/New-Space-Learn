@@ -10,7 +10,7 @@ disappears, only the redundant restatement of a question already asked.
 
 This is the one router in the app with zero test coverage before this file,
 because `send_chat` streams and touches nine services. The seam that makes it
-testable without a real Supabase or a real Groq key: `rag.retrieve_with_links`
+testable without a real Supabase or a real Groq key: `rag.search`
 and `get_llm` are both monkeypatched at their call sites, and everything else
 (`student_model.snapshot`, `activity.bump`, ...) already degrades gracefully
 against an empty `FakeDb` — the same guarantee `test_student_model.py` and
@@ -44,10 +44,10 @@ async def _run(db, monkeypatch: pytest.MonkeyPatch, *, regenerate: bool) -> dict
         [{"id": SUBSPACE_ID, "user_id": OWNER, "subject_id": "s1", "name": "Thrashing"}],
     )
     # No documents indexed — retrieval would otherwise call the
-    # `match_document_chunks` RPC, which `FakeDb` deliberately refuses (see
+    # `search_chunks` RPC, which `FakeDb` deliberately refuses (see
     # its docstring). Empty is also the honest state for this test: nothing
     # here is about retrieval quality.
-    monkeypatch.setattr(subspace_chat.rag, "retrieve_with_links", _no_sources)
+    monkeypatch.setattr(subspace_chat.rag, "search", _no_sources)
     monkeypatch.setattr(subspace_chat, "get_llm", lambda: _FakeLLM())
 
     response = await subspace_chat.send_chat(
@@ -60,8 +60,11 @@ async def _run(db, monkeypatch: pytest.MonkeyPatch, *, regenerate: bool) -> dict
     return _parse_done_event(chunks)
 
 
-async def _no_sources(subspace_id, question, linked_ids):
-    return []
+async def _no_sources(question, **_):
+    from app.services.query_resolver import Query
+    from app.services.retrieval import Retrieval
+
+    return Retrieval(Query(question, question))
 
 
 def _parse_done_event(chunks: list[bytes | str]) -> dict:

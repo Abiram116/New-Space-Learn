@@ -188,9 +188,14 @@ UX feature.
 2. **No malware scanning.** Files are stored and re-served only to their own
    uploader, so this is genuinely low-risk here — but it's worth stating
    explicitly rather than leaving unexamined.
-3. **`pypdf` parses untrusted input** — the realistic exposure is a
-   malformed PDF triggering a crash or pathological CPU use, both bounded by
-   the 25s budget and the broad `except Exception` around processing.
+3. **`pypdf` parses untrusted input.** PDF parsers are a classic target for
+   files crafted to loop forever or decompress into gigabytes; pypdf 5.9 had
+   dozens of such advisories. Two layers: pypdf is pinned at ≥6.19, which
+   fixes every one published; and every PDF is read in a separate process
+   (`services/pdf_worker.py`) killed after 120 s and limited to 384 MB, so
+   a bad file fails its own upload and can neither stall the one ingestion
+   slot nor take the API down. Scanned pages are also checked for their
+   declared pixel size before any image is decoded (`services/ocr.py`).
 
 ---
 

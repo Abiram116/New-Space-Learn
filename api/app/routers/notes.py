@@ -24,7 +24,7 @@ from ..schemas import (
     NoteUpdate,
     OkOut,
 )
-from ..services import activity, personalization, rag, supabase
+from ..services import activity, personalization, rag, supabase, usage
 from ..services.chat_context import format_history, recent_history
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
@@ -160,7 +160,7 @@ async def generate_note(
     rather than just copying the last chat reply verbatim into a note row."""
 
     subspace = await assert_subspace(user.id, subspace_id)
-    await consume_llm_quota(user.id, cost=2)
+    await consume_llm_quota(user.id, cost=2, daily=True)
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
@@ -226,19 +226,20 @@ async def generate_note(
 
     try:
         parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {
-                    "role": "system",
-                    "content": NOTES_AGENT_VOICE
-                    + (f"\n\n{student_context}" if student_context else ""),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            model=settings.groq_model,
-            temperature=0.4,
-        ):
-            parts.append(delta)
+        with usage.task("notes.write"):
+            async for delta in get_llm().stream_chat(
+                [
+                    {
+                        "role": "system",
+                        "content": NOTES_AGENT_VOICE
+                        + (f"\n\n{student_context}" if student_context else ""),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                model=settings.groq_model,
+                temperature=0.4,
+            ):
+                parts.append(delta)
         raw = "".join(parts)
     except ApiError:
         raise
@@ -382,19 +383,22 @@ async def note_ai_inline(
 
     try:
         parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {
-                    "role": "system",
-                    "content": NOTES_AGENT_VOICE
-                    + (f"\n\n{student_context}" if student_context else ""),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            model=settings.groq_model,
-            temperature=0.4,
-        ):
-            parts.append(delta)
+        with usage.task("notes.edit"):
+            async for delta in get_llm().stream_chat(
+                [
+                    {
+                        "role": "system",
+                        "content": NOTES_AGENT_VOICE
+                        + (f"\n\n{student_context}" if student_context else ""),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                # An edit of a passage the student already wrote (shorten, fix, continue): a short,
+                # well-bounded job, so the small model. Checked by `eval.agents` (notes edit).
+                model=settings.groq_model_fast,
+                temperature=0.4,
+            ):
+                parts.append(delta)
         content = "".join(parts).strip()
     except ApiError:
         raise

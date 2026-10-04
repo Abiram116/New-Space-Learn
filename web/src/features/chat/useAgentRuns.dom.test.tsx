@@ -145,7 +145,7 @@ describe('useAgentRuns', () => {
     expect(result.current.runs[0]).toMatchObject({
       status: 'done',
       doneText: '8 cards ready',
-      href: '/s/a/b/flashcards?deck=deck-9',
+      href: '/s/a/b/flashcards?deck=deck-9&from=chat',
     })
     expect(result.current.busy.flashcards).toBe(false)
     // The success state is visible first...
@@ -154,7 +154,7 @@ describe('useAgentRuns', () => {
     await act(async () => {
       vi.advanceTimersByTime(REDIRECT_DELAY_MS)
     })
-    expect(navigate).toHaveBeenCalledWith('/s/a/b/flashcards?deck=deck-9')
+    expect(navigate).toHaveBeenCalledWith('/s/a/b/flashcards?deck=deck-9&from=chat')
   })
 
   it('open() navigates immediately and cancels the pending redirect', async () => {
@@ -205,7 +205,7 @@ describe('useAgentRuns', () => {
     quizMock.mockResolvedValueOnce({ id: 'q1' } as never)
     await act(async () => result.current.retry(result.current.runs[0].id))
     expect(quizMock).toHaveBeenCalledTimes(2)
-    expect(result.current.runs[0]).toMatchObject({ status: 'done', href: '/s/a/b/quizzes?q=q1' })
+    expect(result.current.runs[0]).toMatchObject({ status: 'done', href: '/s/a/b/quizzes?q=q1&from=chat' })
   })
 
   it('a dismissed run never redirects', async () => {

@@ -390,6 +390,14 @@ function TopBar() {
    head rather than behind its body. Stacked over two lines it was buried:
    the figure covered the middle of both words and neither read. */
 
+/**
+ * Where `student-reading-shadow.webp` sits, as fractions of the figure's box:
+ * how far it reaches past the left and right edges and the top, and its own
+ * size. Printed by `web/scripts/bake_figure_shadow.py` — change one, rerun
+ * the other.
+ */
+const FIGURE_SHADOW = { side: 0.1425, top: 0.062, width: 1.285, height: 1.062 }
+
 type CloseHandle = { setProgress: (p: number) => void }
 
 // `forwardRef` + `useImperativeHandle` rather than a `progress` prop — see
@@ -608,12 +616,10 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
             No pointer parallax on this element — tried, and asked to drop
             it: constant motion on the one thing the eye rests on longest
             here worked against the "picture rises into place, done" beat
-            rather than adding to it. The `filter: drop-shadow` pair stays
-            — `drop-shadow` follows the artwork's actual alpha silhouette
-            rather than its bounding box the way `box-shadow` would, so
-            the shadow reads as genuinely cast BY the figure onto the
-            panel, which is what still sells depth without any motion
-            attached to it.
+            rather than adding to it. The shadow behind the figure is a
+            picture laid behind it (see the note on that element), so it
+            still reads as cast BY the figure's own silhouette, which is
+            what sells depth without any motion attached to it.
 
             No opacity FADE — `opacity` here has no `transition`, so the
             rise itself is still the only thing that visibly animates; the
@@ -631,24 +637,8 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
             position, rather than depending on `65svh` being large enough
             for every case. */}
         <div className="relative flex min-h-0 items-end justify-center lg:h-full lg:justify-end">
-          <img
-            src="/student-reading.webp"
-            alt=""
-            aria-hidden
-            // `max-h-[72svh]`, not `max-h-full`. This panel is
-            // `fixed inset-0`, so "full" here meant a full VIEWPORT height
-            // — the figure was allowed to be as tall as the entire screen,
-            // and `object-contain` then made it as wide as that height
-            // demanded. On a short laptop viewport that reads as the
-            // artwork taking over the composition rather than standing in
-            // it, and the `scale(1.05)` on top pushed the head past the
-            // top edge, cropping it. Capping to a fraction of the viewport
-            // makes the figure a sized element in the layout at every
-            // screen height instead of one that grows to fill whatever
-            // it's given; the scale is gone for the same reason — with a
-            // real height cap there's nothing left for it to do except
-            // reintroduce the overflow.
-            className="max-h-[72svh] max-w-full select-none object-contain object-bottom"
+          <div
+            className="relative"
             style={{
               // `everLanded`, not `landed` — see the header note by that
               // state: once this has played, scrolling back up must not
@@ -656,8 +646,6 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
               opacity: everLanded ? 1 : 0,
               transform: `translateY(${everLanded ? 0 : 110}svh)`,
               transformOrigin: 'bottom',
-              filter:
-                'drop-shadow(0 10px 14px rgba(0,0,0,0.35)) drop-shadow(0 30px 46px rgba(0,0,0,0.45))',
               // A short history on this element, because the same visible
               // symptom ("the head pops in, then rises") survived three
               // different attempted fixes before the actual cause was
@@ -697,7 +685,48 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
               // against that (see `SmoothScroll.tsx` for the other one).
               transition: 'transform 1800ms var(--ease-in-out-sl)',
             }}
-          />
+          >
+            {/* THE SHADOW IS A PICTURE, NOT A FILTER. It used to be two
+                `filter: drop-shadow(...)` on the figure; Safari draws that
+                as a hard-edged dark rectangle while the figure slides up
+                (seen on a Mac). `student-reading-shadow.webp` is the same
+                shadow drawn once (`web/scripts/bake_figure_shadow.py`), laid
+                behind the figure and moved with it — this wrapper is the
+                figure's box exactly, so the shadow is placed in fractions of
+                it. Shadows fall away downward, so it ends at the floor. */}
+            <img
+              src="/student-reading-shadow.webp"
+              alt=""
+              aria-hidden
+              draggable={false}
+              className="pointer-events-none absolute max-w-none select-none"
+              style={{
+                left: `${-FIGURE_SHADOW.side * 100}%`,
+                top: `${-FIGURE_SHADOW.top * 100}%`,
+                width: `${FIGURE_SHADOW.width * 100}%`,
+                height: `${FIGURE_SHADOW.height * 100}%`,
+              }}
+            />
+            <img
+              src="/student-reading.webp"
+              alt=""
+              aria-hidden
+              // `max-h-[72svh]`, not `max-h-full`. This panel is
+              // `fixed inset-0`, so "full" here meant a full VIEWPORT height
+              // — the figure was allowed to be as tall as the entire screen,
+              // and `object-contain` then made it as wide as that height
+              // demanded. On a short laptop viewport that reads as the
+              // artwork taking over the composition rather than standing in
+              // it, and the `scale(1.05)` on top pushed the head past the
+              // top edge, cropping it. Capping to a fraction of the viewport
+              // makes the figure a sized element in the layout at every
+              // screen height instead of one that grows to fill whatever
+              // it's given; the scale is gone for the same reason — with a
+              // real height cap there's nothing left for it to do except
+              // reintroduce the overflow.
+              className="relative block max-h-[72svh] max-w-full select-none object-contain object-bottom"
+            />
+          </div>
         </div>
       </div>
       {/* WHY THE COPY NO LONGER FADES IN ON ITS OWN CLOCK.

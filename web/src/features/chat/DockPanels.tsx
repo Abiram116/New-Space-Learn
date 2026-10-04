@@ -20,18 +20,18 @@
  * rich-text note editor. Those genuinely want room.
  */
 
-import { Link } from 'react-router-dom'
+import { useRef } from 'react'
 import type { Document } from '../../api/types'
-import { Icon } from '../../components/ui/Icon'
-import { Skeleton } from '../../components/ui/Skeleton'
-import { SourceItem } from '../docs/SourceItem'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import type { AgentKey } from './agents'
+import { DockAction, DockLink, DockSectionHead } from './dockParts'
+import { DockHelp } from './DockHelp'
+import { DockSources, type SourcesHandle } from './DockSources'
 import { CardsPanel } from './panels/CardsPanel'
 import { NotesPanel } from './panels/NotesPanel'
 import { QuizzesPanel } from './panels/QuizzesPanel'
 
-export type DockPanel = 'docs' | 'notes' | 'quizzes' | 'flashcards' | null
+export type DockPanel = 'docs' | 'notes' | 'quizzes' | 'flashcards' | 'help' | null
 
 export function DockPanelBody({
   panel,
@@ -40,6 +40,8 @@ export function DockPanelBody({
   onRunAgent,
   docs,
   docsLoading = false,
+  docsError = null,
+  onDocsChanged = () => {},
 }: {
   panel: NonNullable<DockPanel>
   subspaceId: string
@@ -49,86 +51,76 @@ export function DockPanelBody({
    *  rather than fetched again, so opening this panel costs no request. */
   docs?: Document[]
   docsLoading?: boolean
+  docsError?: string | null
+  /** Asks the dock to read the sources again (after an upload or a retry). */
+  onDocsChanged?: () => void
 }) {
   if (panel === 'docs')
-    return <DocsPanel subspaceId={subspaceId} base={base} docs={docs ?? []} loading={docsLoading} />
+    return (
+      <DocsPanel
+        subspaceId={subspaceId}
+        base={base}
+        docs={docs ?? []}
+        loading={docsLoading}
+        error={docsError}
+        onChanged={onDocsChanged}
+      />
+    )
+  if (panel === 'help') return <DockHelp />
   if (panel === 'notes')
     return <NotesPanel subspaceId={subspaceId} base={base} onRunAgent={onRunAgent} />
   if (panel === 'quizzes') return <QuizzesPanel subspaceId={subspaceId} base={base} />
   return <CardsPanel subspaceId={subspaceId} base={base} />
 }
 
-/* ── Docs ────────────────────────────────────────────────────────────── */
-
-/** How many sources the panel shows before pointing at the full page. */
-const SOURCES_SHOWN = 3
+/* ── Sources ─────────────────────────────────────────────────────────── */
 
 function DocsPanel({
   subspaceId,
   base,
   docs,
   loading,
+  error,
+  onChanged,
 }: {
   subspaceId: string
   base: string
   docs: Document[]
   loading: boolean
+  error: string | null
+  onChanged: () => void
 }) {
-  const shown = docs.slice(0, SOURCES_SHOWN)
-  const hidden = docs.length - shown.length
+  const sources = useRef<SourcesHandle>(null)
 
   return (
-    <div className="flex flex-1 flex-col gap-5">
-      <section className="flex flex-col gap-2">
-        {/* The way to the full page sits with the heading it belongs to — same
-            spot as "+ Add" on the overview — not at the foot of the panel,
-            where it was the last thing you found. */}
-        <div className="flex items-center justify-between gap-2">
-          <span className="setcode">{docs.length > 0 ? `Sources · ${docs.length}` : 'Sources'}</span>
-          <Link
-            to={`${base}/docs`}
-            className="setcode inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-brand-deep transition-colors hover:text-brand"
-          >
-            {hidden > 0 ? `See all ${docs.length} sources` : 'Manage sources'}
-            <Icon name="arrowRight" size={11} />
-          </Link>
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-2">
+          <DockSources
+            ref={sources}
+            subspaceId={subspaceId}
+            docs={docs}
+            loading={loading}
+            error={error}
+            onChanged={onChanged}
+            pill={false}
+          />
+          {docs.length > 0 && (
+            <p className="text-[11.5px] leading-snug text-faint">The AI looks through all of these when you ask a question.</p>
+          )}
         </div>
-        {loading && docs.length === 0 ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1].map((i) => (
-              <Skeleton key={i} className="h-12 rounded-[10px]" />
-            ))}
-          </div>
-        ) : docs.length === 0 ? (
-          <p className="rounded-[10px] border border-dashed border-line px-2.5 py-3.5 text-center text-[11.5px] leading-snug text-muted">
-            Nothing here yet. Add a PDF or some notes on the full page.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {shown.map((doc) => (
-              <SourceItem key={doc.id} doc={doc} />
-            ))}
-            {hidden > 0 && (
-              <p className="px-1 text-[11.5px] text-faint">
-                and {hidden} more. They&rsquo;re searched too.
-              </p>
-            )}
-          </div>
-        )}
-        <p className="text-[11.5px] leading-snug text-faint">
-          Anything here is searched when you ask a question, and answers cite the
-          page they came from.
-        </p>
-      </section>
 
-      <section className="flex flex-col gap-2">
-        <span className="setcode">Related topics</span>
-        <RelatedTopics subspaceId={subspaceId} layout="stack" />
-        <p className="text-[11.5px] leading-snug text-faint">
-          A linked topic’s sources are searched too. Links only ever add
-          material — they never replace this topic’s own.
-        </p>
-      </section>
+        <section aria-labelledby="dock-related-label" className="flex flex-col gap-2">
+          <DockSectionHead id="dock-related-label">Other topics to use</DockSectionHead>
+          <RelatedTopics subspaceId={subspaceId} layout="stack" />
+          <p className="text-[11.5px] leading-snug text-faint">The AI looks through linked topics too.</p>
+        </section>
+      </div>
+
+      <DockLink to={`${base}/docs`}>Open all files</DockLink>
+      <DockAction icon="plus" onClick={() => sources.current?.choose()}>
+        Add a file
+      </DockAction>
     </div>
   )
 }

@@ -46,6 +46,7 @@ export function Composer({
   onSend,
   onCancel,
   onRunAgent,
+  suggestion,
 }: {
   placeholder: string
   disabled?: boolean
@@ -53,6 +54,8 @@ export function Composer({
   onSend: (text: string, opts?: { images?: string[] }) => void
   onCancel?: () => void
   onRunAgent: (agent: AgentKey, argument?: string) => void
+  /** One question to offer while the box is empty, shown where the text will go. → fills it in; sending stays the student's call. */
+  suggestion?: string
 }) {
   const [value, setValue] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -90,6 +93,8 @@ export function Composer({
      this is only cheating their own revision plan, and treating them as a
      suspect for opening a panel is the worse product. */
   const { assessing, reason } = useAssessment()
+  /** The offer shows in the box itself, in the placeholder's place, while it is empty. */
+  const offer = suggestion && !streaming && !disabled && !assessing && shots.items.length === 0 ? suggestion : null
   const canSend = !disabled && !assessing && value.trim().length > 0
 
   return (
@@ -145,6 +150,7 @@ export function Composer({
         >
           <textarea
             ref={ref}
+            data-chat-input
             rows={1}
             /* Stops at the API's own ceiling rather than letting a long paste
                become a validation error. See lib/limits.ts. */
@@ -163,6 +169,12 @@ export function Composer({
               void shots.add(files)
             }}
             onKeyDown={(e) => {
+              // → takes the offered question into the box, like accepting a completion.
+              if (e.key === 'ArrowRight' && offer && !value) {
+                e.preventDefault()
+                setValue(offer)
+                return
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 submit()
@@ -173,7 +185,7 @@ export function Composer({
                 ? reason === 'quiz'
                   ? 'Paused while you’re taking the quiz'
                   : 'Paused while you’re reviewing cards'
-                : placeholder
+                : (offer ?? placeholder)
             }
             disabled={disabled || assessing}
             className="min-w-0 flex-1 resize-none bg-transparent py-1.5 text-[16px] leading-[1.5] text-ink outline-none placeholder:text-faint disabled:opacity-60"

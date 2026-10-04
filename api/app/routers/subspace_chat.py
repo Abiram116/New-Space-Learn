@@ -29,14 +29,21 @@ from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
 from ..services import (
     activity,
+    answer_cache,
     chat_memory,
+    context_budget,
+    followup,
     guardrails,
     personalization,
     rag,
+    ratelimit,
+    retrieval,
     student_model,
     supabase,
+    usage,
 )
 from ..services.chat_context import recent_history
+from ..services.embeddings import embed_question
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
 
@@ -69,6 +76,7 @@ async def list_messages(
             content=r["content"],
             citations=[Citation(**c) for c in (r.get("citations") or [])] or None,
             created_at=r["created_at"],
+            suggestion=followup.clean((r.get("meta") or {}).get("suggestion")),
         )
         for r in rows
     ]
@@ -89,7 +97,8 @@ async def send_chat(
     # An image costs more: it is a larger request, a slower model, and more
     # tokens in and out. Charging it as one plain turn would let a student
     # burn the free-tier budget three times faster than the quota implies.
-    await consume_llm_quota(user.id, cost=2 if images else 1)
+    quota_cost = 2 if images else 1
+    await consume_llm_quota(user.id, cost=quota_cost, daily=True)
     # Two waves, not six sequential awaits.
     #
     # This is the highest-traffic request in the app and every one of these was
@@ -114,11 +123,28 @@ async def send_chat(
     # style_bandit's own reads are cached per user, but on a cold cache this
     # is the difference between adding a full extra round trip to the
     # request and adding none.
-    prior, retrieved, (student_context, prefs_applied, style_applied) = await asyncio.gather(
-        recent_history(user.id, subspace_id, limit=history_limit),
-        rag.retrieve_with_links(subspace_id, body.text, linked_ids),
+    #
+    # Retrieval needs the history too — a follow-up is searched as the question
+    # it stands for — so it waits on the same fetch rather than a second one,
+    # and still overlaps with everything else.
+    history_task = asyncio.ensure_future(recent_history(user.id, subspace_id, limit=history_limit))
+
+    async def find_sources() -> retrieval.Retrieval:
+        earlier = _before_this_question(await history_task, body.text, body.regenerate)
+        return await rag.search(
+            body.text,
+            subspace_id=subspace_id,
+            linked_subspace_ids=linked_ids,
+            history=earlier,
+            topic=subspace["name"],
+        )
+
+    prior, found, (student_context, prefs_applied, style_applied) = await asyncio.gather(
+        history_task,
+        find_sources(),
         personalization.render_chat(snap, subspace_id, user.id),
     )
+    retrieved = [rag.as_retrieved(c) for c in found.chunks]
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],
         # The skill's mode composed WITH this student's weak concepts, rather
@@ -127,7 +153,10 @@ async def send_chat(
             personalization.for_skill(s, snap, subspace_id=subspace_id)
             for s in active_skills
         ],
-        history=prior,
+        # Shortened, free of stale citation markers and within a size ceiling: see
+        # `context_budget`. Retrieval above still saw the full history, so a follow-up
+        # is resolved against what was really said.
+        history=context_budget.fit_history(prior),
         question=body.text,
         retrieved=retrieved,
         images=images,
@@ -135,7 +164,39 @@ async def send_chat(
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
         student_context=student_context,
         memory_summary=subspace.get("memory_summary") or "",
+        sources_doubtful=found.confidence == "weak",
+        suggest_followup=True,
     )
+
+    # A question asked before, on the same sources and settings, is answered from what
+    # was already written (see `answer_cache`): no model call, no tokens, no wait.
+    cacheable = (
+        settings.answer_cache_enabled
+        and not body.regenerate
+        and not images
+        and found.query.how == "as-is"
+        and bool(retrieved)
+    )
+    cache_vec: list[float] = []
+    cache_fp = ""
+    cached: answer_cache.Cached | None = None
+    if cacheable:
+        try:
+            cache_vec = (await embed_question([body.text]))[0]
+            cache_fp = answer_cache.fingerprint(
+                chunk_ids=[c.id for c in found.chunks],
+                flags={
+                    "only_docs": bool(settings_row.get("answer_only_from_docs", True)),
+                    "cite": bool(settings_row.get("always_show_citations", True)),
+                    "skills": sorted(s["id"] for s in active_skills),
+                    "prefs": prefs_applied,
+                    "doubtful": found.confidence == "weak",
+                },
+            )
+            cached = answer_cache.lookup(user.id, subspace_id, body.text, cache_vec, cache_fp)
+        except Exception:  # noqa: BLE001 — a cache that fails must never fail the answer
+            log.warning("answer cache unavailable", exc_info=True)
+            cacheable = False
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
     # Skipped on a regenerate: the question is already on the record from the
@@ -156,8 +217,24 @@ async def send_chat(
             )
         )[0]
 
+    # When the large model has used nearly all of its day, go to the small one on purpose:
+    # the answer starts at once, instead of failing against a spent allowance first.
+    # (An image needs the vision model whatever the allowance.)
+    large_nearly_spent = usage.near_daily_limit(
+        settings.groq_model, settings.groq_daily_token_limit, settings.groq_switch_at
+    )
+    if large_nearly_spent and not images:
+        log.warning("large model nearly out of its daily tokens; answering this turn with the small one")
+    model_for_turn = (
+        settings.groq_model_vision
+        if images
+        else (settings.groq_model_fast if large_nearly_spent else None)
+    )
+
     async def gen() -> AsyncIterator[bytes]:
         buffer: list[str] = []
+        follow = followup.FollowUpFilter()
+        suggestion: str | None = None
         try:
             # Emit citations up front so the UI can render source cards
             # while tokens are still streaming in.
@@ -169,17 +246,35 @@ async def send_chat(
             # is smaller than the 70B used for text, so attaching a screenshot
             # buys sight at the cost of reasoning. Routing every turn through it
             # "for consistency" would quietly make every text answer worse.
-            async for delta in get_llm().stream_chat(
-                messages,
-                model=settings.groq_model_vision if images else None,
-            ):
-                buffer.append(delta)
-                yield _sse("token", {"delta": delta})
+            if cached is not None:
+                # Nothing was generated, so it does not count against the student's day either.
+                ratelimit.refund(user.id, quota_cost)
+                log.info("chat turn answered from the answer cache subspace=%s user=%s", subspace_id, user.id)
+                suggestion = cached.suggestion
+                for piece in answer_cache.pieces(cached.answer):
+                    buffer.append(piece)
+                    yield _sse("token", {"delta": piece})
+            else:
+                with usage.task("chat"):
+                    async for delta in get_llm().stream_chat(
+                        messages,
+                        model=model_for_turn,
+                    ):
+                        # The trailing "[[next: …]]" line is held back and never shown.
+                        shown = follow.feed(delta)
+                        if shown:
+                            buffer.append(shown)
+                            yield _sse("token", {"delta": shown})
+                tail, suggestion = follow.finish()
+                if tail:
+                    buffer.append(tail)
+                    yield _sse("token", {"delta": tail})
             assistant_text = "".join(buffer).strip() or "(no reply)"
             # The model was told to cite only the sources it was given, but an
             # instruction isn't a guarantee. A marker pointing at a source that
             # doesn't exist renders as an unclickable citation — a broken
             # promise, which is worse than no citation at all.
+            assistant_text = rag.normalize_citation_markers(assistant_text, len(citations_meta))
             assistant_text, dropped = rag.strip_invalid_citations(
                 assistant_text, len(citations_meta)
             )
@@ -189,6 +284,12 @@ async def send_chat(
                     dropped,
                     len(citations_meta),
                 )
+            # A marker pointing at a source that doesn't contain its sentence,
+            # when another source plainly does, is moved there. Like the line
+            # above, the client reconciles to the stored `content` on "done".
+            assistant_text, moved = rag.repoint_citations(assistant_text, [r.content for r in retrieved])
+            if moved:
+                log.info("moved %d citation marker(s) to the source that supports them", moved)
             # The retrieval audit trail. `chat_messages.citations` is the
             # user-facing record (doc, locator, snippet, kept forever on the
             # row) — this is the operator-facing one: which chunks the vector
@@ -199,9 +300,11 @@ async def send_chat(
             # needs today.
             used_markers = {int(n) for n in rag.cited_markers(assistant_text)}
             log.info(
-                "chat turn subspace=%s user=%s retrieved=%s cited=%s",
+                "chat turn subspace=%s user=%s query=%s confidence=%s retrieved=%s cited=%s",
                 subspace_id,
                 user.id,
+                found.query.how,
+                found.confidence,
                 [
                     {
                         "marker": i,
@@ -235,11 +338,19 @@ async def send_chat(
                         # force on this message (real preference or sampled
                         # experiment) — `style_bandit` reads this back to
                         # score a later feedback tap against it.
-                        "style": style_applied,
+                        "style": cached.style if cached is not None else style_applied,
+                        # What was searched for, what came back and what was
+                        # used — so "why did it answer that?" can be read off
+                        # the message instead of re-run.
+                        "retrieval": found.trace(),
+                        # Kept so the suggestion is still in the box after a reload.
+                        "suggestion": suggestion,
                     },
                 },
             )
             saved_id = saved[0]["id"] if saved else None
+            if cacheable and cached is None and cache_vec:
+                answer_cache.store(user.id, subspace_id, body.text, cache_vec, cache_fp, assistant_text, suggestion, style_applied)
             await activity.touch_subspace(subspace_id)
             await activity.bump(
                 user.id,
@@ -263,11 +374,16 @@ async def send_chat(
                     # reconciles against this rather than showing one thing now
                     # and another after a refresh.
                     "content": assistant_text,
+                    # One question the student might ask next, or null.
+                    "suggestion": suggestion,
                 },
             )
         except ApiError as e:
+            # No answer was made, so no answer is used up.
+            ratelimit.refund(user.id, quota_cost)
             yield _sse("error", {"code": e.code, "message": e.message})
         except Exception as e:  # last-resort safety net
+            ratelimit.refund(user.id, quota_cost)
             log.exception("chat stream failed: %s", e)
             yield _sse(
                 "error",
@@ -288,6 +404,20 @@ async def send_chat(
 
 
 # ── Internals ──────────────────────────────────────────────────────────
+
+
+def _before_this_question(history: list[dict[str, str]], question: str, regenerate: bool) -> list[dict[str, str]]:
+    """The conversation as it stood before this question was asked.
+
+    On a regenerate the question is already the last thing the student said,
+    so it (and anything after it) is dropped: otherwise a follow-up would be
+    resolved against itself as "the previous question"."""
+    if not regenerate:
+        return history
+    for i in range(len(history) - 1, -1, -1):
+        if history[i].get("role") == "user" and history[i].get("content") == question:
+            return history[:i]
+    return history
 
 
 def _sse(event: str, data: dict) -> bytes:

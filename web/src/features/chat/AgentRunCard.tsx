@@ -65,7 +65,7 @@ export function AgentRunCard({
   // A retry restarts the clock, so `startedAt` doubles as "a new moment".
   const line = useBotLine(situation, agent, { count }, run.startedAt)
 
-  const mood = running ? (slow ? 'thinking' : 'working') : run.status === 'done' ? 'happy' : 'oops'
+  const mood = running ? (slow ? 'thinking' : 'working') : run.status === 'done' ? 'done' : 'oops'
 
   const detail = running ? (
     <>

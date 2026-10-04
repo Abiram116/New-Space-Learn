@@ -112,8 +112,8 @@ export function celebrateQuiz(
   // A low score that still beat the last one is the better story to tell —
   // "you improved" rather than "keep going" — so it replaces the quiet line.
   if (!(best && scoreTier(q.score) === 'none')) {
-    celebrate('quiz', { ...where, facts: { score: q.score, right: q.right, total: q.total } })
+    celebrate('quiz', { ...where, quiet: true, facts: { score: q.score, right: q.right, total: q.total } })
   }
-  if (best) celebrate('best', { ...where, facts: { score: q.score, previous: q.previousBest ?? 0 } })
+  if (best) celebrate('best', { ...where, quiet: true, facts: { score: q.score, previous: q.previousBest ?? 0 } })
   void checkStreak(where)
 }

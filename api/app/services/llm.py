@@ -20,6 +20,7 @@ import httpx
 
 from ..config import settings
 from ..errors import ApiError, NotConfigured, RateLimited, UpstreamUnavailable
+from . import usage
 
 log = logging.getLogger("space_learn.llm")
 
@@ -40,6 +41,7 @@ class LLM(Protocol):
         *,
         model: str | None = None,
         temperature: float = 0.4,
+        json_object: bool = False,
     ) -> AsyncIterator[str]: ...
 
 
@@ -178,8 +180,15 @@ class GroqLLM:
         *,
         model: str | None = None,
         temperature: float = 0.4,
+        json_object: bool = False,
     ) -> AsyncIterator[str]:
+        """`json_object=True` makes the provider guarantee the reply is one
+        JSON object. Asked politely instead, the small model answered a
+        verification request with `[]` on some material — measured — so
+        anything a program reads back should ask this way."""
         chain = self._chain(model, messages)
+        # Read now: by the time the reply ends, the caller may be elsewhere.
+        task_name = usage.current_task()
         last_error: ApiError = UpstreamUnavailable("The AI service is unavailable.")
 
         for position, candidate in enumerate(chain):
@@ -196,7 +205,7 @@ class GroqLLM:
             for attempt in range(settings.groq_max_retries + 1):
                 started = False
                 try:
-                    async for delta in self._stream_once(candidate, messages, temperature):
+                    async for delta in self._stream_once(candidate, messages, temperature, json_object, task_name):
                         started = True
                         yield delta
                     breaker.succeed()
@@ -230,7 +239,12 @@ class GroqLLM:
         raise last_error
 
     async def _stream_once(
-        self, model: str, messages: list[ChatMessage], temperature: float
+        self,
+        model: str,
+        messages: list[ChatMessage],
+        temperature: float,
+        json_object: bool = False,
+        task_name: str | None = None,
     ) -> AsyncIterator[str]:
         client = await self._get()
         payload: dict[str, Any] = {
@@ -238,11 +252,18 @@ class GroqLLM:
             "messages": messages,
             "temperature": temperature,
             "stream": True,
+            **_reply_budget(model),
         }
+        if json_object:
+            payload["response_format"] = {"type": "json_object"}
+        began = time.monotonic()
         try:
             async with client.stream("POST", "/chat/completions", json=payload) as r:
+                usage.limits(model, r.headers)
                 if r.status_code >= 400:
                     body = await r.aread()
+                    if r.status_code == 429:
+                        usage.refused(model, body)
                     # Log the provider's text; never surface it — it can carry
                     # account and quota details the user shouldn't see.
                     log.warning("groq %s on %s: %s", r.status_code, model, body[:300])
@@ -257,6 +278,10 @@ class GroqLLM:
                         chunk = json.loads(data)
                     except json.JSONDecodeError:
                         continue
+                    # The last chunk carries what the whole call used.
+                    report = (chunk.get("x_groq") or {}).get("usage") or chunk.get("usage")
+                    if isinstance(report, dict):
+                        usage.record(model, report, task_name=task_name, seconds=time.monotonic() - began)
                     delta = (
                         chunk.get("choices", [{}])[0]
                         .get("delta", {})
@@ -270,6 +295,21 @@ class GroqLLM:
             ) from e
         except httpx.HTTPError as e:
             raise _Retryable(UpstreamUnavailable("The AI service didn't respond.")) from e
+
+
+def _reply_budget(model: str) -> dict[str, Any]:
+    """How long a reply may be and, for a reasoning model, how hard it thinks.
+
+    Without this a GPT-OSS model thinks at medium effort inside Groq's default
+    reply budget, and a long reply (a quiz, a deck) is cut off once the
+    thinking has used most of it. Only GPT-OSS takes `reasoning_effort` and
+    `include_reasoning`; other models get the length cap alone."""
+    budget: dict[str, Any] = {"max_completion_tokens": settings.groq_max_completion_tokens}
+    if "gpt-oss" in model:
+        budget["reasoning_effort"] = settings.groq_reasoning_effort
+        # The thinking is not shown to anyone; don't stream it.
+        budget["include_reasoning"] = False
+    return budget
 
 
 def _classify(status: int, body: bytes, retry_after: str | None) -> Exception:
@@ -304,8 +344,9 @@ class StubLLM:
         *,
         model: str | None = None,
         temperature: float = 0.4,
+        json_object: bool = False,
     ) -> AsyncIterator[str]:
-        _ = messages, model, temperature
+        _ = messages, model, temperature, json_object
         text = (
             "This is a placeholder reply — the AI provider isn't configured yet.\n\n"
             "Add `GROQ_API_KEY` to your `.env`, restart the backend, and this "

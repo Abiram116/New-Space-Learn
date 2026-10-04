@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { LIMITS } from '../../lib/limits'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { cameFromChat, returnToChat } from '../../lib/fromChat'
 import { generateQuiz, getQuiz, listAllQuizzes } from '../../api/quizzes'
 import type { Quiz, QuizResult, Tone } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
@@ -49,7 +50,10 @@ export function QuizzesView() {
 }
 
 function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
-  const [, setParams] = useSearchParams()
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  // Opened from the chat sidebar: Back goes to that chat, not to this list.
+  const fromChat = cameFromChat(params)
   const { show, showError } = useToast()
   const isMobile = useIsMobile()
   // Global on purpose — see the identical note on `listAllNotes` in
@@ -86,8 +90,9 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
   )
 
   const back = useCallback(() => {
-    setParams({}, { replace: true })
-  }, [setParams])
+    if (fromChat) returnToChat(navigate, base, 'quizzes')
+    else setParams({}, { replace: true })
+  }, [fromChat, navigate, base, setParams])
 
   const generate = useCallback(
     async (topicId: string, topic: string, count: number) => {
@@ -118,6 +123,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
           <QuizSession
             quizId={activeId}
             onBack={back}
+            backLabel={fromChat ? 'Back to chat' : undefined}
             onDone={() => {
               // No toast on a phone: the results screen says it, and the toast
               // would sit over its Back / Retake bar.
@@ -137,7 +143,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
           breadcrumb={false}
           actions={
             <Button variant="secondary" onClick={back}>
-              All quizzes
+              <Icon name="arrowLeft" size={14} /> {fromChat ? 'Back to chat' : 'All quizzes'}
             </Button>
           }
         />
@@ -148,6 +154,7 @@ function Inner({ subspaceId, base }: { subspaceId: string; base: string }) {
           <QuizSession
             quizId={activeId}
             onBack={back}
+            backLabel={fromChat ? 'Back to chat' : undefined}
             onDone={() => {
               show('Answers submitted.', 'success')
               void quizzes.refresh()
@@ -392,10 +399,13 @@ function QuizSession({
   quizId,
   onDone,
   onBack,
+  backLabel = 'Back to quizzes',
 }: {
   quizId: string
   onDone: () => void
   onBack: () => void
+  /** What the way out is called: where it goes ("Back to chat" from the sidebar). */
+  backLabel?: string
 }) {
   const isMobile = useIsMobile()
   const [quiz, setQuiz] = useState<Quiz | null>(null)
@@ -429,7 +439,7 @@ function QuizSession({
         {/* The phone has no page header to go back with. */}
         {isMobile && (
           <Button variant="secondary" size="lg" className="mt-3 w-full" onClick={onBack}>
-            Back to quizzes
+            {backLabel}
           </Button>
         )}
       </div>
@@ -448,6 +458,7 @@ function QuizSession({
           setAttempt((n) => n + 1)
         }}
         onBack={onBack}
+        backLabel={backLabel}
       />
     )
   }

@@ -101,6 +101,34 @@ describe('botVoice style limits', () => {
   })
 })
 
+describe('botVoice personality: each companion sounds like themselves', () => {
+  const OWN = ['error', 'slow', 'success', 'generating', 'quizGreat', 'quizOk', 'quizRough', 'sessionEnd', 'nudge'] as const
+
+  it('the moments that belong to a companion have lines in that companion\u2019s own voice', () => {
+    const owner = { quiz: ['quizGreat', 'quizOk', 'quizRough'], cards: ['sessionEnd', 'nudge'] } as const
+    for (const [agent, situations] of Object.entries(owner))
+      for (const situation of situations)
+        expect(LINES[situation][agent as 'quiz' | 'cards']?.length ?? 0, `${situation}/${agent}`).toBeGreaterThan(0)
+  })
+
+  it('when things go wrong or take a while, all four have their own way of saying so', () => {
+    for (const situation of ['error', 'slow', 'success', 'generating'] as const)
+      for (const agent of AGENT_IDS)
+        expect(LINES[situation][agent]?.length ?? 0, `${situation}/${agent}`).toBeGreaterThan(0)
+  })
+
+  it('no two companions share a line of their own', () => {
+    for (const situation of OWN) {
+      const seen = new Map<string, string>()
+      for (const agent of AGENT_IDS)
+        for (const line of LINES[situation][agent] ?? []) {
+          expect(seen.get(line), `"${line}" is used by ${seen.get(line)} and ${agent} (${situation})`).toBeUndefined()
+          seen.set(line, agent)
+        }
+    }
+  })
+})
+
 describe('botVoice rotation', () => {
   it('never repeats the previous line back to back', () => {
     const pick = createVoice()

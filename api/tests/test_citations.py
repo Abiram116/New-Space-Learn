@@ -84,3 +84,55 @@ def test_cited_markers_lists_every_marker_present():
 
 def test_cited_markers_empty_when_none_present():
     assert cited_markers("No sources needed here.") == []
+
+
+# ── Another model's citation style, and the stricter citation rule ─────
+
+
+def test_other_citation_styles_become_ours_but_only_for_real_sources_and_never_in_code():
+    from app.services import rag
+
+    norm = rag.normalize_citation_markers
+    assert norm("4NF is enough【4】 and more【2†L3】.", 4) == "4NF is enough[[4]] and more[[2]]."
+    assert norm("The checksum is 16 bits [1] long.", 3) == "The checksum is 16 bits [[1]] long."
+    assert norm("Out of range [7] stays.", 3) == "Out of range [7] stays."
+    assert norm("An array a[1] and a link [1](http://x) and a def\n[1]: http://x", 3) == "An array a[1] and a link [1](http://x) and a def\n[1]: http://x"
+    assert norm("Code `x[1]` and\n```\nprint(a [2])\n```\nthen [2].", 3) == "Code `x[1]` and\n```\nprint(a [2])\n```\nthen [[2]]."
+    assert norm("Already [[1]] fine.", 3) == "Already [[1]] fine."
+
+
+def test_the_citation_rule_asks_for_the_source_that_states_it_not_one_for_safety():
+    from app.services import rag
+
+    messages, _ = rag.build_prompt(
+        subspace_name="t", active_skill_instructions=[], history=[], question="q",
+        retrieved=[rag.Retrieved(document_id="d", document_name="n.pdf", content="c", locator="p. 1", similarity=0.9)],
+        answer_only_from_docs=True, always_show_citations=True,
+    )
+    text = messages[0]["content"]
+    assert "actually states the claim" in text
+    assert "Never invent a marker number" in text  # the old promise is kept
+
+
+def test_a_question_the_sources_do_not_cover_is_refused_in_one_sentence_even_with_a_false_premise():
+    from app.services import rag
+
+    messages, _ = rag.build_prompt(
+        subspace_name="t", active_skill_instructions=[], history=[], question="q",
+        retrieved=[rag.Retrieved(document_id="d", document_name="n.pdf", content="c", locator="p. 1", similarity=0.9)],
+        answer_only_from_docs=True, always_show_citations=True,
+    )
+    text = messages[0]["content"]
+    assert "say so in one sentence and stop" in text
+    assert "false premise" in text
+
+
+def test_the_follow_up_reference_rule_is_only_sent_when_there_is_a_conversation():
+    from app.services import rag
+
+    def prompt(history):
+        m, _ = rag.build_prompt(subspace_name="t", active_skill_instructions=[], history=history, question="Which one?", retrieved=[], answer_only_from_docs=False, always_show_citations=False)
+        return m[0]["content"]
+
+    assert "refers back to something earlier" not in prompt([])
+    assert "refers back to something earlier" in prompt([{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}])

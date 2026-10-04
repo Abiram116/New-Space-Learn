@@ -61,7 +61,7 @@ describe('AgentRunCard bots', () => {
         onDismiss={noop}
       />,
     )
-    expect(bot()?.dataset.mood).toBe('happy')
+    expect(bot()?.dataset.mood).toBe('done')
     for (const n of document.querySelector('.bot-progress-line')!.textContent?.match(/\d+/g) ?? []) expect(n).toBe('6')
     expect(screen.getByRole('button', { name: /open deck/i })).toBeInTheDocument()
     // No clock on a finished run.

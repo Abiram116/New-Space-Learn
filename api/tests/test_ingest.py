@@ -13,12 +13,12 @@ from typing import Any
 
 import pytest
 
-from app.services import ingest
-from app.services.embeddings import chunk_text
+from app.services import chunking, ingest
+from app.services import extract as ingest_extract
 
 DOC = {"id": "doc-1", "subspace_id": "sub-1", "user_id": "user-1", "storage_path": "u/doc-1/a.txt", "mime_type": "text/plain"}
 TEXT = "\n\n".join(f"Paragraph {i}. " + "Attention weighs every token against every other. " * 12 for i in range(20))
-N_CHUNKS = len(chunk_text(TEXT))
+N_CHUNKS = len(chunking.chunk(chunking.read_text(TEXT)))
 
 
 class _Store:
@@ -79,13 +79,49 @@ async def test_a_fresh_upload_stores_every_chunk_then_marks_ready(store):
     ingest.schedule(DOC, TEXT.encode())
     await _finish()
     assert sorted(c["chunk_index"] for c in store.chunks) == list(range(N_CHUNKS))
-    assert store.doc_patches[-1]["status"] == "ready"
+    done = store.doc_patches[-1]
+    assert done["status"] == "ready" and done["error"] is None
+    assert done["index_version"] == chunking.INDEX_VERSION
     assert not ingest.is_running("doc-1") and ingest.progress("doc-1") is None
+
+
+async def test_what_is_embedded_carries_the_heading_and_what_is_stored_does_not(store):
+    text = "# Optimisation\n\n## Momentum\n\n" + "It converges faster on ill-conditioned problems. " * 8
+    ingest.schedule(DOC, text.encode())
+    await _finish()
+    row = store.chunks[0]
+    assert row["section"] == "Optimisation › Momentum" and row["locator"] == "Momentum"
+    assert (row["page_start"], row["page_end"]) == (None, None)
+    assert store.embedded[0].startswith("Optimisation › Momentum\n")
+    assert not row["content"].startswith("Optimisation ›")
+
+
+async def test_a_scanned_pdf_fails_with_words_a_student_can_act_on(store, monkeypatch):
+    async def scanned(data, mime):
+        return ingest_extract.Document([], scanned=True)
+
+    async def unreadable(data, *, user_id):
+        return [], 0, 3
+
+    monkeypatch.setattr(ingest, "read_document", scanned)
+    monkeypatch.setattr(ingest.ocr, "transcribe", unreadable)
+    ingest.schedule(DOC, b"%PDF")
+    await _finish()
+    last = store.doc_patches[-1]
+    assert last["status"] == "failed" and "scan" in last["error"] and store.chunks == []
+
+
+async def test_a_huge_document_is_cut_off_and_says_so(store, monkeypatch):
+    monkeypatch.setattr(ingest, "MAX_CHUNKS", 3)
+    ingest.schedule(DOC, TEXT.encode())
+    await _finish()
+    assert len(store.chunks) == 3
+    assert store.doc_patches[-1] == {**store.doc_patches[-1], "status": "ready", "error": ingest.TRUNCATED_NOTE}
 
 
 async def test_a_resume_skips_chunks_already_stored(store):
     assert N_CHUNKS > ingest.SAVE_EVERY  # otherwise this proves nothing
-    already = chunk_text(TEXT)[: ingest.SAVE_EVERY]
+    already = chunking.chunk(chunking.read_text(TEXT))[: ingest.SAVE_EVERY]
     store.chunks = [{"chunk_index": c.index} for c in already]
 
     ingest.schedule(DOC)  # no bytes: downloads from storage, like a restart
@@ -136,3 +172,22 @@ async def test_cancel_stops_the_job_and_leaves_it_resumable(store):
     assert not ingest.is_running("doc-1")
     # Never marked failed or ready — a restart would resume it.
     assert all(p.get("status") not in {"failed", "ready"} for p in store.doc_patches)
+
+
+async def test_a_scan_is_read_page_by_page_and_says_when_it_stopped_at_the_cap(store, monkeypatch):
+    from app.services.chunking import Line
+
+    async def scanned(data, mime):
+        return ingest_extract.Document([], scanned=True)
+
+    async def transcribe(data, *, user_id):
+        assert user_id == "user-1"
+        return [Line("Photosynthesis", page=1, level=1), Line("Plants make sugar from light. " * 20, page=1)], 12, 30
+
+    monkeypatch.setattr(ingest, "read_document", scanned)
+    monkeypatch.setattr(ingest.ocr, "transcribe", transcribe)
+    ingest.schedule(DOC, b"%PDF")
+    await _finish()
+    done = store.doc_patches[-1]
+    assert done["status"] == "ready" and done["error"] == "This is a scan, so only its first 12 of 30 pages were read."
+    assert store.chunks and store.chunks[0]["page_start"] == 1 and store.chunks[0]["section"] == "Photosynthesis"

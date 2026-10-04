@@ -1,0 +1,282 @@
+{
+ "ran_at": "2026-10-04T12:35:45+00:00",
+ "prompt": {
+  "pieces": {
+   "voice": 94,
+   "answer shape (full)": 536,
+   "answer shape (short)": 104,
+   "diagram rule (full)": 208,
+   "diagram rule (short)": 36,
+   "safety rules": 271,
+   "honesty rules": 122,
+   "follow-up suggestion": 76
+  },
+  "totals": {
+   "plain question (\"What is a page fault?\")": {
+    "instructions": 980,
+    "sources": 1215,
+    "total": 2201
+   },
+   "question with a shape (\"Explain how paging works\")": {
+    "instructions": 1414,
+    "sources": 1215,
+    "total": 2635
+   }
+  }
+ },
+ "budget": [
+  {
+   "messages": 2,
+   "before_tokens": 472,
+   "after_tokens": 427,
+   "saved": "10%"
+  },
+  {
+   "messages": 4,
+   "before_tokens": 944,
+   "after_tokens": 603,
+   "saved": "36%"
+  },
+  {
+   "messages": 8,
+   "before_tokens": 1888,
+   "after_tokens": 954,
+   "saved": "49%"
+  },
+  {
+   "messages": 20,
+   "before_tokens": 4721,
+   "after_tokens": 2010,
+   "saved": "57%"
+  },
+  {
+   "messages": 40,
+   "before_tokens": 9444,
+   "after_tokens": 3418,
+   "saved": "64%"
+  }
+ ],
+ "caches": [
+  {
+   "case": "same question",
+   "should_hit": true,
+   "hit": true,
+   "ok": true
+  },
+  {
+   "case": "same words, different case and punctuation",
+   "should_hit": true,
+   "hit": true,
+   "ok": true
+  },
+  {
+   "case": "a near-identical vector",
+   "should_hit": true,
+   "hit": true,
+   "ok": true
+  },
+  {
+   "case": "an unrelated question",
+   "should_hit": false,
+   "hit": false,
+   "ok": true
+  },
+  {
+   "case": "the sources changed (a file was edited or removed)",
+   "should_hit": false,
+   "hit": false,
+   "ok": true
+  },
+  {
+   "case": "a setting changed (citations off)",
+   "should_hit": false,
+   "hit": false,
+   "ok": true
+  },
+  {
+   "case": "another student, same question",
+   "should_hit": false,
+   "hit": false,
+   "ok": true
+  },
+  {
+   "case": "another topic, same question",
+   "should_hit": false,
+   "hit": false,
+   "ok": true
+  }
+ ],
+ "tiers": [
+  {
+   "file": "app/routers/me/brief.py",
+   "tasks": [
+    "brief"
+   ],
+   "models": [
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/routers/notes.py",
+   "tasks": [
+    "notes.edit",
+    "notes.write"
+   ],
+   "models": [
+    "large (120B)",
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/routers/subspace_chat.py",
+   "tasks": [
+    "chat"
+   ],
+   "models": [
+    "large (120B)",
+    "small (20B)",
+    "vision"
+   ]
+  },
+  {
+   "file": "app/services/card_writer.py",
+   "tasks": [
+    "cards.write"
+   ],
+   "models": [
+    "large (120B)"
+   ]
+  },
+  {
+   "file": "app/services/chat_memory.py",
+   "tasks": [],
+   "models": [
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/services/extract.py",
+   "tasks": [],
+   "models": [
+    "vision"
+   ]
+  },
+  {
+   "file": "app/services/llm.py",
+   "tasks": [],
+   "models": [
+    "large (120B)",
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/services/ocr.py",
+   "tasks": [],
+   "models": [
+    "vision"
+   ]
+  },
+  {
+   "file": "app/services/query_resolver.py",
+   "tasks": [],
+   "models": [
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/services/quiz_agent.py",
+   "tasks": [
+    "quiz.repair",
+    "quiz.verify",
+    "quiz.write"
+   ],
+   "models": [
+    "large (120B)",
+    "small (20B)"
+   ]
+  },
+  {
+   "file": "app/services/usage.py",
+   "tasks": [
+    "quiz.verify"
+   ],
+   "models": []
+  }
+ ],
+ "retrieval_speed": {
+  "variant": "v2-5-judge",
+  "ran_at": "2026-10-04T12:19:16+00:00",
+  "questions": 114,
+  "p50_ms": 9.66,
+  "p95_ms": 13.82,
+  "embed_ms_one_question": 16.2,
+  "note": "On this machine. Production is a tenth of a CPU, so compare variants with each other, not with Render."
+ },
+ "own_code_ms": {
+  "build_prompt_40_message_chat_ms": 1.13,
+  "cache_lookup_12_entries_ms": 0.082
+ },
+ "capacity": {
+  "tpm": 8000,
+  "tpd": 200000,
+  "rows": [
+   {
+    "turn": "plain question (\"What is a page fault?\")",
+    "tokens_per_answer": "2501\u20133001",
+    "answers_per_minute": "2.7\u20133.2",
+    "answers_per_day": "66\u201379"
+   },
+   {
+    "turn": "question with a shape (\"Explain how paging works\")",
+    "tokens_per_answer": "2935\u20133435",
+    "answers_per_minute": "2.3\u20132.7",
+    "answers_per_day": "58\u201368"
+   }
+  ]
+ },
+ "live": {
+  "openai/gpt-oss-120b": {
+   "one_at_a_time": {
+    "ok": 0,
+    "errors": [
+     "429",
+     "429",
+     "429",
+     "429"
+    ]
+   },
+   "three_at_once": {
+    "ok": 0,
+    "errors": [
+     "429",
+     "429",
+     "429"
+    ],
+    "wall_s": 0.77
+   }
+  },
+  "openai/gpt-oss-20b": {
+   "one_at_a_time": {
+    "ok": 3,
+    "of": 4,
+    "median_ttft_s": 0.87,
+    "median_total_s": 0.92,
+    "median_prompt_tokens": 2562,
+    "median_reply_tokens": 156
+   },
+   "three_at_once": {
+    "ok": 1,
+    "of": 3,
+    "median_ttft_s": 0.86,
+    "median_total_s": 1.05,
+    "median_prompt_tokens": 2562,
+    "median_reply_tokens": 170,
+    "wall_s": 1.07
+   }
+  }
+ },
+ "invariants": {
+  "passed": true,
+  "summary": "822 passed, 1 warning in 49.90s"
+ }
+}

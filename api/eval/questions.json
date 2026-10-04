@@ -1,0 +1,1594 @@
+[
+ {
+  "id": "di01",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "Who is gradient descent generally attributed to, and when was it first suggested?",
+  "evidence": [
+   [
+    "generally attributed to Augustin-Louis Cauchy, who first suggested it in 1847"
+   ]
+  ],
+  "answer": "Augustin-Louis Cauchy, in 1847."
+ },
+ {
+  "id": "di02",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "What happens in gradient descent if the step size is too large?",
+  "evidence": [
+   [
+    "too large would lead to overshoot and divergence"
+   ]
+  ],
+  "answer": "It overshoots and diverges."
+ },
+ {
+  "id": "re01",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Why does plain steepest descent crawl towards the answer on badly conditioned problems, and what does its path look like?",
+  "evidence": [
+   [
+    "characteristic zig–zag path",
+    "The result is a path that zigzags toward the solution"
+   ]
+  ],
+  "answer": "A high condition number makes successive steps alternate direction, giving a slow zig-zag path."
+ },
+ {
+  "id": "ex01",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "When should L-BFGS be used?",
+  "evidence": [
+   [
+    "a limited-memory method such as L-BFGS should be used"
+   ]
+  ],
+  "answer": "For extremely large problems where memory dominates."
+ },
+ {
+  "id": "ex02",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is OGM and what does it improve?",
+  "evidence": [
+   [
+    "The optimized gradient method (OGM)"
+   ]
+  ],
+  "answer": "The optimized gradient method; it halves the constant factor and is an optimal first-order method for large-scale problems."
+ },
+ {
+  "id": "di03",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "What is the momentum or heavy ball method?",
+  "evidence": [
+   [
+    "the momentum or heavy ball method uses a"
+   ]
+  ],
+  "answer": "It adds a momentum term, combining the gradient with the previous update, to break the zig-zag pattern."
+ },
+ {
+  "id": "re02",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "How can gradient descent cope when the solution has to stay inside an allowed set?",
+  "evidence": [
+   [
+    "including a projection onto the set of"
+   ]
+  ],
+  "answer": "By projecting onto the set of constraints after each step."
+ },
+ {
+  "id": "re03",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "If the function is convex, can gradient descent end up at the true global best point?",
+  "evidence": [
+   [
+    "all local minima are also global minima"
+   ]
+  ],
+  "answer": "Yes: for a convex function every local minimum is global."
+ },
+ {
+  "id": "di04",
+  "topic": "cs",
+  "category": "direct",
+  "split": "test",
+  "question": "Which method is one of the most popular alternatives to gradient descent for solving linear equations?",
+  "evidence": [
+   [
+    "the conjugate gradient method being one of the most popular"
+   ]
+  ],
+  "answer": "The conjugate gradient method."
+ },
+ {
+  "id": "cr01",
+  "topic": "cs",
+  "category": "cross",
+  "split": "tune",
+  "question": "Who first suggested gradient descent, and who later proposed the modification that gives faster convergence for convex problems?",
+  "evidence": [
+   [
+    "generally attributed to Augustin-Louis Cauchy"
+   ],
+   [
+    "Yurii Nesterov has proposed"
+   ]
+  ],
+  "answer": "Cauchy first suggested it; Yurii Nesterov proposed the accelerated version."
+ },
+ {
+  "id": "ex03",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is FPGM?",
+  "evidence": [
+   [
+    "is called the fast proximal gradient method"
+   ]
+  ],
+  "answer": "The fast proximal gradient method: Nesterov's fast gradient method for constrained or non-smooth problems."
+ },
+ {
+  "id": "di05",
+  "topic": "cs",
+  "category": "direct",
+  "split": "test",
+  "question": "Which optimizers are named as the main examples of momentum-style modifications of gradient descent?",
+  "evidence": [
+   [
+    "optimizers are Adam, DiffGrad, Yogi, AdaBelief"
+   ]
+  ],
+  "answer": "Adam, DiffGrad, Yogi and AdaBelief."
+ },
+ {
+  "id": "re04",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "test",
+  "question": "What is the most basic algorithm used to train deep networks today?",
+  "evidence": [
+   [
+    "stochastic gradient descent, serves as the most basic algorithm"
+   ]
+  ],
+  "answer": "Stochastic gradient descent."
+ },
+ {
+  "id": "fo01",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "Who came up with it?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is gradient descent?"
+   },
+   {
+    "role": "assistant",
+    "content": "Gradient descent is a first-order iterative algorithm that minimises a differentiable function by repeatedly stepping in the direction opposite to the gradient."
+   }
+  ],
+  "evidence": [
+   [
+    "generally attributed to Augustin-Louis Cauchy, who first suggested it in 1847"
+   ]
+  ],
+  "answer": "Augustin-Louis Cauchy, in 1847."
+ },
+ {
+  "id": "fo02",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "And what does the instrument stand for in that picture?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's the mountain analogy for gradient descent?"
+   },
+   {
+    "role": "assistant",
+    "content": "People stuck on a foggy mountain can't see the path down, so they measure how steep the ground is where they stand and walk in the steepest downhill direction."
+   }
+  ],
+  "evidence": [
+   [
+    "The instrument used to measure steepness is differentiation"
+   ]
+  ],
+  "answer": "Differentiation."
+ },
+ {
+  "id": "di06",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "When was Bayes's work published, and under what title?",
+  "evidence": [
+   [
+    "published in 1763 as An Essay Towards Solving a Problem"
+   ]
+  ],
+  "answer": "In 1763, as An Essay Towards Solving a Problem in the Doctrine of Chances."
+ },
+ {
+  "id": "di07",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "Who received and edited Bayes's papers after his death?",
+  "evidence": [
+   [
+    "the minister, philosopher, and mathematician Richard Price"
+   ]
+  ],
+  "answer": "Richard Price."
+ },
+ {
+  "id": "ex04",
+  "topic": "cs",
+  "category": "exact",
+  "split": "test",
+  "question": "In the drug testing example, what is the false positive rate (FPR)?",
+  "evidence": [
+   [
+    "false positive rate (FPR) = 0.01"
+   ]
+  ],
+  "answer": "0.01, i.e. 1%."
+ },
+ {
+  "id": "ex05",
+  "topic": "cs",
+  "category": "exact",
+  "split": "test",
+  "question": "In the pancreatic cancer example, what is the probability that someone with the symptoms has the cancer?",
+  "evidence": [
+   [
+    "symptoms has pancreatic cancer is 9.1%"
+   ]
+  ],
+  "answer": "9.1%."
+ },
+ {
+  "id": "re05",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "test",
+  "question": "How do you get from the odds before seeing evidence to the odds after it?",
+  "evidence": [
+   [
+    "posterior odds are the prior odds times the"
+   ]
+  ],
+  "answer": "Multiply the prior odds by the likelihood ratio (Bayes factor)."
+ },
+ {
+  "id": "cr02",
+  "topic": "cs",
+  "category": "cross",
+  "split": "tune",
+  "question": "What does probability measure under the Bayesian interpretation, and what under the frequentist one?",
+  "evidence": [
+   [
+    "probability measures a rational \"degree of belief\""
+   ],
+   [
+    "probability measures a \"proportion of outcomes\""
+   ]
+  ],
+  "answer": "A rational degree of belief for Bayesians; a proportion of outcomes for frequentists."
+ },
+ {
+  "id": "di08",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "Which well-known puzzles can be solved using Bayes' rule?",
+  "evidence": [
+   [
+    "the Monty Hall problem"
+   ]
+  ],
+  "answer": "The Three Prisoners problem, the Monty Hall problem, the Boy or Girl paradox and the two envelopes problem."
+ },
+ {
+  "id": "ex06",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "Which Japanese naval code is mentioned as cracked with Bayes' theorem?",
+  "evidence": [
+   [
+    "the Japanese naval code JN 25"
+   ]
+  ],
+  "answer": "JN 25."
+ },
+ {
+  "id": "re06",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Who gave the work of Bayes and Laplace a rigorous axiomatic foundation?",
+  "evidence": [
+   [
+    "Sir Harold Jeffreys put Bayes's algorithm"
+   ]
+  ],
+  "answer": "Sir Harold Jeffreys."
+ },
+ {
+  "id": "di09",
+  "topic": "cs",
+  "category": "direct",
+  "split": "test",
+  "question": "What is the Bayes factor also called?",
+  "evidence": [
+   [
+    "quantity called the Bayes factor or likelihood ratio"
+   ]
+  ],
+  "answer": "The likelihood ratio."
+ },
+ {
+  "id": "ex07",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "What did Kolmogorov do in 1933?",
+  "evidence": [
+   [
+    "Andrey Kolmogorov formulated this in 1933"
+   ]
+  ],
+  "answer": "He formulated the general case using conditional expectation."
+ },
+ {
+  "id": "fo03",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "How many of each kind are in it?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's the bent coins example for Bayes' theorem?"
+   },
+   {
+    "role": "assistant",
+    "content": "An urn holds coins of types A, B and C with different chances of heads. You draw one, flip it, and use Bayes' theorem to work out which type it probably was."
+   }
+  ],
+  "evidence": [
+   [
+    "The urn contains 2 type-A coins, 2 type-B"
+   ]
+  ],
+  "answer": "Two type-A, two type-B and one type-C coin."
+ },
+ {
+  "id": "fo04",
+  "topic": "cs",
+  "category": "followup",
+  "split": "test",
+  "question": "So what does the probability come out to?",
+  "history": [
+   {
+    "role": "user",
+    "content": "Walk me through the disease test example in odds form."
+   },
+   {
+    "role": "assistant",
+    "content": "With a prevalence of 1% and a test that is right 99% of the time, you multiply the prior odds of infection by the Bayes factor to get the posterior odds."
+   }
+  ],
+  "evidence": [
+   [
+    "the posterior probability of infection is 50%"
+   ]
+  ],
+  "answer": "50%."
+ },
+ {
+  "id": "fo05",
+  "topic": "cs",
+  "category": "followup",
+  "split": "test",
+  "question": "So can I trust a positive result?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's the drug testing example?"
+   },
+   {
+    "role": "assistant",
+    "content": "A test that is 99% sensitive and 99% specific is used on a population where 0.3% of people use the drug."
+   }
+  ],
+  "evidence": [
+   [
+    "most of its positive results will be false"
+   ]
+  ],
+  "answer": "No: even though the test is 99% accurate, most positives are false."
+ },
+ {
+  "id": "di10",
+  "topic": "cs",
+  "category": "direct",
+  "split": "test",
+  "question": "What other names does binary search go by?",
+  "evidence": [
+   [
+    "also known as half-interval search"
+   ]
+  ],
+  "answer": "Half-interval search, logarithmic search or binary chop."
+ },
+ {
+  "id": "ex08",
+  "topic": "cs",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the worst-case performance of binary search?",
+  "evidence": [
+   [
+    "Worst-case performance O(log n)",
+    "Binary search runs in logarithmic time in the worst case"
+   ]
+  ],
+  "answer": "O(log n)."
+ },
+ {
+  "id": "ex09",
+  "topic": "cs",
+  "category": "exact",
+  "split": "test",
+  "question": "What does bsearch() do in C?",
+  "evidence": [
+   [
+    "C provides the function bsearch() in its standard library"
+   ]
+  ],
+  "answer": "It is the C standard library's search function, typically implemented with binary search."
+ },
+ {
+  "id": "di11",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "Who published the first implementation that leaves out the equality check in each iteration, and when?",
+  "evidence": [
+   [
+    "Hermann Bottenbruch published the first implementation to leave out this check in 1962"
+   ]
+  ],
+  "answer": "Hermann Bottenbruch, in 1962."
+ },
+ {
+  "id": "re07",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Why are hash tables a poor choice when I need the closest key rather than an exact one?",
+  "evidence": [
+   [
+    "hashing is not useful for approximate matches"
+   ]
+  ],
+  "answer": "A failed hash lookup only says the key is absent, so hashing can't find next-smallest, next-largest or nearest keys."
+ },
+ {
+  "id": "re08",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "tune",
+  "question": "What mistake did most programmers make when they got binary search wrong?",
+  "evidence": [
+   [
+    "made an error in defining the exit conditions"
+   ]
+  ],
+  "answer": "They defined the loop's exit conditions incorrectly."
+ },
+ {
+  "id": "di12",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "What is exponential search?",
+  "evidence": [
+   [
+    "Exponential search extends binary search to unbounded lists. It starts by"
+   ]
+  ],
+  "answer": "An extension of binary search to unbounded lists: find a power-of-two index past the target, then binary search below it."
+ },
+ {
+  "id": "di13",
+  "topic": "cs",
+  "category": "direct",
+  "split": "tune",
+  "question": "How long did the overflow bug stay in Java's library implementation of binary search?",
+  "evidence": [
+   [
+    "bug for more than nine years"
+   ]
+  ],
+  "answer": "More than nine years."
+ },
+ {
+  "id": "ex10",
+  "topic": "cs",
+  "category": "exact",
+  "split": "test",
+  "question": "How many comparisons does each iteration make on average?",
+  "evidence": [
+   [
+    "iteration makes 1.5 comparisons on average"
+   ]
+  ],
+  "answer": "1.5."
+ },
+ {
+  "id": "cr03",
+  "topic": "cs",
+  "category": "cross",
+  "split": "tune",
+  "question": "Who first mentioned binary search, and who published the first version that worked on arrays of any length?",
+  "evidence": [
+   [
+    "John Mauchly made the first mention of binary search"
+   ],
+   [
+    "Derrick Henry Lehmer published a binary search algorithm that worked on all"
+   ]
+  ],
+  "answer": "John Mauchly in 1946; Derrick Henry Lehmer in 1960."
+ },
+ {
+  "id": "re09",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "test",
+  "question": "What is the best quantum algorithm for searching a list that is not sorted?",
+  "evidence": [
+   [
+    "Grover's algorithm is the optimal quantum algorithm for searching an unordered list"
+   ]
+  ],
+  "answer": "Grover's algorithm."
+ },
+ {
+  "id": "di14",
+  "topic": "cs",
+  "category": "direct",
+  "split": "test",
+  "question": "What is noisy binary search?",
+  "evidence": [
+   [
+    "Noisy binary search algorithms solve the case where the algorithm cannot"
+   ]
+  ],
+  "answer": "Binary search for when comparisons can be wrong with some probability."
+ },
+ {
+  "id": "re10",
+  "topic": "cs",
+  "category": "reworded",
+  "split": "test",
+  "question": "How much extra memory does binary search need?",
+  "evidence": [
+   [
+    "Binary search requires three pointers to elements"
+   ]
+  ],
+  "answer": "Only three pointers, so constant space, O(1)."
+ },
+ {
+  "id": "fo06",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "Is it faster on small arrays?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's interpolation search?"
+   },
+   {
+    "role": "assistant",
+    "content": "Instead of always taking the midpoint, it estimates where the target is from the lowest and highest elements of the array."
+   }
+  ],
+  "evidence": [
+   [
+    "interpolation search is slower than binary search for small arrays"
+   ]
+  ],
+  "answer": "No, it is slower for small arrays because of the extra computation."
+ },
+ {
+  "id": "fo07",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "Who introduced it?",
+  "history": [
+   {
+    "role": "user",
+    "content": "Tell me about fractional cascading."
+   },
+   {
+    "role": "assistant",
+    "content": "It speeds up binary searches for the same element across several sorted arrays by storing links between them."
+   }
+  ],
+  "evidence": [
+   [
+    "Bernard Chazelle and Leonidas J. Guibas introduced fractional cascading"
+   ]
+  ],
+  "answer": "Bernard Chazelle and Leonidas J. Guibas, in 1986."
+ },
+ {
+  "id": "fo08",
+  "topic": "cs",
+  "category": "followup",
+  "split": "tune",
+  "question": "How do I get the leftmost one then?",
+  "history": [
+   {
+    "role": "user",
+    "content": "How does binary search behave with duplicate values?"
+   },
+   {
+    "role": "assistant",
+    "content": "It can return any index whose element equals the target, not necessarily the first."
+   }
+  ],
+  "evidence": [
+   [
+    "To find the leftmost element, the following procedure can be used"
+   ]
+  ],
+  "answer": "Use the leftmost procedure: keep R = m when A[m] is not less than the target, and return L."
+ },
+ {
+  "id": "di15",
+  "topic": "systems",
+  "category": "direct",
+  "split": "test",
+  "question": "Who first proposed database normalization?",
+  "evidence": [
+   [
+    "first proposed by British computer scientist Edgar F. Codd"
+   ]
+  ],
+  "answer": "Edgar F. Codd."
+ },
+ {
+  "id": "ex11",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is BCNF and when was it defined?",
+  "evidence": [
+   [
+    "Codd normal form (BCNF) in 1974"
+   ]
+  ],
+  "answer": "Boyce–Codd normal form, defined by Codd and Boyce in 1974."
+ },
+ {
+  "id": "ex12",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "Who introduced 6NF, and when?",
+  "evidence": [
+   [
+    "introduced the sixth normal form (6NF) in 2003"
+   ]
+  ],
+  "answer": "Christopher J. Date, in 2003."
+ },
+ {
+  "id": "di16",
+  "topic": "systems",
+  "category": "direct",
+  "split": "tune",
+  "question": "What is an update anomaly?",
+  "evidence": [
+   [
+    "updates to the relation may result in logical inconsistencies"
+   ]
+  ],
+  "answer": "The same information is on several rows, so a partial update leaves the data inconsistent."
+ },
+ {
+  "id": "re11",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Why can't I store a new teacher who hasn't been given any classes yet?",
+  "evidence": [
+   [
+    "a newly hired faculty member who has not yet been assigned"
+   ]
+  ],
+  "answer": "That is an insertion anomaly: without a course the record can't be stored unless the course code is null."
+ },
+ {
+  "id": "re12",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Which normal forms matter in real-world practice and which are mostly theory?",
+  "evidence": [
+   [
+    "normal forms beyond 4NF are mainly of academic interest"
+   ]
+  ],
+  "answer": "Forms beyond 4NF are mainly of academic interest."
+ },
+ {
+  "id": "di17",
+  "topic": "systems",
+  "category": "direct",
+  "split": "tune",
+  "question": "What does the first normal form require of each field?",
+  "evidence": [
+   [
+    "In the first normal form each field contains a single value"
+   ]
+  ],
+  "answer": "Each field holds a single value, not a set or nested record."
+ },
+ {
+  "id": "ex13",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "What does DKNF stand for?",
+  "evidence": [
+   [
+    "DKNF: Domain-key normal form"
+   ]
+  ],
+  "answer": "Domain-key normal form."
+ },
+ {
+  "id": "re13",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Where is a 6NF-style layout actually useful?",
+  "evidence": [
+   [
+    "known as a columnar data store"
+   ]
+  ],
+  "answer": "In data warehouses, as columnar storage."
+ },
+ {
+  "id": "cr04",
+  "topic": "systems",
+  "category": "cross",
+  "split": "test",
+  "question": "When were 3NF and 4NF introduced?",
+  "evidence": [
+   [
+    "third normal form (3NF) in 1971"
+   ],
+   [
+    "Ronald Fagin introduced the fourth normal form (4NF) in 1977"
+   ]
+  ],
+  "answer": "3NF in 1971 and 4NF in 1977."
+ },
+ {
+  "id": "di18",
+  "topic": "systems",
+  "category": "direct",
+  "split": "tune",
+  "question": "What did C.J. Date argue about 5NF?",
+  "evidence": [
+   [
+    "only a database in 5NF is truly"
+   ]
+  ],
+  "answer": "That only a database in 5NF is truly normalized."
+ },
+ {
+  "id": "ex14",
+  "topic": "systems",
+  "category": "exact",
+  "split": "test",
+  "question": "What is EKNF?",
+  "evidence": [
+   [
+    "The elementary key normal form (EKNF) falls strictly between 3NF and BCNF"
+   ]
+  ],
+  "answer": "Elementary key normal form, which sits strictly between 3NF and BCNF."
+ },
+ {
+  "id": "fo09",
+  "topic": "systems",
+  "category": "followup",
+  "split": "test",
+  "question": "What's the downside of it?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's the sixth normal form?"
+   },
+   {
+    "role": "assistant",
+    "content": "A table is in 6NF when each row holds the primary key and at most one other attribute."
+   }
+  ],
+  "evidence": [
+   [
+    "The obvious drawback of 6NF is the proliferation of tables"
+   ]
+  ],
+  "answer": "It needs a great many tables to represent one entity."
+ },
+ {
+  "id": "fo10",
+  "topic": "systems",
+  "category": "followup",
+  "split": "test",
+  "question": "Which attribute depends on the format as well?",
+  "history": [
+   {
+    "role": "user",
+    "content": "Explain the book table example for 2NF."
+   },
+   {
+    "role": "assistant",
+    "content": "The Book table has a composite key of Title and Format, and attributes that depend on only part of that key break second normal form."
+   }
+  ],
+  "evidence": [
+   [
+    "but only Price also depends on Format"
+   ]
+  ],
+  "answer": "Price."
+ },
+ {
+  "id": "fo11",
+  "topic": "systems",
+  "category": "followup",
+  "split": "tune",
+  "question": "Which one is usually considered enough?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What are normal forms?"
+   },
+   {
+    "role": "assistant",
+    "content": "A series of rules, from 1NF up to 6NF, each stricter than the one before."
+   }
+  ],
+  "evidence": [
+   [
+    "if it meets third normal form"
+   ]
+  ],
+  "answer": "Third normal form."
+ },
+ {
+  "id": "di19",
+  "topic": "systems",
+  "category": "direct",
+  "split": "test",
+  "question": "Who developed TCP?",
+  "evidence": [
+   [
+    "Vint Cerf and Bob Kahn described an internetworking protocol",
+    "Developers Vint Cerf and Robert Kahn"
+   ]
+  ],
+  "answer": "Vint Cerf and Bob Kahn."
+ },
+ {
+  "id": "ex15",
+  "topic": "systems",
+  "category": "exact",
+  "split": "test",
+  "question": "What does RFC 675 specify?",
+  "evidence": [
+   [
+    "RFC 675 (Specification of Internet Transmission Control Program)"
+   ]
+  ],
+  "answer": "The Specification of Internet Transmission Control Program, from December 1974."
+ },
+ {
+  "id": "ex16",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "What are the minimum and maximum sizes of a TCP header?",
+  "evidence": [
+   [
+    "minimum size of 20 bytes and maximum of 60 bytes"
+   ]
+  ],
+  "answer": "20 bytes minimum, 60 bytes maximum."
+ },
+ {
+  "id": "ex17",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "What does the PSH flag do?",
+  "evidence": [
+   [
+    "Push function. Asks to push the buffered data"
+   ]
+  ],
+  "answer": "It asks to push the buffered data to the receiving application."
+ },
+ {
+  "id": "di20",
+  "topic": "systems",
+  "category": "direct",
+  "split": "test",
+  "question": "What are the steps of the three-way handshake?",
+  "evidence": [
+   [
+    "the server replies with a SYN-ACK"
+   ]
+  ],
+  "answer": "SYN from the client, SYN-ACK from the server, ACK from the client."
+ },
+ {
+  "id": "re14",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "test",
+  "question": "How is a connection shut down?",
+  "evidence": [
+   [
+    "The connection termination phase uses a four-way handshake"
+   ]
+  ],
+  "answer": "With a four-way handshake: each side sends a FIN and the other acknowledges it."
+ },
+ {
+  "id": "re15",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "test",
+  "question": "Why isn't it a good fit for voice calls?",
+  "evidence": [
+   [
+    "not particularly suitable for real-time applications such as voice over IP"
+   ]
+  ],
+  "answer": "It favours accurate delivery over timely delivery, so waiting for retransmissions causes long delays."
+ },
+ {
+  "id": "ex18",
+  "topic": "systems",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the TIME-WAIT state?",
+  "evidence": [
+   [
+    "Waiting for enough time to pass to be sure that all remaining packets"
+   ]
+  ],
+  "answer": "Waiting long enough to be sure all remaining packets on the connection have expired."
+ },
+ {
+  "id": "di21",
+  "topic": "systems",
+  "category": "direct",
+  "split": "tune",
+  "question": "How many duplicate acknowledgments make the sender retransmit?",
+  "evidence": [
+   [
+    "if the sender receives three duplicate acknowledgments, it retransmits"
+   ]
+  ],
+  "answer": "Three."
+ },
+ {
+  "id": "re16",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "tune",
+  "question": "What keeps a fast sender from overwhelming a slow receiver?",
+  "evidence": [
+   [
+    "TCP uses a sliding window flow control protocol"
+   ]
+  ],
+  "answer": "Sliding window flow control: the receiver advertises how much it is willing to buffer."
+ },
+ {
+  "id": "ex19",
+  "topic": "systems",
+  "category": "exact",
+  "split": "test",
+  "question": "What is the silly window syndrome?",
+  "evidence": [
+   [
+    "This is referred to as the silly window syndrome"
+   ]
+  ],
+  "answer": "When a receiver keeps advertising a small window, so only a few bytes are sent per segment."
+ },
+ {
+  "id": "di22",
+  "topic": "systems",
+  "category": "direct",
+  "split": "tune",
+  "question": "When was TCP standardized?",
+  "evidence": [
+   [
+    "TCP was standardized in January 1980 as RFC 761"
+   ]
+  ],
+  "answer": "January 1980, as RFC 761."
+ },
+ {
+  "id": "cr05",
+  "topic": "systems",
+  "category": "cross",
+  "split": "test",
+  "question": "How many bits are the source port field and the checksum field?",
+  "evidence": [
+   [
+    "Source Port: 16 bits"
+   ],
+   [
+    "Checksum: 16 bits"
+   ]
+  ],
+  "answer": "16 bits each."
+ },
+ {
+  "id": "ex20",
+  "topic": "systems",
+  "category": "exact",
+  "split": "test",
+  "question": "What is a TCB?",
+  "evidence": [
+   [
+    "known as a Transmission Control Block or TCB"
+   ]
+  ],
+  "answer": "A Transmission Control Block: the table entry holding a connection's endpoints, state and buffers."
+ },
+ {
+  "id": "re17",
+  "topic": "systems",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Which loss detection method do Linux and Windows use by default now?",
+  "evidence": [
+   [
+    "Recent Acknowledgment (RACK)"
+   ]
+  ],
+  "answer": "RACK, Recent Acknowledgment."
+ },
+ {
+  "id": "fo12",
+  "topic": "systems",
+  "category": "followup",
+  "split": "tune",
+  "question": "What happens when it runs out?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What's the persist timer in TCP?"
+   },
+   {
+    "role": "assistant",
+    "content": "When the receiver advertises a window of zero, the sender stops sending and starts a persist timer to avoid a deadlock."
+   }
+  ],
+  "evidence": [
+   [
+    "When the persist timer expires, the TCP sender attempts recovery by sending a small packet"
+   ]
+  ],
+  "answer": "The sender sends a small packet so the receiver replies with its current window size."
+ },
+ {
+  "id": "fo13",
+  "topic": "systems",
+  "category": "followup",
+  "split": "tune",
+  "question": "Which RFC says not to use retransmitted segments for that estimate?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What does Karn's algorithm do?"
+   },
+   {
+    "role": "assistant",
+    "content": "It waits for an unambiguous acknowledgment before adjusting the retransmission timeout, so the round-trip estimate stays sound."
+   }
+  ],
+  "evidence": [
+   [
+    "RFC 6298 specifies that implementations must not"
+   ]
+  ],
+  "answer": "RFC 6298."
+ },
+ {
+  "id": "fo14",
+  "topic": "systems",
+  "category": "followup",
+  "split": "test",
+  "question": "Is that strong enough by itself?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is the checksum field in TCP for?"
+   },
+   {
+    "role": "assistant",
+    "content": "It is a 16-bit field used to error-check the header, the payload and a pseudo-header."
+   }
+  ],
+  "evidence": [
+   [
+    "The TCP checksum is a weak check by modern standards"
+   ]
+  ],
+  "answer": "No, it is weak by modern standards and is normally paired with a CRC at layer 2."
+ },
+ {
+  "id": "di23",
+  "topic": "bio",
+  "category": "direct",
+  "split": "tune",
+  "question": "Who discovered photosynthesis, and when?",
+  "evidence": [
+   [
+    "Photosynthesis was discovered in 1779 by Jan Ingenhousz"
+   ]
+  ],
+  "answer": "Jan Ingenhousz, in 1779."
+ },
+ {
+  "id": "ex21",
+  "topic": "bio",
+  "category": "exact",
+  "split": "tune",
+  "question": "How much power does global photosynthesis capture?",
+  "evidence": [
+   [
+    "approximately 130 terawatts"
+   ]
+  ],
+  "answer": "About 130 terawatts."
+ },
+ {
+  "id": "di24",
+  "topic": "bio",
+  "category": "direct",
+  "split": "test",
+  "question": "What is the Calvin cycle?",
+  "evidence": [
+   [
+    "reactions called the Calvin cycle",
+    "in a process called the Calvin cycle"
+   ]
+  ],
+  "answer": "The light-independent reactions in which carbon dioxide is built into sugars using ATP and NADPH."
+ },
+ {
+  "id": "ex22",
+  "topic": "bio",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the overall equation for the light-dependent reactions?",
+  "evidence": [
+   [
+    "2 H2O + 2 NADP+ + 3 ADP + 3 Pi + light"
+   ]
+  ],
+  "answer": "2 H2O + 2 NADP+ + 3 ADP + 3 Pi + light → 2 NADPH + 2 H+ + 3 ATP + O2."
+ },
+ {
+  "id": "ex23",
+  "topic": "bio",
+  "category": "exact",
+  "split": "tune",
+  "question": "What does RuBisCO do?",
+  "evidence": [
+   [
+    "the enzyme RuBisCO captures CO2 from the atmosphere"
+   ]
+  ],
+  "answer": "It is the enzyme that captures CO2 from the atmosphere in the Calvin cycle."
+ },
+ {
+  "id": "re18",
+  "topic": "bio",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Why do leaves look green?",
+  "evidence": [
+   [
+    "The green part of the light spectrum is not absorbed but is reflected"
+   ]
+  ],
+  "answer": "Chlorophyll reflects green light instead of absorbing it."
+ },
+ {
+  "id": "re19",
+  "topic": "bio",
+  "category": "reworded",
+  "split": "test",
+  "question": "How do cacti take in carbon without losing water in the daytime heat?",
+  "evidence": [
+   [
+    "fix the CO2 at night, when their stomata"
+   ]
+  ],
+  "answer": "They use CAM: stomata open at night to fix CO2, which is stored as malic acid and used by day."
+ },
+ {
+  "id": "di25",
+  "topic": "bio",
+  "category": "direct",
+  "split": "test",
+  "question": "Which crop plants are C4 plants?",
+  "evidence": [
+   [
+    "including maize, sorghum"
+   ]
+  ],
+  "answer": "Maize, sorghum, sugarcane and millet."
+ },
+ {
+  "id": "ex24",
+  "topic": "bio",
+  "category": "exact",
+  "split": "test",
+  "question": "What reaction does PEP carboxylase catalyse?",
+  "evidence": [
+   [
+    "a reaction catalyzed by an enzyme called PEP carboxylase"
+   ]
+  ],
+  "answer": "Adding CO2 to phosphoenolpyruvate to make oxaloacetic acid."
+ },
+ {
+  "id": "ex25",
+  "topic": "bio",
+  "category": "exact",
+  "split": "test",
+  "question": "What percentage of plants use C3 carbon fixation?",
+  "evidence": [
+   [
+    "Over 90% of plants use C3 carbon fixation"
+   ]
+  ],
+  "answer": "Over 90%."
+ },
+ {
+  "id": "cr06",
+  "topic": "bio",
+  "category": "cross",
+  "split": "tune",
+  "question": "What do the light reactions make, and what does the Calvin cycle then do with them?",
+  "evidence": [
+   [
+    "make the hydrogen carrier NADPH and the energy-storage molecule ATP"
+   ],
+   [
+    "uses the newly formed NADPH and releases three-carbon sugars"
+   ]
+  ],
+  "answer": "They make NADPH and ATP, which the Calvin cycle uses to turn CO2 into three-carbon sugars."
+ },
+ {
+  "id": "re20",
+  "topic": "bio",
+  "category": "reworded",
+  "split": "test",
+  "question": "What do cyanobacteria have that concentrates carbon dioxide around the enzyme?",
+  "evidence": [
+   [
+    "Cyanobacteria possess carboxysomes"
+   ]
+  ],
+  "answer": "Carboxysomes."
+ },
+ {
+  "id": "di26",
+  "topic": "bio",
+  "category": "direct",
+  "split": "tune",
+  "question": "What is alarm photosynthesis?",
+  "evidence": [
+   [
+    "This process was named alarm photosynthesis"
+   ]
+  ],
+  "answer": "A variant where calcium oxalate crystals supply CO2 when stomata are closed."
+ },
+ {
+  "id": "cr07",
+  "topic": "bio",
+  "category": "cross",
+  "split": "tune",
+  "question": "How does photosynthesis relate to cellular respiration, and where in the cell does respiration happen?",
+  "evidence": [
+   [
+    "photosynthesis is the opposite of cellular respiration"
+   ],
+   [
+    "respiration in mitochondria"
+   ]
+  ],
+  "answer": "It is the opposite process; respiration takes place in mitochondria."
+ },
+ {
+  "id": "re21",
+  "topic": "bio",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Which kind of photosynthesis gives off no oxygen?",
+  "evidence": [
+   [
+    "anoxygenic photosynthesis, which does not produce oxygen"
+   ]
+  ],
+  "answer": "Anoxygenic photosynthesis."
+ },
+ {
+  "id": "di27",
+  "topic": "bio",
+  "category": "direct",
+  "split": "tune",
+  "question": "What is photolysis?",
+  "evidence": [
+   [
+    "in a process called photolysis, which releases oxygen"
+   ]
+  ],
+  "answer": "The splitting of a water molecule, which releases oxygen and returns an electron to chlorophyll."
+ },
+ {
+  "id": "fo15",
+  "topic": "bio",
+  "category": "followup",
+  "split": "test",
+  "question": "What's the difference between the cyclic and the non-cyclic kind?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What are the light-dependent reactions?"
+   },
+   {
+    "role": "assistant",
+    "content": "Chlorophyll absorbs light, electrons pass down a transport chain, and ATP and NADPH are made while water is split."
+   }
+  ],
+  "evidence": [
+   [
+    "it generates only ATP, and no reduced NADP (NADPH) is created"
+   ]
+  ],
+  "answer": "The cyclic reaction makes only ATP and no NADPH, and takes place only at photosystem I."
+ },
+ {
+  "id": "fo16",
+  "topic": "bio",
+  "category": "followup",
+  "split": "tune",
+  "question": "How many species use it?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is CAM photosynthesis?"
+   },
+   {
+    "role": "assistant",
+    "content": "Crassulacean acid metabolism: the plant takes in CO2 at night and stores it as malic acid for use in the day."
+   }
+  ],
+  "evidence": [
+   [
+    "CAM is used by 16,000 species of plants"
+   ]
+  ],
+  "answer": "About 16,000."
+ },
+ {
+  "id": "fo17",
+  "topic": "bio",
+  "category": "followup",
+  "split": "tune",
+  "question": "How many of those does a typical cell have?",
+  "history": [
+   {
+    "role": "user",
+    "content": "Where in a plant cell does photosynthesis happen?"
+   },
+   {
+    "role": "assistant",
+    "content": "In chloroplasts, inside stacks of thylakoids surrounded by the stroma."
+   }
+  ],
+  "evidence": [
+   [
+    "contains about 10 to 100 chloroplasts"
+   ]
+  ],
+  "answer": "About 10 to 100."
+ },
+ {
+  "id": "fo18",
+  "topic": "bio",
+  "category": "followup",
+  "split": "tune",
+  "question": "Why is that better when it's hot?",
+  "history": [
+   {
+    "role": "user",
+    "content": "What are C4 plants?"
+   },
+   {
+    "role": "assistant",
+    "content": "Plants that first fix CO2 into a four-carbon acid in mesophyll cells before passing it to the Calvin cycle."
+   }
+  ],
+  "evidence": [
+   [
+    "C4 plants can produce more sugar than C3 plants in conditions",
+    "reduces photorespiration and increases CO2 fixation"
+   ]
+  ],
+  "answer": "Separating RuBisCO from the oxygen-producing reactions cuts photorespiration, so C4 plants make more sugar in high light and heat."
+ },
+ {
+  "id": "un01",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How does the Adam optimizer compute its adaptive learning rates?"
+ },
+ {
+  "id": "un02",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "What is the time complexity of Dijkstra's shortest path algorithm?"
+ },
+ {
+  "id": "un03",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How do you insert a node into a red-black tree?"
+ },
+ {
+  "id": "un04",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "What does the central limit theorem say?"
+ },
+ {
+  "id": "un05",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "What is the vanishing gradient problem in recurrent neural networks?"
+ },
+ {
+  "id": "un06",
+  "topic": "cs",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "In what year did Thomas Bayes receive the Turing Award?"
+ },
+ {
+  "id": "un07",
+  "topic": "systems",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How do you write a LEFT OUTER JOIN across three tables in SQL?"
+ },
+ {
+  "id": "un08",
+  "topic": "systems",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "What does the CAP theorem state?"
+ },
+ {
+  "id": "un09",
+  "topic": "systems",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "How does BGP choose the best route to a destination?"
+ },
+ {
+  "id": "un10",
+  "topic": "systems",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "What is a B+ tree index and how does it speed up queries?"
+ },
+ {
+  "id": "un11",
+  "topic": "systems",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How does DNS resolve a domain name to an address?"
+ },
+ {
+  "id": "un12",
+  "topic": "bio",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "What are the stages of mitosis?"
+ },
+ {
+  "id": "un13",
+  "topic": "bio",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How does DNA replication work?"
+ },
+ {
+  "id": "un14",
+  "topic": "bio",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "How do neurons transmit signals across a synapse?"
+ },
+ {
+  "id": "un15",
+  "topic": "bio",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "What is the structure of haemoglobin?"
+ },
+ {
+  "id": "un16",
+  "topic": "bio",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How many ATP molecules does the Krebs cycle yield per glucose?"
+ }
+]

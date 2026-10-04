@@ -21,6 +21,8 @@ export type ChatStreamEvent =
        * refresh would show.
        */
       content: string | null
+      /** One question the student might ask next, written with the answer; null when there isn't a good one. */
+      suggestion: string | null
     }
   | { type: 'error'; code: string; message: string }
 
@@ -111,6 +113,7 @@ function parseSseEvent(raw: string): ChatStreamEvent | null {
         userMessageId: (data.user_message_id as string | null) ?? null,
         citations: (data.citations as Citation[]) ?? [],
         content: (data.content as string | undefined) ?? null,
+        suggestion: typeof data.suggestion === 'string' ? data.suggestion : null,
       }
     case 'error':
       return {

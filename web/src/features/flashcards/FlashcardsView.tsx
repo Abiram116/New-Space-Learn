@@ -10,7 +10,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { cameFromChat, returnToChat } from '../../lib/fromChat'
 import { LIMITS } from '../../lib/limits'
 import {
   createCard,
@@ -99,6 +100,9 @@ function Inner({
   // no URL of its own: a refresh while reviewing or browsing one deck's
   // cards silently bounced back to the grid, losing the place you were in.
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  // Opened from the chat sidebar: leaving goes back to that chat, not to the binder.
+  const fromChat = cameFromChat(params)
   const deckParam = useSlugParam('deck', decks.data, deckName, 'deck', !decks.validating)
   const slugForDeck = deckParam.slugFor
   const [mode, setMode] = useState<Mode>(() => {
@@ -124,6 +128,11 @@ function Inner({
     setParams({}, { replace: true })
     decks.refresh()
   }, [setParams, decks])
+  /** The way out of a review, a summary or a deck: the chat it was opened from, or the binder. */
+  const leave = useCallback(() => {
+    if (fromChat) returnToChat(navigate, base, 'flashcards')
+    else backToDecks()
+  }, [fromChat, navigate, base, backToDecks])
   // Clicking "Cards" in the sidebar while inside a deck or a review goes to the
   // same address, so nothing would change. Take it as "back to the top".
   useNavReset(() => {
@@ -217,6 +226,24 @@ function Inner({
     void startDueSession(n > 0 ? n : undefined, new Set(), decks.data.reduce((t, d) => t + d.due, 0))
   }, [params, setParams, decks.loading, decks.data, startDueSession])
 
+  // `?deck=<id>&review=deck` — the sidebar's "Review" on one deck. Handled once,
+  // then cleared so Back doesn't restart it.
+  const deckHandled = useRef(false)
+  const reviewDeckId = deckParam.id
+  useEffect(() => {
+    if (params.get('review') !== 'deck' || deckHandled.current || !reviewDeckId) return
+    deckHandled.current = true
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('review')
+        return next
+      },
+      { replace: true },
+    )
+    void beginReview(reviewDeckId)
+  }, [params, setParams, reviewDeckId, beginReview])
+
   const removeDeck = async () => {
     if (!deleteDeckId) return
     const id = deleteDeckId
@@ -239,7 +266,7 @@ function Inner({
         mode={mode}
         setMode={setMode}
         onFinish={() => decks.refresh()}
-        onExit={backToDecks}
+        onExit={leave}
         title={mode.mixed ? 'Due cards' : (decks.data?.find((d) => d.id === mode.deckId)?.name ?? 'Review')}
         showError={showError}
       />
@@ -266,7 +293,8 @@ function Inner({
         grades={mode.grades}
         keepGoing={keepGoing}
         deckName={mode.mixed ? 'your due cards' : (deck?.name ?? 'Deck')}
-        onDone={backToDecks}
+        onDone={leave}
+        doneLabel={fromChat ? 'Back to chat' : undefined}
         nextDeck={nextDeck}
         onReviewNext={beginReview}
         quizHref={`${base}/quizzes`}
@@ -280,7 +308,8 @@ function Inner({
       <DeckDetail
         deckId={mode.deckId}
         deckName={deck?.name ?? 'Deck'}
-        onBack={backToDecks}
+        onBack={leave}
+        backLabel={fromChat ? 'Back to chat' : undefined}
         onReview={() => beginReview(mode.deckId)}
       />
     )
@@ -576,11 +605,13 @@ function DeckDetail({
   deckId,
   deckName,
   onBack,
+  backLabel = 'All decks',
   onReview,
 }: {
   deckId: string
   deckName: string
   onBack: () => void
+  backLabel?: string
   onReview: () => void
 }) {
   const { show, showError } = useToast()
@@ -743,7 +774,7 @@ function DeckDetail({
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={onBack}>
-              <Icon name="arrowLeft" size={14} /> All decks
+              <Icon name="arrowLeft" size={14} /> {backLabel}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setEditing('new')}>
               <Icon name="plus" size={14} /> Add card

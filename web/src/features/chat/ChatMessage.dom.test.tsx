@@ -7,11 +7,14 @@
  */
 
 import { cleanup, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
 import type { ChatMessage as Message } from '../../api/types'
 
+const getPassage = vi.hoisted(() => vi.fn())
+vi.mock('../../api/documents', () => ({ getPassage }))
 vi.mock('../../api/notes', () => ({
   createNote: vi.fn(),
   updateNote: vi.fn(),
@@ -89,7 +92,15 @@ describe('citations are actually clickable, not just styled to look like it', ()
     ],
   })
 
-  it('the footer citation card links into Docs with the document preselected', () => {
+  it('the footer citation card opens the passage, with the cited text highlighted', async () => {
+    getPassage.mockResolvedValue({
+      document_id: 'doc-9',
+      name: 'Attention Is All You Need',
+      chunks: [
+        { index: 4, locator: 'p. 3', content: 'Before the cited text.', cited: false },
+        { index: 5, locator: 'p. 3', content: 'The cited text itself.', cited: true },
+      ],
+    })
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -97,11 +108,21 @@ describe('citations are actually clickable, not just styled to look like it', ()
         </ToastProvider>
       </MemoryRouter>,
     )
-    const link = screen.getByRole('link', { name: /Attention Is All You Need/ })
-    expect(link).toHaveAttribute('href', '/s/space-1/sub-1/docs?d=doc-9')
+    const user = userEvent.setup()
+    // Closed until asked for.
+    expect(screen.queryByRole('button', { name: /Attention Is All You Need/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Sources · 1/ }))
+    await user.click(screen.getByRole('button', { name: /Attention Is All You Need/ }))
+    const cited = await screen.findByText('The cited text itself.')
+    expect(cited).toHaveAttribute('data-cited')
+    expect(screen.getByText('Before the cited text.')).not.toHaveAttribute('data-cited')
+    expect(getPassage).toHaveBeenCalledWith('doc-9', expect.any(String), expect.any(String))
+    // And the file itself is one step further.
+    expect(screen.getByRole('link', { name: /Open the file/ })).toHaveAttribute('href', '/s/space-1/sub-1/docs?d=doc-9')
   })
 
-  it('the inline [[1]] marker links to the same document', () => {
+  it('the inline [[1]] marker opens the same passage', async () => {
+    getPassage.mockResolvedValue({ document_id: 'doc-9', name: 'x', chunks: [{ index: 1, locator: 'p. 3', content: 'Cited.', cited: true }] })
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -109,11 +130,11 @@ describe('citations are actually clickable, not just styled to look like it', ()
         </ToastProvider>
       </MemoryRouter>,
     )
-    const link = screen.getByRole('link', { name: '1' })
-    expect(link).toHaveAttribute('href', '/s/space-1/sub-1/docs?d=doc-9')
+    await userEvent.setup().click(screen.getByRole('button', { name: '1' }))
+    expect(await screen.findByText('Cited.')).toBeInTheDocument()
   })
 
-  it('degrades to a plain, non-broken badge when base is not yet known (the streaming bubble)', () => {
+  it('degrades to a plain, non-broken badge when base is not yet known (the streaming bubble)', async () => {
     render(
       <MemoryRouter>
         <ToastProvider>
@@ -121,8 +142,10 @@ describe('citations are actually clickable, not just styled to look like it', ()
         </ToastProvider>
       </MemoryRouter>,
     )
-    // Still visible, just not a link to `undefined/docs`.
+    // Still listed once opened, just not something to click through to a file we cannot name.
+    await userEvent.setup().click(screen.getByRole('button', { name: /Sources · 1/ }))
     expect(screen.getByText('Attention Is All You Need.pdf')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Attention Is All You Need/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Attention Is All You Need/ })).not.toBeInTheDocument()
   })
 })

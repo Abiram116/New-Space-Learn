@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, Query
 from ...config import settings as cfg
 from ...deps import CurrentUser, get_current_user
 from ...schemas import BriefOut, BriefSuggestion
-from ...services import clock, personalization, supabase
+from ...services import clock, personalization, supabase, usage
 from ...services import student_model as student_model_service
 from ...services.llm import get_llm
 from ...services.streaks import compute_streak
@@ -172,18 +172,19 @@ async def brief(
 
     try:
         parts: list[str] = []
-        async for delta in get_llm().stream_chat(
-            [
-                {
-                    "role": "system",
-                    "content": COMPANION_VOICE + " You write short, specific copy.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            model=cfg.groq_model_fast,
-            temperature=0.7,
-        ):
-            parts.append(delta)
+        with usage.task("brief"):
+            async for delta in get_llm().stream_chat(
+                [
+                    {
+                        "role": "system",
+                        "content": COMPANION_VOICE + " You write short, specific copy.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                model=cfg.groq_model_fast,
+                temperature=0.7,
+            ):
+                parts.append(delta)
         lines = [ln.strip() for ln in "".join(parts).strip().split("\n") if ln.strip()]
     except Exception:
         # The home page must render regardless.

@@ -1,7 +1,5 @@
-"""Chunking + embedding.
-
-Chunking is deterministic and character-based (works for PDFs and plain text
-without pulling tokenizer weights).
+"""Embedding. (Reading and chunking documents live in `extract.py`,
+`pdf_layout.py` and `chunking.py`.)
 
 Embeddings run **locally** — BGE-small-en-v1.5, quantized ONNX, via
 `fastembed` — or fall back to a deterministic stub when disabled. No API key,
@@ -26,84 +24,13 @@ import asyncio
 import hashlib
 import logging
 import threading
-from dataclasses import dataclass
 from typing import Protocol
 
 from ..config import settings
 from ..errors import UpstreamUnavailable
+from .memo import TTLCache
 
 log = logging.getLogger("space_learn.embed")
-
-
-CHUNK_SIZE = 900       # ~200 tokens
-CHUNK_OVERLAP = 120    # keeps sentence boundaries surviving splits
-
-
-@dataclass(slots=True)
-class Chunk:
-    index: int
-    content: str
-    locator: str        # human-readable page / slide / offset
-
-
-def chunk_text(text: str) -> list[Chunk]:
-    """Split `text` into overlapping windows.
-
-    We look for the nearest paragraph boundary near the chunk edge so answers
-    read as full sentences, not mid-word cuts.
-
-    `locator` is the position ALONE ("offset 5306") — never the document
-    name. Every consumer (ChatMessage's citation cards, notes' `sourceLine`,
-    DocsView) already pairs `document_name` with `locator` itself, on the
-    assumption that the two are complementary. This used to bake
-    `source_label` (the filename) into `locator` too — harmless-looking in
-    isolation, but every pairing then showed the filename twice: once as
-    `document_name`, once again as the front half of `locator`. Two
-    citations to the same document with different offsets rendered as
-    "file.pdf · file.pdf · offset 5306" and "file.pdf · file.pdf · offset
-    1765" — reads as a rendering bug even though the data underneath was
-    merely redundant, not wrong.
-    """
-
-    text = text.strip()
-    if not text:
-        return []
-
-    chunks: list[Chunk] = []
-    start = 0
-    idx = 0
-    while start < len(text):
-        end = min(len(text), start + CHUNK_SIZE)
-        if end < len(text):
-            # Prefer a paragraph break, else a sentence-ish boundary.
-            window = text[start:end]
-            para = window.rfind("\n\n")
-            sent = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
-            cut = max(para, sent)
-            if cut > CHUNK_SIZE * 0.4:
-                end = start + cut + 1
-        piece = text[start:end].strip()
-        if piece:
-            chunks.append(
-                Chunk(index=idx, content=piece, locator=f"offset {start}")
-            )
-            idx += 1
-        # This was an infinite loop for any document whose final chunk is
-        # <= CHUNK_OVERLAP characters short of a full window: once `end`
-        # hits `len(text)` the truncation branch above stops firing, so
-        # `end` never changes again, and `start = end - CHUNK_OVERLAP`
-        # recomputes to the exact same value forever — the same trailing
-        # chunk gets appended without bound until memory runs out. This is
-        # what "documents stuck at EMBEDDING CHUNKS" actually was; it had
-        # nothing to do with embedding-provider timing. Breaking the moment
-        # the window reaches the end of the text is the real fix; the
-        # `max(..., start + 1)` on the other branch is a second guard so no
-        # future change to the boundary-detection heuristic above can
-        # reintroduce the same failure mode for a non-final chunk.
-        if end >= len(text):
-            break
-        start = max(end - CHUNK_OVERLAP, start + 1)
-    return chunks
 
 
 def _stub_embedding(text: str) -> list[float]:
@@ -249,6 +176,28 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     return out
 
 
+#: Question vectors already computed: a regenerate embeds the same text again.
+_QUESTION_VECTORS: TTLCache[list[float]] = TTLCache(maxsize=256, ttl=900)
+
+
+async def embed_question(texts: list[str]) -> list[list[float]]:
+    """`embed_texts` for a student's question: the same text twice costs one embedding.
+
+    Only a single text is cached. A batch is document text being indexed, which
+    is neither repeated nor worth holding in memory.
+    """
+    if len(texts) != 1:
+        return await embed_texts(texts)
+    key = hashlib.sha256(texts[0].encode()).hexdigest()
+    hit = _QUESTION_VECTORS.get(key)
+    if hit is not None:
+        return [hit]
+    out = await embed_texts(texts)
+    if out:
+        _QUESTION_VECTORS.set(key, out[0])
+    return out
+
+
 def is_warm() -> bool:
     """True once the real model is loaded and an upload won't pay for it."""
     provider = _provider
@@ -290,23 +239,3 @@ async def close_client() -> None:
     The local model holds no network connection — nothing to close — but a
     future hosted provider would need this hook again, which is the point of
     keeping it a stable no-op rather than deleting it."""
-
-
-def extract_pdf_text(data: bytes) -> str:
-    """Pull text out of a PDF's pages, keeping page numbers in the stream."""
-
-    try:
-        from pypdf import PdfReader  # imported here to keep cold-start light
-    except Exception:  # pragma: no cover
-        return ""
-    from io import BytesIO
-
-    reader = PdfReader(BytesIO(data))
-    parts: list[str] = []
-    for page_num, page in enumerate(reader.pages, start=1):
-        try:
-            txt = page.extract_text() or ""
-        except Exception:
-            txt = ""
-        parts.append(f"[p.{page_num}]\n{txt}")
-    return "\n\n".join(parts)

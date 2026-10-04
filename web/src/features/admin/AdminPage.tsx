@@ -18,9 +18,10 @@ import { LIMITS } from '../../lib/limits'
 import { Questions } from './Questions'
 import { Responses } from './Responses'
 import { Summary } from './Summary'
+import { Usage } from './Usage'
 import { Welcome } from './Welcome'
 
-const TABS = ['Summary', 'Responses', 'Questions'] as const
+const TABS = ['Summary', 'Responses', 'Questions', 'AI usage'] as const
 type Tab = (typeof TABS)[number]
 
 export function AdminPage() {
@@ -86,7 +87,15 @@ export function AdminPage() {
         </div>
       </header>
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        {tab === 'Summary' ? <Summary /> : tab === 'Responses' ? <Responses /> : <Questions />}
+        {tab === 'Summary' ? (
+          <Summary />
+        ) : tab === 'Responses' ? (
+          <Responses />
+        ) : tab === 'Questions' ? (
+          <Questions />
+        ) : (
+          <Usage />
+        )}
       </main>
     </div>
   )

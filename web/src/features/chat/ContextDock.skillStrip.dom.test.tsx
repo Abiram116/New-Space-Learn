@@ -63,7 +63,7 @@ describe('ActiveSkillStrip', () => {
     expect(await screen.findByText('Skills on')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Change' }))
-    expect(await screen.findByRole('dialog')).toHaveTextContent('How the AI answers')
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Answer style')
   })
 
   it('offers to turn one on when nothing is, and re-reads the list when the dialog closes', async () => {

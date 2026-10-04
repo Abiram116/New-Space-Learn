@@ -24,7 +24,7 @@ import asyncio
 import logging
 
 from ..config import settings
-from . import supabase
+from . import supabase, usage
 from .llm import get_llm
 
 log = logging.getLogger("space_learn.chat_memory")
@@ -138,6 +138,7 @@ async def _fold(
     )
 
 
+@usage.tagged("chat.memory")
 async def _summarize(prior_summary: str, transcript: str) -> str | None:
     prompt = (
         "Summarize the durable facts from this study conversation in at "

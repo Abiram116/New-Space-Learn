@@ -85,6 +85,8 @@
   --color-jade-deep: #86e9c9;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A curve that overshoots and settles — for a thing that has just been earned. */
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @layer base {
@@ -485,6 +487,52 @@ html.no-scrollbars body {
 html.no-scrollbars::-webkit-scrollbar,
 html.no-scrollbars body::-webkit-scrollbar {
   display: none;
+}
+
+/* ── The chat dock's checklist ───────────────────────────────────────────
+   A handful of named moves, each there to say one thing:
+     dock-in      a step arriving (staggered, so the list deals itself in)
+     dock-pop     a step just got done (the mark swells, then settles)
+     dock-spark   …and throws a few sparks
+     dock-ring    "you are here": a halo that rings out from the current step
+                  (the ones that loop do it three times and then rest — motion that
+                  never stops is nagging, not guidance)
+     dock-fill    the thread between steps filling as one is finished
+     dock-breathe the next-step button, quietly asking to be pressed
+     dock-swap    its label changing, because the next step changed
+     dock-float   the drop box's icon, hovering over where a file goes
+     dock-dot     the three dots of "go on, ask something"
+   All of them stop under reduced motion; nothing depends on them to be read. */
+@keyframes dockIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes dockPop { 0% { transform: scale(0.55); } 55% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes dockSpark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+}
+@keyframes dockRing { 0% { box-shadow: 0 0 0 0 rgba(255, 237, 220, 0.45); } 100% { box-shadow: 0 0 0 11px rgba(255, 237, 220, 0); } }
+@keyframes dockFill { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes dockBreathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 60, 0), 0 8px 20px -10px rgba(255, 90, 60, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 90, 60, 0.17), 0 10px 26px -8px rgba(255, 90, 60, 0.6); }
+}
+@keyframes dockSwap { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@keyframes dockFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes dockDot { 0%, 60%, 100% { transform: translateY(0); opacity: 0.35; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+.dock-in { animation: dockIn 520ms var(--ease-out-expo) both; }
+.dock-pop { animation: dockPop 620ms var(--ease-overshoot) both; }
+.dock-spark { animation: dockSpark 760ms var(--ease-out-expo) both; }
+.dock-ring { animation: dockRing 1.9s ease-out 3; }
+.dock-fill { transform-origin: top; animation: dockFill 700ms var(--ease-out-expo) both; }
+.dock-breathe { animation: dockBreathe 2.6s ease-in-out 3; }
+.dock-swap { display: inline-flex; align-items: center; gap: inherit; animation: dockSwap 380ms var(--ease-out-expo) both; }
+.dock-float { animation: dockFloat 3.2s ease-in-out 3; }
+.dock-dot { display: inline-block; width: 5px; height: 5px; border-radius: 9999px; background: currentColor; animation: dockDot 1.3s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-in, .dock-pop, .dock-spark, .dock-ring, .dock-fill, .dock-breathe, .dock-swap, .dock-float, .dock-dot {
+    animation: none !important;
+  }
 }
 
 /* Trust pages from the landing page: the sheet drifts up out of the

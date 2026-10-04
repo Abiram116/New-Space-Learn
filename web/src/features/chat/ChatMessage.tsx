@@ -1,14 +1,14 @@
-import { memo, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { memo, useEffect, useState } from 'react'
 import type { FeedbackKind } from '../../api/feedback'
 import type { AskReason } from './feedbackPolicy'
-import type { ChatMessage as Message } from '../../api/types'
+import type { ChatMessage as Message, Citation } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
 import { AddToNoteButton } from './AddToNote'
 import { FeedbackChips } from './FeedbackChips'
 import { MarkdownMessage } from './MarkdownMessage'
+import { PassagePreview } from './PassagePreview'
 import './chat.css'
 
 export type MessageFeedback = {
@@ -69,6 +69,9 @@ export const ChatMessage = memo(function ChatMessage({
    *  the whole answer blinking at the moment it finishes. */
   instant?: boolean
 }) {
+  // The citation whose passage is open, if any.
+  const [viewing, setViewing] = useState<Citation | null>(null)
+  const [showSources, setShowSources] = useState(false)
   // Bubbles lift in rather than appearing. Short and small — a chat log is
   // read continuously, so anything longer would be in the way.
   if (message.role === 'user') {
@@ -78,7 +81,7 @@ export const ChatMessage = memo(function ChatMessage({
             loudest thing on screen — brighter than the answer it was asking
             about, which inverts the hierarchy. `brand-soft` still reads as
             "this one is mine" without shouting it. */}
-        <div className="rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-4 py-2.5 text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]">
+        <div id={`msg-${message.id}`} className="scroll-mt-24 rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-4 py-2.5 text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]">
           {message.content}
         </div>
       </Rise>
@@ -118,42 +121,56 @@ export const ChatMessage = memo(function ChatMessage({
           citations={citations}
           base={base}
           streaming={streaming}
+          onCite={base ? setViewing : undefined}
         />
       )}
 
       {citations.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {citations.map((c) => {
-            const cardClass =
-              'min-w-40 flex-1 rounded-xl border border-line bg-raised/40 px-3 py-2 text-[12.5px] leading-snug'
-            const inner = (
-              <>
-                <div className="flex gap-1.5 font-bold">
-                  <span className="text-brand">{c.marker}</span>
-                  <span className="truncate">{c.document_name}</span>
-                </div>
-                <div className="text-muted">
-                  {c.locator} · {c.snippet}
-                </div>
-              </>
-            )
-            // `base` is only omitted for the pending/streaming bubble, which
-            // never has real citations yet — but guard anyway rather than
-            // ever emit a link to `undefined/docs`.
-            return base ? (
-              <Link
-                key={c.marker}
-                to={`${base}/docs?d=${c.document_id}`}
-                className={cn(cardClass, 'transition-colors hover:border-brand/40 hover:bg-raised')}
-              >
-                {inner}
-              </Link>
-            ) : (
-              <div key={c.marker} className={cardClass}>
-                {inner}
-              </div>
-            )
-          })}
+        <div className="flex flex-col gap-1">
+          {/* Closed by default: the markers in the text already say which source
+              backs which claim, and a wall of cards under every answer is more to
+              scroll past than to use. Open it when you want to check one. */}
+          <button
+            type="button"
+            onClick={() => setShowSources((v) => !v)}
+            aria-expanded={showSources}
+            className="flex w-fit cursor-pointer items-center gap-1.5 rounded-md py-1 text-[12.5px] font-semibold text-muted transition-colors hover:text-ink"
+          >
+            Sources · {citations.length}
+            <Icon name="chevronDown" size={13} className={cn('transition-transform', showSources && 'rotate-180')} />
+          </button>
+          {showSources && (
+            <ul className="flex flex-col divide-y divide-line-soft overflow-hidden rounded-[10px] border border-line bg-raised/40">
+              {citations.map((c) => {
+                const row = (
+                  <>
+                    <span className="w-4 shrink-0 text-right font-bold text-brand">{c.marker}</span>
+                    <span className="min-w-0 flex-1 truncate font-semibold text-ink-2">{c.document_name}</span>
+                    <span className="max-w-[45%] shrink-0 truncate text-muted">{c.locator}</span>
+                  </>
+                )
+                // `base` is only omitted for the pending/streaming bubble, which
+                // never has real citations yet — but guard anyway rather than
+                // ever offer a preview that cannot link back to its file.
+                return (
+                  <li key={c.marker}>
+                    {base ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewing(c)}
+                        title={c.snippet}
+                        className="flex min-h-9 w-full cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left text-[12px] transition-colors hover:bg-raised"
+                      >
+                        {row}
+                      </button>
+                    ) : (
+                      <div className="flex min-h-9 items-center gap-2 px-2.5 py-1.5 text-[12px]">{row}</div>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -173,6 +190,7 @@ export const ChatMessage = memo(function ChatMessage({
     {feedback && !feedback.messageId.startsWith('srv-') && (
       <FeedbackRow feedback={feedback} content={message.content} />
     )}
+      <PassagePreview citation={viewing} base={base} onClose={() => setViewing(null)} />
     </>
   )
   return instant ? <div>{body}</div> : <Rise distance={6}>{body}</Rise>

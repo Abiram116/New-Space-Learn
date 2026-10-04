@@ -19,6 +19,7 @@ import { friendlyMessage } from '../../api/errors'
 import { generateCards } from '../../api/flashcards'
 import { generateNote } from '../../api/notes'
 import { generateQuiz } from '../../api/quizzes'
+import { deckHref, quizHref } from '../../lib/fromChat'
 import { LIMITS } from '../../lib/limits'
 import type { AgentKey } from './agents'
 
@@ -161,7 +162,7 @@ export function useAgentRuns({
         })
         return {
           doneText: 'Quiz ready',
-          href: `${base}/quizzes?q=${quiz.id}`,
+          href: quizHref(base, quiz.id),
           count: Array.isArray(quiz.questions) ? quiz.questions.length : undefined,
         }
       }
@@ -184,7 +185,7 @@ export function useAgentRuns({
         doneText: `${cards.length} card${cards.length === 1 ? '' : 's'} ready`,
         count: cards.length,
         // Land on the deck itself, as notes and quizzes land on what they wrote.
-        href: cards[0] ? `${base}/flashcards?deck=${cards[0].deck_id}` : `${base}/flashcards`,
+        href: cards[0] ? deckHref(base, cards[0].deck_id) : `${base}/flashcards`,
       }
     },
     [subspaceId, base],

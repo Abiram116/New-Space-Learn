@@ -1,21 +1,20 @@
-"""Retrieval + prompt construction.
+"""Prompt construction, and the doors into retrieval.
 
-Two responsibilities kept intentionally small so they're easy to test:
-1. Given a user question + subspace, fetch the top-k similar chunks.
-2. Build the system + user messages the LLM sees, plus the citations metadata
-   the frontend needs to render inline markers and source cards.
+1. `search` / `retrieve` — what chat and the generators call to find sources.
+   The work is in `services/retrieval.py`; these adapt it to each caller.
+2. `build_prompt` — the system + user messages the LLM sees, plus the
+   citations metadata the frontend needs to render inline markers and source
+   cards.
 """
 
 from __future__ import annotations
 
-import asyncio
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from . import guardrails, supabase
-from .embeddings import embed_texts
-from .voice import COMPANION_VOICE, DIAGRAM_RULE, RESPONSE_SHAPE
+from . import followup, guardrails, retrieval, supabase
+from .voice import COMPANION_VOICE, DIAGRAM_RULE, DIAGRAM_SHORT, shape_for, wants_diagram
 
 
 @dataclass(slots=True)
@@ -27,43 +26,40 @@ class Retrieved:
     similarity: float
 
 
-async def retrieve(subspace_id: str, question: str, *, k: int = 4) -> list[Retrieved]:
-    embeddings = await embed_texts([question])
-    if not embeddings:
-        return []
-    rows = await supabase.db_rpc(
-        "match_document_chunks",
-        {
-            "query_embedding": embeddings[0],
-            "match_subspace": subspace_id,
-            "match_count": k,
-        },
-        read_only=True,
+def as_retrieved(c: retrieval.Candidate) -> Retrieved:
+    return Retrieved(
+        document_id=c.document_id,
+        document_name=c.document_name,
+        content=c.content,
+        locator=c.locator,
+        similarity=c.similarity,
     )
-    if not isinstance(rows, list) or not rows:
-        return []
 
-    # Look up doc names in one query.
-    doc_ids = list({r["document_id"] for r in rows if r.get("document_id")})
-    name_map: dict[str, str] = {}
-    if doc_ids:
-        docs = await supabase.db_select(
-            "documents",
-            filters={"id": f"in.({','.join(doc_ids)})"},
-            select="id,name",
-        )
-        name_map = {d["id"]: d["name"] for d in docs}
 
-    return [
-        Retrieved(
-            document_id=r["document_id"],
-            document_name=name_map.get(r["document_id"], "source"),
-            content=r["content"],
-            locator=r.get("locator") or "",
-            similarity=float(r.get("similarity", 0.0)),
-        )
-        for r in rows
-    ]
+async def search(
+    question: str,
+    *,
+    subspace_id: str,
+    linked_subspace_ids: list[str] | None = None,
+    history: list[dict[str, str]] | None = None,
+    topic: str = "",
+) -> retrieval.Retrieval:
+    """Chat's search: the full pipeline (`services/retrieval.py`), follow-ups
+    resolved against `history`, linked topics searched alongside this one."""
+    return await retrieval.retrieve(
+        question,
+        subspace_id=subspace_id,
+        linked_subspace_ids=linked_subspace_ids or (),
+        history=history,
+        topic=topic,
+    )
+
+
+async def retrieve(subspace_id: str, question: str, *, k: int = 6) -> list[Retrieved]:
+    """The generators' search (notes, cards, quizzes): by a topic or a prompt
+    rather than a conversation, and never judged "not covered" — each of them
+    has its own handling for a topic with nothing in it."""
+    return await retrieve_with_links(subspace_id, question, [], k=k)
 
 
 async def linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
@@ -80,29 +76,19 @@ async def linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
 
 
 async def retrieve_with_links(
-    subspace_id: str,
-    question: str,
-    linked_subspace_ids: list[str],
-    *,
-    k: int = 4,
-    link_k: int = 2,
+    subspace_id: str, question: str, linked_subspace_ids: list[str], *, k: int = 6
 ) -> list[Retrieved]:
-    """The subspace actually being asked about, plus a smaller pull from
-    explicitly linked subspaces (see Linked Subspaces in docs/v2-review.md).
-    Always additive — a link only adds sources, never replaces the primary
-    subspace's own material."""
-
-    if not linked_subspace_ids:
-        return await retrieve(subspace_id, question, k=k)
-    # Concurrent, not sequential: each retrieval is an independent round trip,
-    # so N linked subspaces used to cost N+1 back-to-back waits on the chat's
-    # critical path — before the first token could even be requested.
-    results = await asyncio.gather(
-        retrieve(subspace_id, question, k=k),
-        *(retrieve(linked_id, question, k=link_k) for linked_id in linked_subspace_ids),
+    """`retrieve`, with explicitly linked subspaces searched alongside (see
+    Linked Subspaces in docs/v2-review.md). One search over all of them: a
+    linked topic's material is used when it is the better match, rather than
+    always being given a fixed share."""
+    found = await retrieval.retrieve(
+        question,
+        subspace_id=subspace_id,
+        linked_subspace_ids=linked_subspace_ids,
+        config=replace(retrieval.GENERATION, max_chunks=k),
     )
-    primary, *extra = results
-    return primary + [r for batch in extra for r in batch]
+    return [as_retrieved(c) for c in found.chunks]
 
 
 def build_prompt(
@@ -117,6 +103,8 @@ def build_prompt(
     student_context: str = "",
     images: list[str] | None = None,
     memory_summary: str = "",
+    sources_doubtful: bool = False,
+    suggest_followup: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (messages_for_llm, citations_metadata_for_frontend)."""
 
@@ -156,8 +144,9 @@ def build_prompt(
     system_parts = [
         COMPANION_VOICE,
         f"You are working with the student on the topic '{subspace_name}'.",
-        RESPONSE_SHAPE,
-        DIAGRAM_RULE,
+        shape_for(question),
+        # Only the full rule when the question has a shape; the short one otherwise.
+        DIAGRAM_RULE if wants_diagram(question) else DIAGRAM_SHORT,
     ]
     # Only when there is actually an image. Explaining how to read attachments
     # on every text-only turn is tokens spent on a situation that is not
@@ -169,8 +158,20 @@ def build_prompt(
             "Every factual claim that comes from a source must end with that "
             "source's marker, written [[n]] with no space, where n is the number "
             "in the Sources list below — not a footnote, inline at the point of "
-            "the claim. A sentence combining two sources gets two markers. Never "
-            "invent a marker number that isn't in the list."
+            "the claim. Cite the source that actually states the claim, not one "
+            "that is merely about the same subject, and not as a second marker "
+            "\"for safety\": a sentence gets two markers only when two sources "
+            "each state it. If you cannot point to a source that says it, do not "
+            "make the claim. Never invent a marker number that isn't in the list."
+        )
+    # Only when there is an earlier conversation to resolve against: a question like
+    # "which one is enough?" is answerable only if the model knows what "one" means.
+    if history:
+        system_parts.append(
+            "If the question refers back to something earlier (\"which one\", \"that\", "
+            "\"is it enough\"), use the conversation to work out what it means and answer "
+            "about that. If you genuinely cannot tell, ask which they mean in one short "
+            "sentence instead of guessing."
         )
     if answer_only_from_docs:
         if retrieved:
@@ -178,7 +179,11 @@ def build_prompt(
                 "Answer only using the Sources below — not outside knowledge, even if "
                 "you're confident it's correct. If the sources only partly cover the "
                 "question, answer the part they cover and say plainly what's missing, "
-                "rather than filling the gap yourself."
+                "rather than filling the gap yourself. If they do not cover the "
+                "question at all, say so in one sentence and stop: do not offer to "
+                "answer it from general knowledge, and do not confirm or correct a "
+                "claim about something the Sources never mention, even when the "
+                "question rests on a false premise."
             )
         else:
             system_parts.append(
@@ -186,6 +191,19 @@ def build_prompt(
                 "indexed in this topic covers it yet — do not answer from outside "
                 "knowledge instead."
             )
+    # Retrieval was not sure these sources answer the question (see
+    # `retrieval.judge`). It passes them anyway — refusing a question the
+    # documents do answer is the worse mistake — and says so, because the model
+    # can read what a similarity score cannot: whether the passage is actually
+    # about what was asked.
+    if retrieved and sources_doubtful:
+        system_parts.append(
+            "The sources below were the closest found, but they may not be about "
+            "this question at all. Check before using them: if none of them "
+            "actually answers it, say plainly that the student's material in this "
+            "topic doesn't cover it, and do not cite a source for something it "
+            "doesn't say."
+        )
     # ── Skill, then student, then the rules that outrank both ─────────
     #
     # Order is the whole mechanism here. `for_skill`'s docstring records that
@@ -213,6 +231,11 @@ def build_prompt(
         )
     )
     system_parts.append(guardrails.SAFETY_RULES)
+    # Last of all, and only when the student has sources: a follow-up question
+    # about material that is not there would be a suggestion to ask the one thing
+    # the tutor cannot answer.
+    if suggest_followup and retrieved:
+        system_parts.append(followup.PROMPT)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(system_parts)}]
     if sources_block:
@@ -275,6 +298,29 @@ def _snippet(text: str, *, limit: int = 90) -> str:
 _CITATION_MARKER = re.compile(r"\[\[(\d+)\]\]")
 
 
+_ALT_MARKERS = (
+    re.compile(r"【\s*(\d{1,2})[^】]*】"),  # the full-width brackets some models emit: 【4】, 【4†L2】
+    # A bare [4]: not part of a word, array index, markdown link or reference definition.
+    re.compile(r"(?<![\w\]\[])\[(\d{1,2})\](?![\(\[:])"),
+)
+_FENCE = re.compile(r"(```.*?```|`[^`\n]*`)", re.DOTALL)
+
+
+def normalize_citation_markers(text: str, valid_count: int) -> str:
+    """Turn another model's way of writing a citation into ours.
+
+    Models trained on other formats sometimes write 【4】 or [4] instead of [[4]]. Left
+    alone these show as stray brackets and are not clickable, so the student loses the
+    page the claim came from. Only numbers that name a real source are converted, and
+    never inside code.
+    """
+    parts = _FENCE.split(text)
+    for i in range(0, len(parts), 2):  # even parts are outside code
+        for pattern in _ALT_MARKERS:
+            parts[i] = pattern.sub(lambda m: f"[[{m.group(1)}]]" if 1 <= int(m.group(1)) <= valid_count else m.group(0), parts[i])
+    return "".join(parts)
+
+
 def strip_invalid_citations(text: str, valid_count: int) -> tuple[str, list[int]]:
     """Remove `[[n]]` markers that don't point at a real source.
 
@@ -309,6 +355,61 @@ def strip_invalid_citations(text: str, valid_count: int) -> tuple[str, list[int]
         cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
         cleaned = re.sub(r" +\n", "\n", cleaned)
     return cleaned.strip(), sorted(dropped)
+
+
+#: A citation whose sentence shares less than this with its source…
+_WEAK_SUPPORT = 0.3
+#: …is moved to another source sharing at least this much. Both measured on
+#: the benchmark's graded answers: of 48 citations, 2 pointed at a chunk that
+#: did not contain their sentence while another chunk plainly did.
+_STRONG_SUPPORT = 0.6
+_SUPPORT_WORD = re.compile(r"[a-z0-9]+")
+_SUPPORT_STOP = frozenset(
+    "this that with from have were been which their there about into than then they them these those also such "
+    "using used uses each other more most only over very what when where while your will would could should "
+    "because between within without".split()
+)
+_SENTENCE_SPLIT = re.compile(r"((?<=[.!?])\s+|\n+)")
+
+
+def support(sentence: str, source: str) -> float:
+    """The share of a sentence's meaningful words that appear in a source
+    (by their first five letters, so "converges" finds "convergence")."""
+    words = [w for w in _SUPPORT_WORD.findall(_CITATION_MARKER.sub("", sentence).lower()) if len(w) >= 4 and w not in _SUPPORT_STOP]
+    if not words:
+        return 1.0
+    text = source.lower()
+    return sum(1 for w in words if w[:5] in text) / len(words)
+
+
+def repoint_citations(text: str, sources: list[str]) -> tuple[str, int]:
+    """Move a citation the model attached to the wrong source.
+
+    Only the clear case: the cited source contains almost none of the
+    sentence, and another source contains most of it. The marker then points
+    at that source instead (or is dropped, if that source is already cited
+    there). Anything less clear is left alone — this guesses from shared
+    words, and a wrong "fix" is worse than the original. No model call.
+    Returns the text and how many markers were moved."""
+    if len(sources) < 2 or not _CITATION_MARKER.search(text):
+        return text, 0
+    moved = 0
+    parts = _SENTENCE_SPLIT.split(text)
+    for i, part in enumerate(parts):
+        markers = [int(n) for n in _CITATION_MARKER.findall(part)]
+        if not markers:
+            continue
+        scores = [support(part, s) for s in sources]
+        best = max(range(len(sources)), key=lambda k: scores[k]) + 1
+        if scores[best - 1] < _STRONG_SUPPORT:
+            continue
+        for n in markers:
+            if 1 <= n <= len(sources) and n != best and scores[n - 1] < _WEAK_SUPPORT:
+                replacement = "" if f"[[{best}]]" in part else f"[[{best}]]"
+                part = part.replace(f"[[{n}]]", replacement, 1)
+                moved += 1
+        parts[i] = part
+    return "".join(parts), moved
 
 
 def cited_markers(text: str) -> list[int]:
