@@ -28,7 +28,7 @@ describe('link preview tags', () => {
   })
 
   it('points at an image that exists, is sized as declared and stays WhatsApp-safe', () => {
-    const file = resolve(root, 'public/og-image.jpg')
+    const file = resolve(root, 'public', new URL(meta('property', 'og:image')!).pathname.slice(1))
     expect(existsSync(file)).toBe(true)
     expect(statSync(file).size).toBeLessThan(300 * 1024)
     const buf = readFileSync(file)
@@ -39,6 +39,9 @@ describe('link preview tags', () => {
       if (marker === 0xc0 || marker === 0xc2) break
       i += 2 + buf.readUInt16BE(i + 2)
     }
+    // Baseline (SOF0), not progressive (SOF2): WhatsApp shows no preview for a
+    // progressive JPEG, while Telegram, Instagram and Google Messages do.
+    expect(buf[i + 1]).toBe(0xc0)
     expect(buf.readUInt16BE(i + 5)).toBe(Number(meta('property', 'og:image:height')))
     expect(buf.readUInt16BE(i + 7)).toBe(Number(meta('property', 'og:image:width')))
   })
