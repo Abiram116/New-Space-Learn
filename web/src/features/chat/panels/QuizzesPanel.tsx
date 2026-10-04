@@ -1,115 +1,51 @@
 /**
- * Quizzes, in the dock — taken here, scored here.
+ * Quizzes, in the sidebar: what you have, and the way to take one.
  *
- * The previous version said "taking a quiz needs the full width" and listed
- * links out. It doesn't: a question, four choices and a verdict is a column,
- * and `QuizRunner` already renders at dock density. Sending someone to another
- * route to answer five questions cost them the conversation the quiz came from.
- *
- * The runner and results are the *same components* the full page uses, in
- * `compact` mode. Two implementations of "take a quiz" would drift, and the
- * dock one would be the neglected one.
+ * Taking a quiz opens it as a full page, not inside this narrow column: a
+ * question, its choices and the explanations afterwards want room, and a quiz
+ * is something you sit down to rather than glance at. The page's Back button
+ * returns here, to this panel (see `lib/fromChat`).
  */
 
 import { useCallback, useState } from 'react'
-import { generateQuiz, getQuiz, listQuizzes } from '../../../api/quizzes'
-import type { Quiz, QuizResult } from '../../../api/types'
+import { useNavigate } from 'react-router-dom'
+import { generateQuiz, listQuizzes } from '../../../api/quizzes'
+import type { Quiz } from '../../../api/types'
 import { Icon } from '../../../components/ui/Icon'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
-import { StudyAmbience } from '../../../components/celebrate'
+import { quizHref } from '../../../lib/fromChat'
 import { useAsync } from '../../../lib/useAsync'
-import { QuizResults } from '../../quizzes/QuizResults'
-import { QuizRunner } from '../../quizzes/QuizRunner'
 import { DockAction, DockEmpty, DockSectionHead } from '../dockParts'
 
-export function QuizzesPanel({ subspaceId }: { subspaceId: string; base?: string }) {
+export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
+  const navigate = useNavigate()
   const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId], `quizzes:${subspaceId}`)
-  const [active, setActive] = useState<Quiz | null>(null)
-  const [finished, setFinished] = useState<{ result: QuizResult; answers: number[] } | null>(null)
-  const [attempt, setAttempt] = useState(0)
-  const [loadingId, setLoadingId] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const { show, showError } = useToast()
-
-  const openQuiz = useCallback(
-    async (id: string) => {
-      setLoadingId(id)
-      try {
-        setActive(await getQuiz(id))
-        setFinished(null)
-      } catch (err) {
-        showError(err)
-      } finally {
-        setLoadingId(null)
-      }
-    },
-    [showError],
-  )
 
   const generate = useCallback(async () => {
     setGenerating(true)
     try {
       const quiz = await generateQuiz(subspaceId, { count: 5 })
       await quizzes.refresh()
-      setActive(quiz)
-      setFinished(null)
       show('Quiz ready.', 'success')
+      navigate(quizHref(base, quiz.id))
     } catch (err) {
       showError(err)
     } finally {
       setGenerating(false)
     }
-  }, [subspaceId, quizzes, show, showError])
-
-  if (active) {
-    return (
-      // One room for the runner AND its results, so the light carries across
-      // the finish instead of restarting. The frame never scrolls; the runner
-      // scrolls inside it. On results `min-h-0` is load-bearing: QuizResults
-      // scrolls its own review column, and without it the flex parent grows
-      // instead and the dock's own scroll takes over.
-      <StudyAmbience compact innerClassName={finished ? undefined : '-mr-1 overflow-y-auto pr-1'}>
-        {finished ? (
-          <QuizResults
-            compact
-            quiz={active}
-            answers={finished.answers}
-            result={finished.result}
-            onRetake={() => {
-              setFinished(null)
-              setAttempt((n) => n + 1)
-            }}
-            onBack={() => {
-              setActive(null)
-              setFinished(null)
-            }}
-          />
-        ) : (
-          <QuizRunner
-            key={attempt}
-            compact
-            quiz={active}
-            onFinished={(result, answers) => {
-              setFinished({ result, answers })
-              void quizzes.refresh()
-            }}
-            onExit={() => setActive(null)}
-          />
-        )}
-      </StudyAmbience>
-    )
-  }
+  }, [subspaceId, base, navigate, quizzes, show, showError])
 
   const list = weakestFirst(quizzes.data ?? [])
 
   return (
-    // `flex-1`, not `min-h-full`. A percentage min-height has to resolve
-    // against an ancestor chain of definite heights, and one scroll container
-    // in that chain is enough to collapse it back to content height — which is
-    // why this panel kept bunching into a strip at the top of the dock. Being a
-    // flex item that grows needs nothing from its ancestors.
+    // `flex-1`, not `min-h-full`: a percentage min-height has to resolve against
+    // an ancestor chain of definite heights, and one scroll container in that
+    // chain is enough to collapse it. A flex item that grows needs nothing from
+    // its ancestors.
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <DockSectionHead id="quizzes-panel-label">{list.length > 0 ? `Quizzes · ${list.length}` : 'Quizzes'}</DockSectionHead>
 
@@ -130,23 +66,19 @@ export function QuizzesPanel({ subspaceId }: { subspaceId: string; base?: string
               <button
                 key={q.id}
                 type="button"
-                onClick={() => openQuiz(q.id)}
-                disabled={loadingId === q.id}
+                onClick={() => navigate(quizHref(base, q.id))}
                 className="flex w-full items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors cursor-pointer hover:border-brand/40"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] font-semibold leading-snug text-ink">
                     {q.topic || 'Quiz'}
                   </span>
-                  <span className="mt-0.5 block text-[11.5px] text-muted">
-                    {loadingId === q.id ? 'Opening…' : quizMeta(q)}
-                  </span>
+                  <span className="mt-0.5 block text-[11.5px] text-muted">{quizMeta(q)}</span>
                 </span>
-                {typeof q.best_score === 'number' && q.best_score < 100 ? (
-                  <span className="setcode shrink-0 text-ink-3">Retake</span>
-                ) : (
-                  <Icon name="chevronRight" size={14} className="shrink-0 text-faint" />
-                )}
+                <span className="setcode flex shrink-0 items-center gap-1 text-ink-3">
+                  {typeof q.best_score === 'number' ? 'Retake' : 'Take'}
+                  <Icon name="arrowRight" size={11} />
+                </span>
               </button>
             ))}
           </Stagger>

@@ -11,6 +11,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { deleteDocument, reprocessDocument, uploadDocument } from '../../api/documents'
 import type { Document } from '../../api/types'
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -84,11 +85,15 @@ export function DockSourceRow({
   doc,
   onRetry,
   onRemove,
+  onDelete,
   retrying = false,
 }: {
   doc: Document
   onRetry?: () => void
+  /** For a file that couldn't be read: sits beside Try again. */
   onRemove?: () => void
+  /** For any file: a quiet bin at the row's edge. Asks first (the caller confirms). */
+  onDelete?: () => void
   retrying?: boolean
 }) {
   const pending = doc.status === 'processing' || doc.status === 'uploading'
@@ -160,6 +165,17 @@ export function DockSourceRow({
           </div>
         )}
       </div>
+      {onDelete && !failed && (
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Remove ${doc.name}`}
+          title="Remove this file"
+          className="-mr-1 grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md text-faint transition-colors hover:bg-coral-soft hover:text-coral-deep"
+        >
+          <Icon name="trash" size={14} />
+        </button>
+      )}
     </li>
   )
 }
@@ -191,6 +207,8 @@ export const DockSources = forwardRef<
     bare?: boolean
     /** In a panel, the screen's own main button adds files; no link beside the heading. */
     pill?: boolean
+    /** Makes the heading a way into the Files panel (the full list, linked topics). */
+    onManage?: () => void
     /** With no files, a slim prompt rather than a big box. */
     compactEmpty?: boolean
     /** Opens the file picker when something else on the page asks to add a file
@@ -201,12 +219,14 @@ export const DockSources = forwardRef<
     limit?: number
     onSeeAll?: () => void
   }
->(function DockSources({ subspaceId, docs, loading, error, onChanged, bare = false, pill = true, compactEmpty = false, listenForAdd = false, limit, onSeeAll }, handle) {
+>(function DockSources({ subspaceId, docs, loading, error, onChanged, bare = false, pill = true, onManage, compactEmpty = false, listenForAdd = false, limit, onSeeAll }, handle) {
   const { showError } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [retrying, setRetrying] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<Document | null>(null)
+  const [removing, setRemoving] = useState(false)
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
@@ -242,11 +262,15 @@ export const DockSources = forwardRef<
 
   const remove = useCallback(
     async (doc: Document) => {
+      setRemoving(true)
       try {
         await deleteDocument(doc.id)
+        setConfirming(null)
         onChanged()
       } catch (err) {
         showError(err)
+      } finally {
+        setRemoving(false)
       }
     },
     [onChanged, showError],
@@ -320,7 +344,18 @@ export const DockSources = forwardRef<
             )
           }
         >
-          Files
+          {onManage ? (
+            <button
+              type="button"
+              onClick={onManage}
+              className="-ml-1 inline-flex cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:text-ink"
+              aria-label="Files: see the full list and linked topics"
+            >
+              Files <Icon name="chevronRight" size={12} />
+            </button>
+          ) : (
+            'Files'
+          )}
         </DockSectionHead>
       )}
 
@@ -368,6 +403,7 @@ export const DockSources = forwardRef<
                 doc={doc}
                 onRetry={() => void retry(doc)}
                 onRemove={() => void remove(doc)}
+                onDelete={() => setConfirming(doc)}
                 retrying={retrying === doc.id}
               />
             ))}
@@ -394,6 +430,17 @@ export const DockSources = forwardRef<
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={confirming ? `Remove ${confirming.name}?` : 'Remove this file?'}
+        description="Its text is removed from what the AI answers from. Notes and chats stay."
+        confirmLabel="Remove"
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => confirming && void remove(confirming)}
+        destructive
+        loading={removing}
+      />
     </section>
   )
 })

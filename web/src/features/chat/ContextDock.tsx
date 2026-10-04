@@ -15,11 +15,14 @@
  */
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { reviewDeckHref } from '../../lib/fromChat'
 import { listDocuments } from '../../api/documents'
 import { listDecks } from '../../api/flashcards'
 import { listNotes } from '../../api/notes'
 import { listQuizzes } from '../../api/quizzes'
 import { listActiveSkills } from '../../api/skills'
+import type { DockQuestion } from './DockInsights'
 import { useAsync } from '../../lib/useAsync'
 import { Modal } from '../../components/ui/Modal'
 import { DockSkills } from './DockSkills'
@@ -175,6 +178,7 @@ export function ContextDock({
   onClosePanel,
   onOpenPanel,
   questionsAsked = 0,
+  questions = [],
 }: {
   subspaceId: string
   base: string
@@ -188,6 +192,8 @@ export function ContextDock({
   /** How many questions have been sent in this topic's chat; `null` while the
    *  chat is still loading, so nothing is mistaken for progress. */
   questionsAsked?: number | null
+  /** What the student has asked here, oldest first, for the outline. */
+  questions?: DockQuestion[]
 }) {
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
   const {
@@ -214,6 +220,14 @@ export function ContextDock({
     decks: decks.data?.length ?? 0,
     cards: (decks.data ?? []).reduce((n, d) => n + d.total, 0),
     due: (decks.data ?? []).reduce((n, d) => n + d.due, 0),
+    quizToTake: (quizzes.data ?? []).filter((q) => typeof q.best_score !== 'number' || q.best_score < 80).length,
+  }
+  const navigate = useNavigate()
+  /** Reviews the deck with the most due, as a full page; Back returns here. */
+  const reviewDue = () => {
+    const deck = [...(decks.data ?? [])].filter((d) => d.due > 0).sort((a, b) => b.due - a.due)[0]
+    if (deck) navigate(reviewDeckHref(base, deck.id))
+    else onOpenPanel('flashcards')
   }
   const loaded =
     questionsAsked !== null && !docs.loading && !notes.loading && !quizzes.loading && !decks.loading
@@ -337,6 +351,8 @@ export function ContextDock({
       >
         <DockOverview
           subspaceId={subspaceId}
+          base={base}
+          lists={{ decks: decks.data ?? [], quizzes: quizzes.data ?? [], notes: notes.data ?? [], questions }}
           docs={docList}
           docsLoading={docs.loading}
           docsError={docs.error}
@@ -346,6 +362,7 @@ export function ContextDock({
           busy={busy}
           onRunAgent={onRunAgent}
           onOpenPanel={onOpenPanel}
+          onReviewDue={reviewDue}
         />
       </div>
     </aside>

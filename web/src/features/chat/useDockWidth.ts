@@ -16,12 +16,23 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  */
 
 const KEY = 'sl:dock-width'
-export const DOCK_MIN = 280
-export const DOCK_MAX = 720
+/** Narrower and the title, the buttons and the tiles start to wrap. */
+export const DOCK_MIN = 300
+/** Wider and the sidebar stops being a sidebar: its content is built for a column,
+ *  and the chat is the thing the page is for. */
+export const DOCK_MAX = 440
 export const DOCK_DEFAULT = 320
+/** What the chat and the left navigation need, so a wide sidebar never squeezes them out. */
+const KEEP_FOR_CHAT = 700
 
-function clamp(px: number): number {
-  return Math.min(DOCK_MAX, Math.max(DOCK_MIN, px))
+/** The widest the sidebar may be right now: the ceiling, or less on a narrow window. */
+export function maxWidth(viewport: number = typeof window === 'undefined' ? 1600 : window.innerWidth): number {
+  return Math.max(DOCK_MIN, Math.min(DOCK_MAX, viewport - KEEP_FOR_CHAT))
+}
+
+/** Any width, brought inside the limits. People may drag as they like within them. */
+export function clamp(px: number, viewport?: number): number {
+  return Math.min(maxWidth(viewport), Math.max(DOCK_MIN, px))
 }
 
 function read(): number {
@@ -34,6 +45,13 @@ export function useDockWidth() {
   const [width, setWidth] = useState<number>(read)
   const ref = useRef<HTMLElement | null>(null)
   const [dragging, setDragging] = useState(false)
+
+  // A window made narrower after the sidebar was widened: bring it back inside.
+  useEffect(() => {
+    const fit = () => setWidth((w) => clamp(w))
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  }, [])
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent) => {

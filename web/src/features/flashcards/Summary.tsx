@@ -14,7 +14,7 @@ import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Ledger } from '../../components/ui/Surface'
 import { AmbienceField, celebrate, useAmbienceField } from '../../components/celebrate'
-import { Reaction } from '../../components/mascot'
+import { Reaction, scoreArc } from '../../components/mascot'
 import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
@@ -27,6 +27,7 @@ export function Summary({
   grades,
   deckName,
   onDone,
+  doneLabel = 'Done',
   nextDeck,
   onReviewNext,
   quizHref,
@@ -35,6 +36,8 @@ export function Summary({
   grades: Grade[]
   deckName: string
   onDone: () => void
+  /** What the way out is called — "Back to chat" when this was opened from the sidebar. */
+  doneLabel?: string
   nextDeck: Deck | null
   onReviewNext: (deckId: string) => void
   quizHref: string
@@ -61,13 +64,13 @@ export function Summary({
     ambience.api.progress(1)
     ambience.api.pulse('bright')
     const cards = grades.length - tally.again
-    if (cards > 0) celebrate('deck', { anchor: pctRef, facts: { count: cards, deck: deckName } })
+    if (cards > 0) celebrate('deck', { anchor: pctRef, quiet: true, facts: { count: cards, deck: deckName } })
   }, [grades, tally.again, deckName, ambience.api])
 
   const actions = (
     <>
       <Button variant="secondary" onClick={onDone} className={isMobile ? 'min-h-14 flex-1' : 'flex-1'}>
-        Done
+        {doneLabel}
       </Button>
       {keepGoing ? (
         <Button onClick={keepGoing.onGo} className={cn('min-w-0 flex-1', isMobile && 'min-h-14 flex-[1.6]')}>
@@ -113,7 +116,8 @@ export function Summary({
             agent="cards"
             situation="sessionEnd"
             facts={{ count: grades.length }}
-            mood={pct >= 80 ? 'celebrate' : pct >= 50 ? 'cheer' : 'encouraging'}
+            mood={scoreArc(pct).mood}
+            settle={scoreArc(pct).settle}
             size={56}
             lineKey={grades.length}
             className="justify-center text-left"

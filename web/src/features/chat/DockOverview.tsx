@@ -27,7 +27,6 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import type { Document } from '../../api/types'
-import { AGENTS, Bot, BotSays, type AgentId } from '../../components/mascot'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
@@ -35,16 +34,16 @@ import { type AgentKey, AGENT_BUSY_LABELS, AGENT_ICON } from './agents'
 import type { AgentBusy } from './ContextDock'
 import { DockAction, DockSectionHead } from './dockParts'
 import { nextStep, novaSays, steps, type Next, type NovaLine, type Progress, type StepStatus } from './dockNext'
+import { DockInsights, type DockLists } from './DockInsights'
 import { DockSkills } from './DockSkills'
 import { DockSources, sourcesState, type SourcesHandle } from './DockSources'
 import type { DockPanel } from './DockPanels'
 
-/** The crew who make things: each one is a character with a job, so the job is
- *  recognised by a face before it is read. */
-const CREW: { make: AgentKey; id: AgentId; word: string }[] = [
-  { make: 'notes', id: 'notes', word: 'Note' },
-  { make: 'flashcards', id: 'cards', word: 'Flashcards' },
-  { make: 'quiz', id: 'quiz', word: 'Quiz' },
+/** What can be made, with the icon each one wears everywhere else. */
+const MAKES: { make: AgentKey; word: string }[] = [
+  { make: 'notes', word: 'Note' },
+  { make: 'flashcards', word: 'Flashcards' },
+  { make: 'quiz', word: 'Quiz' },
 ]
 
 /** How many files are listed before pointing at the rest. */
@@ -53,10 +52,14 @@ const SOURCES_SHOWN = 3
 export type DockCounts = Pick<Progress, 'asked' | 'notes' | 'quizzes' | 'decks' | 'due'> & {
   /** Cards across all the topic's decks. */
   cards: number
+  /** Quizzes never taken, or last taken under 80% — the ones worth a go. */
+  quizToTake: number
 }
 
 export function DockOverview({
   subspaceId,
+  base,
+  lists,
   docs,
   docsLoading,
   docsError,
@@ -66,8 +69,13 @@ export function DockOverview({
   busy,
   onRunAgent,
   onOpenPanel,
+  onReviewDue,
 }: {
   subspaceId: string
+  /** The topic's route prefix, for links into its pages. */
+  base: string
+  /** What the topic holds, for the study section. */
+  lists: DockLists
   docs: Document[]
   docsLoading: boolean
   docsError: string | null
@@ -80,6 +88,8 @@ export function DockOverview({
   busy: AgentBusy
   onRunAgent: (agent: AgentKey) => void
   onOpenPanel: (panel: DockPanel) => void
+  /** Opens the review of the deck with the most due, as a full page. */
+  onReviewDue: () => void
 }) {
   const sources = useRef<SourcesHandle>(null)
   const files = sourcesState(docs, docsLoading)
@@ -119,7 +129,7 @@ export function DockOverview({
       case 'ask':
         return focusChat()
       case 'review':
-        return onOpenPanel('flashcards')
+        return onReviewDue()
       case 'waiting':
         return
       default:
@@ -127,10 +137,11 @@ export function DockOverview({
     }
   }
 
-  const common = { subspaceId, docs, docsLoading, docsError, onDocsChanged, sources, onOpenPanel }
+  const common = { subspaceId, base, lists, docs, docsLoading, docsError, onDocsChanged, sources, onOpenPanel, onReviewDue }
 
   // Hooks first: this must run on every render, loaded or not.
   const grown = useGrown(subspaceId, loaded && made && justDone.length === 0)
+  const guideAllowed = useGuideAllowed(subspaceId, loaded && !grown)
 
   if (!loaded) return <Waiting />
 
@@ -138,7 +149,11 @@ export function DockOverview({
   // and keeps it. The guide lingers a moment after the first thing is made so
   // finishing is seen, and the switch is remembered per topic: deleting the
   // note later does not bring the "get started" steps back.
-  const guided = !grown
+  //
+  // And only for the first few topics on this device: the steps teach the app,
+  // and by the fourth topic nobody needs them again. A later new topic opens
+  // straight into the summary, whose button still says what to do next.
+  const guided = !grown && guideAllowed
 
   return (
     <>
@@ -167,12 +182,15 @@ export function DockOverview({
 
 type Shared = {
   subspaceId: string
+  base: string
+  lists: DockLists
   docs: Document[]
   docsLoading: boolean
   docsError: string | null
   onDocsChanged: () => void
   sources: React.RefObject<SourcesHandle | null>
   onOpenPanel: (panel: DockPanel) => void
+  onReviewDue: () => void
 }
 
 function HelpButton({ onClick }: { onClick: () => void }) {
@@ -212,6 +230,45 @@ function useGrown(subspaceId: string, now: boolean): boolean {
   return stored || now
 }
 
+const GUIDED_KEY = 'sl:dock-guided'
+/** How many topics get the step-by-step guide before the summary takes over for good. */
+export const GUIDED_TOPICS = 3
+
+function readGuided(): string[] {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(GUIDED_KEY) ?? '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Whether this topic may show the guide: it already has, or fewer than
+ * `GUIDED_TOPICS` topics have. A topic only takes one of the places when the
+ * guide is actually on screen (`active`), so opening old topics doesn't use
+ * them up. Remembered on this device, like the "outgrown" flag above.
+ */
+function useGuideAllowed(subspaceId: string, active: boolean): boolean {
+  const [allowed, setAllowed] = useState(() => {
+    const list = readGuided()
+    return list.includes(subspaceId) || list.length < GUIDED_TOPICS
+  })
+  useEffect(() => {
+    const list = readGuided()
+    if (list.includes(subspaceId)) return setAllowed(true)
+    if (list.length >= GUIDED_TOPICS) return setAllowed(false)
+    setAllowed(true)
+    if (!active) return
+    try {
+      localStorage.setItem(GUIDED_KEY, JSON.stringify([...list, subspaceId]))
+    } catch {
+      /* private mode: the guide may show again, which is harmless */
+    }
+  }, [subspaceId, active])
+  return allowed
+}
+
 /** While the topic's files, chat and work are still arriving. */
 function Waiting() {
   return (
@@ -243,14 +300,14 @@ function Summary({
         <div className="flex min-w-0 flex-1 items-start gap-2 pl-1">
           <span aria-hidden className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-full', dot, kind === 'reading' && 'animate-pulse')} />
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-extrabold text-ink">{title}</p>
+            <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-ink">{title}</p>
             {kind === 'none' && <p className="text-[11.5px] leading-snug text-muted">Add one to get answers with page numbers.</p>}
           </div>
         </div>
         <HelpButton onClick={() => s.onOpenPanel('help')} />
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden p-3.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5">
         <DockSources
           ref={s.sources}
           subspaceId={s.subspaceId}
@@ -262,24 +319,12 @@ function Summary({
           listenForAdd
           limit={SOURCES_SHOWN}
           onSeeAll={() => s.onOpenPanel('docs')}
+          onManage={() => s.onOpenPanel('docs')}
         />
 
         <DockSkills subspaceId={s.subspaceId} />
 
-        <section aria-labelledby="dock-study-label" className="flex flex-col gap-2">
-          <DockSectionHead id="dock-study-label">Study</DockSectionHead>
-          <div className="grid grid-cols-3 gap-1.5">
-            <Tile n={counts.notes} label="Notes" onClick={() => s.onOpenPanel('notes')} />
-            <Tile n={counts.quizzes} label="Quizzes" onClick={() => s.onOpenPanel('quizzes')} />
-            <Tile
-              n={counts.cards}
-              label="Cards"
-              note={counts.due > 0 ? `${counts.due} due` : undefined}
-              hot={counts.due > 0}
-              onClick={() => s.onOpenPanel('flashcards')}
-            />
-          </div>
-        </section>
+        <DockInsights base={s.base} lists={s.lists} onOpenPanel={s.onOpenPanel} />
       </div>
     </>
   )
@@ -322,14 +367,14 @@ function Guided({
   return (
     <>
       <header className="flex min-h-[5.25rem] shrink-0 items-center gap-2 border-b border-line py-2.5 pl-3 pr-2">
-        <BotSays agent="tutor" mood={nova.mood} size={48} live className="min-w-0 flex-1">
+        <p role="status" className="min-w-0 flex-1 pl-1 text-[13.5px] font-bold leading-snug text-ink">
           {nova.line}
-        </BotSays>
+        </p>
         <HelpButton onClick={() => s.onOpenPanel('help')} />
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5">
-        <ol className="flex flex-col">
+        <ol className="flex min-h-0 flex-1 flex-col">
           <Step n={1} index={0} title="Add a file" status={statuses[0]} celebrate={justDone.includes(0)}>
             <DockSources
               ref={s.sources}
@@ -378,8 +423,8 @@ function Guided({
             <p className="mb-2 text-[12px] leading-snug text-muted">
               {canMake.flashcards ? 'What do you want to make?' : 'Ready once your file is read.'}
             </p>
-            <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Make something">
-              {CREW.map(({ make, id, word }) => {
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Make something">
+              {MAKES.map(({ make, word }) => {
                 const working = busy[make] === true
                 return (
                   <button
@@ -390,19 +435,24 @@ function Guided({
                     aria-busy={working || undefined}
                     title={canMake[make] ? undefined : `Ready ${waitingFor[make]}`}
                     className={cn(
-                      'flex cursor-pointer flex-col items-center rounded-[10px] border bg-raised px-1 pb-2 pt-1 transition-colors',
+                      'flex min-h-[5.5rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-[12px] border bg-raised px-1 py-3 transition-colors',
                       'hover:border-brand/40 disabled:cursor-not-allowed',
                       canMake[make] && next.kind === make ? 'border-ink-3' : 'border-line',
                       working && 'cursor-progress border-ink-3',
                     )}
                   >
-                    <span className={cn(!canMake[make] && 'opacity-60 saturate-50')}>
-                      <Bot agent={id} mood={working ? 'working' : 'idle'} size={44} />
+                    <span
+                      className={cn(
+                        'grid h-10 w-10 place-items-center rounded-xl bg-well text-ink-2 ring-1 ring-line-soft',
+                        !canMake[make] && 'opacity-50',
+                        working && 'animate-pulse',
+                      )}
+                    >
+                      <Icon name={AGENT_ICON[make]} size={20} />
                     </span>
-                    <span className={cn('mt-0.5 text-[12.5px] font-bold', canMake[make] ? 'text-ink' : 'text-muted')}>
+                    <span className={cn('text-[12px] font-bold', canMake[make] ? 'text-ink' : 'text-muted')}>
                       {working ? 'Making…' : word}
                     </span>
-                    <span className="setcode text-[10px]">{AGENTS[id].name}</span>
                   </button>
                 )
               })}
@@ -460,36 +510,6 @@ function focusChat() {
   document.querySelector<HTMLTextAreaElement>('[data-chat-input]')?.focus()
 }
 
-/* ── What you've made ───────────────────────────────────────────────────── */
-
-function Tile({
-  n,
-  label,
-  note,
-  hot = false,
-  onClick,
-}: {
-  n: number
-  label: string
-  note?: string
-  hot?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'flex min-h-[3.75rem] cursor-pointer flex-col items-center justify-center rounded-[10px] border border-line bg-raised px-1 py-1.5 transition-colors hover:border-brand/40',
-      )}
-    >
-      <span className={cn('nameplate text-[21px] leading-none', n === 0 ? 'text-faint' : 'text-ink')}>{n}</span>
-      <span className="setcode mt-1.5">{label}</span>
-      {note && <span className={cn('mt-0.5 text-[10.5px] font-bold', hot ? 'text-ink' : 'text-muted')}>{note}</span>}
-    </button>
-  )
-}
-
 /* ── One step, on the thread ────────────────────────────────────────────── */
 
 function Step({
@@ -512,7 +532,7 @@ function Step({
   return (
     <li
       aria-current={status === 'current' ? 'step' : undefined}
-      className="dock-in relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-3"
+      className={cn('dock-in relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-3', last && 'min-h-0 flex-1')}
       style={{ animationDelay: `${index * 90}ms` }}
     >
       <div className="flex flex-col items-center">
@@ -526,7 +546,7 @@ function Step({
           </span>
         )}
       </div>
-      <div className={cn('min-w-0', last ? 'pb-0' : 'pb-5', status === 'todo' && 'opacity-60')}>
+      <div className={cn('min-w-0', last ? 'flex min-h-0 flex-col pb-0' : 'pb-5', status === 'todo' && 'opacity-60')}>
         <h3 className={cn('mb-1.5 flex min-h-7 items-center text-[14px] font-extrabold', status === 'todo' ? 'text-ink-2' : 'text-ink')}>
           {title}
         </h3>
