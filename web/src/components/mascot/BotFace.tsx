@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, type CSSProperties } from 'react'
 import { AGENTS, type AgentId } from './agents'
 import type { BotProps } from './Bot'
 import { POSES } from './moods'
-import { followPointer, phaseFrom, watchVisibility } from './runtime'
+import { followPointer, phaseFrom, prefersReducedMotion, watchVisibility } from './runtime'
 import './mascot.css'
 
 const EYE_L = 47
@@ -64,6 +64,41 @@ const EMBLEMS: Record<AgentId, React.ReactNode> = {
   notes: <path d="M-4.5-3.2h9M-4.5.2h9M-4.5 3.6h5" fill="none" strokeWidth="2" strokeLinecap="round" />,
 }
 
+
+/** What each one is making, held at their side while they work and shown off when it is done. */
+const PROPS: Record<AgentId, React.ReactNode> = {
+  tutor: null,
+  notes: (
+    <g className="bot-prop-notes">
+      <rect className="bot-pcard" x="-9" y="-12" width="18" height="24" rx="3" />
+      {[-6, -1, 4].map((y, i) => (
+        <path key={y} className="bot-pline" d={`M-5 ${y}h${i === 2 ? 6 : 10}`} style={{ '--i': i } as CSSProperties} />
+      ))}
+    </g>
+  ),
+  cards: (
+    <g className="bot-prop-cards">
+      <g className="bot-pc bot-pc-a">
+        <rect className="bot-pcard" x="-8" y="-11" width="16" height="22" rx="3" />
+      </g>
+      <g className="bot-pc bot-pc-b">
+        <rect className="bot-pcard" x="-8" y="-11" width="16" height="22" rx="3" />
+        <path className="bot-pline" d="M-3-3h6M-3 2h4" />
+      </g>
+    </g>
+  ),
+  quiz: (
+    <g className="bot-prop-quiz">
+      {[0, 1, 2].map((i) => (
+        <g key={i} className="bot-pq" style={{ '--i': i, '--hx': `${(i - 1) * 9}px` } as CSSProperties}>
+          <circle className="bot-pcard" r="5.4" />
+          <path className="bot-pline" d="M-2-1.6a2 2 0 1 1 2.8 1.8c-.7.3-.8.8-.8 1.3" />
+        </g>
+      ))}
+    </g>
+  ),
+}
+
 /** Seven sparks around the head: [x, y, scale, colour slot]. */
 const SPARKS: [number, number, number, number][] = [
   [-50, -18, 1, 0],
@@ -97,7 +132,7 @@ function Eye({ x, side }: { x: number; side: 'l' | 'r' }) {
   )
 }
 
-export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, label, title, look = false }: BotProps) {
+export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, label, title, look = false, calm = false, attn = false, boop = false }: BotProps) {
   const ref = useRef<SVGSVGElement>(null)
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '')
   const clip = `bot-screen-${uid}`
@@ -110,11 +145,38 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
     if (!el) return
     const stopVis = watchVisibility(el)
     const stopLook = look ? followPointer(el) : undefined
+    let stopBoop: (() => void) | undefined
+    if (boop && !prefersReducedMotion()) {
+      const host = el.closest('[data-bot-hover]') ?? el
+      let timer = 0
+      let last = 0
+      const giggle = () => {
+        const now = Date.now()
+        if (now - last < 4000) return // a giggle, not a tic
+        last = now
+        el.setAttribute('data-boop', '')
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => el.removeAttribute('data-boop'), 1100)
+      }
+      host.addEventListener('pointerenter', giggle)
+      // Poking the bot itself always gets a reaction (a tap on a phone, where there is no hover).
+      const poke = () => {
+        last = 0
+        giggle()
+      }
+      el.addEventListener('pointerdown', poke)
+      stopBoop = () => {
+        host.removeEventListener('pointerenter', giggle)
+        el.removeEventListener('pointerdown', poke)
+        window.clearTimeout(timer)
+      }
+    }
     return () => {
       stopVis()
       stopLook?.()
+      stopBoop?.()
     }
-  }, [look])
+  }, [look, boop])
 
   const style = {
     '--bc': meta.color,
@@ -143,6 +205,8 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
       data-mouth={pose.mouth}
       data-brows={pose.brows}
       data-fx={pose.fx}
+      data-calm={calm ? '' : undefined}
+      data-attn={attn ? '' : undefined}
       data-thumb={pose.thumb ? '' : undefined}
       data-small={size < 72 ? '' : undefined}
       viewBox="0 0 120 120"
@@ -230,6 +294,9 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
                 <g transform="translate(94 31)">
                   <path className="bot-sweat" d="M0-5.5C2.6-1.7 3.8.5 3.8 2.1A3.8 3.8 0 0 1-3.8 2.1C-3.8.5-2.6-1.7 0-5.5Z" />
                 </g>
+                <g transform="translate(40 60)">
+                  <path className="bot-tear" d="M0-4.5C2-1.4 3 .4 3 1.7A3 3 0 0 1-3 1.7C-3 .4-2-1.4 0-4.5Z" />
+                </g>
               </g>
               </g>
             </g>
@@ -270,6 +337,18 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
         {[0, 1, 2].map((i) => (
           <g key={i} className="bot-z" style={{ '--i': i } as CSSProperties}>
             <path className="bot-stroke" d="M-3-3H3L-3 3H3" />
+          </g>
+        ))}
+      </g>
+      {/* Instead of hearts, each one throws what is on their own chest: stars
+          for Nova, cards for Flip, a tick for Pop, lines for Jot. */}
+      <g className="bot-prop" transform="translate(102 98)">
+        {PROPS[agent]}
+      </g>
+      <g className="bot-bits" transform="translate(88 30)">
+        {[0, 1, 2].map((i) => (
+          <g key={i} className="bot-bit" style={{ '--i': i, '--hx': `${(i - 1) * 10}px` } as CSSProperties}>
+            <g transform="scale(0.8)">{EMBLEMS[agent]}</g>
           </g>
         ))}
       </g>

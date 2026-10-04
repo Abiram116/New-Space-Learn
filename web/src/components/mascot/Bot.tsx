@@ -26,6 +26,12 @@ export interface BotProps {
   title?: string
   /** Idle eyes follow the pointer (transform-only, off under reduced motion). */
   look?: boolean
+  /** Resting stays still: no idle bob or antenna sway, and expressive moods play a few beats then hold. */
+  calm?: boolean
+  /** Plays this bot's own "look at me" gesture (Nova glance, Flip flip, Pop hand-up, Jot scribble) a few times. */
+  attn?: boolean
+  /** Giggles when the pointer enters it (or the nearest `[data-bot-hover]` ancestor). */
+  boop?: boolean
 }
 
 let Face: ComponentType<BotProps> | null = null

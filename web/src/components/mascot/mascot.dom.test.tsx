@@ -29,6 +29,32 @@ describe('Bot', () => {
       }
   })
 
+  it('can be calm, ask for attention and giggle — each only when told to', () => {
+    const { container: still } = render(<Bot agent="cards" />)
+    const plain = still.querySelector('svg')!
+    expect(plain).not.toHaveAttribute('data-calm')
+    expect(plain).not.toHaveAttribute('data-attn')
+    const { container } = render(<Bot agent="cards" calm attn boop />)
+    const svg = container.querySelector('svg')!
+    expect(svg).toHaveAttribute('data-calm')
+    expect(svg).toHaveAttribute('data-attn')
+  })
+
+  it('giggles on pointer-enter, then stops', () => {
+    vi.useFakeTimers()
+    const { container } = render(
+      <div data-bot-hover>
+        <Bot agent="quiz" boop />
+      </div>,
+    )
+    const svg = container.querySelector('svg')!
+    act(() => void container.firstElementChild!.dispatchEvent(new Event('pointerenter')))
+    expect(svg).toHaveAttribute('data-boop')
+    act(() => void vi.advanceTimersByTime(1200))
+    expect(svg).not.toHaveAttribute('data-boop')
+    vi.useRealTimers()
+  })
+
   it('names the tutor from BOT_NAME', () => {
     expect(AGENTS.tutor.name).toBe(BOT_NAME)
   })

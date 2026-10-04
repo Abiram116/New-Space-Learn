@@ -19,6 +19,10 @@ export interface BotSaysProps {
   /** Announce line changes politely (status updates, not decoration). */
   live?: boolean
   look?: boolean
+  /** Still at rest; expressive moods play a few beats, then hold. */
+  calm?: boolean
+  /** Giggles when the pointer arrives. */
+  boop?: boolean
   className?: string
 }
 
@@ -32,6 +36,8 @@ export function BotSays({
   showName = false,
   live = false,
   look = false,
+  calm = false,
+  boop = false,
   className,
 }: BotSaysProps) {
   const meta = AGENTS[agent]
@@ -42,7 +48,7 @@ export function BotSays({
       className={`bot-says bot-says--${layout}${botsOn ? '' : ' bot-says--plain'}${className ? ` ${className}` : ''}`}
       style={{ '--bot-name': meta.color } as CSSProperties}
     >
-      <Bot agent={agent} mood={mood} size={size} look={look} />
+      <Bot agent={agent} mood={mood} size={size} look={look} calm={calm} boop={boop} />
       <div role={live ? 'status' : undefined} aria-live={live ? 'polite' : undefined}>
         <p className="bot-bubble" key={key}>
           {showName && <span className="bot-says-name">{meta.name}</span>}

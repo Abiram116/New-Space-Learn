@@ -22,6 +22,7 @@
  * one keystroke and nobody has to fill in a form to get a note.
  */
 
+import { Bot } from '../../components/mascot'
 import { useEffect, useState } from 'react'
 import { LIMITS } from '../../lib/limits'
 import { Button } from '../../components/ui/Button'
@@ -123,6 +124,12 @@ export function NoteBriefDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
+          {busy && (
+            <span role="status" className="mr-auto flex items-center gap-2 text-[12.5px] text-muted">
+              <Bot agent="notes" mood="working" size={40} />
+              Jot is writing…
+            </span>
+          )}
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
             Cancel
           </Button>
