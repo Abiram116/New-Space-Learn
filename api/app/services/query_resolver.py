@@ -15,6 +15,7 @@ a slow or absent model never holds up or breaks a chat turn.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -23,6 +24,7 @@ from dataclasses import dataclass
 from ..config import settings
 from . import usage
 from .llm import get_llm
+from .memo import TTLCache
 
 log = logging.getLogger("space_learn.resolver")
 
@@ -94,6 +96,11 @@ async def _ask_model(prompt: str) -> str:
     return "".join(parts)
 
 
+#: Rewrites already paid for. A regenerate or a retry asks the same thing again
+#: with the same history; the model call is made once. Ten minutes, 256 entries.
+_REWRITES: TTLCache[str] = TTLCache(maxsize=256, ttl=600)
+
+
 async def resolve(
     question: str,
     history: list[dict[str, str]],
@@ -118,8 +125,14 @@ async def resolve(
         answer=" ".join(answer.split())[:ANSWER_CHARS] or "(none)",
         question=question,
     )
+    # A caller that passes its own `complete` (tests, the benchmark) is never cached.
+    key = hashlib.sha256(prompt.encode()).hexdigest() if complete is None else None
     try:
-        text = await asyncio.wait_for((complete or _ask_model)(prompt), TIMEOUT_S)
+        text = _REWRITES.get(key) if key else None
+        if text is None:
+            text = await asyncio.wait_for((complete or _ask_model)(prompt), TIMEOUT_S)
+            if key:
+                _REWRITES.set(key, text)
     except Exception:  # a timeout, a rate limit, anything: search anyway
         log.info("follow-up rewrite unavailable; joining with the previous question")
         return joined

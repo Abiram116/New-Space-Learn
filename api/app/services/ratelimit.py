@@ -12,14 +12,28 @@ open tab hammering chat can burn the daily token budget for every user.
 from __future__ import annotations
 
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
+from ..config import settings
 from ..errors import RateLimited
 
 # Refill rate and burst size. Chat costs 1, quiz generation costs 2.
-# ~20 calls/min sustained is far above real study use and far below Groq's cap.
-CAPACITY = 20.0
-REFILL_PER_SECOND = 20.0 / 60.0
+#
+# These used to be 20 a minute, described as "far below Groq's cap". It is not: on
+# the free tier the whole app gets about 3 answers a minute, so one student at 20 a
+# minute could use everyone's allowance. Now a burst of a few and a refill near what
+# the key can actually serve (values in `config`). Real study use is a question every
+# half minute or so, which this allows.
+CAPACITY = settings.llm_burst
+REFILL_PER_SECOND = settings.llm_refill_per_minute / 60.0
+
+# A rolling day, in wall-clock seconds, on top of the per-minute bucket. Only calls
+# that spend the TEXT models' allowance count (`daily=True`): chat, quizzes, decks,
+# notes. Reading a scanned page uses the vision model's own allowance and a plain
+# upload uses none, so neither should use up a student's answers.
+DAILY_WINDOW_S = 24 * 3600.0
+_daily: dict[str, deque[tuple[float, float]]] = {}
 
 # Drop buckets untouched for this long so memory can't grow unbounded.
 _IDLE_TTL_S = 900.0
@@ -44,12 +58,32 @@ def _sweep(now: float) -> None:
     stale = [k for k, b in _buckets.items() if now - b.updated > _IDLE_TTL_S]
     for k in stale:
         del _buckets[k]
+    cutoff = time.time() - DAILY_WINDOW_S
+    for k in [k for k, e in _daily.items() if not e or e[-1][0] < cutoff]:
+        del _daily[k]
 
 
-async def consume_llm_quota(user_id: str, *, cost: float = 1.0) -> None:
-    """Take `cost` tokens from the user's bucket, or raise RateLimited."""
+def _daily_wait_s(entries: deque[tuple[float, float]], now: float, cost: float, limit: float) -> float | None:
+    """None if `cost` fits in today's budget; otherwise seconds until enough has expired."""
+    while entries and now - entries[0][0] >= DAILY_WINDOW_S:
+        entries.popleft()
+    used = sum(c for _, c in entries)
+    if used + cost <= limit:
+        return None
+    freed = 0.0
+    for ts, c in entries:
+        freed += c
+        if used - freed + cost <= limit:
+            return max(1.0, ts + DAILY_WINDOW_S - now)
+    return DAILY_WINDOW_S
+
+
+async def consume_llm_quota(user_id: str, *, cost: float = 1.0, daily: bool = False) -> None:
+    """Take `cost` from the student's per-minute bucket (and, with `daily`, from their
+    rolling-day allowance), or raise RateLimited. Nothing is taken unless both pass."""
 
     now = time.monotonic()
+    wall = time.time()
     _sweep(now)
 
     bucket = _buckets.get(user_id)
@@ -68,7 +102,34 @@ async def consume_llm_quota(user_id: str, *, cost: float = 1.0) -> None:
             f"Try again in about {wait_s} second{'s' if wait_s != 1 else ''}."
         )
 
+    if daily:
+        entries = _daily.setdefault(user_id, deque())
+        limit = settings.llm_daily_quota
+        wait = _daily_wait_s(entries, wall, cost, limit)
+        if wait is not None:
+            mins = max(1, round(wait / 60))
+            when = f"{mins} minute{'s' if mins != 1 else ''}" if mins < 120 else f"about {round(mins / 60)} hours"
+            raise RateLimited(
+                f"You've used today's {int(limit)} free answers. The next one frees up in {when}, "
+                "and the rest follow over the next day."
+            )
+        entries.append((wall, cost))
+
     bucket.tokens -= cost
+
+
+def refund(user_id: str, cost: float = 1.0) -> None:
+    """Give back a charge for a call that produced no answer (it failed, or it was served
+    from the cache): the per-minute tokens and the newest matching entry of the day."""
+    bucket = _buckets.get(user_id)
+    if bucket is not None:
+        bucket.tokens = min(CAPACITY, bucket.tokens + cost)
+    entries = _daily.get(user_id)
+    if entries:
+        for i in range(len(entries) - 1, -1, -1):
+            if entries[i][1] == cost:
+                del entries[i]
+                break
 
 
 # ── A plain "N per window" limit ───────────────────────────────────────
@@ -103,4 +164,5 @@ def consume_window(key: str, *, limit: int, window_s: float, message: str) -> No
 def reset() -> None:
     """Test hook — clears all buckets."""
     _buckets.clear()
+    _daily.clear()
     _windows.clear()

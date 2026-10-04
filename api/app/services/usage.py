@@ -158,6 +158,17 @@ def record(
     )
 
 
+def near_daily_limit(model: str, limit: int, fraction: float) -> bool:
+    """Has this model spent `fraction` of its daily token allowance, by our own count?
+
+    Our count, not Groq's: the daily limit is not in any response header, and it only
+    shows up as a refusal. Ours is per process and per UTC day, so it can undercount
+    (a restart, a second worker) but never overcount: when it says yes the allowance
+    really is mostly spent.
+    """
+    return limit > 0 and _model(model).tokens_today >= limit * fraction
+
+
 def limits(model: str, headers: Mapping[str, str]) -> None:
     """The rate-limit headers from a response, kept as the latest word on them."""
     kept = {k: headers[f"x-ratelimit-{k}"] for k in _HEADERS if f"x-ratelimit-{k}" in headers}

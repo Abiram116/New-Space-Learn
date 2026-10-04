@@ -160,7 +160,7 @@ async def generate_note(
     rather than just copying the last chat reply verbatim into a note row."""
 
     subspace = await assert_subspace(user.id, subspace_id)
-    await consume_llm_quota(user.id, cost=2)
+    await consume_llm_quota(user.id, cost=2, daily=True)
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)
@@ -393,7 +393,9 @@ async def note_ai_inline(
                     },
                     {"role": "user", "content": prompt},
                 ],
-                model=settings.groq_model,
+                # An edit of a passage the student already wrote (shorten, fix, continue): a short,
+                # well-bounded job, so the small model. Checked by `eval.agents` (notes edit).
+                model=settings.groq_model_fast,
                 temperature=0.4,
             ):
                 parts.append(delta)

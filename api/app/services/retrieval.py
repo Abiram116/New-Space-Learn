@@ -26,7 +26,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 from . import query_resolver, supabase
-from .embeddings import embed_texts
+from .embeddings import embed_question
 from .query_resolver import Query
 
 log = logging.getLogger("space_learn.retrieval")
@@ -278,7 +278,7 @@ async def retrieve(
     topic: str = "",
     config: RetrievalConfig = DEFAULT,
     store: Store | None = None,
-    embed: Embed = embed_texts,
+    embed: Embed = embed_question,
     complete: query_resolver.Complete | None = None,
 ) -> Retrieval:
     question = question.replace("\x00", "")  # PostgreSQL text cannot hold it

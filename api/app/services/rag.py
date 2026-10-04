@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from . import followup, guardrails, retrieval, supabase
-from .voice import COMPANION_VOICE, DIAGRAM_RULE, RESPONSE_SHAPE
+from .voice import COMPANION_VOICE, DIAGRAM_RULE, DIAGRAM_SHORT, shape_for, wants_diagram
 
 
 @dataclass(slots=True)
@@ -144,8 +144,9 @@ def build_prompt(
     system_parts = [
         COMPANION_VOICE,
         f"You are working with the student on the topic '{subspace_name}'.",
-        RESPONSE_SHAPE,
-        DIAGRAM_RULE,
+        shape_for(question),
+        # Only the full rule when the question has a shape; the short one otherwise.
+        DIAGRAM_RULE if wants_diagram(question) else DIAGRAM_SHORT,
     ]
     # Only when there is actually an image. Explaining how to read attachments
     # on every text-only turn is tokens spent on a situation that is not
@@ -157,8 +158,20 @@ def build_prompt(
             "Every factual claim that comes from a source must end with that "
             "source's marker, written [[n]] with no space, where n is the number "
             "in the Sources list below — not a footnote, inline at the point of "
-            "the claim. A sentence combining two sources gets two markers. Never "
-            "invent a marker number that isn't in the list."
+            "the claim. Cite the source that actually states the claim, not one "
+            "that is merely about the same subject, and not as a second marker "
+            "\"for safety\": a sentence gets two markers only when two sources "
+            "each state it. If you cannot point to a source that says it, do not "
+            "make the claim. Never invent a marker number that isn't in the list."
+        )
+    # Only when there is an earlier conversation to resolve against: a question like
+    # "which one is enough?" is answerable only if the model knows what "one" means.
+    if history:
+        system_parts.append(
+            "If the question refers back to something earlier (\"which one\", \"that\", "
+            "\"is it enough\"), use the conversation to work out what it means and answer "
+            "about that. If you genuinely cannot tell, ask which they mean in one short "
+            "sentence instead of guessing."
         )
     if answer_only_from_docs:
         if retrieved:
@@ -166,7 +179,11 @@ def build_prompt(
                 "Answer only using the Sources below — not outside knowledge, even if "
                 "you're confident it's correct. If the sources only partly cover the "
                 "question, answer the part they cover and say plainly what's missing, "
-                "rather than filling the gap yourself."
+                "rather than filling the gap yourself. If they do not cover the "
+                "question at all, say so in one sentence and stop: do not offer to "
+                "answer it from general knowledge, and do not confirm or correct a "
+                "claim about something the Sources never mention, even when the "
+                "question rests on a false premise."
             )
         else:
             system_parts.append(
@@ -279,6 +296,29 @@ def _snippet(text: str, *, limit: int = 90) -> str:
 
 
 _CITATION_MARKER = re.compile(r"\[\[(\d+)\]\]")
+
+
+_ALT_MARKERS = (
+    re.compile(r"【\s*(\d{1,2})[^】]*】"),  # the full-width brackets some models emit: 【4】, 【4†L2】
+    # A bare [4]: not part of a word, array index, markdown link or reference definition.
+    re.compile(r"(?<![\w\]\[])\[(\d{1,2})\](?![\(\[:])"),
+)
+_FENCE = re.compile(r"(```.*?```|`[^`\n]*`)", re.DOTALL)
+
+
+def normalize_citation_markers(text: str, valid_count: int) -> str:
+    """Turn another model's way of writing a citation into ours.
+
+    Models trained on other formats sometimes write 【4】 or [4] instead of [[4]]. Left
+    alone these show as stray brackets and are not clickable, so the student loses the
+    page the claim came from. Only numbers that name a real source are converted, and
+    never inside code.
+    """
+    parts = _FENCE.split(text)
+    for i in range(0, len(parts), 2):  # even parts are outside code
+        for pattern in _ALT_MARKERS:
+            parts[i] = pattern.sub(lambda m: f"[[{m.group(1)}]]" if 1 <= int(m.group(1)) <= valid_count else m.group(0), parts[i])
+    return "".join(parts)
 
 
 def strip_invalid_citations(text: str, valid_count: int) -> tuple[str, list[int]]:

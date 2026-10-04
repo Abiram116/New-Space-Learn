@@ -58,6 +58,22 @@ class Settings(BaseSettings):
     # unreadable, so the quiz failed. Low effort thinks in tens of tokens, the
     # reply fits, and a call costs ~3,800 tokens instead of ~5,300 of the free
     # tier's 8,000 a minute. Measured 2026-10-03; see services/llm.py.
+    # Per-student limits on the text models. The free tier gives the whole app about
+    # 3 answers a minute and 60-80 a day on the large model (eval/REPORT.md), so a
+    # student's limits have to be sized against THAT, not against what feels generous:
+    # one student with no daily cap could use everyone's allowance.
+    #   burst / refill: how fast one student can ask (chat costs 1, a quiz or deck 2).
+    #   daily: units of that same cost a student may spend in any rolling 24 hours.
+    llm_burst: float = 6.0
+    llm_refill_per_minute: float = 4.0
+    llm_daily_quota: float = 30.0
+    # The large model's daily token allowance, and how much of it is used before chat
+    # starts going to the small model on purpose rather than failing mid-answer.
+    groq_daily_token_limit: int = 200_000
+    groq_switch_at: float = 0.9
+    # A re-asked question is answered from the stored answer when everything it was
+    # built from is unchanged (services/answer_cache.py). A switch, in case it ever misbehaves.
+    answer_cache_enabled: bool = True
     groq_reasoning_effort: str = "low"
     groq_max_completion_tokens: int = 4096
     groq_timeout_s: float = 60.0

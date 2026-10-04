@@ -8,6 +8,8 @@ to come from real retrieved material or stored data, per the same
 discipline `/me/brief` already holds itself to.
 """
 
+import re
+
 COMPANION_VOICE = (
     "You are part of a study companion the student has an ongoing "
     "relationship with, not a generic assistant answering a one-off "
@@ -121,3 +123,62 @@ DIAGRAM_RULE = (
     "read without the caption is a failed diagram.\n"
     "Never draw one to decorate an answer that is already clear."
 )
+
+
+#: What is sent when the question does not look like it needs a picture. Loading
+#: the whole rule for a definition question is ~200 tokens spent every turn on a
+#: situation that is not happening; this keeps the one thing it must still say.
+DIAGRAM_SHORT = (
+    "Diagrams: draw one (ASCII, in a fenced code block) only when the student asks for one "
+    "or the structure branches or loops. Most answers need none."
+)
+
+_DIAGRAMMABLE = re.compile(
+    r"diagram|draw|sketch|visuali[sz]|flow ?chart|flow of|architecture|hierarch|\btree\b|cycle|loop|"
+    r"life ?cycle|state machine|pipeline|layers?\b|topology|handshake|sequence|workflow|how (does|do|is) .{0,40}\b(work|works|flow|happen)",
+    re.IGNORECASE,
+)
+
+
+def wants_diagram(question: str) -> bool:
+    """Does this question look like it is about something with a shape? Generous on
+    purpose: the cost of a false yes is some tokens, of a false no a worse answer."""
+    return bool(_DIAGRAMMABLE.search(question))
+
+
+#: The answer-shape guidance for a question that is plainly simple. The full
+#: `RESPONSE_SHAPE` is ~540 tokens, most of it about structure (headings, tables,
+#: worked examples) that a one-line definition question will never use. This keeps
+#: the parts that matter every time: the answer first, length to match, and the
+#: two formatting rules (code, maths) that break rendering if forgotten.
+SHAPE_SHORT = (
+    "How to shape an answer. Lead with the direct answer in one or two sentences; "
+    "never open by restating the question. This is a short question, so give a short "
+    "answer: a few sentences, no headings, no forced lists. Put code in fenced code blocks "
+    "with the language tag and maths in LaTeX (\\( ... \\) inline, \\[ ... \\] display). "
+    "Any teaching style or stated preference below about length, depth or format overrides this."
+)
+
+_SIMPLE_START = re.compile(r"^\s*(what|who|when|where|which|define|is|are|was|were|does|do|did|can|how (many|much|long|old))\b", re.IGNORECASE)
+_NEEDS_STRUCTURE = re.compile(
+    r"compar|differen|versus|\bvs\.?\b|steps?\b|procedure|derive|prove|proof|implement|code|write|example|explain|"
+    r"walk me|why|how|list|all the|summari[sz]e|advantages|disadvantages|pros|cons",
+    re.IGNORECASE,
+)
+SIMPLE_MAX_WORDS = 12
+
+
+def is_simple_question(question: str) -> bool:
+    """Short, a plain what/who/when/define-style ask, and nothing that wants structure."""
+    q = question.strip()
+    return (
+        len(q.split()) <= SIMPLE_MAX_WORDS
+        and bool(_SIMPLE_START.match(q))
+        and not _NEEDS_STRUCTURE.search(q)
+        and not wants_diagram(q)
+    )
+
+
+def shape_for(question: str) -> str:
+    """The full shape guidance, or the short one for a plainly simple question."""
+    return SHAPE_SHORT if is_simple_question(question) else RESPONSE_SHAPE

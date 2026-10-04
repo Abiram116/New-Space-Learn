@@ -84,6 +84,18 @@ class FakeDb:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_quotas():
+    """Each test starts with a full per-minute bucket and an empty day. The limits are
+    deliberately small now (see `ratelimit`), and one process-wide counter would make
+    tests depend on the order they run in."""
+    from app.services import ratelimit
+
+    ratelimit.reset()
+    yield
+    ratelimit.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_student_model_cache(monkeypatch: pytest.MonkeyPatch):
     """The snapshot is kept for a few seconds per user in production, and every
     write through the API clears it. Tests change the fake database directly,

@@ -286,7 +286,7 @@ async def generate_cards(
     """
 
     subspace = await assert_subspace(user.id, subspace_id)
-    await consume_llm_quota(user.id, cost=2)
+    await consume_llm_quota(user.id, cost=2, daily=True)
 
     topic = body.topic or "the key concepts in this material"
     label = subspace_label(subspace)

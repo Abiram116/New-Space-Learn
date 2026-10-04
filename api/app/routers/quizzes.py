@@ -115,7 +115,7 @@ async def generate_quiz(
     # Must come first: retrieval runs under the service-role key, so an
     # unvalidated subspace_id would read another user's document chunks.
     subspace = await assert_subspace(user.id, subspace_id)
-    await consume_llm_quota(user.id, cost=2)  # generation is pricier than a chat turn
+    await consume_llm_quota(user.id, cost=2, daily=True)  # generation is pricier than a chat turn
 
     # Linked topics, what earlier quizzes covered, the conversation and the
     # student model are independent reads, so they share one round trip.

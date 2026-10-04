@@ -123,9 +123,10 @@ async def test_read_capped_stops_instead_of_reading_everything():
 def test_every_upload_is_metered_and_images_cost_more(client):
     assert _upload(client, "a.txt").status_code == 201
     ratelimit.reset()
-    codes = [_upload(client, f"{i}.png", b"\x89PNG", "image/png").status_code for i in range(12)]
-    assert codes[:10] == [201] * 10  # 20 tokens, 2 each
-    assert codes[10] == 429
+    fits = int(ratelimit.CAPACITY // 2)  # an image costs 2 of the bucket
+    codes = [_upload(client, f"{i}.png", b"\x89PNG", "image/png").status_code for i in range(fits + 2)]
+    assert codes[:fits] == [201] * fits
+    assert codes[fits] == 429
 
 
 def test_reprocessing_is_metered_too(client):
@@ -135,9 +136,10 @@ def test_reprocessing_is_metered_too(client):
           "status": "ready", "storage_path": "p", "created_at": "2026-10-01T00:00:00Z"}],
     )
     ratelimit.reset()
-    codes = [client.post("/api/v1/documents/d1/reprocess").status_code for _ in range(11)]
-    assert codes[:10] == [200] * 10
-    assert codes[10] == 429
+    fits = int(ratelimit.CAPACITY // 2)
+    codes = [client.post("/api/v1/documents/d1/reprocess").status_code for _ in range(fits + 1)]
+    assert codes[:fits] == [200] * fits
+    assert codes[fits] == 429
 
 
 # ── Request size ───────────────────────────────────────────────────────

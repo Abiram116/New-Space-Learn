@@ -28,6 +28,7 @@ from typing import Protocol
 
 from ..config import settings
 from ..errors import UpstreamUnavailable
+from .memo import TTLCache
 
 log = logging.getLogger("space_learn.embed")
 
@@ -172,6 +173,28 @@ async def embed_texts(texts: list[str]) -> list[list[float]]:
     for start in range(0, len(texts), settings.embedding_batch_size):
         batch = texts[start : start + settings.embedding_batch_size]
         out.extend(await provider.embed(batch))
+    return out
+
+
+#: Question vectors already computed: a regenerate embeds the same text again.
+_QUESTION_VECTORS: TTLCache[list[float]] = TTLCache(maxsize=256, ttl=900)
+
+
+async def embed_question(texts: list[str]) -> list[list[float]]:
+    """`embed_texts` for a student's question: the same text twice costs one embedding.
+
+    Only a single text is cached. A batch is document text being indexed, which
+    is neither repeated nor worth holding in memory.
+    """
+    if len(texts) != 1:
+        return await embed_texts(texts)
+    key = hashlib.sha256(texts[0].encode()).hexdigest()
+    hit = _QUESTION_VECTORS.get(key)
+    if hit is not None:
+        return [hit]
+    out = await embed_texts(texts)
+    if out:
+        _QUESTION_VECTORS.set(key, out[0])
     return out
 
 
