@@ -12,7 +12,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { activateSkill, deactivateSkill, listActiveSkills, listSkills } from '../../api/skills'
 import type { Skill } from '../../api/types'
-import { SectionLabel } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
@@ -20,6 +19,7 @@ import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { resolveSkillIcon } from '../skills/skillIcon'
+import { DockSectionHead } from './dockParts'
 
 /** How many not-yet-on skills the picker lists before pointing at the full page. */
 const PICKER_LIMIT = 5
@@ -70,28 +70,36 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
 
   return (
     <section className="flex flex-col gap-2" aria-labelledby="dock-skills-label">
-      <div className="flex items-center gap-2">
-        <SectionLabel>
-          <span id="dock-skills-label">How the AI answers</span>
-        </SectionLabel>
-        <Link to="/skills" className="setcode ml-auto transition-colors hover:text-brand-deep">
-          Add more →
-        </Link>
-      </div>
+      <DockSectionHead
+        id="dock-skills-label"
+        aside={
+          !skills.loading && (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              className="setcode cursor-pointer transition-colors hover:text-ink"
+            >
+              {open ? 'Close' : active.length > 0 ? 'Change' : 'Pick one'}
+            </button>
+          )
+        }
+      >
+        Answer style
+      </DockSectionHead>
 
       {skills.loading ? (
         <Skeleton className="h-14 rounded-[10px]" />
       ) : (
         <div className="flex flex-col gap-1.5">
           {active.length === 0 && (
-            <p className="rounded-[10px] border border-dashed border-line px-2.5 py-3 text-center text-[11.5px] leading-snug text-muted">
-              No skill on. Answers come back in the default voice.
-            </p>
+            <p className="text-[12px] leading-snug text-muted">None yet. Answers are plain and direct.</p>
           )}
           {active.map((skill) => (
             <div
               key={skill.id}
-              className={cn('cardstock flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 ring-1', `ring-${skill.tone}/25`)}
+              title={skill.description ?? undefined}
+              className="cardstock flex min-h-11 items-center gap-2.5 rounded-[10px] px-2.5 py-1.5"
             >
               <span
                 className={cn(
@@ -102,35 +110,29 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
               >
                 <Icon name={resolveSkillIcon(skill.icon)} size={14} />
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12.5px] font-bold text-ink">{skill.name}</span>
-                <span className="block truncate text-[11px] text-muted">
-                  {skill.description || 'Shaping every answer'}
-                </span>
-              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">{skill.name}</span>
               <button
                 type="button"
+                role="switch"
+                aria-checked="true"
                 onClick={() => void toggle(skill, false)}
                 disabled={pending.has(skill.id)}
                 aria-label={`Turn off ${skill.name}`}
-                title="Turn off"
-                className="grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md text-faint transition-colors hover:bg-line-soft hover:text-ink disabled:cursor-progress disabled:opacity-50"
+                title="On. Click to turn off."
+                className="group/switch flex shrink-0 cursor-pointer items-center rounded-full py-1 pl-1 pr-0.5 disabled:cursor-progress disabled:opacity-50"
               >
-                <Icon name="close" size={13} />
+                <span className="relative h-[18px] w-[30px] rounded-full bg-ink-2 transition-colors group-hover/switch:bg-ink">
+                  <span className="absolute right-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-canvas" />
+                </span>
               </button>
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            className="flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line px-2.5 text-[12px] font-semibold text-muted transition-colors hover:border-brand/40 hover:text-ink"
-          >
-            <Icon name={open ? 'close' : 'plus'} size={13} />
-            {open ? 'Hide skills' : 'Turn on a skill'}
-          </button>
-
+          {active.length > 2 && (
+            <p className="text-[11.5px] leading-snug text-muted">
+              Several styles at once can pull in different directions. Turn some off if answers feel mixed.
+            </p>
+          )}
           {open && (
             <SkillPicker
               activeIds={activeIds}
@@ -208,14 +210,12 @@ function SkillPicker({
           </button>
         </div>
       ))}
-      {offered.length > shown.length && (
-        <Link
-          to={skillsPage}
-          className="px-1.5 pb-0.5 pt-1 text-[11.5px] font-bold text-muted transition-colors hover:text-ink"
-        >
-          See all {offered.length} of your skills →
-        </Link>
-      )}
+      <Link
+        to={skillsPage}
+        className="px-1.5 pb-0.5 pt-1 text-[11.5px] font-bold text-muted transition-colors hover:text-ink"
+      >
+        {offered.length > shown.length ? `See all ${offered.length} of your skills →` : 'Find more skills →'}
+      </Link>
     </div>
   )
 }

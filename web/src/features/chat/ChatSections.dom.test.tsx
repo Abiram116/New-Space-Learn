@@ -22,9 +22,9 @@ const setup = (hasDock: boolean, active: 'chat' | 'notes' = 'chat') => {
 }
 
 describe('ChatSections', () => {
-  it('offers Chat, Docs, Notes, Quizzes and Cards', () => {
+  it('offers Chat, Files, Notes, Quizzes and Cards', () => {
     setup(true)
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Chat', 'Docs', 'Notes', 'Quizzes', 'Cards'])
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Chat', 'Files', 'Notes', 'Quizzes', 'Cards'])
   })
 
   it('with the dock on screen, a section opens beside the chat instead of leaving it', () => {
@@ -33,7 +33,7 @@ describe('ChatSections', () => {
     expect(onSelect).toHaveBeenCalledWith('flashcards')
     fireEvent.click(screen.getByRole('button', { name: 'Chat' }))
     expect(onSelect).toHaveBeenLastCalledWith(null)
-    fireEvent.click(screen.getByRole('button', { name: 'Docs' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
     expect(onSelect).toHaveBeenLastCalledWith('docs')
     expect(screen.getByTestId('where')).toHaveTextContent('/fsd/transformer')
   })

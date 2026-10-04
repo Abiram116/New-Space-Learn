@@ -1,60 +1,46 @@
 /**
- * The right dock: what this topic knows, and what you can do with it.
+ * The right dock: where you are in Space Learn, and what to do next.
  *
- * Three plainly-named sections, top to bottom: **Create from this chat** (the
- * one-shot Agents), **How the AI answers** (Skills — switched on and off right
- * here, see DockSkills) and **Your material** (Sources).
+ * Its first screen is a three-step checklist — add a file, ask a question,
+ * practise — with the next step as one orange button pinned at the bottom (see
+ * `DockOverview`). Files, Notes, Quizzes, Cards and Help open as panels over it,
+ * each with its own main button in the same place.
  *
- * The two AI concepts are deliberately given different shapes, because naming
- * them differently was not enough:
+ * The two AI concepts keep different shapes, because naming them differently
+ * was not enough:
  *
- *   Skills — cards. A stack you equip; each is a personality that stays on and
- *            changes how every answer is written. Card-shaped, like the
- *            character cards they are.
- *   Agents — buttons with a bolt. One-shot actions that hand you an artifact
- *            and finish. Deliberately not card-shaped.
+ *   Skills — cards with a switch. A stack you equip; each is a voice that stays
+ *            on and changes how every answer is written.
+ *   Agents — buttons. One-shot actions that hand you an artifact and finish.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { listDocuments, uploadDocument } from '../../api/documents'
+import { useEffect, useState } from 'react'
+import { listDocuments } from '../../api/documents'
+import { listDecks } from '../../api/flashcards'
+import { listNotes } from '../../api/notes'
+import { listQuizzes } from '../../api/quizzes'
 import { listActiveSkills } from '../../api/skills'
 import { useAsync } from '../../lib/useAsync'
 import { Modal } from '../../components/ui/Modal'
 import { DockSkills } from './DockSkills'
+import { Spinner } from './dockParts'
+import { DockOverview } from './DockOverview'
 import { DockPanelBody, type DockPanel } from './DockPanels'
 import { useDockPanelMotion } from './useDockPanelMotion'
 import { useDockWidth } from './useDockWidth'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
-import { SectionLabel } from '../../components/ui/Bits'
-import { DashedCard } from '../../components/ui/Card'
-import { Icon3D } from '../../components/ui/Icon3D'
 import { Icon } from '../../components/ui/Icon'
-import { Skeleton } from '../../components/ui/Skeleton'
-import { useToast } from '../../components/ui/Toast'
-import { SourceItem } from '../docs/SourceItem'
 import {
   AGENT_BUSY_LABELS,
   AGENT_ICON,
   AGENT_LABELS,
-  AGENT_RESULT,
   AGENT_TONE,
   type AgentKey,
 } from './agents'
 
 /** Which agents have a request in flight; absent means none do. */
 export type AgentBusy = Partial<Record<AgentKey, boolean>>
-
-/** A small ring, same construction as the page spinner. */
-function Spinner({ size = 12 }: { size?: number }) {
-  return (
-    <span
-      aria-hidden
-      style={{ width: size, height: size }}
-      className="inline-block shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent motion-reduce:animate-none motion-reduce:border-t-current motion-reduce:opacity-60"
-    />
-  )
-}
 
 const AGENTS: AgentKey[] = ['notes', 'flashcards', 'quiz']
 
@@ -187,6 +173,8 @@ export function ContextDock({
   busy = {},
   panel,
   onClosePanel,
+  onOpenPanel,
+  questionsAsked = 0,
 }: {
   subspaceId: string
   base: string
@@ -195,12 +183,13 @@ export function ContextDock({
   /** Which workspace panel is open, or null for the overview. */
   panel: DockPanel
   onClosePanel: () => void
+  /** Opens a panel from the overview (the files list, Help). */
+  onOpenPanel: (panel: DockPanel) => void
+  /** How many questions have been sent in this topic's chat; `null` while the
+   *  chat is still loading, so nothing is mistaken for progress. */
+  questionsAsked?: number | null
 }) {
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
-  const { showError } = useToast()
-  const [dragging, setDragging] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
   const {
     width,
     ref: dockRef,
@@ -213,6 +202,22 @@ export function ContextDock({
 
   const docList = docs.data ?? []
 
+  // What has been made so far, for the checklist's third step and the main
+  // button. The same cache keys the panels use, so opening one costs nothing.
+  const notes = useAsync(() => listNotes(subspaceId), [subspaceId], `notes:${subspaceId}`)
+  const quizzes = useAsync(() => listQuizzes(subspaceId), [subspaceId], `quizzes:${subspaceId}`)
+  const decks = useAsync(() => listDecks(subspaceId), [subspaceId], `decks:${subspaceId}`)
+  const counts = {
+    asked: questionsAsked ?? 0,
+    notes: notes.data?.length ?? 0,
+    quizzes: quizzes.data?.length ?? 0,
+    decks: decks.data?.length ?? 0,
+    cards: (decks.data ?? []).reduce((n, d) => n + d.total, 0),
+    due: (decks.data ?? []).reduce((n, d) => n + d.due, 0),
+  }
+  const loaded =
+    questionsAsked !== null && !docs.loading && !notes.loading && !quizzes.loading && !decks.loading
+
   // Uploads are ingested in the background now, so a new source arrives here
   // as `processing`. Re-check until it's ready — re-armed by each new `data`.
   const refreshDocs = docs.refresh
@@ -222,23 +227,6 @@ export function ContextDock({
     const t = window.setTimeout(refreshDocs, 4000)
     return () => window.clearTimeout(t)
   }, [docsPending, docs.data, refreshDocs])
-
-  const upload = useCallback(
-    async (files: FileList | File[]) => {
-      const file = Array.from(files)[0]
-      if (!file) return
-      setUploading(true)
-      try {
-        await uploadDocument(subspaceId, file, () => {})
-        docs.refresh()
-      } catch (err) {
-        showError(err)
-      } finally {
-        setUploading(false)
-      }
-    },
-    [subspaceId, docs, showError],
-  )
 
   return (
     <aside
@@ -290,11 +278,21 @@ export function ContextDock({
             <button
               type="button"
               onClick={onClosePanel}
-              className="flex items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+              className="flex min-h-8 items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
             >
-              <Icon name="arrowLeft" size={13} /> Overview
+              <Icon name="arrowLeft" size={13} /> Back
             </button>
-            <span className="setcode ml-auto">{PANEL_TITLE[view.panel]}</span>
+            {view.panel === 'help' ? (
+              <span className="setcode ml-auto pr-1">Help</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onOpenPanel('help')}
+                className="ml-auto flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
+              >
+                <Icon name="help" size={14} /> Help
+              </button>
+            )}
           </div>
           {/* A flex column whose panel child is `flex-1`, so panels stretch to
               the dock rather than stacking into a strip at the top over a dead
@@ -319,6 +317,8 @@ export function ContextDock({
               onRunAgent={onRunAgent}
               docs={docList}
               docsLoading={docs.loading}
+              docsError={docs.error}
+              onDocsChanged={refreshDocs}
             />
           </div>
         </div>
@@ -330,151 +330,24 @@ export function ContextDock({
           read as returning rather than as a new screen appearing. */}
       <div
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden p-3.5',
+          'flex min-h-0 flex-1 flex-col',
           'motion-safe:transition-transform motion-safe:duration-300 motion-safe:[transition-timing-function:var(--ease-sl)]',
           view.panel && 'motion-safe:scale-[0.98]',
         )}
       >
-      {/* ── Actions ── */}
-      <section className="flex flex-col gap-2" aria-labelledby="dock-create-label">
-        <SectionLabel>
-          <span id="dock-create-label">Create from this chat</span>
-        </SectionLabel>
-        <div className="flex flex-col gap-1.5">
-          {AGENTS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onRunAgent(key)}
-              disabled={busy[key]}
-              aria-busy={busy[key] || undefined}
-              className={cn(
-                'group flex items-start gap-2.5 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors hover:border-brand/40 cursor-pointer',
-                'disabled:cursor-progress disabled:border-brand/40 disabled:hover:border-brand/40',
-              )}
-            >
-              <span
-                className={cn(
-                  'mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                  toneSoft[AGENT_TONE[key]],
-                  toneText[AGENT_TONE[key]],
-                )}
-              >
-                {busy[key] ? <Spinner size={14} /> : <Icon3D name={AGENT_ICON[key]} size={15} />}
-              </span>
-              <span className="min-w-0">
-                <span className="flex items-center gap-1 text-[12.5px] font-bold text-ink">
-                  {busy[key] ? AGENT_BUSY_LABELS[key] : AGENT_LABELS[key]}
-                  {!busy[key] && (
-                    <Icon
-                      name="agent"
-                      size={11}
-                      filled
-                      className="text-faint transition-colors group-hover:text-brand"
-                    />
-                  )}
-                </span>
-                <span className="mt-0.5 block text-[11px] leading-snug text-muted">
-                  {AGENT_RESULT[key]}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Skills ── */}
-      <DockSkills subspaceId={subspaceId} />
-
-      {/* ── Sources ── */}
-      {/* The drop target is the whole section, not just the empty state —
-          it used to only be the empty-state DashedCard, so dropping a file
-          worked exactly once per topic: the moment a first document existed,
-          the card was gone and dropping anywhere just did nothing. */}
-      <section
-        className={cn(
-          'flex min-h-0 flex-col gap-2 rounded-[10px] transition-colors',
-          dragging && docList.length > 0 && 'bg-brand-soft/40 ring-1 ring-brand/40',
-        )}
-        onDragOver={(e) => {
-          e.preventDefault()
-          setDragging(true)
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setDragging(false)
-          if (e.dataTransfer.files.length > 0) void upload(e.dataTransfer.files)
-        }}
-      >
-        {/* One input for the whole section. It used to live inside the empty
-            state, which is why "+ Add" could not reach it the moment a first
-            document existed. */}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) void upload(e.target.files)
-            // Reset, or choosing the same file twice in a row fires nothing.
-            e.target.value = ''
-          }}
+        <DockOverview
+          subspaceId={subspaceId}
+          docs={docList}
+          docsLoading={docs.loading}
+          docsError={docs.error}
+          onDocsChanged={refreshDocs}
+          counts={counts}
+          loaded={loaded}
+          busy={busy}
+          onRunAgent={onRunAgent}
+          onOpenPanel={onOpenPanel}
         />
-        <div className="flex items-center gap-2">
-          <SectionLabel>Your material</SectionLabel>
-          {/* Adding a source is the point of this panel, so it is a button
-              here rather than a trip to another page. Uploading already
-              worked in the dock — but only from the empty state, so the
-              moment you had one document the only way to add a second was to
-              leave chat entirely. */}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="setcode ml-auto transition-colors cursor-pointer hover:text-brand-deep disabled:cursor-default disabled:opacity-50"
-          >
-            {uploading ? 'Uploading…' : '+ Add'}
-          </button>
-        </div>
-
-        {docs.loading ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1].map((i) => (
-              <Skeleton key={i} className="h-12 rounded-[10px]" />
-            ))}
-          </div>
-        ) : docs.error ? (
-          <p className="text-[11.5px] text-muted">{docs.error}</p>
-        ) : docList.length === 0 ? (
-          <DashedCard
-            className={cn(
-              'cursor-pointer px-2.5 py-3.5 text-center transition-colors',
-              dragging && 'border-brand/60 bg-brand-soft',
-            )}
-            onClick={() => fileRef.current?.click()}
-          >
-            <p className="text-[11.5px] leading-snug text-muted">
-              {uploading ? 'Uploading…' : 'Drop a PDF here, or click to choose one.'}
-            </p>
-          </DashedCard>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {docList.map((doc) => (
-              <SourceItem key={doc.id} doc={doc} />
-            ))}
-          </div>
-        )}
-      </section>
       </div>
     </aside>
   )
-}
-
-/** Titles for the panel header — one place, so they cannot drift from tabs. */
-const PANEL_TITLE: Record<NonNullable<DockPanel>, string> = {
-  docs: 'Sources',
-  notes: 'Notes',
-  quizzes: 'Quizzes',
-  flashcards: 'Cards',
 }

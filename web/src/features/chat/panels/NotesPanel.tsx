@@ -24,6 +24,7 @@ import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
 import { useAsync } from '../../../lib/useAsync'
 import type { AgentKey } from '../agents'
+import { DockAction, DockEmpty, DockLink, DockSectionHead } from '../dockParts'
 
 /* Lazy, deliberately.
    The editor is the largest chunk in the app (~270KB gzipped — Tiptap,
@@ -126,14 +127,7 @@ export function NotesPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <button
-        type="button"
-        onClick={() => onRunAgent('notes')}
-        className="flex items-center justify-center gap-1.5 rounded-[10px] border border-line bg-raised px-3 py-2 text-[12.5px] font-semibold text-ink-2 transition-colors cursor-pointer hover:border-brand/40"
-      >
-        <Icon name="sparkle" size={12} className="text-brand-deep" />
-        Write one from this chat
-      </button>
+      <DockSectionHead id="notes-panel-label">{list.length > 0 ? `Notes · ${list.length}` : 'Notes'}</DockSectionHead>
 
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
         {notes.loading ? (
@@ -142,9 +136,9 @@ export function NotesPanel({
             <Skeleton className="h-12 rounded-[10px]" />
           </>
         ) : list.length === 0 ? (
-          <p className="text-[12px] text-muted">
-            No notes in this topic yet.
-          </p>
+          <DockEmpty icon="note" title="No notes yet">
+            Save an answer from the chat to keep it here.
+          </DockEmpty>
         ) : (
           <Stagger step={18} max={140}>
             {list.map((n) => (
@@ -176,6 +170,8 @@ export function NotesPanel({
           </Stagger>
         )}
       </div>
+      <DockLink to={`${base}/notes`}>Open all notes</DockLink>
+      <DockAction onClick={() => onRunAgent('notes')}>Save last answer as a note</DockAction>
     </div>
   )
 }

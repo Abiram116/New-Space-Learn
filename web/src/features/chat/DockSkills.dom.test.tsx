@@ -67,11 +67,10 @@ afterEach(() => {
 })
 
 describe('DockSkills', () => {
-  it('names the section in plain words and links to the full page', async () => {
+  it('names the section in plain words', async () => {
     renderDock()
     expect(await screen.findByText('Compare & Contrast')).toBeInTheDocument()
-    expect(screen.getByText('How the AI answers')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Add more/ })).toHaveAttribute('href', '/skills')
+    expect(screen.getByText('Answer style')).toBeInTheDocument()
   })
 
   it('fetches your skills only when the picker is opened, and never the library', async () => {
@@ -80,7 +79,7 @@ describe('DockSkills', () => {
     await screen.findByText('Compare & Contrast')
     expect(api.listSkills).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /Turn on a skill/ }))
+    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
     await screen.findByText('Feynman Tutor')
     expect(api.listSkills).toHaveBeenCalledTimes(1)
     expect(api.listLibrarySkills).not.toHaveBeenCalled()
@@ -93,8 +92,8 @@ describe('DockSkills', () => {
     api.listSkills.mockResolvedValue([])
     const user = userEvent.setup()
     renderDock()
-    await screen.findByText(/No skill on/)
-    await user.click(screen.getByRole('button', { name: /Turn on a skill/ }))
+    await screen.findByText(/None yet. Answers are plain/)
+    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
     expect(await screen.findByRole('link', { name: /Browse the library/ })).toHaveAttribute('href', '/skills')
   })
 
@@ -102,13 +101,13 @@ describe('DockSkills', () => {
     const user = userEvent.setup()
     renderDock()
     await screen.findByText('Compare & Contrast')
-    await user.click(screen.getByRole('button', { name: /Turn on a skill/ }))
+    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
     await screen.findByText('Feynman Tutor')
 
     await user.click(screen.getAllByRole('button', { name: 'Turn on' })[0])
     expect(api.activateSkill).toHaveBeenCalledWith('sub-1', 's2')
     // It moves from the picker into the active list at once.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Turn off Feynman Tutor' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Turn off Feynman Tutor' })).toBeInTheDocument())
   })
 
   it('turns a skill off, and puts it back if the server refuses', async () => {
@@ -117,15 +116,15 @@ describe('DockSkills', () => {
     renderDock()
     await screen.findByText('Compare & Contrast')
 
-    await user.click(screen.getByRole('button', { name: 'Turn off Compare & Contrast' }))
+    await user.click(screen.getByRole('switch', { name: 'Turn off Compare & Contrast' }))
     expect(api.deactivateSkill).toHaveBeenCalledWith('sub-1', 's1')
     await waitFor(() => expect(screen.getByText('Compare & Contrast')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Turn off Compare & Contrast' })).toBeEnabled()
+    expect(screen.getByRole('switch', { name: 'Turn off Compare & Contrast' })).toBeEnabled()
   })
 
   it('says so when nothing is on', async () => {
     api.listActiveSkills.mockResolvedValue([])
     renderDock()
-    expect(await screen.findByText(/No skill on/)).toBeInTheDocument()
+    expect(await screen.findByText(/None yet. Answers are plain/)).toBeInTheDocument()
   })
 })

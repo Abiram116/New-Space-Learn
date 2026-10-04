@@ -3,9 +3,9 @@ import { cn } from '../../lib/cn'
 import type { DockPanel } from './DockPanels'
 
 /** The sections a topic's chat can open beside the conversation. */
-const SECTIONS: { key: 'chat' | NonNullable<DockPanel>; label: string; path: string }[] = [
+const SECTIONS: { key: 'chat' | Exclude<NonNullable<DockPanel>, 'help'>; label: string; path: string }[] = [
   { key: 'chat', label: 'Chat', path: '' },
-  { key: 'docs', label: 'Docs', path: '/docs' },
+  { key: 'docs', label: 'Files', path: '/docs' },
   { key: 'notes', label: 'Notes', path: '/notes' },
   { key: 'quizzes', label: 'Quizzes', path: '/quizzes' },
   { key: 'flashcards', label: 'Cards', path: '/flashcards' },
@@ -25,7 +25,7 @@ export function ChatSections({
   onSelect,
 }: {
   base: string
-  active: 'chat' | NonNullable<DockPanel>
+  active: 'chat' | Exclude<NonNullable<DockPanel>, 'help'>
   hasDock: boolean
   onSelect: (panel: DockPanel) => void
 }) {

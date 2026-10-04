@@ -35,6 +35,7 @@ import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
 import { ActiveAgentsStrip, ActiveSkillStrip, ContextDock } from './ContextDock'
 import type { DockPanel } from './DockPanels'
+import { ADD_FILE_EVENT } from './DockSources'
 import { NoteBriefDialog } from './NoteBriefDialog'
 import {
   askReason,
@@ -430,7 +431,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           sections={
             <ChatSections
               base={base}
-              active={dockPanel ?? 'chat'}
+              active={dockPanel === null || dockPanel === 'help' ? 'chat' : dockPanel}
               hasDock={hasSidebar}
               onSelect={setDockPanel}
             />
@@ -465,9 +466,14 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
                 // sentence pointing at a tab, which left the one thing a new
                 // student must do as the one thing without a button.
                 <Button
-                  onClick={() => (hasSidebar ? setDockPanel('docs') : onNavigate(`${base}/docs`))}
+                  // One orange button per screen: with the sidebar on screen it
+                  // owns the call to action, and this one stays quiet.
+                  variant={hasSidebar ? 'secondary' : 'primary'}
+                  onClick={() =>
+                    hasSidebar ? window.dispatchEvent(new Event(ADD_FILE_EVENT)) : onNavigate(`${base}/docs`)
+                  }
                 >
-                  <Icon name="plus" size={14} /> Add your material
+                  <Icon name="plus" size={14} /> Add a file
                 </Button>
               }
             />
@@ -553,6 +559,8 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           busy={busy}
           panel={dockPanel}
           onClosePanel={() => setDockPanel(null)}
+          onOpenPanel={setDockPanel}
+          questionsAsked={history.loading ? null : userMessagesInOrder.length}
         />
       )}
 

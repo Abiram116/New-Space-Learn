@@ -65,6 +65,7 @@ export type IconName =
   | 'alignCenter'
   | 'alignRight'
   | 'copy'
+  | 'help'
 
 type Props = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   name: IconName
@@ -496,6 +497,14 @@ function paths(name: IconName, filled: boolean) {
           <path d="M3.3 18.2a5 5 0 0 1 9.4-2.2" />
           <path d="M13.3 20.6h3.1L22.7 14a1.7 1.7 0 0 0-2.4-2.4l-6.3 6.3Z" />
           <path d="M18.5 12.4 20.6 14.5" />
+        </>
+      )
+    case 'help':
+      return (
+        <>
+          <circle cx="12" cy="12" r="8.6" />
+          <path d="M9.5 9.6a2.6 2.6 0 1 1 3.7 2.35c-.85.45-1.2 1-1.2 1.85" />
+          <path d="M12 16.9h.01" />
         </>
       )
     case 'alert':

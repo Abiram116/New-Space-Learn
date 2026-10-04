@@ -29,7 +29,7 @@ describe('ActiveAgentsStrip', () => {
     // this is deliberately reading the real labels, not synthetic ones, so a
     // future rename in agents.ts is caught here too.
     expect(screen.getByRole('button', { name: /save a note/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /make cards/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /make flashcards/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /make a quiz/i })).toBeInTheDocument()
   })
 
@@ -41,7 +41,7 @@ describe('ActiveAgentsStrip', () => {
     await user.click(screen.getByRole('button', { name: /save a note/i }))
     expect(onRunAgent).toHaveBeenLastCalledWith('notes')
 
-    await user.click(screen.getByRole('button', { name: /make cards/i }))
+    await user.click(screen.getByRole('button', { name: /make flashcards/i }))
     expect(onRunAgent).toHaveBeenLastCalledWith('flashcards')
 
     await user.click(screen.getByRole('button', { name: /make a quiz/i }))

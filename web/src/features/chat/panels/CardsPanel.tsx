@@ -13,9 +13,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { generateCards, gradeCard, listCards, listDecks } from '../../../api/flashcards'
 import type { Deck, Flashcard, Grade } from '../../../api/types'
+import { Reaction } from '../../../components/mascot'
 import { Icon } from '../../../components/ui/Icon'
 import { CardFace } from '../../flashcards/Review'
 import { useCardMotion } from '../../flashcards/cardMotion'
@@ -36,6 +36,7 @@ import { cn } from '../../../lib/cn'
 import { nextIntervalLabel } from '../../../lib/schedule'
 import { useAssessmentLock } from '../../../lib/assessment'
 import { useAsync } from '../../../lib/useAsync'
+import { DockAction, DockEmpty, DockLink, DockSectionHead } from '../dockParts'
 
 /** The grade ramp, cold → hot. Mirrors `flashcards/model.ts`. */
 const GRADES: { key: Grade; label: string }[] = [
@@ -74,7 +75,7 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
         </div>
       )}
 
-      <MakeCards subspaceId={subspaceId} onMade={decks.refresh} />
+      <DockSectionHead id="cards-panel-label">{list.length > 0 ? `Flashcards · ${list.length}` : 'Flashcards'}</DockSectionHead>
 
       <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
         {decks.loading ? (
@@ -84,7 +85,9 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
           // read as "you've never made a deck here".
           <p className="text-[12px] text-coral-deep">{decks.error}</p>
         ) : list.length === 0 ? (
-          <p className="text-[12px] text-muted">No decks yet.</p>
+          <DockEmpty icon="deck" title="No flashcards yet">
+            Make some from your files and they show up here.
+          </DockEmpty>
         ) : (
           <Stagger step={18} max={140}>
             {list.map((d) => (
@@ -110,12 +113,8 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
         )}
       </div>
 
-      <Link
-        to={`${base}/flashcards`}
-        className="mt-auto flex items-center justify-center gap-1.5 rounded-[10px] border border-line px-3 py-2 text-[12px] text-muted transition-colors hover:border-brand/40 hover:text-brand-deep"
-      >
-        Manage decks <Icon name="arrowRight" size={12} />
-      </Link>
+      <DockLink to={`${base}/flashcards`}>Open all flashcards</DockLink>
+      <MakeCards subspaceId={subspaceId} onMade={decks.refresh} />
     </div>
   )
 }
@@ -211,6 +210,9 @@ function ReviewLoop({ deck, onExit }: { deck: Deck; onExit: () => void }) {
       // is no next thing below it to stay close to.
       <div className="relative isolate flex min-h-0 flex-1 flex-col justify-center gap-3">
         <AmbienceField field={ambience} compact />
+        {done > 0 && (
+          <Reaction agent="cards" situation="sessionEnd" facts={{ count: done }} mood="cheer" size={48} lineKey={done} />
+        )}
         <div
           ref={statusRef}
           className="rounded-xl border border-mint/35 bg-mint-soft/50 px-3 py-3 text-center"
@@ -354,22 +356,8 @@ function MakeCards({ subspaceId, onMade }: { subspaceId: string; onMade: () => v
   }, [subspaceId, onMade, show, showError])
 
   return (
-    <button
-      type="button"
-      onClick={make}
-      disabled={busy}
-      className={cn(
-        'flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-2',
-        'text-[12.5px] font-semibold t-control duration-200 cursor-pointer',
-        // Busy stays the same live orange, not a greyed-out "disabled" look —
-        // the AI actively writing should read as more alive, not less.
-        busy
-          ? 'cursor-default bg-brand text-[#1a120f] animate-pulse'
-          : 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]',
-      )}
-    >
-      <Icon name="sparkle" size={12} />
-      {busy ? 'Writing cards…' : 'Make cards from this chat'}
-    </button>
+    <DockAction busy={busy} busyLabel="Writing cards…" onClick={make}>
+      Make flashcards
+    </DockAction>
   )
 }

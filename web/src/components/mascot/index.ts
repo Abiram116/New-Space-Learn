@@ -72,6 +72,7 @@
  */
 export { Bot, loadBotFace, type BotProps } from './Bot'
 export { BotSays, type BotSaysProps } from './BotSays'
+export { Reaction } from './Reaction'
 export { BotProgress, formatElapsed, type BotProgressProps } from './BotProgress'
 export { SlowBot } from './SlowBot'
 export { useBotLine } from './useBotLine'

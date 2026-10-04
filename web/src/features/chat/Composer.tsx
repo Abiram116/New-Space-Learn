@@ -145,6 +145,7 @@ export function Composer({
         >
           <textarea
             ref={ref}
+            data-chat-input
             rows={1}
             /* Stops at the API's own ceiling rather than letting a long paste
                become a validation error. See lib/limits.ts. */
