@@ -12,8 +12,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LIMITS } from '../../lib/limits'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import type { ChatReturnState } from '../../lib/fromChat'
 import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
+import { listDocuments } from '../../api/documents'
 import { listPreferences, sendFeedback, type Preference } from '../../api/feedback'
 import type { ChatMessage as Message, Citation } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
@@ -46,6 +48,7 @@ import {
   type TurnSignal,
 } from './feedbackPolicy'
 import type { AgentKey } from './agents'
+import { suggestFor } from './suggest'
 import { StreamingMessage } from './StreamingMessage'
 import { StreamPacer } from './streamPacer'
 import { clampTopic, useAgentRuns } from './useAgentRuns'
@@ -89,6 +92,8 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
   // only the data it shows.
   const hasSidebar = useMediaQuery(LG_QUERY)
   const history = useAsync(() => listMessages(subspaceId), [subspaceId])
+  // Same cache key as the sidebar's file list, so this costs no extra trip once it has loaded.
+  const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
   /* The live turn. Tokens do NOT flow through React state: they go into
      `pacer`, which reveals them on requestAnimationFrame, and only
      `StreamingMessage` subscribes to it. This component re-renders when a turn
@@ -248,6 +253,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
               role: 'assistant',
               content: resolved.text,
               citations: resolved.citations.length ? resolved.citations : null,
+              suggestion: evt.suggestion,
               created_at: new Date().toISOString(),
             }
             settledRef.current.add(assistant.id)
@@ -341,7 +347,11 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
      page, not a location — putting it in the URL would add a history entry
      per glance at your sources and make Back mean "close the panel" instead
      of "leave the chat". */
-  const [dockPanel, setDockPanel] = useState<DockPanel>(null)
+  // Back from a full page the sidebar was left on (a quiz, a review): reopen that panel.
+  const location = useLocation()
+  const [dockPanel, setDockPanel] = useState<DockPanel>(
+    () => (location.state as ChatReturnState | null)?.dockPanel ?? null,
+  )
 
   const [prefs, setPrefs] = useState<Preference[]>([])
   useEffect(() => {
@@ -375,6 +385,16 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
      trigger only fires on the first (see feedbackPolicy's docstring). Every
      user turn in order, not just the last one: consecutiveConfusion needs the
      run leading up to it, not a single message. */
+  // The follow-up the last answer came with (kept on the message, so it survives a reload).
+  // Once a new question is the latest turn there is nothing to offer until its answer lands.
+  const last = messages[messages.length - 1]
+  const followUp = last?.role === 'assistant' ? (last.suggestion ?? null) : null
+  // Something to ask about: a file of its own that is ready, or answers that already
+  // came from sources (a topic can answer from files linked in from another topic,
+  // and then has no file of its own to count).
+  const hasReadyFile =
+    (docs.data ?? []).some((d) => d.status === 'ready') ||
+    messages.some((m) => m.role === 'assistant' && (m.citations?.length ?? 0) > 0)
   const userMessagesInOrder = messages.filter((m) => m.role === 'user').map((m) => m.content)
 
   /* Built once, used by both `chipsFor` and `askReason`. Calling them with
@@ -427,16 +447,10 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <SubspaceHeader
-          sections={
-            <ChatSections
-              base={base}
-              active={dockPanel === null || dockPanel === 'help' ? 'chat' : dockPanel}
-              hasDock={hasSidebar}
-              onSelect={setDockPanel}
-            />
-          }
-        />
+        {/* With the sidebar on screen, Files / Notes / Quizzes / Cards are opened
+            from the sidebar and this row is not shown: one way to each. Below
+            `lg` there is no sidebar, so they stay as links. */}
+        <SubspaceHeader sections={hasSidebar ? undefined : <ChatSections base={base} />} />
 
         {/* Messages sit in a centred, measured column — the scroller stays
             full-width so the scrollbar hugs the window edge rather than
@@ -548,6 +562,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           onCancel={cancel}
           onRunAgent={runAgent}
           streaming={streaming}
+          suggestion={hasReadyFile ? (followUp ?? suggestFor(userMessagesInOrder.length)) : undefined}
         />
       </div>
 
@@ -561,6 +576,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           onClosePanel={() => setDockPanel(null)}
           onOpenPanel={setDockPanel}
           questionsAsked={history.loading ? null : userMessagesInOrder.length}
+          questions={messages.filter((m) => m.role === 'user').map((m) => ({ id: m.id, text: m.content }))}
         />
       )}
 

@@ -30,6 +30,7 @@ from ..schemas import ChatMessageOut, ChatSend, Citation
 from ..services import (
     activity,
     chat_memory,
+    followup,
     guardrails,
     personalization,
     rag,
@@ -71,6 +72,7 @@ async def list_messages(
             content=r["content"],
             citations=[Citation(**c) for c in (r.get("citations") or [])] or None,
             created_at=r["created_at"],
+            suggestion=followup.clean((r.get("meta") or {}).get("suggestion")),
         )
         for r in rows
     ]
@@ -155,6 +157,7 @@ async def send_chat(
         student_context=student_context,
         memory_summary=subspace.get("memory_summary") or "",
         sources_doubtful=found.confidence == "weak",
+        suggest_followup=True,
     )
 
     # Persist the user's turn immediately so refresh shows it even mid-stream.
@@ -178,6 +181,8 @@ async def send_chat(
 
     async def gen() -> AsyncIterator[bytes]:
         buffer: list[str] = []
+        follow = followup.FollowUpFilter()
+        suggestion: str | None = None
         try:
             # Emit citations up front so the UI can render source cards
             # while tokens are still streaming in.
@@ -194,8 +199,15 @@ async def send_chat(
                     messages,
                     model=settings.groq_model_vision if images else None,
                 ):
-                    buffer.append(delta)
-                    yield _sse("token", {"delta": delta})
+                    # The trailing "[[next: …]]" line is held back and never shown.
+                    shown = follow.feed(delta)
+                    if shown:
+                        buffer.append(shown)
+                        yield _sse("token", {"delta": shown})
+            tail, suggestion = follow.finish()
+            if tail:
+                buffer.append(tail)
+                yield _sse("token", {"delta": tail})
             assistant_text = "".join(buffer).strip() or "(no reply)"
             # The model was told to cite only the sources it was given, but an
             # instruction isn't a guarantee. A marker pointing at a source that
@@ -269,6 +281,8 @@ async def send_chat(
                         # used — so "why did it answer that?" can be read off
                         # the message instead of re-run.
                         "retrieval": found.trace(),
+                        # Kept so the suggestion is still in the box after a reload.
+                        "suggestion": suggestion,
                     },
                 },
             )
@@ -296,6 +310,8 @@ async def send_chat(
                     # reconciles against this rather than showing one thing now
                     # and another after a refresh.
                     "content": assistant_text,
+                    # One question the student might ask next, or null.
+                    "suggestion": suggestion,
                 },
             )
         except ApiError as e:

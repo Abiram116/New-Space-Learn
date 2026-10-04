@@ -8,7 +8,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
+from pydantic import BaseModel
 
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, UpstreamUnavailable, ValidationFailed
@@ -170,6 +171,98 @@ async def delete_document(
         "documents", filters={"user_id": f"eq.{user.id}", "id": f"eq.{document_id}"}
     )
     return OkOut()
+
+
+# ── Passage preview ────────────────────────────────────────────────────
+#
+# A citation says "[2] paper.pdf · p. 5". This is what is behind it: the cited
+# passage and the text around it, so the student can read it in place and see
+# exactly what the answer leaned on. Text only (what was extracted and indexed),
+# which is also exactly what the model saw, so what is highlighted is what it read.
+
+PASSAGE_NEIGHBOURS = 2
+
+
+class PassageChunk(BaseModel):
+    index: int
+    locator: str
+    content: str
+    cited: bool = False
+
+
+class PassageOut(BaseModel):
+    document_id: str
+    name: str
+    chunks: list[PassageChunk]
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.split())
+
+
+def pick_cited(chunks: list[dict], snippet: str) -> dict | None:
+    """The chunk a citation's snippet came from.
+
+    The snippet is the first ~90 characters of the chunk's text, whitespace
+    collapsed and ending in an ellipsis when it was cut, so it is matched as a
+    prefix of the chunk's own collapsed text. With no exact match the first
+    chunk of that page is the honest fallback; with no chunks, nothing.
+    """
+    want = _norm(snippet).rstrip("…").rstrip()
+    if want:
+        for c in chunks:
+            if _norm(c.get("content", "")).startswith(want):
+                return c
+    return chunks[0] if chunks else None
+
+
+@router.get("/documents/{document_id}/passage", response_model=PassageOut)
+async def document_passage(
+    document_id: str,
+    locator: str = Query(max_length=200),
+    snippet: str = Query("", max_length=400),
+    user: CurrentUser = Depends(get_current_user),
+) -> PassageOut:
+    rows = await supabase.db_select(
+        "documents",
+        filters={"user_id": f"eq.{user.id}", "id": f"eq.{document_id}"},
+        limit=1,
+    )
+    if not rows:
+        raise NotFound("Document not found.")
+    on_page = await supabase.db_select(
+        "document_chunks",
+        filters={"document_id": f"eq.{document_id}", "locator": f"eq.{locator}"},
+        select="chunk_index,locator,content",
+        order="chunk_index.asc",
+        limit=50,
+    )
+    hit = pick_cited(on_page, snippet)
+    if hit is None:
+        raise NotFound("That passage is no longer in this document.")
+    at = int(hit["chunk_index"])
+    around = await supabase.db_select(
+        "document_chunks",
+        filters={
+            "document_id": f"eq.{document_id}",
+            "and": f"(chunk_index.gte.{max(0, at - PASSAGE_NEIGHBOURS)},chunk_index.lte.{at + PASSAGE_NEIGHBOURS})",
+        },
+        select="chunk_index,locator,content",
+        order="chunk_index.asc",
+    )
+    return PassageOut(
+        document_id=document_id,
+        name=rows[0]["name"],
+        chunks=[
+            PassageChunk(
+                index=int(c["chunk_index"]),
+                locator=c.get("locator") or "",
+                content=c["content"],
+                cited=int(c["chunk_index"]) == at,
+            )
+            for c in around
+        ],
+    )
 
 
 def _to_doc(row: dict) -> DocumentOut:

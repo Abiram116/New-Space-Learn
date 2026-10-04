@@ -67,6 +67,8 @@ class ChatMessageOut(BaseModel):
     content: str
     citations: list[Citation] | None = None
     created_at: datetime
+    #: The follow-up question that came with this answer, if it had a good one.
+    suggestion: str | None = None
 
 
 class ChatSend(BaseModel):

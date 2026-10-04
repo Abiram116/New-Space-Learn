@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, replace
 from typing import Any
 
-from . import guardrails, retrieval, supabase
+from . import followup, guardrails, retrieval, supabase
 from .voice import COMPANION_VOICE, DIAGRAM_RULE, RESPONSE_SHAPE
 
 
@@ -104,6 +104,7 @@ def build_prompt(
     images: list[str] | None = None,
     memory_summary: str = "",
     sources_doubtful: bool = False,
+    suggest_followup: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (messages_for_llm, citations_metadata_for_frontend)."""
 
@@ -213,6 +214,11 @@ def build_prompt(
         )
     )
     system_parts.append(guardrails.SAFETY_RULES)
+    # Last of all, and only when the student has sources: a follow-up question
+    # about material that is not there would be a suggestion to ask the one thing
+    # the tutor cannot answer.
+    if suggest_followup and retrieved:
+        system_parts.append(followup.PROMPT)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": "\n\n".join(system_parts)}]
     if sources_block:

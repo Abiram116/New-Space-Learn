@@ -37,6 +37,18 @@ export const listDocuments = async (subspaceId: string) => {
   return docs
 }
 
+/** The cited passage and the text around it, for the citation preview. */
+export type Passage = {
+  document_id: string
+  name: string
+  chunks: { index: number; locator: string; content: string; cited: boolean }[]
+}
+
+export const getPassage = (documentId: string, locator: string, snippet: string) =>
+  apiFetch<Passage>(
+    `/documents/${documentId}/passage?locator=${encodeURIComponent(locator)}&snippet=${encodeURIComponent(snippet)}`,
+  )
+
 export const deleteDocument = (id: string) =>
   apiFetch<{ ok: true }>(`/documents/${id}`, { method: 'DELETE' })
 

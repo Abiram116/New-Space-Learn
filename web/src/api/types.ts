@@ -38,6 +38,8 @@ export type ChatMessage = {
   content: string
   citations?: Citation[] | null
   created_at: string
+  /** The follow-up question that came with this answer, if it had a good one. */
+  suggestion?: string | null
 }
 
 export type DocStatus = 'uploading' | 'processing' | 'ready' | 'failed'
