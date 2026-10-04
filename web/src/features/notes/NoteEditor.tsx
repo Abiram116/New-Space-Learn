@@ -14,6 +14,7 @@
  * literally the same code.
  */
 
+import { Bot } from '../../components/mascot'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
@@ -747,7 +748,7 @@ export function NoteEditor({
     <span className={cn('flex items-center gap-1.5', aiBusy ? 'setcode-hot' : 'setcode', phone && 'text-[12.5px]')}>
       {aiBusy ? (
         <>
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+          <Bot agent="notes" mood="working" size={32} className="-my-1.5" />
           Writing…
         </>
       ) : status === 'saving' ? (
@@ -770,7 +771,11 @@ export function NoteEditor({
   )
 
   return (
-    <div className={cn('flex min-w-0 flex-1 flex-col', phone && 'notes-phone')}>
+    // `min-h-0` is what makes the page scroll: a flex item defaults to
+    // `min-height: auto`, so without it this column grows to the whole note and
+    // the phone shell (`overflow-hidden`) just cuts it off — the scroller below
+    // never gets a height smaller than its content, so it has nothing to scroll.
+    <div className={cn('flex min-h-0 min-w-0 flex-1 flex-col', phone && 'notes-phone')}>
       {phone && (
         <PhoneBar
           onBack={onBack}
@@ -867,7 +872,7 @@ export function NoteEditor({
           narrow card floating in a void — the writing surface looked like a
           widget on the page rather than being the page. Same colour on both,
           so all that remains of the leaf is its margin rule. */}
-      <div className="min-h-0 flex-1 overflow-y-auto bg-leaf">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain bg-leaf">
         {/* LEAF — the canonical case. A note is the one thing in this app you
             are *inside* rather than holding, so it gets the margin rule and a
             measure instead of a card's border and lift. `measure` caps the

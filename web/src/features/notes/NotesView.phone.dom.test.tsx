@@ -113,3 +113,20 @@ describe('phone notes list', () => {
     await waitFor(() => expect(deleteNote).toHaveBeenCalledWith('n1'))
   })
 })
+
+describe('phone note page', () => {
+  it('lets the page scroll: the editor column may shrink below its content', async () => {
+    // Layout isn't computed in jsdom, so this guards the class that makes it work:
+    // without `min-h-0` the column grows to the whole note, the phone shell clips
+    // it, and the scroller inside never has anything to scroll.
+    const user = userEvent.setup()
+    listAllNotes.mockResolvedValue([note('n1', 'Self-attention')])
+    renderView()
+    await user.click(await screen.findByText('Self-attention'))
+    await waitFor(() => expect(document.querySelector('.notes-phone')).not.toBeNull())
+    const column = document.querySelector('.notes-phone') as HTMLElement
+    expect(column).toHaveClass('min-h-0', 'flex-1')
+    const scroller = column.querySelector(':scope > .overflow-y-auto') as HTMLElement
+    expect(scroller).toHaveClass('min-h-0', 'flex-1')
+  })
+})
