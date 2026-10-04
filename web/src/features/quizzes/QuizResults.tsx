@@ -20,6 +20,8 @@ import { Icon } from '../../components/ui/Icon'
 import { Ledger } from '../../components/ui/Surface'
 import { CountUp, Stagger } from '../../components/ui/motion'
 import { celebrateQuiz, useAmbience } from '../../components/celebrate'
+import { Reaction } from '../../components/mascot'
+import { quizSituation } from '../../lib/botVoice'
 import { bestVerdict, scoreTier } from '../../components/celebrate/logic'
 import { cn } from '../../lib/cn'
 import { formatClock } from './QuizRunner'
@@ -141,6 +143,17 @@ export function QuizResults({
             </p>
           )}
 
+          {/* Pop, reacting to the score. Real text, so it reads the same with the bots off. */}
+          <Reaction
+            agent="quiz"
+            situation={quizSituation(result.score)}
+            facts={{ score: result.score }}
+            mood={result.score >= 80 ? 'celebrate' : result.score >= 50 ? 'proud' : 'encouraging'}
+            size={compact ? 48 : 56}
+            lineKey={`${quiz.id}:${result.attempts ?? 0}:${result.score}`}
+            className="self-start"
+          />
+
           {/* Four figures on one rule, per the design track: a result is a set of
               measurements, not a set of cards. */}
           <div className="flex items-baseline gap-4 border-t border-line pt-3">
@@ -258,6 +271,17 @@ export function QuizResults({
                 Best: {verdict.best}% · attempt {verdict.attempts}
               </p>
             )}
+
+            {/* Pop, reacting to the score. Real text, so it reads the same with the bots off. */}
+            <Reaction
+              agent="quiz"
+              situation={quizSituation(result.score)}
+              facts={{ score: result.score }}
+              mood={result.score >= 80 ? 'celebrate' : result.score >= 50 ? 'proud' : 'encouraging'}
+              size={compact ? 48 : 56}
+              lineKey={`${quiz.id}:${result.attempts ?? 0}:${result.score}`}
+              className="self-start"
+            />
 
             <div className="ruled-datum grid grid-cols-3 gap-3 pt-[clamp(12px,1.6dvh,16px)]">
               <StageFigure label="Right" value={`${right}/${questions.length}`} />

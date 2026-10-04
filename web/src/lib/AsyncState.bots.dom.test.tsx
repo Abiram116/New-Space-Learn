@@ -48,7 +48,8 @@ describe('AsyncState bots', () => {
     expect(bot()?.dataset.mood).toBe('oops')
     const retry = screen.getByRole('button', { name: /retry/i })
     const beside = retry.parentElement!.textContent ?? ''
-    expect(LINES.error.any!.some((l) => beside.includes(l))).toBe(true)
+    // Nova's own wording, or the shared one.
+    expect([...(LINES.error.tutor ?? []), ...LINES.error.any!].some((l) => beside.includes(l))).toBe(true)
   })
 
   it('falls back to the plain glyphs with the bots off, words and Retry intact', () => {

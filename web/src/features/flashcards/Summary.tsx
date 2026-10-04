@@ -14,6 +14,7 @@ import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Ledger } from '../../components/ui/Surface'
 import { AmbienceField, celebrate, useAmbienceField } from '../../components/celebrate'
+import { Reaction } from '../../components/mascot'
 import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
@@ -106,6 +107,17 @@ export function Summary({
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
             <p className={cn('mt-1', isMobile ? 'text-[13px] text-muted' : 'setcode')}>solid on {deckName}</p>
           </div>
+
+          {/* Flip, closing the session — in a voice of their own. */}
+          <Reaction
+            agent="cards"
+            situation="sessionEnd"
+            facts={{ count: grades.length }}
+            mood={pct >= 80 ? 'celebrate' : pct >= 50 ? 'cheer' : 'encouraging'}
+            size={56}
+            lineKey={grades.length}
+            className="justify-center text-left"
+          />
 
           <div className="grid grid-cols-4 gap-2">
             {GRADES.map((g) => (
