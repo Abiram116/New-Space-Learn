@@ -111,6 +111,22 @@
  },
  "warning": {
   "with the warning": {
+   "refused_uncovered": [
+    12,
+    13
+   ],
+   "unsupported_uncovered": [
+    0,
+    13
+   ],
+   "correct_covered": [
+    9,
+    9
+   ],
+   "refused_covered": [
+    0,
+    9
+   ],
    "rows": [
     {
      "id": "re05",
@@ -165,6 +181,18 @@
      "category": "followup",
      "context": "a32cab66c386c859",
      "answer": "The main downside of **sixth normal form (6NF)** is the explosion of tables: a single logical entity that has N non‑key attributes must be split into N separate tables, each holding the primary key plus one attribute. This proliferation makes multi‑attribute updates, inserts, and deletes require multiple statements across many tables, increasing query complexity and overhead—especially problematic for OLTP workloads.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "fo11",
+     "category": "followup",
+     "context": "cbd0e64e61b23e82",
+     "answer": "Most designers stop at **third normal form (3NF)**, because it removes the common insertion, update, and deletion anomalies while keeping the schema practical to implement and maintain. 3NF is often called the “sweet spot” for everyday database design.",
      "judged": true,
      "correct": true,
      "refused": false,
@@ -329,6 +357,18 @@
      "cited_right": 0
     },
     {
+     "id": "un13",
+     "category": "unanswerable",
+     "context": "504d88454b50bd27",
+     "answer": "The provided sources focus on photosynthesis, chloroplast origins, and related cellular processes; they do not contain information on DNA replication. If you need an explanation of DNA replication, let me know and I can give a concise overview based on general biology knowledge.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
      "id": "un14",
      "category": "unanswerable",
      "context": "4441a08db46d71a3",
@@ -341,26 +381,9 @@
      "cited_right": 0
     },
     {
-     "id": "fo11",
-     "category": "followup",
-     "context": "cbd0e64e61b23e82",
-     "answer": "Most designers stop at **third normal form (3NF)**, because it removes the common insertion, update, and deletion anomalies while keeping the schema practical to implement and maintain. 3NF is often called the “sweet spot” for everyday database design.",
-     "judged": true,
-     "correct": true,
-     "refused": false,
-     "unsupported": false,
-     "cited": 0,
-     "cited_right": 0
-    },
-    {
-     "id": "un13",
-     "category": "unanswerable",
-     "error": "The AI is at capacity right now. Try again in a moment."
-    },
-    {
      "id": "un15",
      "category": "unanswerable",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "error": "The AI took too long to respond. Try again."
     },
     {
      "id": "un16",
@@ -377,11 +400,34 @@
    ]
   },
   "without it": {
+   "refused_uncovered": [
+    2,
+    14
+   ],
+   "unsupported_uncovered": [
+    12,
+    14
+   ],
+   "correct_covered": [
+    9,
+    9
+   ],
+   "refused_covered": [
+    0,
+    9
+   ],
    "rows": [
     {
      "id": "re05",
      "category": "reworded",
-     "error": "Event loop is closed"
+     "context": "d856ba8cd853a2db",
+     "answer": "The posterior odds equal the prior odds multiplied by the Bayes factor (the likelihood ratio).  \n\n## Why this works\n- **Prior odds** are \\( \\frac{P(A)}{P(\\neg A)} \\), the ratio of belief in a hypothesis before evidence.  \n- **Likelihoods** are \\( P(E\\mid A) \\) and \\( P(E\\mid \\neg A) \\), the probabilities of the evidence under each hypothesis.  \n\nDividing the Bayes‑updated probabilities for \\(A\\) and \\(\\neg A\\) cancels the unknown \\(P(E)\\) and leaves  \n\n\\[\n\\frac{P(A\\mid E)}{P(\\neg A\\mid E)} \\;=\\; \\frac{P(A)}{P(\\neg A)} \\times \\frac{P(E\\mid A)}{P(E\\mid \\neg A)} .\n\\]\n\nThe second fraction is the **Bayes factor** (or likelihood ratio) [[1](#)].  \n\n## Practical example\nA disease prevalence of 1 % gives prior odds  \n\n\\[\n\\frac{0.01}{0.99}=1{:}99 .\n\\]\n\nA test that is 99 % accurate yields  \n\n\\[\n\\text{Bayes factor} = \\frac{P(\\text{positive}\\mid\\text{disease})}{P(\\text{positive}\\mid\\text{no disease})}\n= \\frac{0.99}{0.01}=99 .\n\\]\n\nPosterior odds = prior odds × Bayes factor  \n\n\\[\n1{:}99 \\times 99 = 1{:}1 ,\n\\]\n\nso the posterior probability is 50 % [[2](#)].\n\n**Key takeaway:** to update odds after evidence, multiply the prior odds by the likelihood ratio of the evidence under the two competing hypotheses.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
     },
     {
      "id": "re11",
@@ -398,12 +444,26 @@
     {
      "id": "re12",
      "category": "reworded",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "150fe5df8305a1b8",
+     "answer": "**In practice you usually stop at 3NF (or BCNF); higher normal forms are mostly of academic interest.**  \n\n## What’s used day‑to‑day  \n- **1NF, 2NF, 3NF** – these eliminate duplicate rows, ensure scalar columns, and remove most insertion, update, and deletion anomalies. Most production systems consider a schema “normalized” once it reaches 3NF [[3]].  \n- **BCNF** – often applied when 3NF still leaves functional dependencies that violate a superkey rule; many designers adopt it as a safe extension of 3NF.  \n\n## What’s largely theoretical  \n- **4NF and above (5NF, 6NF, etc.)** – the additional constraints (multivalued dependencies, join dependencies, domain‑key constraints) address problems that rarely arise in typical applications. The literature notes that normal forms beyond 4NF are “mainly of academic interest, as the problems they exist to solve rarely appear in practice” [[1]].  \n\n**Key takeaway:** Aim for 3NF (or BCNF) in most real‑world databases; higher normal forms are useful mainly for specialized or research‑oriented scenarios.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
     },
     {
      "id": "ex13",
      "category": "exact",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "b1898752ed12de97",
+     "answer": "**DKNF stands for *Domain‑Key Normal Form**【4】.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
     },
     {
      "id": "fo09",
@@ -418,19 +478,52 @@
      "cited_right": 1
     },
     {
+     "id": "fo11",
+     "category": "followup",
+     "context": "cbd0e64e61b23e82",
+     "answer": "**Third normal form (3NF)** is generally regarded as sufficient for most practical relational designs. It eliminates most insertion, update, and deletion anomalies while keeping the schema manageable. [[3]]",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
+    },
+    {
      "id": "re15",
      "category": "reworded",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "e79013a800863e3d",
+     "answer": "TCP’s reliability mechanisms (in‑order delivery, acknowledgment‑driven retransmissions, and congestion control) introduce latency and jitter that exceed the tight timing requirements of voice‑over‑IP streams.  \n\n### Why TCP hurts voice quality\n- **Delay from retransmission** – Lost packets trigger a timeout or fast‑retransmit before the next segment can be delivered, adding seconds of wait time [[1]].\n- **Head‑of‑line blocking** – The receiver cannot process any data that follows a missing segment until the lost one is recovered, causing gaps in the audio stream [[2]].\n- **Congestion‑induced slow‑start** – Spurious timeouts or duplicate ACKs can shrink the sending window, further slowing delivery and increasing jitter [[1],[2]].\n\nThese effects make it hard to maintain the steady, low‑latency packet flow that real‑time voice codecs need; protocols that tolerate loss (e.g., UDP + RTP) are preferred.  \n\n**Key takeaway:** TCP’s emphasis on perfect, ordered delivery trades off the timeliness essential for voice calls.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 2,
+     "cited_right": 1
     },
     {
      "id": "re18",
      "category": "reworded",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "db43c99e35bf931f",
+     "answer": "Leaves appear green because **chlorophyll** in their cells absorbs light most efficiently in the red and blue regions of the spectrum while reflecting and transmitting the green wavelengths, which our eyes perceive as green[[1]].  \n\n### Pigment absorption\n- **Chlorophyll a & b**: peak absorption around 430 nm (blue) and 660 nm (red); minimal absorption near 500–570 nm (green).  \n- **Accessory pigments** (carotenes, xanthophylls) broaden the range of absorbed light but also reflect green, reinforcing the overall green hue[[1]].\n\n### Why green isn’t used for photosynthesis\n- The energy of green photons is intermediate; using chlorophyll’s absorption peaks (higher‑energy blue and lower‑energy red) maximizes the efficiency of converting light energy into chemical energy during the light‑dependent reactions.\n\n**Key takeaway:** The green color of leaves results from chlorophyll’s selective absorption of non‑green light and the consequent reflection of green wavelengths.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
     },
     {
      "id": "re19",
      "category": "reworded",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "e14794b9622492f9",
+     "answer": "Cacti use **Crassulacean Acid Metabolism (CAM)**: they open stomata at night to absorb CO₂, store it as malic acid, and release it internally for the Calvin cycle during the hot daytime while keeping stomata closed.  \n\n## Night‑time CO₂ uptake  \n- Stomata open when temperatures are low and humidity is higher.  \n- CO₂ is fixed by **PEP carboxylase** into oxaloacetate, then reduced to malate and stored in vacuoles as malic acid [[3]].\n\n## Day‑time carbon use without water loss  \n- Stomata remain closed, preventing transpiration.  \n- Malic acid is decarboxylated, releasing CO₂ inside the leaf.  \n- The released CO₂ is fixed by **RuBisCO** in the Calvin cycle, producing 3‑phosphoglycerate [[3]].\n\n## Why this limits water loss  \n- Night‑time gas exchange occurs when vapor pressure deficit is low, so transpiration is minimal.  \n- Day‑time photosynthesis proceeds with internal CO₂, eliminating the need for open stomata and thus conserving water in the extreme heat.\n\n**Key takeaway:** By shifting CO₂ uptake to the cooler night and storing it as malic acid, cacti decouple carbon fixation from water loss, enabling photosynthesis during daytime heat without opening stomata.",
+     "judged": true,
+     "correct": true,
+     "refused": false,
+     "unsupported": false,
+     "cited": 1,
+     "cited_right": 1
     },
     {
      "id": "un02",
@@ -447,7 +540,14 @@
     {
      "id": "un03",
      "category": "unanswerable",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "47d862735ce18cbe",
+     "answer": "The provided sources discuss binary search trees and external path lengths but do not cover red‑black trees or their insertion algorithm. I can explain the general steps for inserting into a red‑black tree, but that information isn’t supported by the given references.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
     },
     {
      "id": "un04",
@@ -464,7 +564,14 @@
     {
      "id": "un06",
      "category": "unanswerable",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "c0e4ee328da7eb87",
+     "answer": "Thomas Bayes never received the Turing Award; the prize was established long after his death.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
     },
     {
      "id": "un07",
@@ -481,7 +588,110 @@
     {
      "id": "un08",
      "category": "unanswerable",
-     "error": "The AI is at capacity right now. Try again in a moment."
+     "context": "7419349de11dac5b",
+     "answer": "The **CAP theorem** states that a distributed data system can provide at most two of the following three guarantees simultaneously:\n\n* **Consistency** – all nodes see the same data at the same time.  \n* **Availability** – every request receives a (non‑error) response, without guarantee that it contains the most recent write.  \n* **Partition tolerance** – the system continues to operate despite arbitrary network partitions between nodes.  \n\nBecause network partitions are unavoidable in real‑world distributed environments, designers must choose a trade‑off between consistency and availability.  \n\n**Key takeaway:** In practice, a system must sacrifice either consistency or availability when a partition occurs.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un09",
+     "category": "unanswerable",
+     "context": "ae1745d720d66d5a",
+     "answer": "BGP selects the best route by applying its path‑selection algorithm, which evaluates attributes such as local preference, AS‑path length, origin type, MED, and tie‑breakers like router ID.  \n\n**Key steps in the decision process**\n\n1. **Highest local preference** – prefers routes advertised with a larger local‑preference value.  \n2. **Shortest AS‑path** – chooses the route with the fewest autonomous system numbers.  \n3. **Lowest origin type** – prefers IGP‑originated routes over EGP, then over incomplete.  \n4. **Lowest MED (Multi‑Exit Discriminator)** – selects the route with the smallest MED when routes come from the same neighboring AS.  \n5. **eBGP over iBGP** – prefers routes learned via eBGP over those learned via iBGP.  \n6. **Lowest IGP cost to the next hop** – uses the internal routing metric to the next‑hop router.  \n7. **Oldest route** – prefers the route that has been in the BGP table longest.  \n8. **Lowest router ID** – final tie‑breaker using the BGP speaker’s router identifier.\n\nIf none of these attributes differentiate the routes, BGP may fall back to additional tie‑breakers such as the lowest neighbor address.  \n\n**Key takeaway:** BGP’s best‑path selection is a deterministic, ordered evaluation of path attributes, ensuring consistent routing decisions across the network.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un10",
+     "category": "unanswerable",
+     "context": "02429077c9a06ece",
+     "answer": "A **B+ tree index** is a balanced, multi‑level tree structure where all searchable records reside in the leaf nodes and the internal nodes contain only key values that guide the search.\n\n### How it speeds up queries\n- **Logarithmic search depth** – Because the tree is balanced, the number of levels grows with log N (N = rows). Finding a key requires traversing only a few pages, not scanning the whole table.\n- **Range scans** – Leaf nodes are linked in order, so once the start key is located the engine can read successive leaves sequentially without additional index lookups, making `BETWEEN`, `>`, `<` and prefix searches fast.\n- **Reduced I/O** – Each node (often a whole disk page) holds many keys, so a single I/O brings in many entries. This minimizes the number of disk reads compared with a linear scan.\n\nIn practice, the database uses the index to locate the relevant leaf page, then reads the matching rows directly, avoiding full‑table scans and dramatically cutting query latency.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un11",
+     "category": "unanswerable",
+     "context": "8a7b4375d57dd1d1",
+     "answer": "DNS resolution isn’t covered by the provided sources, so I can’t detail the process from this material. If you need a description of how a recursive resolver queries root, TLD, and authoritative servers, let me know and I can explain it using general knowledge.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un12",
+     "category": "unanswerable",
+     "context": "06704001164d338a",
+     "answer": "Mitosis proceeds through four sequential phases:\n\n1. **Prophase** – chromosomes condense, the nuclear envelope breaks down, and the spindle apparatus begins to form.  \n2. **Metaphase** – chromosomes align at the cell’s equatorial plate, attached to spindle fibers at their kinetochores.  \n3. **Anaphase** – sister chromatids separate and are pulled toward opposite poles of the cell.  \n4. **Telophase** – nuclear envelopes re‑form around each set of chromosomes, which decondense, and the spindle disassembles.  \n\n(These phases are followed by cytokinesis, which physically divides the cytoplasm.)",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un13",
+     "category": "unanswerable",
+     "context": "504d88454b50bd27",
+     "answer": "DNA replication copies the entire genome before cell division by using each original strand as a template to synthesize a new complementary strand.\n\n**Key steps**\n\n1. **Initiation** – Replication begins at specific origins where initiator proteins unwind the double helix and recruit helicase, which creates replication forks.\n2. **Primer synthesis** – Primase lays down short RNA primers on each template strand, providing a 3’‑OH for DNA polymerase to extend.\n3. **Elongation** – DNA polymerase adds nucleotides to the 3’ end of each primer, synthesizing the leading strand continuously and the lagging strand discontinuously as Okazaki fragments.\n4. **Proofreading** – The polymerase’s exonuclease activity removes misincorporated bases, allowing correction before extension continues.\n5. **Fragment joining** – DNA ligase seals the nicks between adjacent Okazaki fragments, forming a continuous lagging strand.\n6. **Termination** – Replication forks meet, and any remaining RNA primers are removed and replaced with DNA, completing the double‑stranded molecules.\n\nThe coordinated action of these enzymes ensures high fidelity and rapid duplication of the genome.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un14",
+     "category": "unanswerable",
+     "context": "4441a08db46d71a3",
+     "answer": "Neurons transmit signals across a synapse by releasing neurotransmitter molecules from the presynaptic terminal, which then bind to receptors on the postsynaptic membrane, converting the chemical signal back into an electrical response.  \n\n**Key steps**  \n1. **Action potential arrival** – depolarization opens voltage‑gated Ca²⁺ channels in the presynaptic membrane.  \n2. **Calcium influx** – Ca²⁺ entry triggers vesicles containing neurotransmitter to fuse with the membrane (exocytosis).  \n3. **Neurotransmitter diffusion** – released molecules cross the synaptic cleft (≈20 nm) and bind to specific receptors on the postsynaptic cell.  \n4. **Postsynaptic response** – receptor activation opens ion channels or initiates second‑messenger cascades, producing either depolarization (excitatory) or hyperpolarization (inhibitory).  \n5. **Signal termination** – neurotransmitter is removed by reuptake, enzymatic degradation, or diffusion away from the cleft.  \n\n**Key takeaway:** The synaptic signal is converted from an electrical impulse to a chemical messenger and back to an electrical change in the next neuron.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un15",
+     "category": "unanswerable",
+     "context": "d40e56d655e2d9dc",
+     "answer": "Hemoglobin is a tetrameric protein composed of four polypeptide subunits—two α (alpha) chains and two β (beta) chains—arranged symmetrically around a central cavity. Each subunit binds one heme prosthetic group, a planar iron‑containing porphyrin ring that coordinates an oxygen molecule. The overall quaternary structure forms a roughly spherical complex (~64 kDa) with the heme groups positioned near the interior of the protein, allowing cooperative binding and release of O₂.",
+     "judged": true,
+     "correct": false,
+     "refused": false,
+     "unsupported": true,
+     "cited": 0,
+     "cited_right": 0
+    },
+    {
+     "id": "un16",
+     "category": "unanswerable",
+     "context": "bddb8882e273b159",
+     "answer": "I don’t have source material here that covers the ATP yield of the Krebs cycle per glucose, so I can’t provide that figure from the provided references.",
+     "judged": true,
+     "correct": true,
+     "refused": true,
+     "unsupported": false,
+     "cited": 0,
+     "cited_right": 0
     }
    ]
   }
