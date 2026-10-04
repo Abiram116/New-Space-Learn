@@ -1,0 +1,50 @@
+{
+ "cards / cs": {
+  "cards": 8,
+  "question_fronts": 7,
+  "with_source": 8,
+  "repeated_fronts": 0,
+  "grounded": 3,
+  "mean_grounded_share": 0.476,
+  "asked": 8,
+  "trace": {
+   "written": 10,
+   "malformed": 0,
+   "repeats": 0,
+   "kept": 8
+  },
+  "title": "Gradient Descent Fundamentals and Variants"
+ },
+ "cards / systems": {
+  "cards": 8,
+  "question_fronts": 8,
+  "with_source": 8,
+  "repeated_fronts": 0,
+  "grounded": 5,
+  "mean_grounded_share": 0.463,
+  "asked": 8,
+  "trace": {
+   "written": 10,
+   "malformed": 0,
+   "repeats": 0,
+   "kept": 8
+  },
+  "title": "Database Normalization Essentials"
+ },
+ "cards / bio": {
+  "cards": 8,
+  "question_fronts": 8,
+  "with_source": 8,
+  "repeated_fronts": 0,
+  "grounded": 4,
+  "mean_grounded_share": 0.501,
+  "asked": 8,
+  "trace": {
+   "written": 10,
+   "malformed": 0,
+   "repeats": 0,
+   "kept": 8
+  },
+  "title": "Photosynthesis Mechanisms and Variants"
+ }
+}

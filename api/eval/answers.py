@@ -91,7 +91,7 @@ def context_key(result: Result) -> str:
     return hashlib.sha1("\x1f".join(c.text for c in result.context).encode()).hexdigest()[:16]
 
 
-async def answer_one(question: Question, result: Result) -> dict:
+async def answer_one(question: Question, result: Result, model: str | None = None) -> dict:
     retrieved = [
         rag.Retrieved(document_id=c.document, document_name=c.document, content=c.text, locator=c.locator, similarity=0.0)
         for c in result.context
@@ -107,8 +107,10 @@ async def answer_one(question: Question, result: Result) -> dict:
         # As production does: tell the model when retrieval doubted its sources.
         sources_doubtful=getattr(result.found, "confidence", "good") == "weak",
     )
-    raw = await _complete(messages, settings.groq_model, 0.4)
-    answer, _ = rag.strip_invalid_citations(raw, len(retrieved))
+    raw = await _complete(messages, model or settings.groq_model, 0.4)
+    answer, _ = rag.strip_invalid_citations(rag.normalize_citation_markers(raw, len(retrieved)), len(retrieved))
+    # As production does, after the markers are in our format.
+    answer, _ = rag.repoint_citations(answer, [c.text for c in result.context])
     await asyncio.sleep(PAUSE_S)
 
     sources = "\n\n".join(f"[{i}] {c.text}" for i, c in enumerate(result.context, start=1)) or "(none were given)"

@@ -55,3 +55,22 @@ Production's retrieval is `app/services/retrieval.py` run with
 change, add a `Pipeline` subclass in `variants.py` with a different config,
 run it, and compare its row in `RESULTS.md`. Only move the default once the
 numbers say so (a test pins the defaults to make that a deliberate act).
+
+## The rest of the evaluation suite
+
+Retrieval is one part of what is measured. **`REPORT.md` is the one file that pulls
+everything together** — read or send that. The scripts that feed it:
+
+| Script | Question it answers | Model calls? | Saves |
+|---|---|---|---|
+| `bench` | Does retrieval find the right passage? (`--answers N` also grades answers) | retrieval: none | `RESULTS.md`, `results/<variant>.json` |
+| `ablate` | What is each retrieval stage worth? | `--warning` only | `ABLATION.md`, `results/ablation.json` |
+| `route_check` | Can a cheaper prompt, or the small model, answer as well? | yes, paced | `results/route_check_{A,B,C}.json` |
+| `agents` | Are flashcards well-formed, distinct and grounded? | `--cards` only | `results/agents.json` |
+| `quiz_check` | Do quizzes cover the material, and are their questions sound? | `--questions` only | `results/quizzes.json` |
+| `system` | Prompt size, history budget, caches, tiers, capacity, latency, invariants | `--live` only | `results/system.json` |
+| `report` | All of the above in one document | none | `REPORT.md` |
+
+`system` and `report` are worth running on every change. The model-backed ones are
+paced for a free-tier key and spend from its daily allowance, so use a key that is not
+production's. `route_check` arms B and C use different models and can run together.
