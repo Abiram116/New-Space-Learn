@@ -24,6 +24,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { SCROLL_LOCK_EVENT } from '../../lib/scrollLock'
+import { createSwipeGovernor, isApplePlatform } from '../../lib/swipeGovernor'
 
 gsap.registerPlugin(ScrollTrigger)
 
@@ -42,10 +43,38 @@ gsap.registerPlugin(ScrollTrigger)
 export const lenisRef: { current: Lenis | null } = { current: null }
 
 export function SmoothScroll({ children }: { children: ReactNode }) {
+  // START AT THE TOP, EVERY TIME. On a reload or "back", Safari restores the
+  // old scroll position before this page's pinned scenes exist, and GSAP
+  // restores its own copy of it after: the page lands part-way into a scene
+  // and then jumps. Nothing about a position in the middle of this film is
+  // worth returning to, so neither is allowed to.
+  useEffect(() => {
+    const before = window.history.scrollRestoration
+    ScrollTrigger.clearScrollMemory('manual')
+    window.scrollTo(0, 0)
+    return () => {
+      window.history.scrollRestoration = before
+    }
+  }, [])
+
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
+    // A Mac trackpad keeps sending scroll events for a second or more after a
+    // flick, and one flick is about 2,000px — most of this page. Cap how far a
+    // swipe can carry it (see `swipeGovernor`). Everything else is untouched.
+    const admit = isApplePlatform() ? createSwipeGovernor(() => window.innerHeight) : null
+
     const lenis = new Lenis({
+      virtualScroll: admit
+        ? ({ deltaY, event }) => {
+            if (!event.type.includes('wheel') || admit(Math.abs(deltaY))) return true
+            // Refusing the event also has to stop the browser scrolling on its
+            // own with it.
+            if (event.cancelable) event.preventDefault()
+            return false
+          }
+        : undefined,
       // 1.1s → 0.8s → 0.5s → 0.35s. Still not the whole story on its own —
       // `easing` below is an expo-out curve, which decelerates hardest
       // right at the END of its own duration. That's the right shape for

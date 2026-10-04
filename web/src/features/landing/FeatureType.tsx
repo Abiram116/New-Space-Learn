@@ -95,6 +95,7 @@ import { Icon, type IconName } from '../../components/ui/Icon'
 import { useReducedMotion } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
 import { lenisRef } from './SmoothScroll'
+import { isApplePlatform } from '../../lib/swipeGovernor'
 
 gsap.registerPlugin(Flip, ScrollTrigger)
 
@@ -321,8 +322,12 @@ export function FeatureType({
   // magnetically dragged back into it against their own gesture. Skipped
   // entirely once inside the frame's own scroll room (`rect.top <= 0`):
   // the pull is for arriving at the edge, not a tether while exploring.
+  // Not on a Mac: a trackpad's momentum keeps sending wheel events after the
+  // fingers lift, so "90ms of quiet" fires mid-swipe and the pull-in becomes a
+  // second, unasked-for scroll on top of the swipe (`SmoothScroll` caps swipes
+  // there instead).
   useEffect(() => {
-    if (reduced) return
+    if (reduced || isApplePlatform()) return
     const el = ref.current
     if (!el) return
     const SNAP_ZONE = window.innerHeight * 0.28
