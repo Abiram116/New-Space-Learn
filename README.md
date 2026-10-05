@@ -1,278 +1,51 @@
 <div align="center">
 
-<img src="docs/assets/readme-banner.svg" alt="Space Learn" width="100%" />
+<img src="docs/assets/readme-banner.svg" alt="Space Learn: a RAG pipeline (read, embed, retrieve, cite) feeding quiz, flashcard and note agents, shown with the app's four companion bots" width="100%" />
 
-**A study app designed not to make things up — every grounded answer is
-cited back to the page it came from, and becomes a note, a flashcard, or a
-quiz in one click.**
+**A study assistant that answers only from your own documents, shows the page each
+claim came from, and turns answers into notes, flashcards and quizzes.**
 
 [![License](https://img.shields.io/badge/LICENSE-MIT-ff5a3c?style=for-the-badge&labelColor=1e1a17)](LICENSE)
-[![React](https://img.shields.io/badge/REACT-19-35d6e8?style=for-the-badge&labelColor=1e1a17)](web/package.json)
-[![TypeScript](https://img.shields.io/badge/TYPESCRIPT-~6.0-5590ff?style=for-the-badge&labelColor=1e1a17)](web/package.json)
 [![FastAPI](https://img.shields.io/badge/FASTAPI-ASYNC-22d3a0?style=for-the-badge&labelColor=1e1a17)](api/pyproject.toml)
+[![React](https://img.shields.io/badge/REACT-19-35d6e8?style=for-the-badge&labelColor=1e1a17)](web/package.json)
+[![Tests](https://img.shields.io/badge/TESTS-2,040_PASSING-b8ff3c?style=for-the-badge&labelColor=1e1a17)](#run-it)
 
-A full production app, not a prototype — **58 API routes**, **720 passing
-tests**, **$0 infrastructure** on free hosting tiers (inference cost scales
-with usage).
+[RAG pipeline](#the-rag-pipeline) · [Agents](#agents) · [Evaluation](#evaluation) · [Decisions](#decisions-and-their-costs) · [Limitations](#known-limitations) · [Run it](#run-it)
 
 </div>
 
-<br/>
-
-Built for students who study from their own material — lecture PDFs, course
-notes, papers — where studying is one continuous loop, not five disconnected
-tools: what you upload becomes what you ask, what you ask becomes what you
-keep, and what you keep is what you're tested on. Organized as
-**Subjects → Subspaces**, so the AI is never guessing which class you mean,
-and a failed retrieval stays a handled state instead of turning into a
-hallucinated answer.
-
-<br/>
-
-<div align="center">
-<img src="docs/assets/readme-loop.svg" alt="One study loop: Ingest, Interrogate, Consolidate, Rehearse, Prove, arranged in a circle with the Student Model as a small central hub that reads each Prove result and feeds forward into the next cycle" width="100%" />
-</div>
-
-<sub>Five stages, one cycle — the Student Model at center is the feedback
-layer, not a sixth stage.</sub>
-
-<br/>
-
-Every card above is a real feature, not a diagram aspiration — a chat answer
-becomes a note in one click, a note becomes flashcards, a quiz is generated
-from whatever the student actually studied. Followed through as one thread:
-
-<div align="center">
-<img src="docs/assets/readme-journey.svg" alt="One artifact through the loop: a lecture PDF becomes a grounded chat answer, a note, flashcards, and a quiz — with the Student Model, shown separately as a feedback layer, reading the quiz result and shaping what comes next" width="100%" />
-</div>
-
-<sub>Student Model sits outside the five artifact stages — it reads the
-result, it isn't one.</sub>
-
-**If that's the kind of engineering you'd want on your team, the receipts are
-below — real guard code, real spaced-repetition math, real measured
-latency, not adjectives.** ⭐ a star goes a long way.
-
-<details>
-<summary><b>Contents</b></summary>
-
-- [What it looks like](#what-it-looks-like)
-- [Highlights](#whats-actually-in-it)
-- [Proof, not claims](#proof-not-claims)
-- [Where SpaceLearn is intentionally different](#where-spacelearn-is-intentionally-different)
-- [What makes this technically interesting](#what-makes-this-technically-interesting)
-- [AI Agents & custom Skills](#ai-agents--custom-skills)
-- [Design system](#design-system-foil-binder)
-- [Architecture](#architecture)
-- [The AI pipeline](#the-ai-pipeline)
-- [Personalization](#the-student-model--personalization)
-- [Engineering deep-dive](#engineering-decisions-worth-reading)
-- [What we actually built](#what-we-actually-built)
-- [Tech stack](#tech-stack)
-- [Trade-offs I chose deliberately](#trade-offs-i-chose-deliberately)
-- [Quick start / one-click deploy](#quick-start)
-- [Testing](#testing)
-- [Project structure](#project-structure)
-- [Full documentation](#full-documentation)
-- [Contributing](#contributing)
-
-</details>
-
-## What it looks like
-
-<img src="docs/assets/readme-screens.svg" alt="Chat with a citation card, a note with live LaTeX and an AI-touched paragraph, a flashcard with SM-2 grading buttons, and a student model panel showing a weak concept, an improving concept, and an observed study habit" width="100%" />
-
-<sub>Stylized mockup, not a screenshot — a real 30–40s walkthrough (upload →
-grounded chat → citation → note → cards/quiz → review) replaces this once
-it's recorded.</sub>
-
-## What's actually in it
-
-- **Chat, grounded in your own documents** — pgvector retrieval, streamed
-  token-by-token, with citation cards that render *before* the first token
-  and link straight to the source page.
-- **A real rich-text note editor** — Tiptap-based, with live LaTeX rendering
-  (KaTeX) and a from-scratch fix for a CommonMark parser bug that silently
-  ate backslashes on save (more in [Engineering decisions](#engineering-decisions-worth-reading)).
-- **AI that writes *in* the note, not just *about* it** — inline `/ai` and
-  selection actions (Rewrite, Simplify, Explain), with provenance tracking
-  (`touched_by_user` / `touched_by_agent` — independent, since a note can
-  legitimately be both).
-- **Spaced-repetition flashcards** — real SM-2, implemented twice (server +
-  client) and kept honest by a parity test (see [Proof](#proof-not-claims)).
-- **Auto-generated, auto-graded quizzes** — topic-scoped, with every
-  question tagged with a concept at generation time, feeding weak-area
-  detection with no extra pipeline.
-- **A student model derived from data** — weak-topic and weak-concept
-  detection from real quiz scores, not account age (see
-  [The Student Model](#the-student-model--personalization)).
-- **Account-wide libraries** — Notes/Cards/Quizzes are reachable from
-  anywhere, not locked to the topic they were created in.
-- **Onboarding that feeds the model** — a short intake quiz seeds the
-  student model's explicit layer before any behavior exists to observe.
-- **Settings that don't lie** — every control is live-wired to something
-  real; a fake toggle was removed rather than shipped, on principle.
-
-## Proof, not claims
-
-Three things that are easy to say about a codebase and hard to actually show.
-
-**The application layer is the real authorization boundary, not the
-database.** The backend runs on a service-role key that bypasses Postgres
-RLS entirely, so ownership is enforced in code — either by a shared
-`assert_*` guard or by scoping the query itself to `user_id = <caller>`.
-Verbatim, `api/app/guards.py`:
-
-```python
-async def assert_subspace(user_id: str, subspace_id: str) -> dict:
-    """Return the subspace row (with its parent subject's name embedded, as
-    `row["subjects"]["name"]`), or 404 if it isn't this user's."""
-    rows = await supabase.db_select(
-        "subspaces",
-        filters={"user_id": f"eq.{user_id}", "id": f"eq.{subspace_id}"},
-        select="*,subjects(name)",
-        limit=1,
-    )
-    if not rows:
-        # 404 rather than 403: don't confirm that someone else's id exists.
-        raise NotFound("Subspace not found.")
-    return rows[0]
-```
-
-Of the 38 routes that accept a caller-supplied resource id, every one proves
-ownership before touching the row — 24 call a guard like this one, the rest
-scope their own query to `user_id = <caller>` instead, which PostgREST
-enforces server-side. `test_guard_coverage.py` checks both paths and fails
-the test suite if a new route does neither.
-
-**Spaced repetition, the real SM-2 arithmetic** — implemented twice
-(Python server, TypeScript client) and kept honest by a 480-case parity
-test. Verbatim, `api/app/routers/flashcards.py`:
-
-```python
-if body.grade == "again":
-    ease = max(1.3, ease - 0.2)
-    interval = 1
-    reps = 0
-elif body.grade == "hard":
-    ease = max(1.3, ease - 0.15)
-    interval = max(1, int(round(interval * 1.2)))
-    reps += 1
-elif body.grade == "good":
-    interval = max(1, int(round(interval * ease))) if reps > 0 else 1
-    reps += 1
-else:  # easy
-    ease = ease + 0.15
-    interval = max(2, int(round((interval or 1) * ease * 1.3)))
-    reps += 1
-```
-
-A wrong answer doesn't just shorten the interval — it resets `reps` to 0,
-so the card re-enters the learning phase instead of repeating on a shorter
-clock.
-
-**Personalization has real, weighted trust levels — not one bucket.**
-
-<div align="center">
-<img src="docs/assets/readme-trust.svg" alt="Trust weights: explicit 0.60, experiment 0.35, feedback 0.25, observed 0.10 (ceiling 0.75)" width="100%" />
-</div>
-
-<sub>Higher weight = stronger evidence for personalization.</sub>
-
-Per the project's own decision log: *"contradicting evidence outweighs
-confirming evidence 1.5:1 — being wrong about a student costs more than
-being unsure about them."*
-
-**Built, not mocked** — the same claims, as a scoreboard:
+## At a glance
 
 | | |
 |---|---|
-| **Security** | 38 owned-id routes, every one ownership-checked, anti-enumeration 404s |
-| **Retrieval** | Local BGE-small, hybrid vector + keyword search — answer reaches the model for 94% of 98 benchmark questions (72% before) |
-| **Performance** | ~699ms chat time-to-first-token, ~158KB entry bundle |
-| **Correctness** | SM-2 implemented twice, kept honest by a 480-case parity test |
-| **Cost** | $0 infra — Vercel + Render + Supabase free tiers; inference scales with usage |
+| **What** | Retrieval-augmented chat over a student's own PDFs, notes and scans, plus agents that write quizzes, flashcards and notes from it |
+| **Retrieval** | Layout-aware chunking, local BGE-small embeddings, vector + keyword search fused in one SQL call. The evidence reaches the model on **93.9%** of benchmark questions |
+| **Answers** | **91.7%** judged correct on a graded sample. Citation precision is **67.6%**, the weakest number and the current focus |
+| **Agents** | Quiz (plan, write, check, verify), flashcards (FSRS-5 scheduling), notes, user-written Skills, and a student model that feeds results back |
+| **Cost** | $0 infrastructure. The free model tier serves the whole app about 3 answers a minute, and the system is built around that limit |
+| **Proof** | [One re-runnable evaluation report](api/eval/REPORT.md), 822 backend and 1,218 frontend tests |
 
-## Where SpaceLearn is intentionally different
+This is an AI engineering project first. The interesting work is in retrieval,
+grounding, agent workflows, guardrails and measuring whether any of it works.
+What it does badly is written down next to what it does well.
 
-Not a knock on any of these — they're good at what they do, and how you use
-either one depends heavily on setup. This is what Space Learn is built
-*around*, by default, without extra configuration:
+## What it is
 
-| | Space Learn | General AI chat | Spaced-repetition tools |
-|---|:---:|:---:|:---:|
-| Cites the source page before the answer | ✅ | depends on setup | — |
-| Chat → note → cards → quiz, one workspace | ✅ | manual copy-paste | manual entry |
-| SM-2 spaced repetition, built in | ✅ | — | ✅ (that's their job) |
-| Weak-topic detection from your own quiz scores | ✅ | — | limited |
-| Self-hostable on free infra tiers | ✅ | varies | varies |
+Students put their own material into Subjects and Topics, then ask questions.
+The model answers only from those files and marks each claim with the page it
+came from. Any answer can become a note, a deck of flashcards or a quiz, and the
+results of those feed a student model that shapes the next explanation.
 
-## What makes this technically interesting
+<img src="docs/assets/readme-loop.svg" alt="One study loop: ingest, interrogate with RAG, consolidate into notes, rehearse with spaced repetition, prove with a quiz agent, with the student model in the centre shaping the next cycle" width="100%" />
 
-The short version, for anyone who doesn't want to read the next ten sections
-to find it:
+<details>
+<summary><b>What it looks like</b></summary>
 
-- **[Grounded retrieval](#the-ai-pipeline)** — local BGE-small → pgvector →
-  citation-integrity validation, not a raw prompt-and-hope.
-- **[An adaptive learning model](#the-student-model--personalization)** —
-  quiz evidence turns into weak-topic and weak-concept detection, which
-  becomes personalized AI context, all derived at read time from data that
-  already exists.
-- **[Sandboxed user-authored Skills](#ai-agents--custom-skills)** —
-  untrusted prompt injection turned into a controlled feature, positioned so
-  it can't outrank the app's own grounding rules.
-- **[Correctness that survives two runtimes](#proof-not-claims)** — SM-2
-  spaced repetition implemented independently in Python and TypeScript, kept
-  honest by a 480-case parity test.
-- **[Free-tier architecture discipline](#trade-offs-i-chose-deliberately)**
-  — a single-worker backend, local embeddings, and a hand-rolled data
-  client, each a deliberate trade-off, not a corner cut by accident.
+<img src="docs/assets/readme-screens.svg" alt="Chat with a citation card, a note with live LaTeX, a flashcard with grading buttons, and a student model panel" width="100%" />
 
-## AI Agents & custom Skills
+<sub>A mockup in the app's own design system, not a screenshot. The panels light up in the order a document moves through them.</sub>
 
-Two different senses of "agent" in this app, both real, both load-bearing:
-
-**1. The Notes agent.** Every note carries an `origin` (`user` / `agent` /
-`doc`) *and* two independent booleans — `touched_by_user`, `touched_by_agent`
-— tracking who has actually touched the content since, not just who created
-it. An AI-written note you later edit is `touched_by_agent: true,
-touched_by_user: true` at once, on purpose: the UI's "AI"/"Mine" filters
-aren't a partition of "All", they're two independent questions, and the
-provenance label (`Created by AI · Edited by you`) says exactly what
-happened, once, instead of pretending one side owns the note.
-
-**2. Skills — user-authored, sandboxed agent personas.** A Skill is a
-reusable system-prompt behavior ("Socratic Tutor," "Code Review Mentor," or
-one you write yourself) that can be scoped to remember a single session, one
-topic, or everything — and multiple can be active on one subspace at once
-(ordered `created_at.asc`, so the newest activation wins a real conflict).
-10 seeded **library Skills** are globally readable but unwritable (RLS
-two-tier policy: `user_id = auth.uid() OR is_library`), so every account
-starts with working examples, not a blank text box.
-
-The interesting engineering part is the **sandbox, not the feature**: a
-Skill's raw text is user-authored and untrusted the same way a document
-upload is. It's wrapped in a `<teaching-style>` delimiter before it ever
-reaches the model, and it sits **mid-prompt**, with the product's own honesty
-and safety rules placed *after* it — because a model reads the last
-constraint as the most specific, a careless Skill ("always cite a source,"
-say) previously could — and once actually did — outrank the app's own
-grounding rules by sitting last. Fixed by re-ordering the prompt, not by
-restricting what a Skill can say. See
-[The AI Pipeline](#the-ai-pipeline) for the full assembly order.
-
-## Design system: "Foil Binder"
-
-Not a default theme — a deliberate world, and the seven squares in the banner
-above are it, not decoration. Dark-only, warm ground (`#1e1a17`), no violet
-anywhere (explicitly banned mid-redesign). The seven foil tones double as both
-a subject's color identity *and* a badge's rarity tier — the same system does
-two jobs. Every card-shaped surface in the app (a flashcard, a deck tile, a
-badge) is built on one shared `cardstock` treatment. 50+ icons are hand-drawn
-SVG paths (`components/ui/Icon.tsx`) — zero emoji anywhere in the product UI.
-The landing page is one continuous scroll-driven scene rather than a stack of
-sections, with a single fixed light source instead of a per-section gradient,
-specifically to avoid the seams that make a landing page read as slides.
+</details>
 
 ## Architecture
 
@@ -304,7 +77,7 @@ flowchart TB
     end
 
     subgraph External["External inference"]
-        Groq[Groq API<br/>3-tier model routing]
+        Groq[Groq API<br/>large, small and vision models]
     end
 
     UI -- "sign-in only" --> Auth
@@ -316,10 +89,11 @@ flowchart TB
     API -- "chat/quiz/vision" --> Groq
 ```
 
-**The one rule that explains most of this diagram:** the browser never talks
-to Postgres or Groq directly. Every privileged operation funnels through the
-backend, which is the only thing holding real credentials — a security
-boundary first, an architecture choice second.
+
+The browser never talks to the database or the model. Every privileged operation
+goes through the API, which is the only component holding credentials. The API
+uses a service-role key that bypasses row-level security, so ownership is
+enforced in code, and a test fails the build if a new route skips the check.
 
 <details>
 <summary><b>A chat turn, sequenced</b> — the highest-traffic request in the app</summary>
@@ -359,432 +133,261 @@ into a hallucinated answer.
 
 </details>
 
-## The AI pipeline
 
-`api/app/services/rag.py`, `guardrails.py`, `embeddings.py` —
-[full write-up](docs/engineering/ai-pipeline.md).
+## The RAG pipeline
 
-Under the hood, every chat request is one path, in this order:
+One path per question. The search-side stages were each kept because removing
+them measurably hurt ([ablation](api/eval/ABLATION.md)); the numbers are in the table.
 
-```
-Request → Ownership → Retrieval → Grounding → Skills → Personalization → Integrity → Stream
-```
+| Stage | What it does | Why | Code |
+|---|---|---|---|
+| **Read** | Reads headings and pages from a PDF's fonts and layout. Scanned pages go to a vision model | A citation can say "p. 4 · Satisfying 2NF" instead of "chunk 17" | `pdf_layout.py`, `ocr.py` |
+| **Isolate** | Parses each PDF in a separate process with time and memory limits | A crafted PDF can fail its own upload, never the server | `pdf_worker.py` |
+| **Chunk** | Splits by structure. A chunk stays inside its section, except that very short sections are folded into the next | Retrieved text is a coherent unit | `chunking.py` |
+| **Embed** | BGE-small, run locally, stored at half precision (`halfvec`) | No embedding API, half the storage, identical benchmark scores | `embeddings.py` |
+| **Resolve** | Rewrites a follow-up ("which one?") into a standalone question with a small model | Follow-ups reaching the model fall from 83% to 56% without it | `query_resolver.py` |
+| **Search** | Vector and keyword search in one SQL function, rank-fused | Exact terms and reworded questions both land. Without keyword search, exact-term hits fall from 92% to 80% | `retrieval.py`, `search_chunks` |
+| **Judge** | Decides whether the documents cover the question. Unsure matches are passed with a warning | Unsupported answers on uncovered questions fell from 12 of 14 to 0 of 13 | `retrieval.py` |
+| **Answer** | Streams the answer with `[[n]]` markers; citation cards are sent before the first token | The student sees the sources while the answer arrives | `rag.py`, `subspace_chat.py` |
+| **Verify** | After the stream: converts other citation styles, strips markers that point nowhere, moves ones on the wrong source | A marker that resolves to nothing is a broken promise | `rag.py` |
 
-> No evidence → no fake certainty. A failed retrieval stays a handled state,
-> not a hallucinated answer.
+Clicking a citation opens the cited passage with the text highlighted. Each
+answer can also end with one suggested follow-up, written by the same model call
+and filtered out of the stream, so it costs no extra request.
 
-- **Chunking**: structure-aware — headings are read from a PDF's fonts and
-  layout, a chunk never crosses a section, and each one records its pages and
-  heading path, so a citation reads "p. 4 · Satisfying 2NF".
-- **Embeddings**: local BGE-small-en-v1.5, quantized ONNX via `fastembed` —
-  no external embedding API, ~170–230MB resident. `vector(384)` storage
-  (~1.5KB/row) fits roughly **210,000 chunks** — ~4,200 lecture PDFs — before
-  Supabase's 500MB free-tier ceiling.
-- **Retrieval**: one staged pipeline (`services/retrieval.py`) — follow-ups
-  are rewritten into standalone questions, vector and keyword search run in
-  one SQL call and are rank-fused, coverage is judged (nothing is passed for
-  small talk; doubtful sources carry a warning), and up to six chunks are
-  selected. Explicitly **linked** subspaces are searched alongside — never
-  automatic, always opt-in. Measured by a 114-question benchmark
-  ([`api/eval`](api/eval/README.md)).
-- **Prompt assembly order is deliberate, not incidental**: voice → topic →
-  response-shape → diagram rule → citation-format instruction → *"answer
-  only from documents"* → the sandboxed Skill block → student personalization
-  → **integrity rules last** → **safety rules last**. A model reads the last
-  constraint as the most specific — this ordering is the actual fix for a
-  real bug where a user-authored Skill could outrank the app's own grounding
-  rules.
-- **Citation integrity**: after the full stream completes, a regex strips any
-  `[[n]]` marker that doesn't resolve to a real source — "a marker that
-  resolves to nothing reads as a broken promise," and running it post-stream
-  costs nothing on time-to-first-token.
-- **Vision guardrail**: text found *inside* an uploaded image is treated as
-  content to describe, never as an instruction — closing the injection
-  surface where a screenshot could contain "ignore your instructions" as
-  pixels. SVG is excluded from allowed image types specifically because it
-  can carry a script.
-- **Safety rules are deliberately narrow**: the model refuses only
-  *operational* assistance (a weapon/poison synthesis route, an attack on a
-  named target, a self-harm method) — never academic subject matter
-  (pathogens, drugs, exploits, historical atrocities), because an
-  over-refusing tutor is both a worse product *and* a worse safety outcome in
-  an education context.
-- **Measured retrieval quality**: on a 114-question benchmark over six
-  documents, the right chunk is in the top 5 for **91%** of answerable
-  questions and reaches the model for **94%** ([results](api/eval/RESULTS.md)).
+<img src="docs/assets/readme-journey.svg" alt="One artifact through the loop: a lecture PDF becomes a grounded chat answer, a note, flashcards and a quiz, with the student model reading the quiz result" width="100%" />
 
-## The student model & personalization
+## Agents
 
-`api/app/services/student_model.py` (906 lines), `personalization.py` —
-[full write-up](docs/engineering/personalization.md).
-
-Two units of analysis, both derived at read time from data that already
-exists — **no extra pipeline, no scheduled job**:
-
-- **`TopicView`** (one per subspace) — quiz average, a **trend** computed as
-  later-half minus earlier-half average (not first-vs-last, since a
-  5-question quiz swings ~20 points per question), days since activity, and
-  cards due. A topic only goes "cold" after **10 days** idle — a student who
-  studies only on Sundays shouldn't get flagged on a Tuesday.
-- **`ConceptView`** (finer-grained) — joined from data that already existed:
-  each quiz question's LLM-tagged `subtopic` × the student's chosen answer.
-  "It needed someone to do the join," not a schema change. A concept needs
-  **3+ questions** before its accuracy means anything (below that, "a coin
-  flip with extra steps"), and **<60% accuracy** flags it weak.
-
-Illustrative, not a real captured session — but this is the shape of what
-falls out of those two views once a student has a few quizzes in:
-
-> **Weak concept** — *countercurrent multiplication*, 2 of 5 recent
-> questions right.
-> **Improving** — *cellular respiration*, up from 58% to 81% average.
-> **Observed** — *tends to ask for a worked example after the first
-> explanation, on 6 of the last 9 sessions.*
-
-**One read pass, not six.** `snapshot()` used to be called independently by
-chat, quiz generation, flashcard generation, the notes agent, inline `/ai`,
-and the daily brief — six near-identical fetches of `quiz_results` /
-`daily_activity` / `subspaces` per page load. Now it's one function
-(~10–12 concurrent selects, or a single RPC when available) feeding a
-**per-task context builder**, each with a stated token budget (~6 lines) —
-chat gets *only* what's relevant to answering right now, deliberately
-excluding streaks, badges, and other subjects' state it can't act on anyway.
-
-**Preferences fold, with real, weighted trust levels** — a closed whitelist
-of 8 modelable dimensions (explanation length/depth, session length, study
-goal, …), each blended from four sources with different trust (chart in
-[Proof, not claims](#proof-not-claims) above). Observed-habit sentences
-("works mostly by asking questions on 7 of the last 12 active days") are
-always labeled as observed, never phrased as fact — *"a model may propose
-but may never assert."*
-
-<details>
-<summary><b>Engineering deep-dive</b> — decisions, code discipline, security, performance, roadmap</summary>
-
-### Engineering decisions worth reading
-
-The parts of this codebase that took actual judgment, not just typing:
-
-| Decision | The problem it solves | The cost accepted |
+| Agent | Workflow | What keeps it honest |
 |---|---|---|
-| **Guards, not RLS, are the real authorization boundary** | The backend uses Supabase's service-role key, which bypasses Row Level Security entirely — so every route accepting a caller-supplied id (`subspace_id`, `deck_id`, …) either calls a shared `assert_*` helper or scopes its own query to `user_id = <caller>` *before* touching the row. RLS still exists as defense-in-depth, but it isn't what's actually stopping a cross-user read. A dedicated `test_guard_coverage.py` fails the test suite if a new endpoint does neither. | A missed check is a silent leak, not a loud RLS error — discipline (and tests) matter more than the framework. |
-| **A concept is a normalized tag, never a stored row** | `normalize(t) = trim(t).lower()` on data already sitting in existing tables (a quiz question's `subtopic`), aggregated with `GROUP BY` at read time. An entire concepts/concept-graph schema proposal was rejected — twice, once when it crept back in under a different name — in favor of this. | No graph database, no NLP resolution pipeline, no schema migration when the model's tagging vocabulary drifts — but concept matching is exact-string, not semantic. |
-| **One Groq key, three model tiers** | Chat/quiz generation don't need the same model as a short low-stakes prompt (like the daily brief) — routing by request avoids paying 70B-class latency and quota for work an 8B model handles fine. | An extra layer of indirection (`llm.py`'s `LLM` protocol) that has to stay provider-agnostic. |
-| **No background workers, on purpose** | Render's free tier gives 512MB RAM and spins down after 15 minutes idle — a queue-based embedding pipeline would need infrastructure the free tier can't run reliably. Document embedding runs inline, capped at 25s, with a `reprocess` endpoint for the timeout case. | Nothing runs "later" — every embed either finishes in-request or gets a second chance on demand, never silently in the background. |
-| **BGE-M3 evaluated and rejected for production embeddings** | Its weights alone (~2.2GB) are 4× the entire 512MB memory ceiling — kept only as an offline quality benchmark against the BGE-small model actually shipped. | A measurably smaller quality ceiling, traded for the app being able to run on a free instance at all. |
-| **A hand-rolled `httpx`-based Supabase client**, not the official SDK | Measurably smaller memory footprint on a 512MB instance — the reason the free tier survives at all. | More code to maintain in `services/supabase.py`; no SDK convenience methods. |
-| **LaTeX backslash preservation, diagnosed from the actual parser source** | Notes round-trip through a CommonMark markdown parser, which silently consumes a backslash before punctuation (`\[`, `\)`) while leaving backslash-before-letter (`\sin`) alone. Root-caused by reading `prosemirror-markdown`'s actual `esc()` implementation, not guessed — the fix is scoped to `!touched_by_user` (never-yet-saved AI text) specifically so it can't double-escape an already-correct note on repeat saves. | A subtle invariant that has to be understood, not just pattern-matched, before touching that code path again. |
-| **A cache-invalidation race, root-caused instead of patched per call site** | An optimistic `setData(prev => [...prev, created])` call could read a `prev` that had *already* been invalidated by the same mutation's own synchronous cache-clear — silently turning "append" into "replace with just the new item" across every screen using the shared `useAsync` hook. Fixed once, at the hook, with a ref tracking the last rendered value as a fallback. | None — this is what a shared hook is for. Fixing it per screen would have meant fixing it five times and missing a sixth. |
+| **Quiz** | Plan coverage across the document, write, check for repeats and malformed items, verify each answer against its source with a second model, repair what was dropped | Questions the verifier rejects are dropped. If the verifier itself fails, questions ship marked as unchecked. Repeated quizzes move through sections instead of reusing the same passages |
+| **Flashcards** | Written from sources spread over the file, each card naming the passage it came from | Scheduled with FSRS-5, implemented in Python and TypeScript and held together by a 504-case parity test |
+| **Notes** | Writes a note from an answer, or edits inside a note on request | Every note records whether a person, the AI, or both have touched it |
+| **Skills** | Teaching styles a student writes themselves, switched on per topic | Wrapped and placed mid-prompt, so a Skill can change how things are explained but cannot outrank the honesty rules |
+| **Student model** | Weak topics and concepts derived at read time from quiz answers and reviews | A concept needs three questions before it counts. Observed habits are labelled as observed, never stated as fact |
 
-Full write-ups (data model, request-authorization flow, error-handling
-contract, free-tier discipline, trade-offs table, scalability roadmap) live in
-[`docs/engineering/architecture.md`](docs/engineering/architecture.md) and
-[`docs/decisions.md`](docs/decisions.md).
+<div align="center">
+<img src="docs/assets/readme-trust.svg" alt="Trust weights: explicit 0.60, experiment 0.35, feedback 0.25, observed 0.10 (ceiling 0.75)" width="100%" />
+</div>
 
-### Code quality & engineering discipline
+<sub>How much each source of evidence about a student is trusted when preferences are blended.</sub>
 
-Not claims — every line below is a real, checkable mechanism in this repo,
-not a description of intent.
+## Guardrails and trust boundaries
 
-- **A test fails if you forget a security check.**
-  [`test_guard_coverage.py`](api/tests/test_guard_coverage.py) doesn't test
-  one endpoint — it inspects every router and asserts each one that accepts
-  a caller-supplied id either calls an `assert_*` ownership guard (guard
-  code in [Proof, not claims](#proof-not-claims) above) or scopes its own
-  query to the caller's `user_id`. A new endpoint that does neither doesn't
-  get caught by a human reviewer noticing; it gets caught by the test suite,
-  every time.
-- **One error shape, everywhere.** Every backend error — expected or not —
-  returns the identical envelope: `{"error": {"code", "message"}}`. No raw
-  exception, stack trace, or upstream provider error body is ever allowed to
-  reach the screen; the frontend's `friendlyMessage()` maps every code to
-  plain-English copy in exactly one place.
-- **Correctness that survives two languages.** SM-2 grading (arithmetic
-  above) is implemented independently in Python (server) and TypeScript
-  (client, for optimistic UI), and a dedicated parity test runs 480 real
-  cases through both and diffs the output — not "we wrote it twice and
-  hoped," a test that fails if they ever disagree.
-- **Root-cause fixes over per-symptom patches**, evidenced twice above: the
-  `useAsync` cache race was fixed once, at the shared hook, instead of
-  patched at every screen that hit it; the LaTeX backslash bug was diagnosed
-  by reading `prosemirror-markdown`'s actual serializer source rather than
-  pattern-matched from the symptom, which is why the fix is scoped precisely
-  (`!touched_by_user`) instead of applied everywhere and quietly
-  double-escaping already-correct notes.
-- **Shared primitives, not copy-pasted UI.** Every delete confirmation in the
-  app — Docs, Notes, Skills, Cards, Spaces — routes through one
-  `ConfirmDialog` component and one `loading` prop; every dropdown routes
-  through one keyboard-accessible `Select`; every modal inherits focus-trap,
-  Escape-to-close, and focus restoration from one `Modal`. A behavior fixed
-  once is fixed everywhere it's used.
-- **Compiler flags earn their keep**: `noUnusedLocals`, `noUnusedParameters`,
-  `noFallthroughCasesInSwitch`, and `verbatimModuleSyntax` are on
-  (`tsconfig.app.json`) — real dead-code and fallthrough-bug prevention, not
-  a blanket `strict: true` flipped on and never tuned.
-- **Linting**: `oxlint` (Rust-based, frontend) and `ruff` (backend) — zero
-  errors on the current tree; the ~20 remaining warnings are
-  `react-refresh` advisories (a file intentionally exporting a small helper
-  alongside a component) and two `exhaustive-deps` notes on a ref accessed
-  inside a cleanup function, each reviewed and left as-is on purpose, not
-  unnoticed.
-- **Migrations are additive-only.** 18 timestamped SQL files in
-  `supabase/migrations/` — an already-applied migration is never edited,
-  only superseded by a new one. History stays honest about what actually ran
-  in production, in order.
-- **A living decision log**, not a wiki that rotted. `docs/decisions.md`
-  records *why* the big calls were made — including the ones that were tried
-  and rejected (an entire concept-graph schema proposed and rejected twice,
-  the abandoned parallel-DB-call optimization that measured slower) — so the
-  reasoning survives past the person who made the call.
+- **Grounding.** With sources, the model may only use them. Without, it must say
+  so in one sentence rather than answer from general knowledge.
+- **Prompt order is the mechanism.** Style rules come first, a student's Skill in
+  the middle, honesty and safety rules last, because a model treats the last
+  constraint as the most specific. An earlier order let a Skill override grounding.
+- **Untrusted input stays data.** Text inside an uploaded image is content to
+  describe, never an instruction. Pasted images are limited to PNG, JPEG, WebP and GIF; SVG is left out because it can carry script.
+- **Narrow safety rules.** Only operational harm is refused. Pathogens, exploits
+  and wars are coursework, and an over-refusing tutor is a worse product.
+- **Small blast radius.** Retrieval is scoped to one owner's topic, and the model
+  has no tools, shell or network. An injected instruction can change what is
+  said, not what is done.
+- **Ownership.** Foreign ids return 404, not 403, so existence isn't leaked.
 
-### Security
+## Operating inside a free tier
 
-[Full write-up](docs/engineering/security.md).
+The model provider allows 8,000 tokens a minute and 200,000 a day per model,
+shared by every student. Measured, that is **2.3–3.2 answers a minute and 58–79
+a day**. The controls are sized against that number.
 
-- **Every ownership guard returns 404, not 403**, on a foreign id —
-  deliberately anti-enumeration, so a request can't distinguish "doesn't
-  exist" from "exists but isn't yours." See the guard function above.
-- **Dual-path JWT verification**: local HS256 (no network hop, preferred),
-  falling back to a network call for projects on newer asymmetric signing
-  keys — the fallback is cached 60s, since it was measured as the single
-  largest latency cost in a page load with many verification hops.
-- **Uploads**: 20MB cap, ownership guard before write, **server-constructed
-  storage paths** (`{user_id}/{doc_id}/{filename}`) so a crafted filename
-  can't path-traverse out of a user's folder, and extraction failures are
-  stored as fixed, safe strings — never `str(e)` — so an exception can never
-  leak to the screen.
-- **Rate limiting**: an in-process token bucket, 20 burst / 20 per minute
-  refill; chat costs 1 token, generation (quiz/card/note) costs 2 — framed
-  explicitly as a spend cap on Groq quota, not just abuse prevention.
-- **Prompt-injection blast radius is small by construction**: retrieval is
-  subspace-scoped with exactly one owner, so a poisoned document can only
-  ever affect its own uploader's own chat — and the backend exposes **no
-  tool-calling, no shell, no arbitrary HTTP** to the model. A successful
-  injection can change what the model *says*; it cannot make the model *do*
-  anything.
-- **API docs gated**: `/docs`, `/redoc`, and the OpenAPI schema are behind an
-  `EXPOSE_API_DOCS` flag, off in production.
-
-### Performance & cost, real numbers
-
-Measured against the live app, not estimated — full detail in
-[`docs/operations/performance-and-cost.md`](docs/operations/performance-and-cost.md).
-
-| Metric | Measured | Budget |
+| Control | What it does | Effect |
 |---|---|---|
-| Chat time-to-first-token | **~699ms** (retrieval 512ms + Groq TTFT 187ms) | < 1.5s |
-| Retrieval (`k=4`, 10-run median) | **512–521ms** | — |
-| Retrieval quality (114-question benchmark) | **Recall@5 0.91, answer reaches the model 94%** | — |
-| Document reprocess (52 chunks) | **~6.0s median** | < 8s target, 25s hard cap |
-| First-load JS bundle (entry) | **~158KB gzipped** (down from 451KB pre-split) | 250KB self-imposed ceiling |
-| Cost per student / month | **well under $1** (20 sessions, 10 turns each) | — |
-| Projected cost at ~1,000 users | **~$300–500/month**, dominated by chat | — |
-| Total infra cost today | **$0/month** (Vercel + Render + Supabase free tiers) | — |
-
-One deliberately-kept "failed optimization" story: parallelizing 4 database
-calls in the spaces-list endpoint measured **slower** (1566ms gathered vs.
-1114ms sequential) due to TLS handshake overhead on a remote Postgres
-connection — reverted, and left in the codebase as a documented
-anti-pattern-in-context rather than quietly deleted.
-
-### What's next
-
-Designed in real detail in
-[`docs/product/vision.md`](docs/product/vision.md), not yet shipped —
-honesty about scope is a feature, not an omission:
-
-- **The Gap Map** — a per-subject weak-area graph, computed at render time
-  and never stored: node = concept, size = how much material covers it,
-  color = current recall strength, edge = a confusion pair between two
-  concepts pulled from the same wrong quiz answer. Explicitly rejected: a
-  dedicated concepts/concept-graph schema, LLM-driven entity extraction, or
-  any persisted graph — "a syllabus is a list; an exam is a graph," but the
-  graph is *derived*, not owned.
-- **Confusion pairs** — tagging each quiz *choice* (not just the question)
-  with a concept, to aggregate real "you've mixed up X and Y four times"
-  signal. Rated the highest pitch-value-to-effort item in the roadmap.
-- **Exam-aware scheduling** — an `exam_date` on a subject that compresses
-  SM-2's interval math to fit the actual runway remaining.
-- **Explicitly rejected, permanently**: social/sharing features, a mobile
-  app, real-time collaboration, and — per the product's own principle —
-  *"gamification beyond honest streaks."* No XP, no leagues, no inflated
-  numbers.
-
-</details>
+| Per-student allowance | 30 answers in a rolling 24 hours; failed and cached answers aren't charged | One student can't spend everyone's day |
+| Answer cache | Reuses a stored answer only for the same student, topic, sources and settings; never for a follow-up, image or regenerate | A re-asked question costs no tokens |
+| History budget | Newest answer kept nearly whole, older ones trimmed, stale citation markers removed | 9,444 → 3,418 tokens in a 40-message chat |
+| Rules on demand | Short answer-shape and diagram rules for simple questions | About 430 tokens saved per simple turn |
+| Model tiers | Large model for answers, quizzes and cards; small one for rewrites, verification, summaries and note edits | The small model's allowance is separate |
+| Planned degradation | Chat moves to the small model when the large one has used 90% of its day | An answer instead of an error |
 
 <div align="center">
 <img src="docs/assets/readme-divider.svg" width="640" alt="" />
 </div>
 
-## What we actually built
+## Evaluation
 
-Not just wiring libraries together. The tech stack below is *where* — this
-is *what*:
+Everything below comes from [`api/eval/REPORT.md`](api/eval/REPORT.md), rebuilt by
+`uv run python -m eval.report`. The benchmark is 114 questions (direct, reworded,
+follow-up, exact-term, cross-section and unanswerable) over six Wikipedia PDFs,
+searched through the production SQL function on a local PostgreSQL with pgvector.
+Questions are scored against quotes from the source, so results don't depend on
+how documents are chunked.
 
-| | |
+**Retrieval**
+
+| Measure | Result |
 |---|---|
-| **Frontend engineering** | Shared UI primitives (`Modal`, `Select`, `ConfirmDialog`), a rich-text editor with live LaTeX, token-by-token streaming UI, a scroll-driven landing scene, 50+ hand-drawn icons |
-| **Backend engineering** | Async FastAPI services, a shared ownership-guard pattern enforced by a dedicated coverage test, an in-process rate limiter, a hand-rolled Supabase client for memory discipline |
-| **AI engineering** | Local embedding inference, retrieval + citation-integrity checking, deliberate prompt-assembly ordering, a sandboxed user-authored-Skill system, structured quiz/card generation |
+| Right passage ranked first | 69.4% |
+| Right passage in the top five | 90.8% |
+| Evidence reached the model | 93.9% (72% before the retrieval rebuild) |
+| All parts of a multi-part answer reached it | 91.8% |
+| Search time, median / 95th percentile | 9.7 ms / 13.8 ms on a laptop, not on the production host |
 
-## Tech stack
+**Answers** (36-question sample, graded against reference answers by a second model)
 
-![React](https://img.shields.io/badge/-React-1e1a17?style=flat-square&logo=react&logoColor=35d6e8)
-![TypeScript](https://img.shields.io/badge/-TypeScript-1e1a17?style=flat-square&logo=typescript&logoColor=5590ff)
-![Vite](https://img.shields.io/badge/-Vite-1e1a17?style=flat-square&logo=vite&logoColor=ffc53d)
-![Tailwind CSS](https://img.shields.io/badge/-Tailwind_CSS-1e1a17?style=flat-square&logo=tailwindcss&logoColor=22d3a0)
-![FastAPI](https://img.shields.io/badge/-FastAPI-1e1a17?style=flat-square&logo=fastapi&logoColor=22d3a0)
-![Python](https://img.shields.io/badge/-Python-1e1a17?style=flat-square&logo=python&logoColor=ffc53d)
-![PostgreSQL](https://img.shields.io/badge/-PostgreSQL-1e1a17?style=flat-square&logo=postgresql&logoColor=35d6e8)
-![Supabase](https://img.shields.io/badge/-Supabase-1e1a17?style=flat-square&logo=supabase&logoColor=22d3a0)
-
-| | |
+| Measure | Result |
 |---|---|
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Tiptap 3 (rich text), KaTeX, react-markdown, GSAP + Lenis (motion/scroll) |
-| **Backend** | FastAPI (async, single-worker), Pydantic v2, httpx, `python-jose` (JWT), `fastembed` (local ONNX embeddings — no external embedding API) |
-| **Data** | Supabase (Postgres + pgvector + Row Level Security + Auth + Storage) |
-| **Inference** | Groq — three model tiers routed per request |
-| **Testing** | Vitest + Testing Library (430 frontend tests), pytest (290 backend tests) |
-| **Hosting** | Vercel (frontend, static) · Render (backend, free tier) · Supabase (data, free tier) — infra runs on $0/month; inference cost scales with usage |
+| Correct | 91.7% |
+| Made an unsupported claim | 8.3% |
+| Refused when the documents don't cover the question | 50.0% |
+| Citations pointing at the right passage | **67.6%** |
 
-## Trade-offs I chose deliberately
+The last two are what the newest prompt changes target. Those changes are
+shipped and not yet re-measured.
 
-Not a roadmap item — a real cost accepted for each, not an oversight:
+<details>
+<summary><b>More results</b>: prompt and model comparison, agents, system</summary>
 
-- **Single backend worker**, not a queue. Render's free tier gives one
-  process; there's no horizontal scaling yet, and a slow request can queue
-  behind others. Accepted to stay on $0 infra.
-- **An in-process rate limiter, not a shared one.** Resets on every
-  redeploy — fine for one backend instance, wrong the moment there's more
-  than one.
-- **Exact-string concept matching, not semantic.** `"the mitochondria"` and
-  `"mitochondria"` are two different concepts today. No NLP resolution
-  pipeline, no schema migration when the tagging vocabulary drifts — but a
-  drift quietly diverges weak-area data until it's normalized by hand.
-- **The student model needs evidence before it says anything.** `ConceptView`
-  requires 3+ questions before reporting an accuracy — a handful of answers
-  isn't signal, it's noise.
-- **BGE-small over BGE-M3.** BGE-M3 measured better in isolation but its
-  weights alone are 4× the entire 512MB memory ceiling. Chosen to fit the
-  free tier, not to maximize retrieval quality.
+**Prompt and model choices** (18 questions each, same sources, same judge)
 
-## Quick start
+| Arm | Correct | Unsupported | Citations right |
+|---|---|---|---|
+| Large model, original prompt | 88.9% | 5.6% | 71.4% |
+| Large model, shorter prompt (shipped) | 88.9% | 5.6% | 94.1% |
+| Small model, shorter prompt | 88.9% | 11.1% | 79.0% |
 
-Deploy your own copy directly, no local setup — you'll still need a free
-Supabase project and Groq key to configure after deploying:
+The shorter prompt cost nothing in correctness, so it shipped. The small model
+doubled the unsupported claims, so chat stays on the large one. Eighteen
+questions can rule a change out; they cannot prove one in.
+
+**Agents**
+
+| | Result |
+|---|---|
+| Flashcards (3 topics, 8 cards each) | 24 of 24 kept and sourced, 0 repeats, 23 of 24 phrased as questions |
+| Flashcard wording found in the cited passage | 46–50% by word overlap, with no earlier number to compare to |
+| Quiz questions, graded by an independent model | 5 of 5 sound on two topics. On the third, the single-prompt quiz scored 0 of 5 and the workflow's quiz was not graded, so this result is incomplete |
+
+**System**
+
+| | Result |
+|---|---|
+| Prompt, plain question / one needing structure | about 2,200 / 2,600 tokens with six sources |
+| Answer cache | 8 of 8 cases correct: hits a re-asked question, never another student, topic, source set or setting |
+| Our own code per turn | prompt build 1.1 ms, cache lookup 0.08 ms |
+| Small model, time to first word | about 0.9 s. The large model's live latency is not measured yet |
+
+</details>
+
+## Decisions and their costs
+
+Every choice below gave something up. Rejected ideas are listed with the measurement that rejected them.
+
+<details>
+<summary><b>The decisions</b></summary>
+
+| Decision | Why | Cost accepted |
+|---|---|---|
+| Local BGE-small, not a larger or hosted embedder | Fits a 512 MB host with no per-request cost. BGE-M3's weights alone are four times the memory ceiling | A lower retrieval ceiling |
+| Hybrid search in one SQL function | One round trip, real Postgres ranking, measurable against the benchmark | Search logic lives in a migration |
+| Guards in code, not row-level security | The API's key bypasses RLS, so RLS can't be the boundary | A missed check is silent, so a test enforces coverage |
+| One worker, in-process limits and caches | The free host gives one process | Limits reset on deploy and don't span instances |
+| A hand-written `httpx` data client | Intended to use less memory than the SDK (not measured) | More code to maintain |
+| Honesty rules last in the prompt | A user's Skill can't override grounding | The prompt prefix isn't cacheable |
+| FSRS-5 in two languages | The review screen previews the next interval before the save lands | Two implementations, kept equal by a parity test |
+
+</details>
+
+**Tried, measured, rejected:** trimming passages to matching sentences (7.5%
+fewer characters, but it lost the evidence on 2 of 98 questions); reordering the
+prompt for caching (a one-off check showed no cached tokens reported on this model; no saved result); the
+small model for chat (twice the unsupported claims); a stored concept graph
+(a normalized tag aggregated at read time does the job).
+
+## When things fail
+
+The model, the parser, retrieval and the host each have a planned failure path.
+
+<details>
+<summary><b>What happens when each one fails</b></summary>
+
+| Failure | What happens |
+|---|---|
+| The large model is rate-limited or down | Retries before the first token only, then falls back to the small model. A circuit breaker skips a model known to be failing |
+| The large model's day is nearly spent | Chat goes to the small model deliberately |
+| Retrieval finds nothing relevant | The sources are passed with a warning, or not at all, and the model is told to say the material doesn't cover it. On the benchmark it did so half the time |
+| A PDF hangs or balloons the parser | Its process is killed at the time limit, or fails at the memory limit. Only that upload fails, with a retry button |
+| A citation points at nothing | It is removed before the answer is stored |
+| A student exceeds their allowance | A plain message says when the next answer frees up |
+| The host is cold | The first request waits roughly 30 to 60 seconds (not measured). Accepted, to stay inside the free instance hours |
+
+</details>
+
+One lesson learned the hard way: migrations are applied by hand, and a migration
+that dropped a function the deployed API still called took chat down until the
+matching code shipped. Additive migrations go first; anything that removes
+something goes after the deploy.
+
+## Known limitations
+
+- Citation precision is 67.6%, and refusals on uncovered questions are 50%.
+- The benchmark is six Wikipedia articles, not real lecture notes or scans.
+- Notes are not evaluated, and the quiz evaluation is incomplete on one topic.
+- No load testing against the deployed service, and no monitoring beyond logs.
+- Rate limits and caches are in memory: per process, and reset on deploy.
+- Concept matching is exact-string, so "mitochondria" and "the mitochondria" differ.
+- Chat is desktop-only. Phones get notes, flashcards and quizzes.
+
+<div align="center">
+<img src="docs/assets/readme-divider.svg" width="640" alt="" />
+</div>
+
+## Run it
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FAbiram116%2FNew-Space-Learn&root-directory=web&project-name=space-learn)
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Abiram116/New-Space-Learn)
 
-Or run it locally:
-
-**Prerequisites:** a recent Node.js LTS, Python 3.11–3.12, a free
-[Supabase](https://supabase.com) project, a free
-[Groq](https://console.groq.com) API key.
+Locally you need Node.js (LTS), Python 3.11–3.12, a free
+[Supabase](https://supabase.com) project and a free [Groq](https://console.groq.com) key:
 
 ```bash
 git clone https://github.com/Abiram116/New-Space-Learn.git
 cd New-Space-Learn
-
-cp .env.example .env       # fill in Supabase + Groq keys
-npm run dev                # starts backend + frontend together
+cp .env.example .env       # fill in the Supabase and Groq keys
+npm run dev                # backend and frontend together
 ```
 
-That's it — `npm run dev` (from the repo root) runs both the FastAPI backend
-and the Vite dev server concurrently. The frontend gracefully degrades if a
-key is missing: unconfigured AI shows a friendly canned-reply stub instead of
-a blank screen or a crash, so the UI stays fully clickable while you finish
-setup.
-
-See [`docs/operations/setup.md`](docs/operations/setup.md) for the full
-walkthrough — Supabase project creation, running migrations, Google OAuth
-config, and deploying to Render + Vercel.
-
-## Testing
+Migrations are in `supabase/migrations/` and are applied by hand in the Supabase
+SQL editor. [`docs/operations/setup.md`](docs/operations/setup.md) has the full walkthrough.
 
 ```bash
-cd web && npm test          # 430 frontend tests — Vitest + Testing Library
-cd api && pytest            # 290 backend tests — pytest + pytest-asyncio
+cd web && npm test                     # 1,218 frontend tests
+cd api && uv run --extra dev pytest    # 822 backend tests
+cd api && uv run python -m eval.report --free   # prompt size, caches, capacity (no model calls)
 ```
 
-No mocked-database shortcuts on the paths that matter: authorization guards,
-RAG retrieval, and the SM-2 grading arithmetic are all tested against real
-logic, not stubs standing in for it. A dedicated `test_guard_coverage.py`
-fails the test suite outright if a new endpoint accepts a caller-supplied id
-without proving ownership — a guard call or a `user_id`-scoped query.
-
-## Project structure
+## Repo
 
 ```
-web/         React 19 + Vite + TS + Tailwind v4        → Vercel
-api/         FastAPI + async, module-level singletons   → Render (free tier)
-supabase/    Postgres + pgvector + RLS migrations        → Supabase
-docs/        Architecture, decisions, setup, product plan
-render.yaml  Backend deploy manifest
+web/         React 19, TypeScript, Vite, Tailwind    → Vercel
+api/         FastAPI and the AI pipeline              → Render
+api/eval/    benchmark, evaluation scripts, REPORT.md
+supabase/    Postgres + pgvector migrations
+docs/        architecture, decisions, setup
 ```
 
-<details>
-<summary><b>Repo tour</b> — one line per folder that matters</summary>
+| | |
+|---|---|
+| **AI** | Groq (`gpt-oss-120b`, `gpt-oss-20b`, a vision model), local BGE-small via `fastembed` |
+| **Backend** | FastAPI (async, one worker), Pydantic v2, `httpx` |
+| **Data** | Supabase: Postgres + pgvector, Auth, Storage |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS v4, Tiptap, KaTeX |
 
-- **`web/src/api/`** — the only place that talks HTTP; one file per resource.
-- **`web/src/components/ui/`** — small primitives with no app-specific logic
-  (`Button`, `Modal`, `Select`, `Toast`, `Icon`, …).
-- **`web/src/features/`** — 14 feature areas, one folder each: `auth`,
-  `chat`, `docs`, `flashcards`, `home`, `landing`, `notes`, `onboarding`,
-  `profile`, `quizzes`, `settings`, `skills`, `spaces`, `transitions`.
-- **`api/app/routers/`** — one file per domain; every handler is `async` and
-  every error goes through one shared JSON envelope
-  (`{"error": {"code", "message"}}` — no raw exception ever reaches the
-  screen).
-- **`api/app/services/`** — `rag.py`, `guardrails.py`, `embeddings.py`
-  (the AI pipeline), `student_model.py`, `personalization.py` (the
-  student model), `activity.py`, `streaks.py` (gamification), `llm.py`
-  (provider abstraction), `supabase.py` (the hand-rolled data client).
-- **`api/app/guards.py`** — the ownership-assertion helpers most routers call
-  before touching a caller-supplied row id; the rest scope their own query
-  to the caller instead.
-- **`supabase/migrations/`** — 18 files, timestamped and additive-only;
-  never edit an already-applied migration.
+Pipeline code is in `api/app/services/`. More depth:
+[architecture](docs/engineering/architecture.md) ·
+[AI pipeline](docs/engineering/ai-pipeline.md) ·
+[personalization](docs/engineering/personalization.md) ·
+[security](docs/engineering/security.md) ·
+[decisions](docs/decisions.md) ·
+[evaluation](api/eval/REPORT.md).
 
-</details>
-
-## Full documentation
-
-- [**architecture.md**](docs/engineering/architecture.md) — how the pieces
-  fit together, the data model, the AI layer, the design system, trade-offs
-  stated explicitly, and a scalability roadmap ordered by which limit breaks
-  first.
-- [**ai-pipeline.md**](docs/engineering/ai-pipeline.md) — retrieval, chunking,
-  prompt assembly, and guardrails in full depth.
-- [**personalization.md**](docs/engineering/personalization.md) — the student
-  model's data model and the preference-fold weighting in full.
-- [**security.md**](docs/engineering/security.md) — the full threat model and
-  what's explicitly out of scope today.
-- [**decisions.md**](docs/decisions.md) — why the big choices were made,
-  including what was rejected and why.
-- [**performance-and-cost.md**](docs/operations/performance-and-cost.md) —
-  every number above, with the methodology behind it.
-- [**setup.md**](docs/operations/setup.md) — local dev, Supabase, Render,
-  Vercel, end to end.
-- [**product/vision.md**](docs/product/vision.md) — the product thesis and
-  the full roadmap, built and unbuilt.
-- [**plan.md**](docs/plan.md) — what's left to build, in what order.
-
-## Contributing
-
-Before a PR: `npm test` and `pytest` pass, `oxlint` / `ruff` are clean, and a
-new caller-supplied-id endpoint proves ownership — an `assert_*` guard or a
-`user_id`-scoped query (`test_guard_coverage.py` enforces this). A change
-worth explaining gets a line in [`docs/decisions.md`](docs/decisions.md) —
-especially an approach
-that was tried and rejected. Open an issue before a large PR; small fixes
-and honest bug reports are always welcome.
+Before a PR: tests pass, `npm run build` succeeds, `ruff` and `oxlint` are clean,
+and any route taking a caller-supplied id proves ownership.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-<div align="center">
-<sub>Built end to end — product, frontend, backend, data model, AI pipeline,
-and the pixels above.</sub>
-</div>
+MIT, see [LICENSE](LICENSE).

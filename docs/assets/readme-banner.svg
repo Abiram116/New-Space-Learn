@@ -47,10 +47,36 @@
     </linearGradient>
   </defs>
 
+  <style>
+    .talk{animation:talk 12s ease-out infinite}
+    .led{animation:blink 1.6s steps(1) infinite}
+    .cur{animation:blink 1.1s steps(1) infinite}
+    .ask{animation:ask 6.4s ease-out infinite}
+    .ans{animation:ans 6.4s ease-out infinite}
+    @keyframes ask{0%,30%,100%{opacity:1}6%{opacity:.6}}
+    @keyframes ans{0%,12%{opacity:.55}24%,100%{opacity:1}}
+    .scan{animation:scan 3.2s ease-in-out infinite}
+    .hop{animation:hop 7s linear infinite;opacity:0}
+    .chip{animation:chip 6.4s ease-out infinite}
+    .bob{animation:bob 2.8s ease-in-out infinite}
+    .eye{animation:wink 4.6s steps(1) infinite;transform-box:fill-box;transform-origin:center}
+    .tip{animation:glow 1.8s ease-in-out infinite}
+    .say{animation:say 12s steps(1) infinite;opacity:0}
+    @keyframes talk{0%,8%,100%{transform:none}3%{transform:translateY(-4px)}}
+    @keyframes blink{50%{opacity:0}}
+    @keyframes scan{0%,100%{transform:translateY(0)}50%{transform:translateY(66px)}}
+    @keyframes hop{0%{opacity:0}5%{opacity:.85}14%{opacity:0}100%{opacity:0}}
+    @keyframes chip{0%,100%{opacity:.6}10%,80%{opacity:1}}
+    @keyframes bob{50%{transform:translateY(-3px)}}
+    @keyframes wink{0%,92%{transform:none}94%{transform:scaleY(.15)}98%{transform:none}}
+    @keyframes glow{50%{opacity:.45}}
+    @keyframes say{0%{opacity:1}25%{opacity:0}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}.say{opacity:0}.say.first{opacity:1}}
+  </style>
+
   <!-- Canvas: radial depth (surface → canvas), pixel grid on top -->
   <rect width="1200" height="320" fill="url(#glow)"/>
   <rect width="1200" height="320" fill="url(#grid)" opacity="0.5"/>
-
   <!-- Soft corner glows, one per accent hue — feathered, not hard-edged -->
   <circle cx="120" cy="90" r="220" fill="url(#corner-brand)"/>
   <circle cx="1080" cy="230" r="220" fill="url(#corner-sky)"/>
@@ -73,18 +99,104 @@
 
   <!-- Subtitle, terminal style -->
   <text x="600" y="192" text-anchor="middle" font-family="'Courier New', monospace"
-        font-size="18" letter-spacing="4" fill="#c4b5aa">&gt; UPLOAD.CHAT.NOTE.REHEARSE.PROVE_</text>
+        font-size="18" letter-spacing="4" fill="#c4b5aa">&gt; RAG.AGENTS.GUARDRAILS.EVALS<tspan class="cur">_</tspan></text>
 
   <!-- Palette strip — the real seven "foil" tones, each swatch a base→deep gradient -->
   <g>
-    <rect x="472" y="238" width="28" height="28" fill="url(#sw-brand)"/>
-    <rect x="510" y="238" width="28" height="28" fill="url(#sw-sky)"/>
-    <rect x="548" y="238" width="28" height="28" fill="url(#sw-mint)"/>
-    <rect x="586" y="238" width="28" height="28" fill="url(#sw-sun)"/>
-    <rect x="624" y="238" width="28" height="28" fill="url(#sw-coral)"/>
-    <rect x="662" y="238" width="28" height="28" fill="url(#sw-azure)"/>
-    <rect x="700" y="238" width="28" height="28" fill="url(#sw-jade)"/>
+    <rect x="472" y="232" width="28" height="28" fill="url(#sw-brand)"/>
+    <rect x="510" y="232" width="28" height="28" fill="url(#sw-sky)"/>
+    <rect x="548" y="232" width="28" height="28" fill="url(#sw-mint)"/>
+    <rect x="586" y="232" width="28" height="28" fill="url(#sw-sun)"/>
+    <rect x="624" y="232" width="28" height="28" fill="url(#sw-coral)"/>
+    <rect x="662" y="232" width="28" height="28" fill="url(#sw-azure)"/>
+    <rect x="700" y="232" width="28" height="28" fill="url(#sw-jade)"/>
   </g>
-  <text x="600" y="292" text-anchor="middle" font-family="'Courier New', monospace"
-        font-size="11" letter-spacing="3" fill="#9c8b80">SEVEN FOIL TONES // ONE DESIGN SYSTEM</text>
+  <text x="600" y="284" text-anchor="middle" font-family="'Courier New', monospace"
+        font-size="12" letter-spacing="3" fill="#c4b5aa">READ · EMBED · RETRIEVE · CITE // QUIZ · CARDS · NOTES</text>
+  <!-- A light runs along the seven tones: one document going through the pipeline -->
+  <rect class="hop" opacity="0" x="472" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:0s"/>
+  <rect class="hop" opacity="0" x="510" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:1s"/>
+  <rect class="hop" opacity="0" x="548" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:2s"/>
+  <rect class="hop" opacity="0" x="586" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:3s"/>
+  <rect class="hop" opacity="0" x="624" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:4s"/>
+  <rect class="hop" opacity="0" x="662" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:5s"/>
+  <rect class="hop" opacity="0" x="700" y="232" width="28" height="28" fill="#fff6ea" style="animation-delay:6s"/>
+
+  <!-- Left: retrieval. your file, your question, and an answer that names the pages it came from -->
+  <text x="58" y="56" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="3" fill="#ff8b76">// RAG</text>
+  <g>
+    <path d="M62 82h44l14 14v62H62z" fill="#262119" stroke="#ff5a3c" stroke-width="2"/><path d="M106 82v14h14" fill="none" stroke="#ff5a3c" stroke-width="2"/>
+    <rect x="70" y="104" width="30" height="3" fill="#5a4a40"/>
+    <rect x="70" y="114" width="44" height="3" fill="#5a4a40"/>
+    <rect x="70" y="124" width="38" height="3" fill="#5a4a40"/>
+    <rect x="70" y="134" width="44" height="3" fill="#5a4a40"/>
+    <rect x="70" y="144" width="24" height="3" fill="#5a4a40"/>
+    <rect class="scan" x="60" y="88" width="62" height="3" fill="#ff5a3c" opacity=".85"/>
+  </g>
+  <!-- file → question → answer that names its pages -->
+  <path d="M130 120h14M139 115l5 5-5 5" fill="none" stroke="#8a776a" stroke-width="2"/>
+  <g class="ask"><rect x="156" y="88" width="176" height="26" fill="#1e1a17" stroke="#ff5a3c" stroke-width="2"/>
+    <text x="166" y="105" font-family="'Courier New', monospace" font-size="12" fill="#f5ede4">Q: what is 2NF?</text></g>
+  <g class="ans"><rect x="156" y="124" width="176" height="34" fill="#1e1a17" stroke="#35d6e8" stroke-width="2"/>
+    <text x="166" y="138" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa">A: no partial key</text>
+    <text x="166" y="151" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa">dependencies <tspan fill="#ffdd8f">[1][2]</tspan></text></g>
+  <g class="chip" style="animation-delay:0.8s"><rect x="62" y="180" width="70" height="20" fill="#1e1a17" stroke="#3b3028" stroke-width="2"/><text x="97" y="194" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" fill="#ffdd8f">[1] p.4</text></g>
+  <g class="chip" style="animation-delay:1.3s"><rect x="144" y="180" width="70" height="20" fill="#1e1a17" stroke="#3b3028" stroke-width="2"/><text x="179" y="194" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" fill="#ffdd8f">[2] p.9</text></g>
+  <g class="chip" style="animation-delay:1.8s"><rect x="226" y="180" width="76" height="20" fill="#1e1a17" stroke="#3b3028" stroke-width="2"/><text x="264" y="194" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" fill="#ffdd8f">[3] p.31</text></g>
+  <text x="62" y="222" font-family="'Courier New', monospace" font-size="11" letter-spacing="1" fill="#c4b5aa">ask your file, get the page</text>
+
+  <!-- Right: the agents, as the four companions from the app -->
+  <text x="1142" y="56" text-anchor="end" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="3" fill="#92eaf4">// AGENTS</text>
+  <g transform="translate(12 8)">
+<g class="talk" style="animation-delay:0s">  <g class="bob" style="animation-delay:0.00s">
+    <rect class="tip" x="886" y="92" width="8" height="8" fill="#ffc53d"/><rect x="888" y="100" width="4" height="4" fill="#b33f2a"/>
+    <rect x="870" y="104" width="40" height="28" fill="#ff5a3c"/><rect x="866" y="112" width="4" height="12" fill="#b33f2a"/><rect x="910" y="112" width="4" height="12" fill="#b33f2a"/>
+    <rect x="874" y="108" width="32" height="20" fill="#1a1411"/>
+    <rect class="eye" x="880" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:0.0s"/><rect class="eye" x="894" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:0.0s"/>
+    <rect x="887" y="123" width="6" height="2" fill="#fff6ea"/>
+    <rect x="878" y="132" width="24" height="12" fill="#b33f2a"/><rect x="870" y="134" width="6" height="6" fill="#ff5a3c"/><rect x="904" y="134" width="6" height="6" fill="#ff5a3c"/>
+  </g></g>
+  <text x="890" y="162" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="2" fill="#f5ede4">NOVA</text>
+  <text x="890" y="175" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" letter-spacing="1" fill="#c4b5aa">tutor</text>
+<g class="talk" style="animation-delay:3s">  <g class="bob" style="animation-delay:0.35s">
+    <rect class="tip" x="958" y="92" width="8" height="8" fill="#92eaf4"/><rect x="960" y="100" width="4" height="4" fill="#3b65b3"/>
+    <rect x="942" y="104" width="40" height="28" fill="#5590ff"/><rect x="938" y="112" width="4" height="12" fill="#3b65b3"/><rect x="982" y="112" width="4" height="12" fill="#3b65b3"/>
+    <rect x="946" y="108" width="32" height="20" fill="#1a1411"/>
+    <rect class="eye" x="952" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:1.1s"/><rect class="eye" x="966" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:1.1s"/>
+    <rect x="959" y="123" width="6" height="2" fill="#fff6ea"/>
+    <rect x="950" y="132" width="24" height="12" fill="#3b65b3"/><rect x="942" y="134" width="6" height="6" fill="#5590ff"/><rect x="976" y="134" width="6" height="6" fill="#5590ff"/>
+  </g></g>
+  <text x="962" y="162" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="2" fill="#f5ede4">FLIP</text>
+  <text x="962" y="175" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" letter-spacing="1" fill="#c4b5aa">cards</text>
+<g class="talk" style="animation-delay:6s">  <g class="bob" style="animation-delay:0.70s">
+    <rect class="tip" x="1030" y="92" width="8" height="8" fill="#ff3d8b"/><rect x="1032" y="100" width="4" height="4" fill="#b38a2b"/>
+    <rect x="1014" y="104" width="40" height="28" fill="#ffc53d"/><rect x="1010" y="112" width="4" height="12" fill="#b38a2b"/><rect x="1054" y="112" width="4" height="12" fill="#b38a2b"/>
+    <rect x="1018" y="108" width="32" height="20" fill="#1a1411"/>
+    <rect class="eye" x="1024" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:2.2s"/><rect class="eye" x="1038" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:2.2s"/>
+    <rect x="1031" y="123" width="6" height="2" fill="#fff6ea"/>
+    <rect x="1022" y="132" width="24" height="12" fill="#b38a2b"/><rect x="1014" y="134" width="6" height="6" fill="#ffc53d"/><rect x="1048" y="134" width="6" height="6" fill="#ffc53d"/>
+  </g></g>
+  <text x="1034" y="162" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="2" fill="#f5ede4">POP</text>
+  <text x="1034" y="175" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" letter-spacing="1" fill="#c4b5aa">quiz</text>
+<g class="talk" style="animation-delay:9s">  <g class="bob" style="animation-delay:1.05s">
+    <rect class="tip" x="1102" y="92" width="8" height="8" fill="#b8ff3c"/><rect x="1104" y="100" width="4" height="4" fill="#189470"/>
+    <rect x="1086" y="104" width="40" height="28" fill="#22d3a0"/><rect x="1082" y="112" width="4" height="12" fill="#189470"/><rect x="1126" y="112" width="4" height="12" fill="#189470"/>
+    <rect x="1090" y="108" width="32" height="20" fill="#1a1411"/>
+    <rect class="eye" x="1096" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:3.3s"/><rect class="eye" x="1110" y="113" width="6" height="8" fill="#fff6ea" style="animation-delay:3.3s"/>
+    <rect x="1103" y="123" width="6" height="2" fill="#fff6ea"/>
+    <rect x="1094" y="132" width="24" height="12" fill="#189470"/><rect x="1086" y="134" width="6" height="6" fill="#22d3a0"/><rect x="1120" y="134" width="6" height="6" fill="#22d3a0"/>
+  </g></g>
+  <text x="1106" y="162" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="2" fill="#f5ede4">JOT</text>
+  <text x="1106" y="175" text-anchor="middle" font-family="'Courier New', monospace" font-size="11" letter-spacing="1" fill="#c4b5aa">notes</text>
+  </g>
+  <text class="say first" x="1142" y="222" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa" style="animation-delay:0s" opacity="1">&gt; nova: answered from p.4</text>
+  <text class="say" opacity="0" x="1142" y="222" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa" style="animation-delay:3s">&gt; flip: 8 cards due today</text>
+  <text class="say" opacity="0" x="1142" y="222" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa" style="animation-delay:6s">&gt; pop: verified 5 of 5</text>
+  <text class="say" opacity="0" x="1142" y="222" text-anchor="end" font-family="'Courier New', monospace" font-size="11" fill="#c4b5aa" style="animation-delay:9s">&gt; jot: note saved</text>
+
+  <!-- Scoreline, like a cartridge's HUD: the measured results -->
+  <g font-family="'Courier New', monospace" font-size="11" font-weight="700" letter-spacing="2" text-anchor="middle">
+    <rect class="led" x="320" y="48" width="8" height="8" fill="#b8ff3c"/>
+    <text x="608" y="56" fill="#d8ff92">EVIDENCE FOUND 93.9%  //  ANSWERS CORRECT 91.7%  //  TESTS 2040</text>
+  </g>
 </svg>

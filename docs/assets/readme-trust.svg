@@ -18,6 +18,11 @@
     </linearGradient>
   </defs>
 
+  <style>
+    .bar{transform-box:fill-box;transform-origin:left;animation:grow 10s cubic-bezier(.2,.8,.2,1) infinite backwards}
+    @keyframes grow{0%{transform:scaleX(0)}14%,100%{transform:scaleX(1)}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  </style>
   <rect width="1200" height="260" fill="#1e1a17"/>
   <text x="40" y="34" font-family="'Courier New', monospace" font-size="14" letter-spacing="1.5"
         fill="#d3c5b9">TRUST WEIGHTS — WHAT THE PERSONALIZATION LAYER BELIEVES, AND HOW MUCH</text>
@@ -36,22 +41,22 @@
   </g>
 
   <!-- explicit — 0.60 -->
-  <text x="40" y="80" font-family="'Courier New', monospace" font-size="15" fill="#ffb3a0">explicit</text>
-  <rect x="280" y="66" width="700" height="26" fill="url(#bar-brand)"/>
+  <text x="40" y="85" font-family="'Courier New', monospace" font-size="15" fill="#ffb3a0">explicit</text>
+  <rect class="bar" style="animation-delay:0.0s" x="280" y="66" width="700" height="26" fill="url(#bar-brand)"/>
   <text x="990" y="85" font-family="'Courier New', monospace" font-size="15" fill="#ff8b76">0.60</text>
 
   <!-- experiment — 0.35 -->
-  <text x="40" y="130" font-family="'Courier New', monospace" font-size="15" fill="#92eaf4">experiment</text>
-  <rect x="280" y="116" width="408" height="26" fill="url(#bar-sky)"/>
+  <text x="40" y="135" font-family="'Courier New', monospace" font-size="15" fill="#92eaf4">experiment</text>
+  <rect class="bar" style="animation-delay:1.0s" x="280" y="116" width="408" height="26" fill="url(#bar-sky)"/>
   <text x="698" y="135" font-family="'Courier New', monospace" font-size="15" fill="#92eaf4">0.35</text>
 
   <!-- feedback — 0.25 -->
-  <text x="40" y="180" font-family="'Courier New', monospace" font-size="15" fill="#ffdd8f">feedback</text>
-  <rect x="280" y="166" width="292" height="26" fill="url(#bar-sun)"/>
+  <text x="40" y="185" font-family="'Courier New', monospace" font-size="15" fill="#ffdd8f">feedback</text>
+  <rect class="bar" style="animation-delay:2.0s" x="280" y="166" width="292" height="26" fill="url(#bar-sun)"/>
   <text x="582" y="185" font-family="'Courier New', monospace" font-size="15" fill="#ffdd8f">0.25</text>
 
   <!-- observed — 0.10, ceiling 0.75 -->
-  <text x="40" y="230" font-family="'Courier New', monospace" font-size="15" fill="#86e9c9">observed</text>
-  <rect x="280" y="216" width="117" height="26" fill="url(#bar-jade)"/>
+  <text x="40" y="235" font-family="'Courier New', monospace" font-size="15" fill="#86e9c9">observed</text>
+  <rect class="bar" style="animation-delay:3.0s" x="280" y="216" width="117" height="26" fill="url(#bar-jade)"/>
   <text x="407" y="235" font-family="'Courier New', monospace" font-size="15" fill="#86e9c9">0.10 (ceiling 0.75)</text>
 </svg>
