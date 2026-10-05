@@ -23,16 +23,15 @@
 
 name: keepalive
 
-# Scheduled pings are OFF on purpose: keeping the instance awake 24/7 burns
-# ~744 of Render's 750 free instance-hours a month, leaving no room for any
-# other free service. Cold starts (~30s after 15 idle minutes) are accepted
-# instead. To bring it back, restore the cron below. NOTE: a free Supabase
-# project pauses after 7 days with no traffic and needs a manual restore, so
-# if the app may sit unused for a week, a once-a-day cron is cheap insurance
-# (~8 instance-hours a month): `- cron: "30 3 * * *"`.
+# Scheduled ping is ON: it keeps the free Render instance awake (no cold start
+# for the first visitor) and, because /ready does a tiny database read, keeps a
+# free Supabase project from pausing after 7 idle days.
+# Note GitHub's cron is best-effort and often runs far less often than asked;
+# an external pinger (e.g. UptimeRobot, every 5 min, GET /api/v1/ready) is the
+# reliable way to hold the instance awake. This is the backup.
 on:
-  # schedule:
-  #   - cron: "*/10 * * * *"
+  schedule:
+    - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
 permissions: {}
