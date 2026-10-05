@@ -2,9 +2,10 @@
  * The page frame around Settings: the header with its profile card, the
  * section navigation, and the cross-fade between sections.
  *
- * The navigation is ONE tablist. At `lg` it is a rail down the left with an
- * active pill that slides between tabs; below `lg` the same buttons lay out as
- * a scrollable chip strip. One set of buttons means one set of ids, one roving
+ * The navigation is ONE tablist. When the page is wide enough (a container
+ * query on the page itself, not the screen, so a collapsed or open sidebar
+ * both work) it is a rail down the left with an active pill that slides
+ * between tabs; narrower, the same buttons lay out as a scrollable chip strip. One set of buttons means one set of ids, one roving
  * tabindex and one arrow-key handler for both.
  */
 
@@ -88,14 +89,14 @@ export function SettingsNav<T extends string>({
           aria-label="Settings sections"
           onScroll={measure}
           onKeyDown={onKeyDown}
-          className="relative flex snap-x snap-proximity gap-2 overflow-x-auto scroll-px-4 px-4 py-2.5 [scrollbar-width:none] sm:px-6 lg:snap-none lg:flex-col lg:gap-1 lg:overflow-visible lg:rounded-2xl lg:border lg:border-line lg:bg-surface lg:p-1.5 [&::-webkit-scrollbar]:hidden"
+          className="relative flex snap-x snap-proximity gap-2 overflow-x-auto scroll-px-[var(--pad)] px-[var(--pad)] py-2.5 [scrollbar-width:none] @4xl/page:snap-none @4xl/page:flex-col @4xl/page:gap-1 @4xl/page:overflow-visible @4xl/page:rounded-2xl @4xl/page:border @4xl/page:border-line @4xl/page:bg-surface @4xl/page:p-1.5 @4xl/page:px-1.5 [&::-webkit-scrollbar]:hidden"
         >
           <span
             aria-hidden
             data-testid="nav-indicator"
             data-index={index}
             className={cn(
-              'pointer-events-none absolute inset-x-1.5 top-0 hidden h-12 rounded-[12px] bg-brand-soft ring-1 ring-brand/40 lg:block',
+              'pointer-events-none absolute inset-x-1.5 top-0 hidden h-12 rounded-[12px] bg-brand-soft ring-1 ring-brand/40 @4xl/page:block',
               ready && !reduced && 't-move duration-[380ms]',
             )}
             style={{ transform: `translateY(${y}px)`, transitionTimingFunction: SPRING }}
@@ -119,27 +120,27 @@ export function SettingsNav<T extends string>({
                 onFocus={() => setPeek(item.name)}
                 onBlur={() => setPeek(null)}
                 className={cn(
-                  'group t-control relative z-10 flex h-11 shrink-0 cursor-pointer snap-start items-center gap-2.5 whitespace-nowrap rounded-full border px-4 text-[14px] lg:h-12 lg:w-full lg:rounded-[12px] lg:border-transparent lg:px-3.5',
+                  'group t-control relative z-10 flex h-11 shrink-0 cursor-pointer snap-start items-center gap-2.5 whitespace-nowrap rounded-full border px-4 text-[14px] @4xl/page:h-12 @4xl/page:w-full @4xl/page:rounded-[12px] @4xl/page:border-transparent @4xl/page:px-3.5',
                   selected
-                    ? 'border-brand/40 bg-brand-soft font-bold text-brand-deep lg:bg-transparent'
-                    : 'border-line bg-raised font-medium text-ink-3 hover:border-line-dash hover:text-ink lg:bg-transparent lg:hover:bg-line-soft',
+                    ? 'border-brand/40 bg-brand-soft font-bold text-brand-deep @4xl/page:bg-transparent'
+                    : 'border-line bg-raised font-medium text-ink-3 hover:border-line-dash hover:text-ink @4xl/page:bg-transparent @4xl/page:hover:bg-line-soft',
                 )}
               >
                 <Icon
                   name={item.icon}
                   size={16}
-                  className="shrink-0 t-move group-hover:scale-110 max-lg:hidden"
+                  className="shrink-0 t-move group-hover:scale-110 @max-4xl/page:hidden"
                 />
                 {item.name}
               </button>
             )
           })}
         </div>
-        <span aria-hidden className={cn('pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-canvas to-transparent t-move duration-150 lg:hidden', edges.start ? 'opacity-100' : 'opacity-0')} />
-        <span aria-hidden className={cn('pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-canvas to-transparent t-move duration-150 lg:hidden', edges.end ? 'opacity-100' : 'opacity-0')} />
+        <span aria-hidden className={cn('pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-canvas to-transparent t-move duration-150 @4xl/page:hidden', edges.start ? 'opacity-100' : 'opacity-0')} />
+        <span aria-hidden className={cn('pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-canvas to-transparent t-move duration-150 @4xl/page:hidden', edges.end ? 'opacity-100' : 'opacity-0')} />
       </div>
       {shown && (
-        <Rise key={shown.name} distance={4} className="mt-3 hidden px-3 lg:block">
+        <Rise key={shown.name} distance={4} className="mt-3 hidden px-3 @4xl/page:block">
           <p className="text-[12.5px] leading-snug text-faint">{shown.summary}</p>
         </Rise>
       )}
@@ -148,15 +149,15 @@ export function SettingsNav<T extends string>({
 }
 
 /** Remounts per section and eases in from the side the new tab sits on. */
-export function TabSwap({ id, dir, children }: { id: string; dir: number; children: ReactNode }) {
+export function TabSwap({ id, dir, grid, children }: { id: string; dir: number; grid: string; children: ReactNode }) {
   return (
-    <SwapInner key={id} dir={dir}>
+    <SwapInner key={id} dir={dir} grid={grid}>
       {children}
     </SwapInner>
   )
 }
 
-function SwapInner({ dir, children }: { dir: number; children: ReactNode }) {
+function SwapInner({ dir, grid, children }: { dir: number; grid: string; children: ReactNode }) {
   const reduced = useReducedMotion()
   const [on, setOn] = useState(reduced)
   useEffect(() => {
@@ -166,7 +167,7 @@ function SwapInner({ dir, children }: { dir: number; children: ReactNode }) {
   }, [reduced])
   return (
     <div
-      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,400px),1fr))] items-stretch gap-4 t-move duration-300 ease-out xl:gap-5"
+      className={cn('grid items-stretch gap-[clamp(1rem,0.6rem+1.2cqi,1.5rem)] t-move duration-300 ease-out', grid)}
       style={{ opacity: on ? 1 : 0, transform: on ? 'none' : `translateX(${dir * 14}px)` }}
     >
       {children}
@@ -174,7 +175,11 @@ function SwapInner({ dir, children }: { dir: number; children: ReactNode }) {
   )
 }
 
-/** Big title, a friendly line, and who you are signed in as. */
+/**
+ * Big title, a friendly line, and who you are signed in as. Sizes follow the
+ * page's own width (container units), so the header grows with the page and
+ * stops growing where a line would get too long.
+ */
 export function SettingsHeader({
   name,
   initials,
@@ -189,14 +194,14 @@ export function SettingsHeader({
   goal: number | null
 }) {
   return (
-    <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-5 @2xl/page:flex-row @2xl/page:items-end @2xl/page:justify-between @2xl/page:gap-8">
       <Rise>
-        <h1 className="font-display text-[36px] font-semibold leading-none tracking-tight text-ink sm:text-[44px]">Settings</h1>
-        <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">
-          Make Space Learn yours. Everything here saves the moment you change it.
+        <h1 className="font-display text-[clamp(2rem,1.3rem+1.5cqi,3.25rem)] font-semibold leading-none tracking-tight text-ink">Settings</h1>
+        <p className="mt-3 max-w-[40ch] text-[clamp(0.9375rem,0.9rem+0.15cqi,1.0625rem)] leading-relaxed text-muted">
+          Make Space Learn yours. Every change saves as soon as you make it.
         </p>
       </Rise>
-      <Rise delay={80}>
+      <Rise delay={80} className="min-w-0 max-w-full self-start @2xl/page:max-w-[26rem] @2xl/page:shrink-0">
         <div className="flex items-center gap-4 rounded-2xl border border-line bg-surface py-3 pl-3 pr-5">
           <span
             aria-hidden

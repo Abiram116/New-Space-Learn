@@ -89,7 +89,7 @@ describe('Settings section switcher (phones and tablets)', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     // Only the selected tab is in the tab order (roving tabindex).
     expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1)
-    await screen.findByText('When something is new to you, what makes it click?')
+    await screen.findByText('When something is new to you, what helps it click?')
   })
 
   it('reaches Account — Sign out and, last, Delete account — by tapping its tab', async () => {

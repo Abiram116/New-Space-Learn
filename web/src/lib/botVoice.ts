@@ -1,5 +1,7 @@
 /**
- * The bots' voice: short, warm, first-person lines per situation and agent.
+ * The bots' voice: short, casual, first-person lines per situation and agent.
+ * Nova is calm and warm, Flip is bouncy, Pop is excitable, Jot is thoughtful and a
+ * little dry. A light joke is fine; a made-up fact never is.
  *
  * Honesty rules (enforced by botVoice.test.ts):
  *  - A line may only interpolate facts the caller passed, and only the facts
@@ -87,60 +89,60 @@ type Pool = Partial<Record<AgentId | 'any', readonly string[]>>
  *  `<situation>.<surface>` for a surface's own wording (replaces the base pool). */
 export const LINES: Record<string, Pool> = {
   greeting: {
-    any: ['Hey {name}! Good to see you.', 'Hi {name}. What are we learning today?', 'Hello! Pick a topic and I’m all yours.'],
-    tutor: ['Ask me anything about this topic. I’ll show you the page it came from.'],
-    cards: ['Flip here. Got something worth remembering?'],
-    quiz: ['Pop here! Want to see what stuck?'],
-    notes: ['Jot here. Let’s get the good bits written down.'],
+    any: ['Hey {name}! Good to see you.', 'Hi {name}! What are we learning today?', 'Hey! Pick a topic and let’s go.'],
+    tutor: ['Hi, I’m {bot}. Ask me anything and I’ll show you the page it came from.', 'Take your time. Ask whatever you like.'],
+    cards: ['{bot} here! Got something worth remembering?', 'Hey, it’s {bot}. Let’s make some cards.'],
+    quiz: ['{bot} here! Ready to see what stuck?', 'Hey hey! Want a quick quiz?'],
+    notes: ['{bot} here. Let’s write down the good bits.', 'Hi, it’s {bot}. I’ll keep the notes, you keep the ideas.'],
   },
   'greeting.home': {
-    any: ['Hey {name}! Good to see you.', 'Hi {name}. What are we learning today?', 'Hello! Ready when you are.'],
+    any: ['Hey {name}! Good to see you.', 'Hi {name}! What are we learning today?', 'Hey! Ready when you are.'],
   },
   'greeting.morning': {
-    any: ['Morning, {name}! Fresh brain, fresh start.', 'Good morning! Coffee optional, curiosity required.'],
+    any: ['Morning, {name}! Let’s ease into it.', 'Good morning! Coffee is optional, curiosity is not.'],
   },
   'greeting.afternoon': {
-    any: ['Afternoon, {name}. Let’s make a little progress.', 'Good afternoon! Nice time for a quick session.'],
+    any: ['Afternoon, {name}! Let’s get a little done.', 'Good afternoon! A good time for a quick session.'],
   },
   'greeting.evening': {
-    any: ['Evening, {name}! Let’s make tonight count.', 'Good evening. Study lamp on, ready when you are.'],
+    any: ['Evening, {name}! Let’s make tonight count.', 'Good evening! Study lamp on, ready when you are.'],
   },
   'greeting.late': {
-    any: ['Burning the midnight oil, {name}? I’m here for it.', 'Late-night study crew, reporting in.', 'Still up? Let’s keep it short and sweet.'],
+    any: ['Up late, {name}? I’m here too.', 'Late-night crew, checking in!', 'Still up? Let’s keep it short and sweet.'],
   },
   firstRun: {
     any: [
-      'Hi {name}, I’m {bot}! Add a PDF or some notes and we’ll learn it together.',
-      'Welcome aboard! Add a document to your topic and I’ll help you study it.',
-      'I’m {bot}. Upload something you’re studying, then ask me anything about it.',
+      'Hi {name}, I’m {bot}! Add a PDF or some notes and we’ll dive in.',
+      'Welcome! Add a document to a topic and I’ll help you study it.',
+      'I’m {bot}. Upload something you’re studying, then ask me about it.',
     ],
   },
   waking: {
     any: [
-      'Yawn… waking the server up.',
-      'One sec, I was napping between stars. Booting up!',
-      'Warming up my circuits. Almost there.',
-      'Rise and shine, servers! Give me a moment.',
+      'Yawn… waking things up. Back in a moment.',
+      'Just stretching! Starting up now.',
+      'Warming up. Thanks for waiting.',
+      'Rise and shine, servers!',
     ],
   },
   slow: {
     any: [
-      'Still on it. This one’s taking a little longer.',
-      'Hang tight, I’m still working on it.',
-      'Taking the scenic route through the galaxy. Nearly there.',
+      'Still on it. This one’s taking a bit.',
+      'Hang tight, I’m still working.',
+      'Taking the scenic route. Nearly there.',
       'Thanks for waiting. Still going!',
     ],
-    tutor: ['Still reading your pages. Thanks for waiting.'],
-    notes: ['Still writing. Neat takes a moment.', 'Pen’s moving, almost there.'],
+    tutor: ['Still reading your pages. No rush.'],
+    notes: ['Still writing. Tidy takes a minute.', 'Pen’s moving. Almost there.'],
     cards: ['Still shuffling… nearly dealt!', 'Cutting the deck. One more second.'],
     quiz: ['Still cooking up questions. Hang tight!', 'Warming up the buzzers. Almost go time.'],
   },
   error: {
     any: [
-      'Oops, that one’s on me. Want to try again?',
-      'My signal got lost somewhere in orbit. Give it another go?',
+      'Oops, that one’s on me. Try again?',
+      'That didn’t work. Want to give it another go?',
       'Something broke on my end, not yours. Try again?',
-      'That didn’t go through. Retry when you’re ready.',
+      'Hmm, that didn’t go through. Try again?',
     ],
     tutor: ['Hmm, I lost my place. Shall we try that again?'],
     notes: ['Ink smudged on that one. Mind trying again?', 'Margin note: that didn’t save. Retry?'],
@@ -149,50 +151,50 @@ export const LINES: Record<string, Pool> = {
   },
   success: {
     any: ['Done! Take a look.', 'All set. Hope it helps!'],
-    tutor: ['There you go!', 'All yours. Anything unclear, just ask.'],
-    cards: ['Fresh deck: {count:card:cards}. Dealt!', 'Deck’s ready. Flip when you are.'],
+    tutor: ['There you go!', 'All yours. Ask me if anything’s unclear.'],
+    cards: ['Fresh deck: {count:card:cards}. Dealt!', 'Deck’s ready. Flip when you like.'],
     quiz: ['Quiz is up: {count:question:questions}. Good luck!', 'Your quiz is live. Buzzers ready!'],
     notes: ['Noted. All written up.', 'Your note is ready. Neat and tidy.'],
   },
   generating: {
-    tutor: ['Reading through your docs…', 'Thinking this through.', 'Finding the right page.'],
-    cards: ['Shuffling up {count:card:cards}…', 'Dealing you a fresh deck.', 'Turning this into flashcards.'],
-    quiz: ['Writing {count:question:questions}…', 'Cooking up some questions.', 'Picking questions worth asking.'],
-    notes: ['Jotting it down…', 'Tidying this into a note.', 'Margins and bullets, coming up.'],
+    tutor: ['Reading through your docs…', 'Thinking it over…', 'Finding the right page…'],
+    cards: ['Shuffling up {count:card:cards}…', 'Dealing you a fresh deck…', 'Turning this into flashcards…'],
+    quiz: ['Writing {count:question:questions}…', 'Cooking up some questions…', 'Picking questions worth asking…'],
+    notes: ['Jotting it down…', 'Tidying this into a note…', 'Adding bullets and margins…'],
   },
   streak: {
     any: [
       '{streak:day:days} in a row! That’s a real streak.',
-      'Streak kept: {streak:day:days}. Nice orbit, {name}.',
+      'Streak kept: {streak:day:days}. Nice, {name}!',
       'Streak safe for today. Nicely done!',
-      'Day {streak}! Consistency looks good on you.',
+      'Day {streak}! Look at you go.',
     ],
   },
   goal: {
-    any: ['Daily goal done! {count} today, {name}.', 'You hit today’s goal. Proud of you!', 'Goal complete. Everything from here is bonus.'],
+    any: ['Daily goal done! {count} today, {name}.', 'You hit today’s goal. Nice one!', 'Goal done. Anything extra is a bonus.'],
   },
   quizGreat: {
-    any: ['{score}%! You really know this.', 'Stellar, {name}. {score}% is a great score.', 'Brilliant run. That material stuck!'],
-    quiz: ['{score}%! Confetti cannon, fire!', 'Boom, {name}! {score}% and the crowd goes wild.', 'Champion move! That material really stuck.'],
+    any: ['{score}%! You really know this.', 'Great run, {name}. {score}% is a great score.', 'Wow, that stuck!'],
+    quiz: ['{score}%! Confetti time!', 'Boom, {name}! {score}% and the crowd goes wild.', 'Champion move! That really stuck.'],
   },
   quizOk: {
-    any: ['{score}%, solid! A quick review will lock in the rest.', 'Good work. The ones you missed are worth another look.'],
-    quiz: ['{score}%, nice round! The misses are easy points next time.', 'Solid! Catch the ones that slipped and you’re golden.'],
+    any: ['{score}%, solid! A quick review will cover the rest.', 'Good work. The ones you missed are worth another look.'],
+    quiz: ['{score}%, nice round! The misses are easy points next time.', 'Solid! Fix the few that slipped and you’re golden.'],
   },
   quizRough: {
     any: [
       '{score}% this time. That’s what practice is for.',
-      'Tough one! The misses show exactly what to review next.',
-      'Every miss is a map. Want to go over them together?',
+      'Tough one! The misses show what to look at next.',
+      'Every miss is a clue. Want to go over them together?',
     ],
     quiz: [
       '{score}% this round. Shake it off, rematch?',
-      'Tough set! The misses tell us exactly what to drill.',
+      'Tough set! The misses tell us what to practice.',
       'Everyone whiffs sometimes. Let’s turn these into points.',
     ],
   },
   welcomeBack: {
-    any: ['Welcome back, {name}! Pick up wherever you like.', 'Hey, you’re back! Good to see you.', 'Welcome back. No catching up needed, let’s just start.'],
+    any: ['Welcome back, {name}! Pick up wherever you like.', 'Hey, you’re back! Good to see you.', 'Welcome back! Let’s just start.'],
   },
   emptyCards: {
     any: ['No cards yet. Your first deck is one chat away.'],
@@ -203,8 +205,8 @@ export const LINES: Record<string, Pool> = {
     quiz: ['No quizzes yet. Chat about a topic and I’ll quiz you on it.'],
   },
   'emptyCards.phone': {
-    any: ['No cards yet. Generate a deck from your material, or write the first card.'],
-    cards: ['No cards yet. Tap Generate and I’ll deal you a deck from your material.'],
+    any: ['No cards yet. Make a deck from your material, or write the first card.'],
+    cards: ['No cards yet. Tap Generate and I’ll deal you a deck.'],
   },
   emptyNotes: {
     any: ['No notes yet. Any chat can become one.'],
@@ -212,17 +214,17 @@ export const LINES: Record<string, Pool> = {
   },
   'emptyNotes.phone': {
     any: ['No notes yet. Start one here, or have one written from your material.'],
-    notes: ['No notes yet. Start one here, or I can write one from your material.'],
+    notes: ['No notes yet. Start one here, or I can write one for you.'],
   },
   'emptyQuizzes.phone': {
-    any: ['No quizzes yet. Generate one from your material.'],
+    any: ['No quizzes yet. Make one from your material.'],
     quiz: ['No quizzes yet. Tap Generate and I’ll quiz you on your material.'],
   },
   emptyDocs: {
-    any: ['No documents yet. Add a PDF and I’ll read it with you.', 'This topic is empty. Upload something and let’s get started.'],
+    any: ['No documents yet. Add a PDF and I’ll read it with you.', 'This topic is empty. Upload something and let’s start.'],
   },
   sessionEnd: {
-    any: ['Nice session, {name}. See you next time!', '{count:card:cards} reviewed. That’s real progress.', 'Good work today. Rest counts too.', 'That’s a wrap! Come back whenever you’re ready.'],
+    any: ['Nice session, {name}. See you next time!', '{count:card:cards} reviewed. That’s real progress.', 'Good work today. Rest counts too.', 'That’s a wrap! Come back whenever you like.'],
     cards: ['{count:card:cards} flipped. Clean deal!', 'Deck done, {name}. Shuffle you later!', 'All flipped. Nice work today.'],
   },
   nudge: {
@@ -230,7 +232,7 @@ export const LINES: Record<string, Pool> = {
       '{count:card is:cards are} due whenever you’re ready.',
       'Quick review? {count:card:cards} waiting, no rush.',
       'Got a few minutes? A short review goes a long way.',
-      'Your cards are ready when you are. No pressure, they’re very patient.',
+      'Your cards are ready when you are. They’re very patient.',
     ],
     cards: ['{count:card is:cards are} due. Quick flip?', 'A few cards want a turn. No rush!', 'Your deck’s waiting. It’s very patient.'],
   },

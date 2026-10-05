@@ -119,7 +119,7 @@ describe('Settings on a phone', () => {
 
   it('never offers the skipped style questions on the phone itself', async () => {
     renderSettings('/settings?section=how-you-learn')
-    expect(await screen.findByText('When something is new to you, what makes it click?')).toBeInTheDocument()
+    expect(await screen.findByText('When something is new to you, what helps it click?')).toBeInTheDocument()
     expect(screen.queryByText('Tell me how you like to learn')).not.toBeInTheDocument()
   })
 })

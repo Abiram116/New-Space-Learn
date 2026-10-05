@@ -119,7 +119,7 @@ export function Settings() {
       // preferences survive a reset, so the correct post-reset list is
       // whatever the server resolves — not an empty array.
       setLearned(await listPreferences())
-      show('Cleared what I learned from your feedback.', 'success')
+      show('Cleared. I’ve forgotten what I learned from your ratings.', 'success')
     } catch (err) {
       showError(err)
     } finally {
@@ -341,7 +341,7 @@ export function Settings() {
 
       {!prefs && !error && (
         <div className="col-span-full">
-          <PageSpinner label="Loading preferences…" />
+          <PageSpinner label="Loading your settings…" />
         </div>
       )}
 
@@ -364,7 +364,7 @@ export function Settings() {
             <SettingsCard
               icon="target"
               title="Daily goal"
-              hint="How many cards you aim to review each day."
+              hint="How many cards you want to review each day."
               tell={<SaveTell saving={savingKey === 'daily_goal'} saved={savedKey === 'daily_goal'} />}
             >
               <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -392,7 +392,7 @@ export function Settings() {
           </Rise>
 
           <Rise delay={50}>
-            <SettingsCard icon="flame" title="Streak" hint="Keep it going, even when life gets in the way.">
+            <SettingsCard icon="flame" title="Streak" hint="Keep your streak going, even on a busy day.">
               <div className="mb-3 flex items-center gap-4 rounded-xl bg-well px-4 py-4">
                 <div className="leading-none">
                   <span className="font-display text-[40px] font-semibold tabular-nums text-ink">{student?.streak_days ?? 0}</span>
@@ -417,36 +417,40 @@ export function Settings() {
             </SettingsCard>
           </Rise>
 
-          <Rise delay={100}>
-            <SettingsCard icon="doc" title="Your documents" hint="How answers lean on what you have uploaded.">
-              <SettingRow
-                label="Answer only from my docs"
-                hint="If your documents don’t cover it, the tutor says so instead of guessing."
-                saved={savedKey === 'answer_only_from_docs'}
-              >
-                <SpringSwitch
+          <Rise delay={100} className="col-span-full @[68rem]/panel:col-span-1">
+            <SettingsCard icon="doc" title="Your documents" hint="How answers use the files you upload.">
+              <div className="flex flex-col @[40rem]/card:grid @[40rem]/card:grid-cols-3 @[40rem]/card:gap-3">
+                <SettingRow
+                  tile
                   label="Answer only from my docs"
-                  checked={prefs.answer_only_from_docs}
-                  onChange={(v) => patch('answer_only_from_docs', { answer_only_from_docs: v })}
-                />
-              </SettingRow>
-              <SettingRow
-                label="Always show citations"
-                hint="Marks which part of your documents each answer came from."
-                saved={savedKey === 'always_show_citations'}
-                last={phone}
-              >
-                <SpringSwitch
-                  label="Always show citations"
-                  checked={prefs.always_show_citations}
-                  onChange={(v) => patch('always_show_citations', { always_show_citations: v })}
-                />
-              </SettingRow>
-              {!phone && (
-                <SettingRow label="Show the agent bots" hint="Nova and the crew, while the AI works. Saved on this device." last>
-                  <SpringSwitch label="Show the agent bots" checked={botsOn} onChange={setBotsEnabled} />
+                  hint="Not in your files? The tutor says so instead of guessing."
+                  saved={savedKey === 'answer_only_from_docs'}
+                >
+                  <SpringSwitch
+                    label="Answer only from my docs"
+                    checked={prefs.answer_only_from_docs}
+                    onChange={(v) => patch('answer_only_from_docs', { answer_only_from_docs: v })}
+                  />
                 </SettingRow>
-              )}
+                <SettingRow
+                  tile
+                  label="Always show citations"
+                  hint="Shows which page each answer came from."
+                  saved={savedKey === 'always_show_citations'}
+                  last={phone}
+                >
+                  <SpringSwitch
+                    label="Always show citations"
+                    checked={prefs.always_show_citations}
+                    onChange={(v) => patch('always_show_citations', { always_show_citations: v })}
+                  />
+                </SettingRow>
+                {!phone && (
+                  <SettingRow tile label="Show the bots" hint="Nova and friends pop up while the AI works. This device only." last>
+                    <SpringSwitch label="Show the bots" checked={botsOn} onChange={setBotsEnabled} />
+                  </SettingRow>
+                )}
+              </div>
             </SettingsCard>
           </Rise>
           {phone ? (
@@ -467,7 +471,7 @@ export function Settings() {
           <Rise className="col-span-full">
             <SettingsCard tone="hero" icon="user" title="Profile" hint={email}>
               <form
-                className="flex items-center gap-3"
+                className="flex max-w-xl items-center gap-3"
                 onSubmit={(e) => {
                   e.preventDefault()
                   void saveName()
@@ -528,7 +532,7 @@ export function Settings() {
               </SettingsCard>
             ) : (
               <SettingsCard icon="lock" title="Password">
-                <p className="text-[14px] text-muted">You sign in with Google, so there is no password to change here.</p>
+                <p className="text-[14px] text-muted">You sign in with Google, so there’s no password to change.</p>
               </SettingsCard>
             )}
           </Rise>
@@ -537,7 +541,7 @@ export function Settings() {
             <SettingsCard icon="settings" title="Sessions">
               <div className="flex flex-col gap-3 text-[14px]">
                 <p className="text-muted">
-                  Signing out keeps everything in your account.{' '}
+                  Signing out doesn’t delete anything.{' '}
                   <Link to={trustOverlayHref(location, 'privacy')} className="text-brand-deep hover:underline">
                     What we keep and why
                   </Link>
@@ -552,7 +556,7 @@ export function Settings() {
                     onClick={() => void signOutOthers()}
                     variant="secondary"
                     disabled={othersBusy}
-                    title="Other devices are asked to sign in again within the hour"
+                    title="Your other devices will ask you to sign in again within the hour"
                     className="w-full min-w-52 sm:w-auto"
                   >
                     {othersBusy ? 'Signing out…' : 'Sign out of other devices'}
@@ -566,9 +570,8 @@ export function Settings() {
             <SettingsCard icon="alert" title="Danger zone" tone="danger">
               <div className="flex flex-col gap-4 text-[14px] sm:flex-row sm:items-center sm:justify-between">
                 <p className="max-w-xl text-muted">
-                  Permanently delete your account and everything in it — every
-                  subject, document, chat, note, deck, and quiz. This can't be
-                  undone.
+                  Delete your account and everything in it: every subject,
+                  document, chat, note, deck and quiz. You can’t undo this.
                 </p>
                 <Button onClick={() => setDeleteOpen(true)} variant="danger" className="w-full sm:w-auto sm:shrink-0">
                   Delete account
@@ -629,8 +632,8 @@ export function Settings() {
         }}
       >
         <p className="text-[14px] leading-relaxed text-muted">
-          This permanently deletes your account and every subject, document,
-          chat, note, deck, and quiz in it. There is no undo. Type{' '}
+          This deletes your account and everything in it: every subject,
+          document, chat, note, deck and quiz. There’s no undo. Type{' '}
           <b className="text-ink">delete</b> to confirm.
         </p>
         <Input
@@ -696,8 +699,8 @@ export function Settings() {
               }}
             >
               <p className="text-[15px] leading-relaxed text-muted">
-                This permanently deletes your account and every subject, document,
-                chat, note, deck, and quiz in it. There is no undo. Type{' '}
+                This deletes your account and everything in it: every subject,
+                document, chat, note, deck and quiz. There’s no undo. Type{' '}
                 <b className="text-ink">delete</b> to confirm.
               </p>
               <Input
@@ -718,7 +721,11 @@ export function Settings() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="w-full max-w-[1920px] px-4 pb-16 pt-6 sm:px-7 lg:px-8 lg:pt-9">
+      {/* The page measures itself (container queries), not the screen: the same
+          layout then holds whether the sidebar is open or collapsed, on a
+          tablet or a 2560px monitor. Centred and capped so lines and cards
+          never stretch past what reads well. */}
+      <div className="@container/page mx-auto w-full max-w-[1600px] px-[var(--pad)] pb-16 pt-6 [--pad:clamp(1rem,2.6vw,3rem)] @4xl/page:pt-9">
         <SettingsHeader
           name={displayName}
           initials={initials}
@@ -726,13 +733,13 @@ export function Settings() {
           streak={student ? student.streak_days : null}
           goal={prefs ? prefs.daily_goal : null}
         />
-        <div className="mt-6 flex flex-col gap-4 lg:mt-9 lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-8">
-          {/* Pinned: the chip strip below `lg`, the rail beside the content above it. */}
-          <div className="sticky top-0 z-20 bg-canvas max-lg:-mx-4 sm:max-lg:-mx-7 lg:top-6 lg:bg-transparent">
+        <div className="mt-6 flex flex-col gap-4 @4xl/page:mt-9 @4xl/page:grid @4xl/page:grid-cols-[clamp(13.75rem,18cqi,17.5rem)_minmax(0,1fr)] @4xl/page:items-start @4xl/page:gap-x-[clamp(1.5rem,2.4cqi,2.75rem)]">
+          {/* Pinned: the chip strip on a narrower page, the rail beside the content on a wider one. */}
+          <div className="sticky top-0 z-20 bg-canvas @max-4xl/page:-mx-[var(--pad)] @4xl/page:top-6 @4xl/page:bg-transparent">
             <SettingsNav items={navItems} active={active} onSelect={select} />
           </div>
-          <div role="tabpanel" id={PANEL_ID} aria-label={active} className="min-w-0">
-            <TabSwap id={active} dir={dir}>
+          <div role="tabpanel" id={PANEL_ID} aria-label={active} className="@container/panel min-w-0">
+            <TabSwap id={active} dir={dir} grid={SECTION_GRID[active]}>
               {panel(active)}
             </TabSwap>
           </div>
@@ -741,6 +748,21 @@ export function Settings() {
       {deleteDialog}
     </div>
   )
+}
+
+/**
+ * How many cards sit side by side, by the width of the panel itself: one, then
+ * two, then (where there are three cards to place) three. Sections whose cards
+ * come in twos stop at two and are capped, so a pair never gets stretched, and
+ * the prose sections stay at a readable width.
+ */
+const COLS_2 = 'grid-cols-1 @2xl/panel:grid-cols-2'
+const SECTION_GRID: Record<Section, string> = {
+  Learning: COLS_2,
+  Study: `${COLS_2} @[68rem]/panel:grid-cols-3`,
+  Account: `${COLS_2} max-w-[62rem]`,
+  Feedback: 'grid-cols-1',
+  'About & legal': 'grid-cols-1',
 }
 
 // ── Phones: a grouped list, then one section at a time ─────────────────

@@ -8,7 +8,7 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
   {
     title: 'Reviewing cards',
     keys: [
-      [['Space', 'Enter'], 'Flip the card, then confirm the highlighted grade'],
+      [['Space', 'Enter'], 'Flip the card, then pick the highlighted grade'],
       [['←', '→'], 'Move between grades'],
       [['1', '–', '4'], 'Grade straight away'],
       [['Esc'], 'End the session'],
@@ -18,8 +18,8 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
     title: 'Taking a quiz',
     keys: [
       [['↑', '↓'], 'Move between answers'],
-      [['Enter', 'Space'], 'Choose the highlighted answer'],
-      [['1', '–', '4'], 'Choose an answer straight away (A–D work too)'],
+      [['Enter', 'Space'], 'Pick the highlighted answer'],
+      [['1', '–', '4'], 'Pick an answer straight away (A–D work too)'],
       [['→', 'N'], 'Next question, once answered'],
       [['Esc'], 'Leave the quiz'],
     ],

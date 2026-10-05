@@ -15,11 +15,30 @@
   --pink: #ff8a9a;
   --ease-bot: var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
   --ease-bot-soft: var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1));
+  /* Personality in motion: tempo (--tp scales loop times), float depth and period,
+     hop height and count, wiggle speed and swing, how often it blinks. */
+  --tp: 1;
+  --fd: 3.8s;
+  --fh: -2.6px;
+  --hopy: -6px;
+  --hopd: 0.9s;
+  --hopn: 1;
+  --wgd: 0.5s;
+  --wga: 10deg;
+  --bk: 5.2s;
   display: inline-block;
   flex: none;
   overflow: visible;
   vertical-align: middle;
 }
+/* Nova: calm and warm. Slow, deep, unhurried. */
+.bot[data-agent='tutor'] { --tp: 1.2; --fd: 4.8s; --fh: -2.2px; --hopy: -4px; --hopd: 1.2s; --wgd: 0.8s; --wga: 6deg; --bk: 6s; }
+/* Flip: bouncy. Quick springy double hops. */
+.bot[data-agent='cards'] { --tp: 0.9; --fd: 3.1s; --fh: -3.4px; --hopy: -8px; --hopd: 0.8s; --hopn: 2; --wgd: 0.5s; --wga: 11deg; --bk: 4.6s; }
+/* Pop: excitable. Fast, high, can't keep still. */
+.bot[data-agent='quiz'] { --tp: 0.75; --fd: 2.5s; --fh: -3.8px; --hopy: -11px; --hopd: 0.62s; --hopn: 2; --wgd: 0.32s; --wga: 15deg; --bk: 3.8s; }
+/* Jot: thoughtful. Small, slow, a little distracted. */
+.bot[data-agent='notes'] { --tp: 1.3; --fd: 5.4s; --fh: -1.8px; --hopy: -3px; --hopd: 1.3s; --wgd: 0.9s; --wga: 5deg; --bk: 6.4s; }
 .bot * {
   transform-origin: 0 0;
   transform-box: view-box;
@@ -63,9 +82,9 @@
 .bot-spark path[data-c='2'] { fill: #fff6ea; }
 
 /* Pose (transitions) */
-.bot-rig { transform: translateY(var(--lift)); transition: transform 460ms var(--ease-bot); }
-.bot-head { transform: rotate(var(--tilt)); transition: transform 520ms var(--ease-bot); }
-.bot-arm { transition: transform 560ms var(--ease-bot); }
+.bot-rig { transform: translateY(var(--lift)); transition: transform 560ms var(--ease-bot-soft); }
+.bot-head { transform: rotate(var(--tilt)); transition: transform 640ms var(--ease-bot); }
+.bot-arm { transition: transform 620ms var(--ease-bot); }
 .bot-arm-l { transform: rotate(var(--al)); }
 .bot-arm-r { transform: rotate(var(--ar)); }
 .bot-gaze { transform: translate(var(--gx), var(--gy)); transition: transform 380ms var(--ease-bot-soft); }
@@ -103,7 +122,7 @@
 .bot[data-brows='focus'] .bot-brow-r { transform: translateY(1.5px) rotate(-13deg); }
 
 /* Mouths */
-.bot-m { opacity: 0; transform: scale(0.4); transition: opacity 180ms, transform 380ms var(--ease-bot); }
+.bot-m { opacity: 0; transform: scale(0.4); transition: opacity 220ms, transform 420ms var(--ease-bot); }
 .bot[data-mouth='smile'] .bot-m-smile,
 .bot[data-mouth='grin'] .bot-m-grin,
 .bot[data-mouth='o'] .bot-m-o,
@@ -128,12 +147,12 @@
 .bot[data-fx='sweat'] .bot-sweat { opacity: 0.95; }
 
 /* ── Loops ─────────────────────────────────────────────────────────────── */
-.bot[data-eyes='open'] .bot-blink { animation: bot-blink 5.2s var(--ph, 0ms) infinite; }
+.bot[data-eyes='open'] .bot-blink { animation: bot-blink var(--bk) var(--ph, 0ms) infinite; }
 .bot .bot-tip { animation: bot-twinkle 3.4s ease-in-out var(--ph, 0ms) infinite; }
 
 .bot:is([data-mood='idle'], [data-mood='lookaround'], [data-mood='wave'], [data-mood='proud'], [data-mood='curious'], [data-mood='encouraging'], [data-mood='thinking'], [data-mood='oops']) .bot-float,
 .bot:is([data-mood='idle'], [data-mood='lookaround'], [data-mood='wave'], [data-mood='proud'], [data-mood='curious'], [data-mood='encouraging'], [data-mood='thinking'], [data-mood='oops']) .bot-shadow {
-  animation: bot-float 3.8s ease-in-out var(--ph, 0ms) infinite;
+  animation: bot-float var(--fd) ease-in-out var(--ph, 0ms) infinite;
 }
 .bot:is([data-mood='idle'], [data-mood='lookaround'], [data-mood='wave'], [data-mood='proud'], [data-mood='curious'], [data-mood='encouraging'], [data-mood='thinking'], [data-mood='oops']) .bot-shadow {
   animation-name: bot-shadow;
@@ -145,17 +164,17 @@
 
 .bot[data-mood='lookaround'] .bot-gaze { animation: bot-glance 6.5s var(--ease-bot-soft) infinite; }
 
-.bot[data-mood='wave'] .bot-arm-r .bot-armanim { animation: bot-wave 0.9s ease-in-out infinite; }
+.bot[data-mood='wave'] .bot-arm-r .bot-armanim { animation: bot-wave calc(0.9s * var(--tp)) ease-in-out infinite; }
 
-.bot:is([data-mood='happy'], [data-mood='cheer']) .bot-float { animation: bot-hop 1.3s var(--ease-bot-soft) infinite; }
-.bot:is([data-mood='happy'], [data-mood='cheer']) .bot-shadow { animation: bot-shadow-hop 1.3s var(--ease-bot-soft) infinite; }
+.bot:is([data-mood='happy'], [data-mood='cheer']) .bot-float { animation: bot-hop calc(1.3s * var(--tp)) var(--ease-bot-soft) infinite; }
+.bot:is([data-mood='happy'], [data-mood='cheer']) .bot-shadow { animation: bot-shadow-hop calc(1.3s * var(--tp)) var(--ease-bot-soft) infinite; }
 .bot[data-mood='cheer'] .bot-float,
-.bot[data-mood='cheer'] .bot-shadow { animation-duration: 0.8s; }
-.bot[data-mood='cheer'] .bot-arm-r .bot-armanim { animation: bot-pump 0.8s var(--ease-bot-soft) infinite; }
+.bot[data-mood='cheer'] .bot-shadow { animation-duration: calc(0.8s * var(--tp)); }
+.bot[data-mood='cheer'] .bot-arm-r .bot-armanim { animation: bot-pump calc(0.8s * var(--tp)) var(--ease-bot-soft) infinite; }
 
-.bot[data-mood='celebrate'] .bot-float { animation: bot-jump 0.95s var(--ease-bot-soft) infinite; }
-.bot[data-mood='celebrate'] .bot-shadow { animation: bot-shadow-jump 0.95s var(--ease-bot-soft) infinite; }
-.bot[data-mood='celebrate'] .bot-armanim { animation: bot-wiggle 0.48s ease-in-out infinite alternate; }
+.bot[data-mood='celebrate'] .bot-float { animation: bot-jump calc(0.95s * var(--tp)) var(--ease-bot-soft) infinite; }
+.bot[data-mood='celebrate'] .bot-shadow { animation: bot-shadow-jump calc(0.95s * var(--tp)) var(--ease-bot-soft) infinite; }
+.bot[data-mood='celebrate'] .bot-armanim { animation: bot-wiggle calc(0.48s * var(--tp)) ease-in-out infinite alternate; }
 .bot[data-mood='celebrate'] .bot-arm-r .bot-armanim { animation-direction: alternate-reverse; }
 .bot[data-mood='celebrate'] .bot-tip { animation: bot-spin 1.2s var(--ease-bot-soft) infinite; }
 .bot[data-fx='spark'] .bot-spark { animation: bot-spark 1.5s var(--ease-bot-soft) calc(var(--i) * -0.21s) infinite; }
@@ -170,8 +189,8 @@
 .bot[data-mood='working'] .bot-tip { animation: bot-pulse 0.9s ease-in-out infinite; }
 .bot[data-fx='orbit'] .bot-orbit { animation: bot-spin 1.4s linear infinite; }
 
-.bot[data-mood='curious'] .bot-headanim { animation: bot-ponder 3.2s ease-in-out infinite; }
-.bot[data-mood='encouraging'] .bot-headanim { animation: bot-nod 1.6s ease-in-out infinite; }
+.bot[data-mood='curious'] .bot-headanim { animation: bot-ponder calc(3.2s * var(--tp)) ease-in-out infinite; }
+.bot[data-mood='encouraging'] .bot-headanim { animation: bot-nod calc(1.6s * var(--tp)) ease-in-out infinite; }
 .bot[data-mood='encouraging'] .bot-arm-r .bot-armanim { animation: bot-tap 1.6s ease-in-out infinite; }
 
 .bot[data-mood='oops'] .bot-headanim { animation: bot-shake 0.55s ease-in-out 1 both; }
@@ -179,21 +198,21 @@
 .bot[data-fx='sweat'] .bot-sweat { animation: bot-drip 2.4s ease-in infinite; }
 
 /* Waking: one sequence, closed → stretch + yawn → eyes open, settling on the pose. */
-.bot[data-mood='waking'] .bot-ec { animation: bot-wake-closed 2.4s both; }
-.bot[data-mood='waking'] .bot-eo { animation: bot-wake-open 2.4s both; }
-.bot[data-mood='waking'] .bot-m-yawn { animation: bot-wake-yawn 2.4s both; }
-.bot[data-mood='waking'] .bot-m-smile { animation: bot-wake-smile 2.4s both; }
-.bot[data-mood='waking'] .bot-arm-l .bot-armanim { animation: bot-wake-arm-l 2.4s var(--ease-bot-soft) both; }
-.bot[data-mood='waking'] .bot-arm-r .bot-armanim { animation: bot-wake-arm-r 2.4s var(--ease-bot-soft) both; }
-.bot[data-mood='waking'] .bot-stick { animation: bot-wake-reach 2.4s var(--ease-bot-soft) both; }
-.bot[data-mood='waking'] .bot-reach { animation: bot-wake-hand 2.4s var(--ease-bot-soft) both; }
-.bot[data-mood='waking'] .bot-float { animation: bot-wake-stretch 2.4s var(--ease-bot-soft) both; }
-.bot[data-mood='waking'] .bot-tip { animation: bot-wake-tip 2.4s both; }
-.bot[data-mood='waking'] .bot-blink { animation: none; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-ec { animation: bot-wake-closed 2.4s both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-eo { animation: bot-wake-open 2.4s both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-m-yawn { animation: bot-wake-yawn 2.4s both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-m-smile { animation: bot-wake-smile 2.4s both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-arm-l .bot-armanim { animation: bot-wake-arm-l 2.4s var(--ease-bot-soft) both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-arm-r .bot-armanim { animation: bot-wake-arm-r 2.4s var(--ease-bot-soft) both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-stick { animation: bot-wake-reach 2.4s var(--ease-bot-soft) both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-reach { animation: bot-wake-hand 2.4s var(--ease-bot-soft) both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-float { animation: bot-wake-stretch 2.4s var(--ease-bot-soft) both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-tip { animation: bot-wake-tip 2.4s both; }
+.bot:is([data-mood='waking'], [data-life='yawn']) .bot-blink { animation: none; }
 
 @keyframes bot-blink { 0%, 93%, 100% { transform: none; } 96% { transform: scaleY(0.08); } }
 @keyframes bot-twinkle { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }
-@keyframes bot-float { 0%, 100% { transform: none; } 50% { transform: translateY(-2.6px); } }
+@keyframes bot-float { 0%, 100% { transform: none; } 50% { transform: translateY(var(--fh)); } }
 @keyframes bot-shadow { 0%, 100% { transform: none; opacity: 0.32; } 50% { transform: scale(0.88); opacity: 0.22; } }
 @keyframes bot-glance {
   0%, 12%, 88%, 100% { transform: none; }
@@ -391,6 +410,77 @@
 @keyframes bot-fan-b { to { transform: translate(7px, -3px) rotate(22deg); } }
 @keyframes bot-popq { 0% { transform: scale(0); } 25% { transform: scale(1.15); } 40%, 70% { transform: scale(1); } 100% { transform: scale(0); } }
 @keyframes bot-burstq { 0% { transform: scale(0.2); } 50% { transform: translate(var(--hx), -14px) scale(1.2); } 100% { transform: translate(var(--hx), -6px) scale(1); } }
+
+/* ── Little lives: what a resting bot does now and then ──────────────────────
+   BotFace sets data-life for a moment (runtime.ts picks it, per agent). Each is
+   transform and opacity only. A yawn is the waking sequence above, run on a
+   bot that has been left alone a while. */
+.bot[data-eyes='open'][data-life='blink2'] .bot-blink { animation: bot-blink2 0.9s ease-in-out 1; }
+.bot[data-eyes='open'][data-life='blinks'] .bot-blink { animation: bot-blinks 1.2s ease-in-out 1; }
+.bot[data-life='look'] .bot-gaze { animation: bot-scan 2.6s var(--ease-bot-soft) 1; }
+.bot[data-life='look'] .bot-headanim { animation: bot-turn 2.6s var(--ease-bot-soft) 1; }
+.bot[data-life='hop'] .bot-float { animation: bot-lifehop var(--hopd) var(--ease-bot-soft) var(--hopn); }
+.bot[data-life='hop'] .bot-shadow { animation: bot-shadow-hop var(--hopd) var(--ease-bot-soft) var(--hopn); }
+.bot[data-life='tilt'] .bot-headanim { animation: bot-musing 2.6s ease-in-out 1; }
+.bot[data-life='tilt'] .bot-gaze { animation: bot-muse-eyes 2.6s ease-in-out 1; }
+.bot[data-life='wiggle'] .bot-headanim { animation: bot-headwig var(--wgd) ease-in-out 4; }
+.bot[data-life='wiggle'] .bot-armanim { animation: bot-armwig var(--wgd) ease-in-out 4 alternate; }
+.bot[data-life='wiggle'] .bot-arm-r .bot-armanim { animation-direction: alternate-reverse; }
+.bot[data-life='wiggle'] .bot-tip { animation: bot-twinkle calc(var(--wgd) * 0.5) ease-in-out 8; }
+
+/* A mood change settles instead of cutting. */
+.bot[data-shift]:not([data-mood='waking']) .bot-float { animation: bot-settle 520ms var(--ease-bot-soft) 1; }
+
+/* Poked: squash, spring, and a little "oh!". The third poke in a row is a giggle fit. */
+.bot[data-poke][data-mood][data-agent] .bot-float { animation: bot-poke 0.62s var(--ease-bot) 1; }
+.bot[data-poke][data-mood][data-agent] .bot-shadow { animation: bot-shadow-hop 0.62s var(--ease-bot-soft) 1; }
+.bot[data-poke] .bot-headanim { animation: bot-recoil 0.62s var(--ease-bot) 1; }
+.bot[data-poke] .bot-tip { animation: bot-twinkle 0.2s ease-in-out 4; }
+.bot[data-poke] .bot-eo { opacity: 0; }
+.bot[data-poke] .bot-eh { opacity: 1; transform: none; }
+.bot[data-poke] .bot-m { opacity: 0; }
+.bot[data-poke] .bot-m-o { opacity: 1; transform: none; }
+.bot[data-poke] .bot-cheek { opacity: 1; }
+.bot[data-poke='3'] .bot-m-o { opacity: 0; }
+.bot[data-poke='3'] .bot-m-grin { opacity: 1; transform: none; }
+.bot[data-poke='3'][data-mood][data-agent] .bot-float { animation-name: bot-lifehop; animation-duration: var(--hopd); animation-iteration-count: 2; }
+.bot[data-poke='3'] .bot-headanim { animation: bot-headwig var(--wgd) ease-in-out 3; }
+.bot[data-poke='3'] .bot-armanim { animation: bot-armwig var(--wgd) ease-in-out 4 alternate; }
+.bot[data-poke='3'] .bot-arm-r .bot-armanim { animation-direction: alternate-reverse; }
+.bot[data-poke='3'] .bot-bit { animation: bot-bit 1s var(--ease-bot-soft) calc(var(--i) * 0.18s) 1 both; }
+/* A hover giggle wiggles too, in the bot's own way. */
+.bot[data-boop] .bot-headanim { animation: bot-headwig var(--wgd) ease-in-out 2; }
+.bot[data-boop] .bot-armanim { animation: bot-armwig var(--wgd) ease-in-out 3 alternate; }
+.bot[data-boop] .bot-arm-r .bot-armanim { animation-direction: alternate-reverse; }
+
+@keyframes bot-blink2 { 0%, 60%, 100% { transform: none; } 12%, 40% { transform: scaleY(0.08); } 26% { transform: none; } }
+@keyframes bot-blinks { 0%, 100% { transform: none; } 35%, 60% { transform: scaleY(0.08); } }
+@keyframes bot-scan {
+  0%, 100% { transform: none; }
+  20%, 40% { transform: translate(-4.5px, 0.5px); }
+  58%, 78% { transform: translate(4.5px, -0.5px); }
+}
+@keyframes bot-turn { 0%, 100% { transform: none; } 20%, 40% { transform: rotate(-3deg); } 58%, 78% { transform: rotate(3deg); } }
+@keyframes bot-lifehop {
+  0%, 100% { transform: none; }
+  18% { transform: scale(1.06, 0.93); }
+  45% { transform: translateY(var(--hopy)) scale(0.97, 1.05); }
+  72% { transform: scale(1.04, 0.96); }
+  86% { transform: none; }
+}
+@keyframes bot-musing { 0%, 100% { transform: none; } 25%, 70% { transform: rotate(-7deg); } }
+@keyframes bot-muse-eyes { 0%, 100% { transform: translate(var(--gx), var(--gy)); } 25%, 70% { transform: translate(calc(var(--gx) - 2.5px), calc(var(--gy) - 2.5px)); } }
+@keyframes bot-headwig { 0%, 100% { transform: none; } 25% { transform: rotate(calc(var(--wga) * -0.4)); } 75% { transform: rotate(calc(var(--wga) * 0.4)); } }
+@keyframes bot-armwig { from { transform: rotate(calc(var(--wga) * -1)); } to { transform: rotate(var(--wga)); } }
+@keyframes bot-settle { 0% { transform: scale(1.04, 0.95); } 100% { transform: none; } }
+@keyframes bot-poke {
+  0% { transform: none; }
+  16% { transform: translateY(1.5px) scale(1.1, 0.8); }
+  48% { transform: translateY(-4px) scale(0.93, 1.1); }
+  74% { transform: scale(1.03, 0.97); }
+  100% { transform: none; }
+}
+@keyframes bot-recoil { 0%, 100% { transform: none; } 16% { transform: rotate(5deg) translateY(1px); } 48% { transform: rotate(-4deg); } 74% { transform: rotate(1.5deg); } }
 
 /* Offscreen: nothing ticks — see speech.css ([data-bot-off]). */
 

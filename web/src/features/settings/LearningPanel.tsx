@@ -63,7 +63,7 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
   return (
     <>
       <Rise className="col-span-full"><SettingsCard tone="hero" icon="sparkle" title={STYLE.ask} hint={STYLE.aside} tell={tell('learning_style')}>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
+        <div className="grid grid-cols-1 gap-3 @[28rem]/card:grid-cols-2 @[56rem]/card:grid-cols-4">
           {STYLE.options.map((o, i) => {
             const on = styles.picked.includes(o.value)
             return (
@@ -93,10 +93,10 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
             }}
             placeholder="e.g. diagrams, real-world uses, one step at a time"
             aria-label="Anything else that helps, in your own words"
-            className={field}
+            className={cn(field, 'mt-3 max-w-2xl')}
           />
         ) : (
-          <button type="button" onClick={() => setOwnOpen(true)} className={link}>
+          <button type="button" onClick={() => setOwnOpen(true)} className={cn(link, 'mt-3 block')}>
             + Add something in your own words
           </button>
         )}
@@ -172,8 +172,8 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
         </SettingsCard>
       </Rise>
 
-      <Rise delay={150} className="h-full">
-        <SettingsCard icon="target" title="Working towards" hint="An exam, a course or a job. Answers lean towards it." tell={tell('exam_context')}>
+      <Rise delay={150} className="col-span-full">
+        <SettingsCard side icon="target" title="Working towards" hint="An exam, a course or a job. Answers will lean that way." tell={tell('exam_context')}>
           <input
             type="text"
             value={student.exam_context ?? ''}
@@ -181,7 +181,7 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
             aria-label="Working towards"
             placeholder="e.g. GATE 2027"
             onChange={(e) => saveText('exam_context', { exam_context: e.target.value || null })}
-            className={field}
+            className={cn(field, 'max-w-xl')}
           />
         </SettingsCard>
       </Rise>
@@ -195,7 +195,7 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-ink">Picked up from your 👍 and 👎</div>
               <p className="mt-0.5 text-[12.5px] text-faint">
-                What I’ve adjusted from how you rated answers. Reset to start over.
+                What I changed after you rated answers. Reset to start fresh.
               </p>
             </div>
             <Button variant="secondary" size="sm" onClick={onResetLearned} disabled={resetting} className="min-w-24 shrink-0">

@@ -40,6 +40,10 @@
  *   Props for crowded screens: `calm` (still at rest, a few beats then hold),
  *   `attn` (each one's own "look at me": Nova glances, Flip flips, Pop puts a hand
  *   up, Jot scribbles), `boop` (giggles when the pointer arrives).
+ *   Every resting bot also lives a little: double blinks, a glance, a hop, a head tilt,
+ *   a wiggle, and a yawn when the student has been away a while (runtime.ts `startLife`,
+ *   per-agent temperament: Nova calm, Flip bouncy, Pop excitable, Jot thoughtful).
+ *   Poke one (click or tap) and it goes boop; three pokes in a row and it giggles.
  *   Pose changes tween (eyes squash into their next shape, arms swing, head
  *   tilts); loops pause offscreen; under prefers-reduced-motion every mood is
  *   a still key pose.
