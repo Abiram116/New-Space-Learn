@@ -79,7 +79,12 @@ def schedule(doc: dict, data: bytes | None = None, *, fresh: bool = False) -> No
     doc_id = doc["id"]
     if doc_id in _tasks:
         return
-    task = asyncio.create_task(_run(doc, data, fresh=fresh), name=f"ingest:{doc_id}")
+    if data is not None and _gate.locked() and doc.get("storage_path"):
+        # Queued behind another document: don't hold up to 21MB of upload in
+        # memory for however long that takes. The file is already in storage;
+        # it is fetched when this one's turn comes.
+        data = None
+    task = asyncio.create_task(_run(doc, [data], fresh=fresh), name=f"ingest:{doc_id}")
     _tasks[doc_id] = task
     task.add_done_callback(lambda _t: (_tasks.pop(doc_id, None), _progress.pop(doc_id, None)))
 
@@ -114,11 +119,11 @@ async def drain() -> None:
     await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def _run(doc: dict, data: bytes | None, *, fresh: bool) -> None:
+async def _run(doc: dict, box: list[bytes | None], *, fresh: bool) -> None:
     doc_id = doc["id"]
     try:
         async with _gate:
-            await _ingest(doc, data, fresh=fresh)
+            await _ingest(doc, box, fresh=fresh)
     except asyncio.CancelledError:
         raise  # shutdown: leave it at `processing` for resume_pending()
     except UnreadablePdf as e:
@@ -143,8 +148,11 @@ class _NoText(Exception):
     pass
 
 
-async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
+async def _ingest(doc: dict, box: list[bytes | None], *, fresh: bool) -> None:
     doc_id = doc["id"]
+    # The file's bytes live in `box` so they can be let go once read: the rest
+    # of the job (minutes of embedding) needs only the text.
+    data = box.pop()
     if data is None:
         buf = bytearray()
         async for part in supabase.storage_download(doc["storage_path"]):
@@ -152,16 +160,19 @@ async def _ingest(doc: dict, data: bytes | None, *, fresh: bool) -> None:
         data = bytes(buf)
 
     document = await read_document(data, doc.get("mime_type") or "")
+    scan_data = data if document.scanned else None
+    del data
     note: str | None = None
     if document.scanned:
         # Pictures of pages: the vision model reads them, up to a page cap.
-        lines, read, total = await ocr.transcribe(data, user_id=doc["user_id"])
+        lines, read, total = await ocr.transcribe(scan_data, user_id=doc["user_id"])
         if not any(line.text.strip() for line in lines):
             raise _NoText(
                 "This PDF is a scan (pictures of pages) and its pages couldn't be read. "
                 "Upload a text PDF, or clearer photos of the pages as images."
             )
         document = Document(lines)
+        del scan_data
         if read < total:
             note = f"This is a scan, so only its first {read} of {total} pages were read."
     if document.empty:

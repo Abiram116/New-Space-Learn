@@ -107,7 +107,7 @@ async def main() -> int:
             # `fresh=True` clears the document's old chunks before writing new
             # ones, so this is idempotent and safe to re-run after a partial
             # failure. The file is streamed from Storage by `_ingest` itself.
-            await ingest._ingest(doc, None, fresh=True)
+            await ingest._ingest(doc, [None], fresh=True)
             print(f"{label} — ok")
             ok += 1
         except Exception as e:  # noqa: BLE001 — one bad document must not stop the run

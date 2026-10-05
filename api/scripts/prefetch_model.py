@@ -25,6 +25,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import settings  # noqa: E402
 
 
+def _prepare_direct_model(reference: list[float]) -> None:
+    """Pre-optimise the ONNX graph for the fast loader in `app.services.embeddings`.
+
+    Checked against fastembed's own vector for the same text; if the prepared
+    model disagrees at all it is deleted and the runtime uses the plain model.
+    """
+    from app.services.embeddings import _DIRECT_MODEL, _DirectBge
+
+    if settings.embedding_model != _DIRECT_MODEL:
+        return
+    model_dir = _DirectBge.find_dir(settings.embedding_cache_dir)
+    if model_dir is None:
+        print("no model directory found for the fast loader; runtime will use fastembed")
+        return
+    prepared = _DirectBge.prepare(model_dir)
+    got = next(iter(_DirectBge(model_dir, settings.embedding_threads).embed(["prefetch check"])))
+    cosine = sum(a * float(b) for a, b in zip(reference, got, strict=True))
+    if cosine < 0.999:
+        prepared.unlink(missing_ok=True)
+        print(f"prepared model disagreed with fastembed (cosine {cosine:.5f}); removed it")
+    else:
+        print(f"prepared {prepared.name} (cosine vs fastembed {cosine:.6f})")
+
+
 def main() -> None:
     if settings.use_stub_embeddings:
         print("stub embeddings enabled; nothing to prefetch")
@@ -43,6 +67,7 @@ def main() -> None:
         raise SystemExit(
             f"model produced {len(vector)} dims, expected {settings.embedding_dim}"
         )
+    _prepare_direct_model(vector)
     print(
         f"prefetched {settings.embedding_model} into "
         f"{settings.embedding_cache_dir or 'default cache'} "

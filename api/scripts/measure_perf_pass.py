@@ -117,7 +117,7 @@ async def measure_reprocess(n: int = 3) -> list[float]:
     timings = []
     for _ in range(n):
         t0 = time.perf_counter()
-        await ingest._ingest(doc, None, fresh=True)  # includes the storage download
+        await ingest._ingest(doc, [None], fresh=True)  # includes the storage download
         timings.append((time.perf_counter() - t0) * 1000)
     _stats(f"Document reprocess (extract+chunk+embed+insert), {doc['name']!r}", timings)
     return timings
