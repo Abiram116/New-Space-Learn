@@ -11,7 +11,7 @@ vi.mock('../../api/client', () => ({ apiFetch }))
 
 import { AdminPage } from './AdminPage'
 import { toCsv } from './Responses'
-import { percent, scoreTone } from './Summary'
+import { percent, scoreTone } from './format'
 
 const SUMMARY: FeedbackSummary = {
   days: 30, total: 4, previous_total: 1, by_day: [{ date: '2026-10-01', count: 2 }, { date: '2026-10-02', count: 2 }],
@@ -28,44 +28,90 @@ const SUMMARY: FeedbackSummary = {
   ],
 }
 
+const DASH = {
+  generated_at: '2026-10-10T12:00:00Z',
+  users: {
+    total: 120, new_7d: 9, new_30d: 31, active_1d: 14, active_7d: 40, active_30d: 77,
+    daily: Array.from({ length: 30 }, (_, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, count: i % 5 })),
+  },
+  usage: {
+    messages: { total: 5400, this_week: 300, last_week: 250 },
+    files: { total: 210, this_week: 12, last_week: 12 },
+    notes: { total: 88, this_week: 4, last_week: 9 },
+    cards: { total: 1500, this_week: null, last_week: null },
+    quizzes: { total: 66, this_week: 5, last_week: 1 },
+    reviews: { total: 9000, this_week: 700, last_week: 650 },
+  },
+  funnel: {
+    steps: [
+      { label: 'Signed up', count: 120, percent: 100 },
+      { label: 'Uploaded a file', count: 90, percent: 75 },
+      { label: 'Asked a question', count: 80, percent: 67 },
+      { label: 'Made cards or a quiz', count: 50, percent: 42 },
+      { label: 'Came back another day', count: 30, percent: 25 },
+    ],
+    approximate: false,
+  },
+}
+const FEEDBACK = { ...SUMMARY, total: 4, items: [{ ...SUMMARY.items[0], kind: 'choice', counts: { Notes: 3, Quizzes: 1 }, distribution: {} }] }
+
+const route = (path: string) => {
+  if (path === '/admin/unlock') return { token: 'tok', expires_at: Date.now() / 1000 + 3600 }
+  if (path === '/admin/dashboard') return DASH
+  if (path.startsWith('/admin/feedback/summary')) return FEEDBACK
+  if (path.startsWith('/admin/feedback/responses')) return [RESPONSE]
+  return []
+}
+const RESPONSE: FeedbackResponse = {
+  id: '1', created_at: '2026-10-02T09:00:00Z', source: 'landing', signed_in: false, contact_email: null, page: null,
+  answers: [{ question_id: 'a', prompt: 'Use it for?', kind: 'choice', value: 'Notes', detail: 'Exam revision notes' }],
+}
 const mount = () => render(<ToastProvider><AdminPage /></ToastProvider>)
 
 beforeEach(() => {
   sessionStorage.clear()
   apiFetch.mockReset()
+  apiFetch.mockImplementation(async (path: string) => route(path))
 })
 afterEach(cleanup)
 
-describe('the feedback desk', () => {
-  it('shows only a password box until the right password is given, and never stores the password', async () => {
-    apiFetch.mockImplementation(async (path: string) => {
-      if (path === '/admin/unlock') return { token: 'tok', expires_at: Date.now() / 1000 + 3600 }
-      return SUMMARY
-    })
+describe('the admin page', () => {
+  it('shows only a password box until the right password is given, never stores it, then greets and shows the numbers', async () => {
     mount()
-    expect(screen.queryByText('Feedback desk')).toBeNull()
+    expect(screen.queryByText('Admin')).toBeNull()
     await userEvent.type(screen.getByPlaceholderText('Password'), 'our secret words{Enter}')
-    expect(await screen.findByText('Feedback desk')).toBeTruthy()
-    // The hello shows once, right after the password, and a click sends it away.
-    await userEvent.click(screen.getByText(/Helloo, boss bitch/))
-    expect(screen.queryByText(/Helloo, boss bitch/)).toBeNull()
-    expect(await screen.findByText(/up from 1 in the 30 days before/)).toBeTruthy()
+    expect(await screen.findByText('Hello Boss')).toBeTruthy()
+    expect(await screen.findByText('120')).toBeTruthy() // signed up
+    expect(screen.getByText('5,400')).toBeTruthy() // questions asked
+    expect(screen.getByText('Came back another day')).toBeTruthy()
+    expect(await screen.findByText('Exam revision notes', { exact: false })).toBeTruthy() // written reply
     expect(JSON.stringify({ ...sessionStorage })).not.toContain('our secret words')
-    // Admin calls carry the token and no account.
-    const call = apiFetch.mock.calls.find(([p]) => String(p).startsWith('/admin/feedback/summary'))!
+    const call = apiFetch.mock.calls.find(([p]) => p === '/admin/dashboard')!
     expect(call[1]).toMatchObject({ anonymous: true, headers: { 'X-Admin-Token': 'tok' } })
   })
 
+  it('fetches once on open and again only when Refresh is pressed', async () => {
+    sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
+    mount()
+    await screen.findByText('120')
+    const dash = () => apiFetch.mock.calls.filter(([p]) => p === '/admin/dashboard').length
+    expect(dash()).toBe(1)
+    await userEvent.click(screen.getByRole('button', { name: /Refresh/ }))
+    await waitFor(() => expect(dash()).toBe(2))
+  })
+
   it('says so on a wrong password and stays locked', async () => {
+    apiFetch.mockReset()
     apiFetch.mockRejectedValue(new ApiError('forbidden', "That's not the password.", 403))
     mount()
     await userEvent.type(screen.getByPlaceholderText('Password'), 'guess{Enter}')
     expect((await screen.findByRole('alert')).textContent).toContain("That's not the password.")
-    expect(screen.queryByText('Feedback desk')).toBeNull()
+    expect(screen.queryByText('Admin')).toBeNull()
   })
 
-  it('locks again when the server stops accepting the token, and on Lock', async () => {
+  it('locks again when the server stops accepting the token', async () => {
     sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'old', expires_at: Date.now() / 1000 + 3600 }))
+    apiFetch.mockReset()
     apiFetch.mockRejectedValue(new ApiError('forbidden', 'The admin page is locked.', 403))
     mount()
     await waitFor(() => expect(screen.getByPlaceholderText('Password')).toBeTruthy())
@@ -77,16 +123,6 @@ describe('the feedback desk', () => {
     mount()
     expect(screen.getByPlaceholderText('Password')).toBeTruthy()
     expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('filters written answers to the unhappy ones', async () => {
-    sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
-    apiFetch.mockResolvedValue(SUMMARY)
-    mount()
-    expect(await screen.findByText('Offline cards')).toBeTruthy()
-    await userEvent.click(screen.getByRole('button', { name: /From unhappy people · 1/ }))
-    expect(screen.queryByText('Offline cards')).toBeNull()
-    expect(screen.getByText('Uploads fail')).toBeTruthy()
   })
 })
 

@@ -451,22 +451,6 @@
 
 /* Trust pages (About, Privacy, …): the panel arrives from the right edge, the
    page behind it dims. Transform/opacity only, so both composite. */
-/* The feedback desk's hello (features/admin/Welcome): emoji thrown out from the
-   middle, the words popping in, then the whole thing lifting away. */
-@keyframes deskSplat {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0) rotate(0deg); }
-  60% { opacity: 1; transform: translate(calc(-50% + var(--x) * 1.06), calc(-50% + var(--y) * 1.06)) scale(1.25) rotate(var(--r)); }
-  100% { opacity: 1; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1) rotate(var(--r)); }
-}
-@keyframes deskHello {
-  0% { opacity: 0; transform: scale(0.4) rotate(-8deg); }
-  60% { opacity: 1; transform: scale(1.12) rotate(2deg); }
-  100% { opacity: 1; transform: scale(1) rotate(-2deg); }
-}
-@keyframes deskAway {
-  to { opacity: 0; transform: scale(1.06); visibility: hidden; }
-}
-
 @keyframes trustIn {
   from { transform: translateX(48px); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }

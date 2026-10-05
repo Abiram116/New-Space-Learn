@@ -199,6 +199,8 @@ ADMIN_CALLS = [
     ("get", "/api/v1/admin/feedback/responses", None),
     ("delete", "/api/v1/admin/feedback/responses/product_feedback-0", None),
     ("get", "/api/v1/admin/feedback/summary", None),
+    ("get", "/api/v1/admin/dashboard", None),
+    ("get", "/api/v1/admin/usage", None),
 ]
 
 
