@@ -67,47 +67,48 @@ afterEach(() => {
 })
 
 describe('DockSkills', () => {
-  it('names the section in plain words', async () => {
+  it('names the section in plain words and shows what is on as a chip', async () => {
     renderDock()
     expect(await screen.findByText('Compare & Contrast')).toBeInTheDocument()
-    expect(screen.getByText('Answer style')).toBeInTheDocument()
+    expect(screen.getByText('How I answer')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change' })).toHaveAttribute('aria-expanded', 'false')
   })
 
-  it('fetches your skills only when the picker is opened, and never the library', async () => {
+  it('fetches your skills only when Change is pressed, and never the library', async () => {
     const user = userEvent.setup()
     renderDock()
     await screen.findByText('Compare & Contrast')
     expect(api.listSkills).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
+    await user.click(screen.getByRole('button', { name: 'Change' }))
     await screen.findByText('Feynman Tutor')
     expect(api.listSkills).toHaveBeenCalledTimes(1)
     expect(api.listLibrarySkills).not.toHaveBeenCalled()
-    // Already-on skills are not offered again.
-    expect(screen.queryAllByText('Compare & Contrast')).toHaveLength(1)
+    // Each of your skills has one switch, and the one that's on says so.
+    expect(screen.getByRole('switch', { name: 'Compare & Contrast' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('switch', { name: 'Feynman Tutor' })).toHaveAttribute('aria-checked', 'false')
   })
 
-  it('points to the library when you have added no skills yet', async () => {
+  it('points to the Skills page, for this topic, when you have no skills yet', async () => {
     api.listActiveSkills.mockResolvedValue([])
     api.listSkills.mockResolvedValue([])
     const user = userEvent.setup()
     renderDock()
-    await screen.findByText(/None yet. Answers are plain/)
-    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
-    expect(await screen.findByRole('link', { name: /Browse the library/ })).toHaveAttribute('href', '/skills')
+    await screen.findByText('Normal')
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    expect(await screen.findByRole('link', { name: /Pick a ready-made one/ })).toHaveAttribute('href', '/skills?topic=sub-1')
   })
 
-  it('turns a skill on from the picker, straight away', async () => {
+  it('turns a skill on from the list, straight away', async () => {
     const user = userEvent.setup()
     renderDock()
     await screen.findByText('Compare & Contrast')
-    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
-    await screen.findByText('Feynman Tutor')
-
-    await user.click(screen.getAllByRole('button', { name: 'Turn on' })[0])
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    await user.click(await screen.findByRole('switch', { name: 'Feynman Tutor' }))
     expect(api.activateSkill).toHaveBeenCalledWith('sub-1', 's2')
-    // It moves from the picker into the active list at once.
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Turn off Feynman Tutor' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Feynman Tutor' })).toHaveAttribute('aria-checked', 'true'))
+    // And the chip shows it at once.
+    expect(screen.getAllByText('Feynman Tutor')).toHaveLength(2)
   })
 
   it('turns a skill off, and puts it back if the server refuses', async () => {
@@ -115,16 +116,27 @@ describe('DockSkills', () => {
     api.deactivateSkill.mockRejectedValueOnce(new Error('nope'))
     renderDock()
     await screen.findByText('Compare & Contrast')
-
-    await user.click(screen.getByRole('switch', { name: 'Turn off Compare & Contrast' }))
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    await user.click(await screen.findByRole('switch', { name: 'Compare & Contrast' }))
     expect(api.deactivateSkill).toHaveBeenCalledWith('sub-1', 's1')
-    await waitFor(() => expect(screen.getByText('Compare & Contrast')).toBeInTheDocument())
-    expect(screen.getByRole('switch', { name: 'Turn off Compare & Contrast' })).toBeEnabled()
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Compare & Contrast' })).toHaveAttribute('aria-checked', 'true'),
+    )
+    expect(screen.getByRole('switch', { name: 'Compare & Contrast' })).toBeEnabled()
   })
 
-  it('says so when nothing is on', async () => {
+  it('says Normal, and what that means, when nothing is on', async () => {
     api.listActiveSkills.mockResolvedValue([])
     renderDock()
-    expect(await screen.findByText(/None yet. Answers are plain/)).toBeInTheDocument()
+    expect(await screen.findByText('Normal')).toBeInTheDocument()
+    expect(screen.getByText(/Plain, direct answers/)).toBeInTheDocument()
+  })
+
+  it('links to more skills with this topic picked', async () => {
+    const user = userEvent.setup()
+    renderDock()
+    await screen.findByText('Compare & Contrast')
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    expect(await screen.findByRole('link', { name: /Find more skills/ })).toHaveAttribute('href', '/skills?topic=sub-1')
   })
 })

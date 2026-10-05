@@ -487,7 +487,7 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
                     hasSidebar ? window.dispatchEvent(new Event(ADD_FILE_EVENT)) : onNavigate(`${base}/docs`)
                   }
                 >
-                  <Icon name="plus" size={14} /> Add a file
+                  <Icon name="plus" size={14} /> Add files
                 </Button>
               }
             />

@@ -65,16 +65,14 @@ describe('DockSkills over the real api client', () => {
       </MemoryRouter>,
     )
     await screen.findByText('Compare')
-    await user.click(screen.getByRole('button', { name: /Pick one|Change/ }))
-    await screen.findByText('Feynman')
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    await user.click(await screen.findByRole('switch', { name: 'Feynman' }))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Feynman' })).toHaveAttribute('aria-checked', 'true'))
 
-    await user.click(screen.getAllByRole('button', { name: 'Turn on' })[0])
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Turn off Feynman' })).toBeInTheDocument())
-
-    // The write succeeded and cleared the client's caches. The picker must still
-    // be open, still listing the skills that are not on yet — until Hide.
+    // The write succeeded and cleared the client's caches. The list must still
+    // be open, still listing the skills that are not on yet — until Done.
     await new Promise((r) => setTimeout(r, 50))
-    expect(screen.getByRole('button', { name: /Close/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument()
     expect(screen.getByText('Exam Cram')).toBeInTheDocument()
     expect(screen.getByText('Mistake Analyst')).toBeInTheDocument()
     expect(screen.queryByText(/haven.t added any skills/)).not.toBeInTheDocument()
@@ -91,13 +89,14 @@ describe('DockSkills over the real api client', () => {
     )
     await screen.findByText('Compare')
 
-    await user.click(screen.getByRole('switch', { name: 'Turn off Compare' }))
-    await waitFor(() => expect(screen.queryByText('Compare')).not.toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: 'Change' }))
+    await user.click(await screen.findByRole('switch', { name: 'Compare' }))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Compare' })).toHaveAttribute('aria-checked', 'false'))
 
     // The write succeeded and cleared the client's caches. The other skill must
-    // still be there — not a skeleton, not "No skill on".
+    // still be on — not a skeleton, not "Normal".
     await new Promise((r) => setTimeout(r, 50))
-    expect(screen.getByText('Feynman')).toBeInTheDocument()
-    expect(screen.queryByText(/No skill on/)).not.toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Feynman' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByText('Normal')).not.toBeInTheDocument()
   })
 })

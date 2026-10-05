@@ -103,23 +103,23 @@ function DocsPanel({
             loading={loading}
             error={error}
             onChanged={onChanged}
-            pill={false}
+            addButton="none"
           />
           {docs.length > 0 && (
-            <p className="text-[11.5px] leading-snug text-faint">The AI looks through all of these when you ask a question.</p>
+            <p className="text-[11.5px] leading-snug text-faint">I read all of these when you ask a question.</p>
           )}
         </div>
 
         <section aria-labelledby="dock-related-label" className="flex flex-col gap-2">
-          <DockSectionHead id="dock-related-label">Other topics to use</DockSectionHead>
+          <DockSectionHead id="dock-related-label">Linked topics</DockSectionHead>
+          <p className="text-[11.5px] leading-snug text-faint">Link another topic and I’ll answer from its files too.</p>
           <RelatedTopics subspaceId={subspaceId} layout="stack" />
-          <p className="text-[11.5px] leading-snug text-faint">The AI looks through linked topics too.</p>
         </section>
       </div>
 
       <DockLink to={`${base}/docs`}>Open all files</DockLink>
       <DockAction icon="plus" onClick={() => sources.current?.choose()}>
-        Add a file
+        Add files
       </DockAction>
     </div>
   )

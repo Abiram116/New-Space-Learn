@@ -1,17 +1,15 @@
 /**
- * The right dock: where you are in Space Learn, and what to do next.
- *
- * Its first screen is a three-step checklist — add a file, ask a question,
- * practise — with the next step as one orange button pinned at the bottom (see
- * `DockOverview`). Files, Notes, Quizzes, Cards and Help open as panels over it,
- * each with its own main button in the same place.
+ * The right dock: your material, what to make from the chat, what's saved, and
+ * how the tutor answers — four plain sections (see `DockOverview`). Files,
+ * Notes, Quizzes, Cards and Help open as panels over it, each with its own main
+ * button in the same place, and Back returns to the four sections.
  *
  * The two AI concepts keep different shapes, because naming them differently
  * was not enough:
  *
- *   Skills — cards with a switch. A stack you equip; each is a voice that stays
- *            on and changes how every answer is written.
- *   Agents — buttons. One-shot actions that hand you an artifact and finish.
+ *   Skills — a chip with Change. A voice that stays on and changes how every
+ *            answer is written.
+ *   Agents — buttons. One-shot actions that hand you something and finish.
  */
 
 import { useEffect, useState } from 'react'
@@ -88,12 +86,13 @@ export function ActiveSkillStrip({ subspaceId }: { subspaceId: string }) {
       <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
         {list.length === 0 ? (
           <>
-            <span className="setcode shrink-0">No skill on</span>
-            {change('Turn one on')}
+            <span className="setcode shrink-0">How I answer</span>
+            <span className="shrink-0 rounded-full bg-line-soft px-2.5 py-1 text-[11.5px] font-bold text-ink-2">Normal</span>
+            {change('Change')}
           </>
         ) : (
           <>
-            <span className="setcode shrink-0">Skills on</span>
+            <span className="setcode shrink-0">How I answer</span>
             {list.map((skill) => (
               <span
                 key={skill.id}
@@ -117,7 +116,7 @@ export function ActiveSkillStrip({ subspaceId }: { subspaceId: string }) {
           setOpen(false)
           refreshSkills()
         }}
-        title="Skills for this topic"
+        title="Change how I answer"
       >
         <DockSkills subspaceId={subspaceId} />
       </Modal>
@@ -146,7 +145,7 @@ export function ActiveAgentsStrip({
 }) {
   return (
     <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
-      <span className="setcode shrink-0">Make something</span>
+      <span className="setcode shrink-0">Make from this chat</span>
       {AGENTS.map((key) => (
         <button
           key={key}
@@ -351,7 +350,6 @@ export function ContextDock({
       >
         <DockOverview
           subspaceId={subspaceId}
-          base={base}
           lists={{ decks: decks.data ?? [], quizzes: quizzes.data ?? [], notes: notes.data ?? [], questions }}
           docs={docList}
           docsLoading={docs.loading}

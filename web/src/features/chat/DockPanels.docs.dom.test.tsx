@@ -78,18 +78,25 @@ describe('Files panel in the dock', () => {
 
   it('says what to do first when there are none, rather than showing an empty box', () => {
     renderDocs([])
-    expect(screen.getByText('Drop your notes or a PDF here')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Add your notes or PDFs/ })).toBeInTheDocument()
   })
 
   it('shows placeholders, not the drop box, while the list is still loading', () => {
     renderDocs([], true)
-    expect(screen.queryByText('Drop your notes or a PDF here')).not.toBeInTheDocument()
+    expect(screen.queryByText('Add your notes or PDFs')).not.toBeInTheDocument()
   })
 
   it('has its main button at the bottom and a quiet way to the full page above it', () => {
     renderDocs([doc(1)])
-    expect(screen.getByRole('button', { name: /Add a file/ })).toBeInTheDocument()
+    // One Add files button: the panel's own, not a second one under the list.
+    expect(screen.getAllByRole('button', { name: /Add files/ })).toHaveLength(1)
     expect(screen.getByRole('link', { name: /Open all files/ })).toHaveAttribute('href', '/fsd/transformer/docs')
+  })
+
+  it('shows linked topics under their own plain heading', () => {
+    renderDocs([doc(1)])
+    expect(screen.getByText('Linked topics')).toBeInTheDocument()
+    expect(screen.getByText('related topics')).toBeInTheDocument()
   })
 
   it('lets a file that failed be removed', async () => {

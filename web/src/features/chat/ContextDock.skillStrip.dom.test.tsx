@@ -60,17 +60,19 @@ describe('ActiveSkillStrip', () => {
     api.listActiveSkills.mockResolvedValue([skill('s1', 'Compare')])
     const user = userEvent.setup()
     renderStrip()
-    expect(await screen.findByText('Skills on')).toBeInTheDocument()
+    expect(await screen.findByText('How I answer')).toBeInTheDocument()
+    expect(screen.getByText('Compare')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Change' }))
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Answer style')
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Change how I answer')
   })
 
-  it('offers to turn one on when nothing is, and re-reads the list when the dialog closes', async () => {
+  it('says Normal when nothing is on, and re-reads the list when the dialog closes', async () => {
     api.listActiveSkills.mockResolvedValue([])
     const user = userEvent.setup()
     renderStrip()
-    await user.click(await screen.findByRole('button', { name: 'Turn one on' }))
+    expect(await screen.findByText('Normal')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Change' }))
     await screen.findByRole('dialog')
     await vi.waitFor(() => expect(api.listActiveSkills).toHaveBeenCalledTimes(2)) // strip + the dialog's own list
 

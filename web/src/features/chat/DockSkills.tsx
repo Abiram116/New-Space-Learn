@@ -1,11 +1,12 @@
 /**
- * "How the AI answers" — the Skills switched on for this topic, in the dock.
+ * "How I answer" — the skill that is on for this topic, as one chip, and a
+ * Change link that opens a short list of your skills with a switch each.
  *
- * This is the ONLY place a skill is turned on or off: the topic is already
- * obvious here, so nothing needs a picker or a page of its own. The account-wide
- * `/skills` page is just the collection — add skills from the library or write
- * your own — and the picker below offers exactly those, so one small request
- * (your skills) is all it ever costs, and only when it is opened.
+ * Skills change how the tutor talks; they are not actions (see `agents.ts`).
+ * The chip says which voice is on at a glance; everything else waits behind
+ * Change. The Skills page is where skills are found and written — the link at
+ * the foot of the list goes there with this topic picked, so a skill added
+ * there can be switched on in the same visit.
  */
 
 import { useMemo, useState } from 'react'
@@ -21,15 +22,18 @@ import { useAsync } from '../../lib/useAsync'
 import { resolveSkillIcon } from '../skills/skillIcon'
 import { DockSectionHead } from './dockParts'
 
-/** How many not-yet-on skills the picker lists before pointing at the full page. */
-const PICKER_LIMIT = 5
+/** How many skills the list shows before pointing at the Skills page. */
+const PICKER_LIMIT = 6
+
+/** The Skills page, opened for this topic. */
+export const skillsPageFor = (subspaceId: string) => `/skills?topic=${encodeURIComponent(subspaceId)}`
 
 export function DockSkills({ subspaceId }: { subspaceId: string }) {
   const { showError } = useToast()
   // Deliberately NOT cached under a shared key. The API client clears every
   // `skills:` cache entry after any successful skill write, which would empty
   // this list the instant a toggle was confirmed. Plain component state is
-  // unaffected, and only one of this and the phone strip is ever on screen.
+  // unaffected, and only one of this and the tablet strip is ever on screen.
   const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
@@ -46,7 +50,7 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
       return next
     })
 
-  /** Optimistic: the list changes at once and is put back if the server refuses. */
+  /** Optimistic: the chip changes at once and is put back if the server refuses. */
   const toggle = async (skill: Skill, on: boolean) => {
     if (pending.has(skill.id)) return
     setBusy(skill.id, true)
@@ -70,75 +74,65 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
 
   return (
     <section className="flex flex-col gap-2" aria-labelledby="dock-skills-label">
-      <DockSectionHead
-        id="dock-skills-label"
-        aside={
-          !skills.loading && (
+      <DockSectionHead id="dock-skills-label">How I answer</DockSectionHead>
+
+      {skills.loading ? (
+        <Skeleton className="h-11 rounded-[10px]" />
+      ) : (
+        <div className="flex flex-col gap-2">
+          <div className="flex min-h-11 items-center gap-2 rounded-[10px] border border-line bg-raised py-1.5 pl-1.5 pr-1">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {active.length === 0 ? (
+                <span className="flex min-h-8 items-center gap-2 rounded-full bg-line-soft py-1 pl-1.5 pr-3 text-[12.5px] font-bold text-ink-2">
+                  <span className="grid h-6 w-6 place-items-center rounded-full bg-well text-ink-3">
+                    <Icon name="chat" size={12} />
+                  </span>
+                  Normal
+                </span>
+              ) : (
+                active.map((skill) => (
+                  <span
+                    key={skill.id}
+                    title={skill.description ?? undefined}
+                    className={cn(
+                      'flex min-h-8 min-w-0 max-w-full items-center gap-2 rounded-full py-1 pl-1.5 pr-3 text-[12.5px] font-bold',
+                      toneSoft[skill.tone],
+                      toneText[skill.tone],
+                    )}
+                  >
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-black/20">
+                      <Icon name={resolveSkillIcon(skill.icon)} size={12} />
+                    </span>
+                    <span className="truncate">{skill.name}</span>
+                  </span>
+                ))
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}
-              className="setcode cursor-pointer transition-colors hover:text-ink"
+              className="min-h-8 shrink-0 cursor-pointer rounded-md px-2.5 text-[12.5px] font-bold text-brand-deep transition-colors hover:bg-brand-soft"
             >
-              {open ? 'Close' : active.length > 0 ? 'Change' : 'Pick one'}
+              {open ? 'Done' : 'Change'}
             </button>
-          )
-        }
-      >
-        Answer style
-      </DockSectionHead>
+          </div>
 
-      {skills.loading ? (
-        <Skeleton className="h-14 rounded-[10px]" />
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {active.length === 0 && (
-            <p className="text-[12px] leading-snug text-muted">None yet. Answers are plain and direct.</p>
+          {!open && active.length === 0 && (
+            <p className="text-[11.5px] leading-snug text-muted">Plain, direct answers. Tap Change to try a style, like exam mode.</p>
           )}
-          {active.map((skill) => (
-            <div
-              key={skill.id}
-              title={skill.description ?? undefined}
-              className="cardstock flex min-h-11 items-center gap-2.5 rounded-[10px] px-2.5 py-1.5"
-            >
-              <span
-                className={cn(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                  toneSoft[skill.tone],
-                  toneText[skill.tone],
-                )}
-              >
-                <Icon name={resolveSkillIcon(skill.icon)} size={14} />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">{skill.name}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked="true"
-                onClick={() => void toggle(skill, false)}
-                disabled={pending.has(skill.id)}
-                aria-label={`Turn off ${skill.name}`}
-                title="On. Click to turn off."
-                className="group/switch flex shrink-0 cursor-pointer items-center rounded-full py-1 pl-1 pr-0.5 disabled:cursor-progress disabled:opacity-50"
-              >
-                <span className="relative h-[18px] w-[30px] rounded-full bg-ink-2 transition-colors group-hover/switch:bg-ink">
-                  <span className="absolute right-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-canvas" />
-                </span>
-              </button>
-            </div>
-          ))}
-
           {active.length > 2 && (
             <p className="text-[11.5px] leading-snug text-muted">
-              Several styles at once can pull in different directions. Turn some off if answers feel mixed.
+              Lots of styles at once can clash. Turn some off if answers feel mixed.
             </p>
           )}
           {open && (
             <SkillPicker
+              active={active}
               activeIds={activeIds}
               pending={pending}
-              onTurnOn={(skill) => void toggle(skill, true)}
-              skillsPage="/skills"
+              onToggle={(skill, on) => void toggle(skill, on)}
+              skillsPage={skillsPageFor(subspaceId)}
             />
           )}
         </div>
@@ -148,35 +142,42 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
 }
 
 function SkillPicker({
+  active,
   activeIds,
   pending,
-  onTurnOn,
+  onToggle,
   skillsPage,
 }: {
+  /** What is on now (it may include a skill the list hasn't caught up with). */
+  active: Skill[]
   activeIds: ReadonlySet<string>
   pending: ReadonlySet<string>
-  onTurnOn: (skill: Skill) => void
+  onToggle: (skill: Skill, on: boolean) => void
   skillsPage: string
 }) {
   // Plain component state, not a shared cache key: the API client clears every
   // `skills:` entry after a skill is turned on, which would empty this list (and
-  // read as "you have no skills") the moment you tapped Turn on.
+  // read as "you have no skills") the moment a switch was flipped.
   const own = useAsync(() => listSkills(), [])
 
-  const offered = useMemo(
-    () => (own.data ?? []).filter((s) => !activeIds.has(s.id)),
-    [own.data, activeIds],
-  )
+  // Every skill you have, each with its own switch, so turning one off is as
+  // easy as turning one on. The order is the list's own and never shuffles
+  // under the pointer; only a skill that is on but missing from it (it was
+  // just added elsewhere) goes first.
+  const offered = useMemo(() => {
+    const list = own.data ?? []
+    const known = new Set(list.map((s) => s.id))
+    return [...active.filter((s) => !known.has(s.id)), ...list]
+  }, [own.data, active])
 
   if (own.loading) return <Skeleton className="h-24 rounded-[10px]" />
   if (own.error) return <p className="text-[11.5px] text-muted">{own.error}</p>
   if (offered.length === 0) {
-    const none = (own.data ?? []).length === 0
     return (
-      <p className="rounded-[10px] border border-line bg-raised px-2.5 py-3 text-center text-[11.5px] leading-snug text-muted">
-        {none ? 'You haven’t added any skills yet. ' : 'All your skills are on. '}
-        <Link to={skillsPage} className="font-bold text-brand-deep">
-          {none ? 'Browse the library →' : 'Add more →'}
+      <p className="rounded-[10px] border border-line bg-raised px-3 py-3 text-[12px] leading-snug text-muted">
+        You don’t have any skills yet.{' '}
+        <Link to={skillsPage} className="font-bold text-brand-deep hover:underline">
+          Pick a ready-made one →
         </Link>
       </p>
     )
@@ -184,37 +185,52 @@ function SkillPicker({
 
   const shown = offered.slice(0, PICKER_LIMIT)
   return (
-    <div className="flex flex-col gap-1 rounded-[10px] border border-line bg-raised p-1.5">
-      {shown.map((skill) => (
-        <div key={skill.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
-          <span
-            className={cn(
-              'grid h-6 w-6 shrink-0 place-items-center rounded-md',
-              toneSoft[skill.tone],
-              toneText[skill.tone],
-            )}
-          >
-            <Icon name={resolveSkillIcon(skill.icon)} size={12} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[12px] font-bold text-ink">{skill.name}</span>
-            <span className="block truncate text-[10.5px] text-muted">{skill.description ?? ''}</span>
-          </span>
+    <div className="flex flex-col gap-0.5 rounded-[10px] border border-line bg-raised p-1.5">
+      {shown.map((skill) => {
+        const on = activeIds.has(skill.id)
+        return (
           <button
+            key={skill.id}
             type="button"
-            onClick={() => onTurnOn(skill)}
+            role="switch"
+            aria-checked={on}
+            aria-label={skill.name}
+            onClick={() => onToggle(skill, !on)}
             disabled={pending.has(skill.id)}
-            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-[11.5px] font-bold text-brand-deep transition-colors hover:bg-brand-soft disabled:cursor-progress disabled:opacity-50"
+            className="group/switch flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-line-soft disabled:cursor-progress disabled:opacity-60"
           >
-            Turn on
+            <span
+              className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-md', toneSoft[skill.tone], toneText[skill.tone])}
+            >
+              <Icon name={resolveSkillIcon(skill.icon)} size={13} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[12.5px] font-bold text-ink">{skill.name}</span>
+              {skill.description && <span className="block truncate text-[11px] text-muted">{skill.description}</span>}
+            </span>
+            <span
+              aria-hidden
+              className={cn(
+                'relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors',
+                on ? 'bg-brand' : 'bg-line-dash group-hover/switch:bg-ink-3/50',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-[2px] h-[14px] w-[14px] rounded-full bg-canvas transition-[left]',
+                  on ? 'left-[14px]' : 'left-[2px]',
+                )}
+              />
+            </span>
           </button>
-        </div>
-      ))}
+        )
+      })}
       <Link
         to={skillsPage}
-        className="px-1.5 pb-0.5 pt-1 text-[11.5px] font-bold text-muted transition-colors hover:text-ink"
+        className="mt-0.5 flex min-h-9 items-center gap-1.5 rounded-lg px-1.5 text-[12px] font-bold text-muted transition-colors hover:bg-line-soft hover:text-ink"
       >
-        {offered.length > shown.length ? `See all ${offered.length} of your skills →` : 'Find more skills →'}
+        <Icon name="plus" size={13} />
+        {offered.length > shown.length ? `See all ${offered.length}, or find more` : 'Find more skills'}
       </Link>
     </div>
   )

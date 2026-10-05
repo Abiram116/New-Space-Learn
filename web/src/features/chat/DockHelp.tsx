@@ -21,7 +21,7 @@ const STEPS: { icon: IconName; title: string; body: string }[] = [
 const FIXES: { problem: string; fix: string }[] = [
   {
     problem: 'It says it can’t find the answer',
-    fix: 'It only answers from your files. Check your file says Ready, or add the one that covers it. Scanned PDFs are read up to page 12.',
+    fix: 'I only answer from your files. Check your file says Ready, or add the one that covers it. Scanned PDFs are read up to page 12.',
   },
   {
     problem: 'My file is stuck on “Reading…”',
@@ -37,7 +37,7 @@ const FIXES: { problem: string; fix: string }[] = [
   },
   {
     problem: 'Where did my notes, cards and quizzes go?',
-    fix: 'Each has a tab at the top of the page.',
+    fix: 'Under “Saved in this topic” in this sidebar. Every topic’s are on the Notes, Cards and Quizzes pages too.',
   },
 ]
 

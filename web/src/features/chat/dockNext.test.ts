@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextStep, otherMakes, steps, type Progress } from './dockNext'
+import { nextStep, type Progress } from './dockNext'
 import type { SourcesState } from './DockSources'
 
 const files = (kind: SourcesState['kind'], over: Partial<SourcesState> = {}): SourcesState => ({
@@ -56,41 +56,6 @@ describe('nextStep: one button, always the next thing to do', () => {
 
   it('counts a topic with one ready and one failed file as ready', () => {
     expect(nextStep(at('ready', { files: files('ready', { failed: 1 }) })).kind).toBe('ask')
-  })
-})
-
-describe('steps: what is done, what is next, what is wrong', () => {
-  it('starts with the first step current and the rest waiting', () => {
-    expect(steps(at('none'))).toEqual({ files: 'current', ask: 'todo', practice: 'todo', done: 0 })
-  })
-
-  it('marks a file that failed as a problem, not as progress', () => {
-    expect(steps(at('failed')).files).toBe('problem')
-  })
-
-  it('moves on as each step is done', () => {
-    expect(steps(at('ready'))).toMatchObject({ files: 'done', ask: 'current', practice: 'todo', done: 1 })
-    expect(steps(at('ready', { asked: 1 }))).toMatchObject({ ask: 'done', practice: 'current', done: 2 })
-    expect(steps(at('ready', { asked: 1, notes: 1 }))).toMatchObject({ practice: 'done', done: 3 })
-  })
-})
-
-describe('otherMakes', () => {
-  it('offers the two things the main button is not', () => {
-    expect(otherMakes({ kind: 'flashcards', label: '' })).toEqual(['notes', 'quiz'])
-    expect(otherMakes({ kind: 'review', label: '' })).toEqual(['notes', 'flashcards', 'quiz'])
-  })
-})
-
-describe('novaSays: the guide talks, and her face shows the state', () => {
-  it('follows a new topic through the three steps', async () => {
-    const { novaSays } = await import('./dockNext')
-    expect(novaSays(at('none'))).toMatchObject({ mood: 'wave', line: expect.stringContaining('Add your notes') })
-    expect(novaSays(at('reading'))).toMatchObject({ mood: 'working' })
-    expect(novaSays(at('failed'))).toMatchObject({ mood: 'curious' })
-    expect(novaSays(at('ready'))).toMatchObject({ mood: 'happy', line: 'Got it! Ask me anything about it.' })
-    expect(novaSays(at('ready', { asked: 2 }))).toMatchObject({ mood: 'proud' })
-    expect(novaSays(at('ready', { asked: 9, notes: 2 }))).toMatchObject({ mood: 'celebrate' })
   })
 })
 

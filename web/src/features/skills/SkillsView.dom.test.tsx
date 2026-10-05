@@ -64,14 +64,18 @@ const LIBRARY = skill({
 const listSkills = vi.fn()
 const listLibrarySkills = vi.fn()
 // The page header reads the topic list, which this page doesn't otherwise use.
+// No topics unless a test gives some.
+let spaces: unknown[] = []
 vi.mock('../spaces/SpacesProvider', () => ({
-  useSpaces: () => ({ spaces: [], loading: false }),
+  useSpaces: () => ({ spaces, loading: false }),
 }))
 
 const listActiveSkills = vi.fn()
 const createSkill = vi.fn()
 const updateSkill = vi.fn()
 const deleteSkill = vi.fn()
+const activateSkill = vi.fn()
+const deactivateSkill = vi.fn()
 
 vi.mock('../../api/skills', () => ({
   listSkills: (...args: unknown[]) => listSkills(...args),
@@ -80,13 +84,15 @@ vi.mock('../../api/skills', () => ({
   createSkill: (...args: unknown[]) => createSkill(...args),
   updateSkill: (...args: unknown[]) => updateSkill(...args),
   deleteSkill: (...args: unknown[]) => deleteSkill(...args),
+  activateSkill: (...args: unknown[]) => activateSkill(...args),
+  deactivateSkill: (...args: unknown[]) => deactivateSkill(...args),
 }))
 
-import { SkillsView } from './SkillsView'
+import { EXAMPLE_MARKER, SkillsView, joinExample, splitExample } from './SkillsView'
 
-function renderView() {
+function renderView(at = '/skills') {
   return render(
-    <MemoryRouter initialEntries={['/skills']}>
+    <MemoryRouter initialEntries={[at]}>
       <ToastProvider>
         <SkillsView />
       </ToastProvider>
@@ -96,6 +102,9 @@ function renderView() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  spaces = []
+  activateSkill.mockResolvedValue({ ok: true })
+  deactivateSkill.mockResolvedValue({ ok: true })
   listSkills.mockResolvedValue([OWN])
   listLibrarySkills.mockResolvedValue([LIBRARY])
   listActiveSkills.mockResolvedValue([])
@@ -146,16 +155,14 @@ describe('the custom icon option', () => {
     renderView()
 
     await user.click(screen.getByRole('button', { name: 'New skill' }))
+    await user.click(screen.getByRole('button', { name: /More options/ }))
     await user.click(screen.getByRole('button', { name: 'Custom icon' }))
 
     await user.click(screen.getByRole('button', { name: 'jade tone' }))
     await user.click(screen.getByRole('button', { name: 'flame' }))
 
-    await user.type(screen.getByPlaceholderText('Socratic Tutor'), 'My Coach')
-    await user.type(
-      screen.getByPlaceholderText(/Ask one guiding question/),
-      'Push me through drills.',
-    )
+    await user.type(screen.getByLabelText('Name'), 'My Coach')
+    await user.type(screen.getByLabelText('What should it do?'), 'Push me through drills.')
     await user.click(screen.getByRole('button', { name: 'Create skill' }))
 
     await waitFor(() =>
@@ -170,6 +177,7 @@ describe('the custom icon option', () => {
     renderView()
 
     await user.click(screen.getByRole('button', { name: 'New skill' }))
+    await user.click(screen.getByRole('button', { name: /More options/ }))
     await user.click(screen.getByRole('button', { name: 'Custom icon' }))
     expect(screen.getByRole('button', { name: 'flame' })).toBeInTheDocument()
 
@@ -177,6 +185,7 @@ describe('the custom icon option', () => {
     await user.click(screen.getByRole('button', { name: 'New skill' }))
 
     expect(screen.queryByRole('button', { name: 'flame' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /More options/ })).toHaveAttribute('aria-expanded', 'false')
   })
 })
 
@@ -188,7 +197,7 @@ describe('adding a library skill', () => {
     renderView()
     await screen.findByText('Exam Cram')
 
-    await user.click(screen.getByRole('button', { name: 'Add →' }))
+    await user.click(screen.getByRole('button', { name: 'Add to my skills' }))
 
     await waitFor(() =>
       expect(createSkill).toHaveBeenCalledWith(
@@ -213,7 +222,7 @@ describe('a library skill already added once', () => {
     renderView()
 
     await screen.findByText('Added')
-    expect(screen.queryByRole('button', { name: 'Add →' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add to my skills' })).not.toBeInTheDocument()
   })
 
   it('does not call createSkill even if Add is somehow triggered again', async () => {
@@ -228,7 +237,7 @@ describe('a library skill already added once', () => {
 })
 
 describe('the account-wide Skills page', () => {
-  it('lists the skills you own, with no on/off switch and no topic picker', async () => {
+  it('with no topic yet, lists the skills you own with no switch and no topic picker', async () => {
     renderView()
     await screen.findByText('Socratic Tutor')
     expect(screen.queryByRole('switch')).toBeNull()
@@ -253,6 +262,111 @@ describe('the account-wide Skills page', () => {
     await screen.findByText('Socratic Tutor')
     expect(listSkills).toHaveBeenCalledTimes(1)
     expect(listLibrarySkills).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the page explains itself', () => {
+  it('opens with one sentence on what skills are, and the two sections in plain words', async () => {
+    renderView()
+    expect(await screen.findByText(/Skills change how the tutor talks to you/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Ready-made' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My skills' })).toBeInTheDocument()
+  })
+})
+
+describe('the short form', () => {
+  it('asks for a name and what it should do; the rest waits behind More options', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await user.click(await screen.findByRole('button', { name: 'New skill' }))
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    expect(screen.getByLabelText('What should it do?')).toBeInTheDocument()
+    expect(screen.getByLabelText('Example of a good answer (optional)')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Answer format')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /More options/ }))
+    expect(screen.getByLabelText('Answer format')).toBeInTheDocument()
+  })
+
+  it('fills the form from an idea, and keeps the example inside what it does', async () => {
+    createSkill.mockImplementation(async (input: { name: string }) => skill({ id: 'new', name: input.name }))
+    const user = userEvent.setup()
+    renderView()
+    await user.click(await screen.findByRole('button', { name: 'New skill' }))
+    await user.click(screen.getByRole('button', { name: /Exam mode/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Exam mode')
+    await user.type(screen.getByLabelText('Example of a good answer (optional)'), 'Key fact: X.')
+    await user.click(screen.getByRole('button', { name: 'Create skill' }))
+    await waitFor(() => expect(createSkill).toHaveBeenCalled())
+    const sent = createSkill.mock.calls[0][0] as { name: string; instructions: string }
+    expect(sent.name).toBe('Exam mode')
+    expect(splitExample(sent.instructions).example).toBe('Key fact: X.')
+  })
+
+  it('splits the example back out when a skill is opened again', async () => {
+    listSkills.mockResolvedValue([skill({ instructions: joinExample('Be brief.', 'Short answer.') })])
+    const user = userEvent.setup()
+    renderView()
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('What should it do?')).toHaveValue('Be brief.')
+    expect(screen.getByLabelText('Example of a good answer (optional)')).toHaveValue('Short answer.')
+  })
+
+  it('round-trips instructions with and without an example', () => {
+    expect(joinExample(' Be brief. ', '')).toBe('Be brief.')
+    expect(joinExample('Be brief.', 'Ok.')).toBe(`Be brief.${EXAMPLE_MARKER}Ok.`)
+    expect(splitExample('Just this.')).toEqual({ what: 'Just this.', example: '' })
+  })
+})
+
+describe('Use in this topic', () => {
+  const topics = () => [
+    {
+      id: 'sp1',
+      name: 'ML',
+      subspaces: [
+        { id: 'old', subject_id: 'sp1', name: 'Regression', last_activity_at: '2026-09-01T00:00:00Z', counts: {} },
+        { id: 'new', subject_id: 'sp1', name: 'Transformers', last_activity_at: '2026-10-01T00:00:00Z', counts: {} },
+      ],
+    },
+  ]
+
+  it('works on the topic you came from, and switches your skill off there', async () => {
+    spaces = topics()
+    listActiveSkills.mockResolvedValue([OWN])
+    const user = userEvent.setup()
+    renderView('/skills?topic=old')
+    const sw = await screen.findByRole('switch', { name: 'Use Socratic Tutor in Regression' })
+    await waitFor(() => expect(sw).toBeEnabled())
+    expect(listActiveSkills).toHaveBeenCalledWith('old')
+    expect(sw).toHaveAttribute('aria-checked', 'true')
+    await user.click(sw)
+    expect(deactivateSkill).toHaveBeenCalledWith('old', 'skill-1')
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'false'))
+  })
+
+  it('otherwise picks the topic you used last', async () => {
+    spaces = topics()
+    renderView()
+    expect(await screen.findByRole('switch', { name: 'Use Socratic Tutor in Transformers' })).toBeInTheDocument()
+    expect(listActiveSkills).toHaveBeenCalledWith('new')
+  })
+
+  it('copies a ready-made skill into yours the first time, then switches it on', async () => {
+    spaces = topics()
+    createSkill.mockResolvedValue(skill({ id: 'skill-2', name: 'Exam Cram' }))
+    const user = userEvent.setup()
+    renderView('/skills?topic=new')
+    const sw = await screen.findByRole('switch', { name: 'Use Exam Cram in Transformers' })
+    await waitFor(() => expect(sw).toBeEnabled())
+    await user.click(sw)
+    await waitFor(() => expect(activateSkill).toHaveBeenCalledWith('new', 'skill-2'))
+    expect(createSkill).toHaveBeenCalledWith(expect.objectContaining({ name: 'Exam Cram' }))
+    // It is yours now too, so it shows under My skills as well — on in both places.
+    await waitFor(() => {
+      const both = screen.getAllByRole('switch', { name: 'Use Exam Cram in Transformers' })
+      expect(both).toHaveLength(2)
+      for (const s of both) expect(s).toHaveAttribute('aria-checked', 'true')
+    })
   })
 })
 
