@@ -150,7 +150,7 @@ describe('chooseTodayAction', () => {
     ).toMatchObject({ kind: 'notes', href: '/sp/sp-t/notes' })
     expect(
       chooseTodayAction({ topics: topicsByRecency([space({})]), stats: null, suggestion: null, plan: noPlan }),
-    ).toMatchObject({ kind: 'material', label: 'Add material', href: '/sp/sp-t/docs?add=1' })
+    ).toMatchObject({ kind: 'material', label: 'Add a file', href: '/sp/sp-t/docs?add=1' })
   })
 
   it('has nothing to offer without a topic', () => {

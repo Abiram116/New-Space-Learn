@@ -171,7 +171,7 @@ export function PhoneOnboarding() {
             <h1 ref={headingRef} tabIndex={-1} id="po-ask" className="nameplate text-[clamp(26px,min(8.5vw,9vh),36px)] leading-[1.02] outline-none">
               What should we call you?
             </h1>
-            <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">It’s how Today will greet you.</p>
+            <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">It’s how we'll say hi on Today.</p>
             <input
               ref={inputRef}
               value={name}
@@ -192,7 +192,7 @@ export function PhoneOnboarding() {
               How long do you usually study in one go?
             </h1>
             <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
-              Today sizes your reviews to fit. You can change it later.
+              We'll fit your reviews to this. You can change it later.
             </p>
             <div role="radiogroup" aria-labelledby="po-ask" className="mt-6 [@media(max-height:640px)]:mt-3 grid gap-2.5 [@media(max-height:640px)]:gap-2 [@media(min-width:600px)_and_(max-height:500px)]:grid-cols-3">
               {PHONE_SESSIONS.map((o) => {
@@ -237,7 +237,7 @@ export function PhoneOnboarding() {
               What are you working towards?
             </h1>
             <p className="mt-2.5 [@media(max-height:640px)]:mt-1.5 text-[15px] leading-relaxed text-ink-3">
-              An exam, a course or a job. Optional.
+              An exam, a course or a job. You can skip this.
             </p>
             <input
               ref={inputRef}

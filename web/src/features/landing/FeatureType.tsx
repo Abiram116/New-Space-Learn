@@ -113,18 +113,18 @@ const FEATURES: Feature[] = [
   {
     tone: 'sky',
     icon: 'doc',
-    label: 'Retrieval',
+    label: 'Answers',
     heading: 'Every answer names its page.',
     support:
-      "Ask anything about what you've uploaded. It only draws on what your material actually says, and it always says where it found it.",
+      "Ask anything about your files. It only uses what your files say, and it always tells you where it found it.",
   },
   {
     tone: 'sun',
     icon: 'deck',
-    label: 'The hand-off',
-    heading: 'One chat. Notes, deck, test.',
+    label: 'All in one',
+    heading: 'One chat. Notes, cards, quiz.',
     support:
-      'No separate app, nothing to re-type. The conversation that explained it becomes the note, the deck and the quiz about it.',
+      'No other app, nothing to retype. The chat that explained it turns into your note, your cards and your quiz.',
   },
   {
     tone: 'mint',
@@ -132,7 +132,7 @@ const FEATURES: Feature[] = [
     label: 'Skills',
     heading: 'You pick how it teaches.',
     support:
-      "Socratic Tutor won't hand you the answer. Exam Cram runs rapid-fire. Same material, your way through it — set per topic.",
+      "Socratic Tutor won't just give you the answer. Exam Cram asks quick questions. Same files, your way. Pick one for each topic.",
   },
   {
     tone: 'coral',
@@ -140,7 +140,7 @@ const FEATURES: Feature[] = [
     label: 'Progress',
     heading: 'Your streak is real.',
     support:
-      "Or it doesn't move. The streak, the cards due, the quiz average — every number is pulled from what you actually did.",
+      "Or it doesn't move. Your streak, your cards and your quiz scores all come from what you really did.",
   },
 ]
 
@@ -723,7 +723,7 @@ function RetrievalArt({ tone }: { tone: Tone }) {
 function HandoffArt({ tone }: { tone: Tone }) {
   const shards: { icon: IconName; label: string }[] = [
     { icon: 'note', label: 'Note' },
-    { icon: 'deck', label: 'Deck' },
+    { icon: 'deck', label: 'Cards' },
     { icon: 'quiz', label: 'Quiz' },
   ]
   return (

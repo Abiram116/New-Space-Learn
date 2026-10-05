@@ -155,7 +155,7 @@ export function PhoneNotes({
               icon="note"
               title="No notes yet"
               bot={{ agent: 'notes', say: 'emptyNotes', surface: 'phone' }}
-              description="Start a blank one, or have the AI write one from what's indexed here."
+              description="Start a blank note, or let the AI write one from your files."
               action={
                 <div className="flex w-full flex-col gap-2">
                   <Button size="xl" onClick={onNew}>

@@ -146,14 +146,14 @@ describe('?review=due&limit=N', () => {
       expect(await screen.findByLabelText(`Card ${i} of 2`)).toBeInTheDocument()
       await gradeGood()
     }
-    await waitFor(() => expect(screen.getByText('Session complete')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('All done!')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /Keep going/ })).not.toBeInTheDocument()
   })
 
   it('nothing due: stays on the deck list', async () => {
     listAllDecks.mockResolvedValue([deck('a', 0)])
     renderAt('?review=due&limit=10')
-    expect(await screen.findByText(/Nothing due right now/)).toBeInTheDocument()
+    expect(await screen.findByText(/No cards are due right now/)).toBeInTheDocument()
     expect(screen.getByText('Deck a')).toBeInTheDocument()
   })
 })

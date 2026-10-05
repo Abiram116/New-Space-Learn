@@ -19,9 +19,9 @@ export function shareMessage(
 ): { text: string; kind: 'success' | 'info' | 'error' } | null {
   switch (outcome) {
     case 'copied':
-      return { text: 'Link copied — paste it wherever you’ll open it on your computer.', kind: 'success' }
+      return { text: 'Link copied! Paste it on your computer to keep going.', kind: 'success' }
     case 'failed':
-      return { text: `Couldn’t share from this browser. The address is ${url}`, kind: 'info' }
+      return { text: `We couldn’t share it from here. The link is ${url}`, kind: 'info' }
     default:
       return null
   }

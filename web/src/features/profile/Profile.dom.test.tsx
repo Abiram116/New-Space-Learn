@@ -4,7 +4,7 @@
  * (`/me/student-model`'s `weak_areas`) computed and already shown in
  * Settings' "Learning" tab, but never on Profile — the page that's actually
  * meant to answer "how am I doing", not just "what have I built". This
- * mounts the real `Profile` and proves the new "Where to focus" section
+ * mounts the real `Profile` and proves the new "What to work on" section
  * reads from that same endpoint, stays silent when there's nothing to
  * report, and that the heatmap legend now says the shading is relative
  * rather than an absolute scale.
@@ -79,7 +79,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe('the "Where to focus" panel', () => {
+describe('the "What to work on" panel', () => {
   it('shows real weak topics from the student model, with their subject', async () => {
     getStudentModel.mockResolvedValue(
       studentModel({
@@ -90,10 +90,10 @@ describe('the "Where to focus" panel', () => {
     )
     renderProfile()
 
-    expect(await screen.findByText('Where to focus')).toBeInTheDocument()
+    expect(await screen.findByText('What to work on')).toBeInTheDocument()
     expect(screen.getByText(/Cross-attention/)).toBeInTheDocument()
     expect(screen.getByText(/Transformers/)).toBeInTheDocument()
-    expect(screen.getByText('42% avg')).toBeInTheDocument()
+    expect(screen.getByText('42% average')).toBeInTheDocument()
   })
 
   it('stays off the page when there are no weak areas yet', async () => {
@@ -101,7 +101,7 @@ describe('the "Where to focus" panel', () => {
     renderProfile()
 
     await waitFor(() => expect(getStudentModel).toHaveBeenCalled())
-    expect(screen.queryByText('Where to focus')).not.toBeInTheDocument()
+    expect(screen.queryByText('What to work on')).not.toBeInTheDocument()
   })
 
   it('shows at most three, even with more weak areas than that', async () => {
@@ -117,7 +117,7 @@ describe('the "Where to focus" panel', () => {
     )
     renderProfile()
 
-    await screen.findByText('Where to focus')
+    await screen.findByText('What to work on')
     expect(screen.getByText('Topic 1')).toBeInTheDocument()
     expect(screen.getByText('Topic 3')).toBeInTheDocument()
     expect(screen.queryByText('Topic 4')).not.toBeInTheDocument()
@@ -131,7 +131,7 @@ describe('the "Where to focus" panel', () => {
     )
     renderProfile()
 
-    await screen.findByText('Where to focus')
+    await screen.findByText('What to work on')
     expect(screen.getByText(/Mix-up: confuses Q-learning with SARSA/)).toBeInTheDocument()
   })
 
@@ -144,7 +144,7 @@ describe('the "Where to focus" panel', () => {
     renderProfile()
 
     expect(
-      await screen.findByText(/Struggles with Attention, Backprop — likely because of Matrix multiplication/),
+      await screen.findByText(/Having trouble with Attention, Backprop\? It may come from Matrix multiplication/),
     ).toBeInTheDocument()
   })
 
@@ -156,7 +156,7 @@ describe('the "Where to focus" panel', () => {
     )
     renderProfile()
 
-    expect(await screen.findByText(/Fading: Bayesian Inference, last practised 12 days ago/)).toBeInTheDocument()
+    expect(await screen.findByText(/Fading: Bayesian Inference, last practiced 12 days ago/)).toBeInTheDocument()
   })
 
   it('shows a recall/application split only when at least one side has evidence', async () => {
@@ -219,6 +219,6 @@ describe('the activity heatmap legend', () => {
     getStudentModel.mockResolvedValue(studentModel())
     renderProfile()
 
-    expect(await screen.findByText(/relative to your busiest day/)).toBeInTheDocument()
+    expect(await screen.findByText(/compared to your busiest day/)).toBeInTheDocument()
   })
 })

@@ -593,6 +593,6 @@ export function legend(a: Answers): LegendRow[] {
   const session = options('session').find((o) => o.value === a.session)
   if (session) rows.push({ key: 'orbit', label: 'Session', text: `${session.label} — ${session.hint.toLowerCase()}` })
   const goal = a.goal.trim()
-  if (goal) rows.push({ key: 'star', label: 'North star', text: goal })
+  if (goal) rows.push({ key: 'star', label: 'Goal', text: goal })
   return rows
 }

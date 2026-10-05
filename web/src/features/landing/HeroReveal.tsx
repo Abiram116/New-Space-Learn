@@ -329,19 +329,19 @@ function HeroCopy() {
           "IT CITES THE PAGE THE PAGE EVERY TIME". The foil belongs on static
           type; animated type gets its emphasis from colour and motion. */}
       <h1 className="nameplate max-w-full text-[clamp(36px,7vw,124px)] leading-[0.86] text-ink [&_.sl-line]:overflow-hidden">
-        One page in. <span className="text-brand">Notes, cards, and a test</span> out.
+        One page in. <span className="text-brand">Notes, cards and a quiz</span> out.
       </h1>
       <p data-hero-tail className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-3">
-        Upload what you're studying. Every answer cites the exact page it came
-        from, then turns into the note, the deck, or the quiz you actually
-        need — without leaving the conversation.
+        Add what you're studying. Every answer shows the exact page it came
+        from. Then turn it into a note, cards or a quiz, without leaving the
+        chat.
       </p>
       {/* Same CTA component as the close. The hero used to use the app's
           bevelled Button while the close used a glowing hand-rolled link —
           one page, two button languages. */}
       <div data-hero-tail className="mt-6 flex flex-wrap items-center gap-4">
         <CTA to="/signup">Get started</CTA>
-        <span className="setcode">No card needed</span>
+        <span className="setcode">No credit card needed</span>
       </div>
     </>
   )

@@ -113,18 +113,18 @@ export function GenerateModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Generate a deck">
+    <Modal open={open} onClose={onClose} title="Make a deck">
       <div className="flex flex-col gap-3">
         <TopicSelect value={topicId} onChange={setTopicId} />
         <Input
           name="topic"
-          label="Focus (optional)"
+          label="What to focus on (optional)"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           className="pointer-coarse:text-base"
           maxLength={LIMITS.cardsTopic}
           placeholder={topicName}
-          hint="Left blank, it draws on everything indexed in the topic above."
+          hint="Leave this empty to use everything in the topic above."
         />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="count" className="setcode">
@@ -146,15 +146,14 @@ export function GenerateModal({
           </div>
         </div>
         <p className="text-[12px] leading-relaxed text-faint">
-          Drafted cards are a starting point — edit anything that reads wrong before
-          you rely on it.
+          Cards made by AI are a good start. Fix anything that looks wrong.
         </p>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button onClick={submit} disabled={busy}>
-            {busy ? 'Writing cards…' : 'Generate'}
+            {busy ? 'Making cards…' : 'Make cards'}
           </Button>
         </div>
       </div>

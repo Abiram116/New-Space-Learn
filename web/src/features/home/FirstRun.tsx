@@ -85,9 +85,9 @@ export function FirstRun({
         Bring what you're studying
       </h1>
       <p className="mt-4 max-w-xl text-[15.5px] leading-relaxed text-ink-3" style={at(180)}>
-        Drop a PDF or your lecture notes into a topic. Ask about them and every
-        answer cites the page it came from — then hand that answer straight to a
-        note, a deck, or a quiz.
+        Add a PDF or your lecture notes to a topic. Ask questions about them,
+        and every answer shows the page it came from. Then turn it into a note,
+        cards or a quiz.
       </p>
 
       {steps && (
@@ -104,7 +104,7 @@ export function FirstRun({
           <Icon name="arrowRight" size={15} />
         </Button>
         <p className="text-[13px] text-faint">
-          A subject holds topics — “Reinforcement Learning”, then “Q-learning”.
+          A subject holds topics. Like “Biology”, then “Cell respiration”.
         </p>
       </div>}
 
@@ -129,11 +129,11 @@ function Loop({ reduced, reveal }: { reduced: boolean; reveal: boolean }) {
   return (
     <div
       className="mt-12 flex w-full max-w-4xl flex-col items-stretch gap-3 sm:flex-row sm:items-center"
-      aria-label="How Space Learn works: your material, a cited answer, then cards and quizzes made from it"
+      aria-label="How Space Learn works: you add your files, get answers with pages, then make cards and quizzes"
     >
       <Panel
-        caption="Your material"
-        note="PDFs and notes, chunked and indexed on upload"
+        caption="Your files"
+        note="Add PDFs and notes. We read them for you."
         delay={340}
         hold={hold}
         reduced={reduced}
@@ -159,8 +159,8 @@ function Loop({ reduced, reveal }: { reduced: boolean; reveal: boolean }) {
       <Connector delay={560} hold={hold} reduced={reduced} />
 
       <Panel
-        caption="A cited answer"
-        note="Every claim carries the document and page behind it"
+        caption="An answer with pages"
+        note="Every answer shows the file and page it came from"
         delay={700}
         hold={hold}
         reduced={reduced}
@@ -183,8 +183,8 @@ function Loop({ reduced, reveal }: { reduced: boolean; reveal: boolean }) {
       <Connector delay={860} hold={hold} reduced={reduced} />
 
       <Panel
-        caption="Something to be tested on"
-        note="Cards come back on a schedule that tracks what you forget"
+        caption="Something to practice"
+        note="Cards come back right when you are about to forget them"
         delay={1000}
         hold={hold}
         reduced={reduced}
@@ -308,31 +308,31 @@ const SURFACES: { icon: IconName; name: string; what: string; tone: string }[] =
   {
     icon: 'chat',
     name: 'Chat',
-    what: 'Ask about your material. Answers cite the page, and the conversation is what every agent works from.',
+    what: 'Ask about your files. Every answer shows the page it came from.',
     tone: 'text-brand',
   },
   {
     icon: 'doc',
-    name: 'Sources',
-    what: 'PDFs and pasted notes, split and indexed on upload so retrieval can find the right passage.',
+    name: 'Files',
+    what: 'Add PDFs and pasted notes. We read them so answers can point to the right page.',
     tone: 'text-sky',
   },
   {
     icon: 'note',
     name: 'Notes',
-    what: 'A real editor — headings, tables, images, code. Type / to ask the tutor mid-sentence and keep the citation.',
+    what: 'Write with headings, tables, images and code. Type / to ask the tutor while you write.',
     tone: 'text-ink-3',
   },
   {
     icon: 'deck',
-    name: 'Flashcards',
-    what: 'Spaced repetition. Grade a card and it comes back when you are about to forget it, not on a fixed rota.',
+    name: 'Cards',
+    what: 'Tell us how it went. Cards you find hard come back sooner.',
     tone: 'text-sun',
   },
   {
     icon: 'quiz',
     name: 'Quizzes',
-    what: 'Scored, with the weak subtopics named — so the next session has somewhere obvious to start.',
+    what: 'Get a score and see what to work on next.',
     tone: 'text-coral',
   },
 ]
@@ -348,7 +348,7 @@ const SURFACES: { icon: IconName; name: string; what: string; tone: string }[] =
 function Surfaces({ reveal, reduced }: { reveal: boolean; reduced: boolean }) {
   return (
     <div className="mt-16 w-full max-w-3xl text-left">
-      <h2 className="nameplate text-[19px] text-ink-3">What's inside a topic</h2>
+      <h2 className="nameplate text-[19px] text-ink-3">What you get in each topic</h2>
       <ul className="mt-4 flex flex-col">
         {SURFACES.map((s, i) => (
           <li
@@ -396,7 +396,7 @@ function TwoKinds({ reveal, reduced }: { reveal: boolean; reduced: boolean }) {
 
   return (
     <div className="mt-14 w-full max-w-3xl text-left" style={at(1800)}>
-      <h2 className="nameplate text-[19px] text-ink-3">Two kinds of AI in here</h2>
+      <h2 className="nameplate text-[19px] text-ink-3">Two ways the AI helps</h2>
       <div className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2">
         <div>
           <div className="flex items-center gap-2">
@@ -405,8 +405,8 @@ function TwoKinds({ reveal, reduced }: { reveal: boolean; reduced: boolean }) {
           </div>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
             Change <em className="not-italic text-ink-3">how the tutor talks</em>, and
-            stay on until you switch them off. Socratic Tutor refuses to hand you
-            the answer. Debugging Mentor asks questions until you find the bug
+            stay on until you switch them off. Socratic Tutor won't hand you the
+            answer. Debugging Mentor asks questions until you find the bug
             yourself.
           </p>
         </div>
@@ -417,8 +417,8 @@ function TwoKinds({ reveal, reduced }: { reveal: boolean; reduced: boolean }) {
           </div>
           <p className="mt-1.5 text-[13.5px] leading-relaxed text-muted">
             <em className="not-italic text-ink-3">Make you something</em> from the
-            conversation you just had — a note, a deck, a quiz — and then they're
-            done. One tap, one artifact.
+            conversation you just had, like a note, cards or a quiz. One tap and
+            it's done.
           </p>
         </div>
       </div>

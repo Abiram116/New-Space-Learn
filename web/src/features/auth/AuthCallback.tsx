@@ -46,5 +46,5 @@ export function AuthCallback() {
 
   // Only visible while Supabase is still parsing the URL, before the curtain
   // goes up. Once the handoff starts, it covers this.
-  return <PageSpinner label="Finishing sign-in…" />
+  return <PageSpinner label="Signing you in…" />
 }

@@ -30,7 +30,7 @@ describe('landing on a phone', () => {
     expect(screen.getAllByRole('link', { name: /Get started/ })).toHaveLength(1)
     expect(screen.getByRole('link', { name: /Get started/ })).toHaveAttribute('href', '/signup')
     expect(
-      screen.getByText('Revise anywhere on your phone. Add material and chat with the tutor on desktop.'),
+      screen.getByText('Revise anywhere on your phone. Add files and chat with the tutor on a computer.'),
     ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Send myself the link/ }))

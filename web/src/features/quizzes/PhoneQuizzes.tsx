@@ -39,7 +39,7 @@ export function PhoneQuizzes({
   onSubjectFilter: (id: string) => void
   toneOf: (q: Quiz) => Tone | undefined
   generating: boolean
-  /** Set when the topic has no sources yet: where "Add material" goes. */
+  /** Set when the topic has no sources yet: where "Add a file" goes. */
   addMaterialHref: string | null
   onOpen: (id: string) => void
   onGenerate: () => void
@@ -95,17 +95,17 @@ export function PhoneQuizzes({
               bot={{ agent: 'quiz', say: 'emptyQuizzes', surface: 'phone' }}
               description={
                 addMaterialHref
-                  ? 'This topic has no material yet. Add some and questions get drawn from it.'
-                  : "Draw questions from what you've indexed in this topic, then find out what actually stuck."
+                  ? "This topic has no files yet. Add one and we'll write questions from it."
+                  : "Get questions from your files in this topic and see what you remember."
               }
               action={
                 addMaterialHref ? (
                   <Button size="xl" onClick={() => navigate(addMaterialHref)} className="w-full">
-                    <Icon name="plus" size={16} /> Add material
+                    <Icon name="plus" size={16} /> Add a file
                   </Button>
                 ) : (
                   <Button size="xl" onClick={onGenerate} className="w-full">
-                    <Icon name="sparkle" size={16} /> Generate a quiz
+                    <Icon name="sparkle" size={16} /> Make a quiz
                   </Button>
                 )
               }
@@ -152,7 +152,7 @@ export function PhoneQuizzes({
           <StickyActionBar>
             <Button size="xl" className="min-h-14 flex-1" onClick={onGenerate} disabled={generating}>
               <Icon name="sparkle" size={16} />
-              {generating ? 'Generating…' : 'New quiz'}
+              {generating ? 'Making your quiz…' : 'New quiz'}
             </Button>
           </StickyActionBar>
         )}

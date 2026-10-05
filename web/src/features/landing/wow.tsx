@@ -447,7 +447,7 @@ export function MaskedLines({
 const FRAGMENTS = [
   { t: 'micro-ch7.pdf · p.88', x: 8, y: 18, s: 1.0, d: 0, dur: 64 },
   { t: '∂L/∂w = 0', x: 74, y: 12, s: 1.25, d: 9, dur: 78 },
-  { t: 'retrieved · 1 of 3', x: 58, y: 62, s: 0.9, d: 4, dur: 70 },
+  { t: 'found · 1 of 3', x: 58, y: 62, s: 0.9, d: 4, dur: 70 },
   { t: 'physiology-wk6.pdf · p.31', x: 20, y: 74, s: 1.1, d: 14, dur: 86 },
   { t: 'due today', x: 87, y: 44, s: 0.95, d: 6, dur: 58 },
   { t: 'Marbury v. Madison', x: 40, y: 34, s: 1.05, d: 19, dur: 92 },

@@ -168,7 +168,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
   }
 
   if (questions.length === 0) {
-    return <p className="text-[14.5px] text-muted">The feedback form is being updated. Please check back soon.</p>
+    return <p className="text-[14.5px] text-muted">The feedback form isn't ready right now. Please check back soon.</p>
   }
 
   return (
@@ -192,7 +192,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
                 value={details[q.id] ?? ''}
                 maxLength={LIMITS.feedbackDetail}
                 onChange={(e) => setDetails((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                placeholder="Tell us a little more — what happened?"
+                placeholder="Tell us a bit more. What happened?"
                 aria-label={`${q.prompt} — tell us more`}
                 className={cn(field, 'mt-2.5')}
               />
@@ -209,7 +209,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
       {!signedIn && (
         <label className="flex flex-col gap-2">
           <span className="text-[14px] font-medium text-ink-2">
-            Your email <span className="text-faint">— optional, only if you'd like a reply</span>
+            Your email <span className="text-faint">— optional, if you'd like a reply</span>
           </span>
           <input
             type="email"

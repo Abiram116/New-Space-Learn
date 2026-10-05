@@ -167,9 +167,9 @@ function Strip({ phase, detail, episode }: { phase: Phase; detail: Readiness | n
             <span className="font-semibold">{wakingLine}</span> {wakingCopy(detail)}
           </>
         ) : phase === 'back' ? (
-          'Connected again — you’re all set.'
+          'You’re back online!'
         ) : (
-          "We can't reach the server right now — your changes will retry automatically."
+          "We can't reach the server right now. We'll keep trying."
         )}
       </span>
     </div>
@@ -180,10 +180,10 @@ function Strip({ phase, detail, episode }: { phase: Phase; detail: Readiness | n
  *  breakdown says why — still one calm sentence, never a stack trace. */
 function wakingCopy(detail: Readiness | null): string {
   if (detail && !detail.database) {
-    return 'Reconnecting to the database — should just be a moment.'
+    return 'Getting things connected. This should only take a moment.'
   }
   if (detail && !detail.embeddings) {
-    return 'Warming up search — almost there.'
+    return 'Getting things ready. Almost there.'
   }
-  return 'The first request after a quiet spell can take up to a minute.'
+  return 'It can take up to a minute to wake up after a quiet spell.'
 }

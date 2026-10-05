@@ -71,7 +71,7 @@ describe('OfflineBanner', () => {
     checkReady.mockResolvedValue({ ready: false, database: false, embeddings: true })
     render(<OfflineBanner />)
     await flush()
-    expect(screen.getByRole('status').textContent).toMatch(/reconnecting to the database/i)
+    expect(screen.getByRole('status').textContent).toMatch(/getting things connected/i)
   })
 
   it('notifies the app to retry failed loads on recovery, and only once', async () => {

@@ -115,8 +115,8 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
     material: !anySpaces
       ? { kind: 'button', label: 'Create a subject', onClick: () => setNewSpaceOpen(true) }
       : materialTopic
-        ? { kind: 'link', to: `${materialTopic.link}/docs`, label: 'Add material' }
-        : { kind: 'hint', text: 'Add a topic to your subject from the rail, then drop a PDF into it.' },
+        ? { kind: 'link', to: `${materialTopic.link}/docs`, label: 'Add a file' }
+        : { kind: 'hint', text: 'Add a topic to your subject on the left, then add a PDF to it.' },
     practice: materialTopic
       ? {
           kind: 'link',
@@ -124,10 +124,10 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
           label: 'Make cards',
           alt: { to: `${materialTopic.link}/quizzes`, label: 'or a quiz' },
         }
-      : { kind: 'hint', text: 'Add material first.' },
+      : { kind: 'hint', text: 'Add a file first.' },
     tutor: materialTopic
       ? { kind: 'link', to: materialTopic.link, label: 'Ask the tutor' }
-      : { kind: 'hint', text: 'Add material first.' },
+      : { kind: 'hint', text: 'Add a file first.' },
   }
   const showChecklist = !checklist.complete && !checklistHidden && !stats.loading
 
@@ -160,7 +160,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
       <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <EmptyState
           icon="offline"
-          title="Couldn't load your home"
+          title="We couldn't open your home page"
           bot={{ agent: 'tutor', say: 'error', mood: 'oops' }}
           description={spacesError}
           action={
@@ -233,7 +233,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                 )}
                 <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
                   {brief.data?.body ??
-                    'Add a topic to your space and start asking questions about your own material.'}
+                    'Add a topic to your subject and start asking questions about your own files.'}
                 </p>
                 {/* A failed background refresh keeps whatever headline is
                     already showing (the effect never clears `local` on
@@ -318,8 +318,8 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                 lit={(stats.data?.streak_days ?? 0) > 0}
                 detail={
                   (stats.data?.streak_days ?? 0) > 0
-                    ? 'Consecutive days with something logged.'
-                    : 'Log anything today to start one.'
+                    ? 'Days in a row you studied.'
+                    : 'Study today to start one.'
                 }
                 countUp
               />
@@ -330,7 +330,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                 unit={due === 1 ? 'card' : 'cards'}
                 tone="sun"
                 lit={due > 0}
-                detail={due > 0 ? 'Ready to review now.' : 'Nothing waiting. Nice.'}
+                detail={due > 0 ? 'Ready for you now.' : 'Nothing waiting. Nice!'}
                 to={cardsEntry && due > 0 ? `${cardsEntry.link}/flashcards` : undefined}
               />
               <Figure
@@ -348,8 +348,8 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                 lit={(stats.data?.quiz_average ?? 0) >= 80}
                 detail={
                   stats.data?.quiz_average != null
-                    ? 'Across your last five.'
-                    : 'Take one to find out.'
+                    ? 'From your last five.'
+                    : 'Take a quiz to see.'
                 }
                 to={quizzesEntry ? `${quizzesEntry.link}/quizzes` : undefined}
               />
@@ -360,7 +360,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                 unit="min"
                 tone="mint"
                 lit={(stats.data?.study_minutes_this_week ?? 0) > 0}
-                detail="Estimated from what you completed."
+                detail="A rough guess from what you did."
               />
             </div>
             {stats.loading ? (
@@ -397,7 +397,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
           <section className="flex flex-col gap-3 pt-8">
             <div className="flex items-baseline gap-3">
               <h2 className="nameplate text-[22px] text-ink">Your topics</h2>
-              <span className="setcode">{entries.length} in play</span>
+              <span className="setcode">{entries.length} to explore</span>
             </div>
             {/* Topic cards deal themselves in left-to-right, in keeping with
                 the card-table world. Capped stagger — see ui/motion. */}
@@ -418,7 +418,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
                   </div>
                   <div>
                     <p className="text-[14px] leading-snug text-muted">
-                      No topics yet. Add one from the rail to start collecting.
+                      No topics yet. Add one on the left to get started.
                     </p>
                   </div>
                 </DashedCard>
@@ -431,8 +431,8 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
           <EmptyState
             className="my-6"
             icon="target"
-            title="Your subject has no topics yet"
-            description="Open it in the rail and add a topic — that's where documents, chat, and cards live."
+            title="No topics yet"
+            description="Add a topic to your subject on the left. That's where your files, chat and cards go."
           />
         )}
       </div>
@@ -530,7 +530,7 @@ function TopicCard({ entry }: { entry: ActiveEntry }) {
   const { space, subspace } = entry
   const counts = subspace.counts ?? {}
   const bits: string[] = []
-  if (counts.docs) bits.push(`${counts.docs} doc${counts.docs === 1 ? '' : 's'}`)
+  if (counts.docs) bits.push(`${counts.docs} file${counts.docs === 1 ? '' : 's'}`)
   if (counts.cards) bits.push(`${counts.cards} card${counts.cards === 1 ? '' : 's'}`)
   if (counts.notes) bits.push(`${counts.notes} note${counts.notes === 1 ? '' : 's'}`)
 
@@ -550,7 +550,7 @@ function TopicCard({ entry }: { entry: ActiveEntry }) {
         <div className="nameplate text-[21px] leading-tight text-ink">{subspace.name}</div>
 
         <div className="mt-auto flex flex-col gap-1.5">
-          <span className="setcode">{bits.length ? bits.join(' · ') : 'Nothing added yet'}</span>
+          <span className="setcode">{bits.length ? bits.join(' · ') : 'Nothing here yet'}</span>
           <span className="setcode">{relativeShort(subspace.last_activity_at)}</span>
         </div>
       </Card>
@@ -620,13 +620,13 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
   return (
     <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
-        <span className="setcode-strong">Coming due</span>
-        <span className="setcode">next 7 days · {total} total</span>
+        <span className="setcode-strong">Coming up</span>
+        <span className="setcode">next 7 days · {total} in all</span>
       </div>
 
       {total === 0 ? (
         <p className="text-[13.5px] text-muted">
-          Nothing scheduled yet. Cards appear here the moment you grade one.
+          Nothing coming up yet. Review a card and it will show up here.
         </p>
       ) : (
         <div className="flex h-[104px] items-end gap-2">
@@ -664,9 +664,8 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
           under the bars rather than above them so it explains something the
           reader has already seen. */}
       <Tip id="home-forecast-v1" icon="clock">
-        Cards return on a schedule, not all at once. Today's column is what's
-        actually waiting — the rest is what's coming, so you can see a heavy
-        day before it lands.
+        Cards don't all come back at once. Today's bar is what's waiting now.
+        The rest is coming up, so you can see a busy day early.
       </Tip>
     </Ledger>
   )
@@ -714,8 +713,8 @@ function Composition({
 
       {total === 0 ? (
         <p className="text-[13.5px] text-muted">
-          Nothing logged in the last seven days. Ask something, grade a card, or
-          take a quiz and it shows up here.
+          Nothing in the last seven days. Ask a question, review a card or take
+          a quiz and it will show up here.
         </p>
       ) : (
         <>

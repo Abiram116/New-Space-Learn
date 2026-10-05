@@ -187,7 +187,7 @@ export function Opening({
           </span>
         </p>
         <p data-sub className="max-w-[44rem] text-[clamp(15px,1.05vw,20px)] leading-relaxed text-ink-3">
-          Five quick questions. Each answer shapes your learning fingerprint.
+          Five quick questions to help us teach you your way.
         </p>
       </div>
       <span data-skip className="setcode absolute bottom-[max(2rem,5vh)] left-1/2 -translate-x-1/2 whitespace-nowrap">

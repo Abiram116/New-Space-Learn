@@ -141,7 +141,7 @@ describe('review keyboard', () => {
     press('Escape')
     const dialog = screen.getByRole('dialog', { name: 'End this session?' })
     expect(dialog).toHaveTextContent(/reviewed 1 card/)
-    expect(dialog).toHaveTextContent(/grades are saved/)
+    expect(dialog).toHaveTextContent(/answers are saved/)
     expect(latest?.kind).toBe('review')
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))

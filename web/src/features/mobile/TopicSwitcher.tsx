@@ -98,7 +98,7 @@ export function TopicSwitcher({
           <div className="py-4">
             <p className="text-[16px] font-semibold text-ink">No subjects yet</p>
             <p className="mt-1 text-[15px] leading-relaxed text-muted">
-              A subject holds topics, and a topic holds the material you revise from. Start one below.
+              A subject holds topics, and a topic holds your files. Start one below.
             </p>
           </div>
         ) : (

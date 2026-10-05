@@ -119,7 +119,7 @@ describe('a failed /spaces load', () => {
     spacesState = { spaces: [], loading: false, error: "Can't reach the server." }
     renderHome()
 
-    expect(await screen.findByText("Couldn't load your home")).toBeInTheDocument()
+    expect(await screen.findByText("We couldn't open your home page")).toBeInTheDocument()
     expect(screen.queryByText(/bring what you're studying/i)).not.toBeInTheDocument()
   })
 })

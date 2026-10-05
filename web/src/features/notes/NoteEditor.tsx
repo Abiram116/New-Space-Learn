@@ -248,13 +248,13 @@ export function NoteEditor({
         // an unbounded paste would push a single note past what the API will
         // accept and fail the save with no obvious cause.
         if (file.size > 4 * 1024 * 1024) {
-          showError(new Error(`${file.name} is over 4MB — resize it first.`))
+          showError(new Error(`${file.name} is too big (over 4MB). Try a smaller one.`))
           continue
         }
         const src = await new Promise<string>((resolve, reject) => {
           const fr = new FileReader()
           fr.onload = () => resolve(String(fr.result))
-          fr.onerror = () => reject(new Error('Could not read that file.'))
+          fr.onerror = () => reject(new Error('We couldn’t open that file.'))
           fr.readAsDataURL(file)
         }).catch((e) => {
           showError(e)
@@ -358,7 +358,7 @@ export function NoteEditor({
       Placeholder.configure({
         // The one piece of discovery this editor needs. There is no permanent
         // toolbar any more, so this line is where `/` is learned.
-        placeholder: 'Write, or press / to ask the tutor and add blocks…',
+        placeholder: 'Start writing, or press / to ask the tutor…',
       }),
       TaskList,
       // Nested to-dos, because revision checklists are naturally hierarchical.
@@ -762,7 +762,7 @@ export function NoteEditor({
         </span>
       ) : status === 'error' ? (
         <span className="flex items-center gap-1 text-coral-deep">
-          <Icon name="alert" size={11} /> Couldn’t save
+          <Icon name="alert" size={11} /> Not saved
         </span>
       ) : (
         `Edited ${relativeTime(note.updated_at)}`
@@ -1052,12 +1052,12 @@ export function NoteEditor({
                   placeholder={
                     askAi.sel
                       ? 'e.g. explain this with a worked example'
-                      : 'e.g. an overview of value iteration, with the update rule'
+                      : 'e.g. a short summary of photosynthesis'
                   }
                   className="w-full rounded-[9px] border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
                 />
                 <p className="mt-2 text-[11.5px] text-muted">
-                  Answers come from this topic’s material.{' '}
+                  Answers come from your files in this topic.{' '}
                   <span className="text-faint">Enter to write · Esc to cancel</span>
                 </p>
               </div>
@@ -1386,7 +1386,7 @@ function SelectionBar({
         {primaryAi && (
           <button
             type="button"
-            title={`${primaryAi.label} — with AI, in place`}
+            title={`${primaryAi.label} with AI`}
             onClick={() => runAction(primaryAi)}
             className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
           >

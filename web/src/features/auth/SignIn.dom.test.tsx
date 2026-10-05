@@ -167,7 +167,7 @@ describe('forgot password', () => {
     renderSignIn()
     await user.click(screen.getByRole('button', { name: /forgot password/i }))
 
-    expect(await screen.findByText(/enter your email above first/i)).toBeInTheDocument()
+    expect(await screen.findByText(/type your email above first/i)).toBeInTheDocument()
     expect(sendPasswordReset).not.toHaveBeenCalled()
   })
 

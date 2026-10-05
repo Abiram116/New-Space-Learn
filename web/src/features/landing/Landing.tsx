@@ -591,8 +591,8 @@ const Close = forwardRef<CloseHandle>(function Close(_props, ref) {
             <span className="text-brand">you're behind on.</span>
           </h2>
           <p className="max-w-sm text-[15px] leading-relaxed text-ink-3">
-            One PDF is enough to see whether this works the way you study.
-            Nothing to configure first.
+            One PDF is enough to see if this works for you.
+            There's nothing to set up first.
           </p>
           <CTA to="/signup">Get started</CTA>
         </div>

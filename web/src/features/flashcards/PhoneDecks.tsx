@@ -116,15 +116,15 @@ export function PhoneDecks({
               bot={{ agent: 'cards', say: 'emptyCards', surface: 'phone' }}
               description={
                 addMaterialHref
-                  ? `${subspaceName} has no material yet. Add some and I'll draft cards from it, or write your own.`
-                  : `Write cards yourself, or have them drafted from what you've indexed under ${subspaceName}.`
+                  ? `${subspaceName} has no files yet. Add one and I'll make cards from it, or write your own.`
+                  : `Write your own cards, or let me make them from your files in ${subspaceName}.`
               }
               action={
                 <div className="flex w-full flex-col gap-2">
                   {addMaterialHref ? (
                     <>
                       <Button size="xl" onClick={() => navigate(addMaterialHref)}>
-                        <Icon name="plus" size={16} /> Add material
+                        <Icon name="plus" size={16} /> Add a file
                       </Button>
                       <Button size="lg" variant="secondary" onClick={onNew}>
                         Start a deck
@@ -133,7 +133,7 @@ export function PhoneDecks({
                   ) : (
                     <>
                       <Button size="xl" onClick={onGenerate}>
-                        <Icon name="sparkle" size={16} /> Generate a deck
+                        <Icon name="sparkle" size={16} /> Make a deck
                       </Button>
                       <Button size="lg" variant="secondary" onClick={onNew}>
                         Start a deck
@@ -153,7 +153,7 @@ export function PhoneDecks({
                 <Icon name="plus" size={15} /> New deck
               </Button>
               <Button size="md" variant="secondary" onClick={onGenerate} className="flex-1">
-                <Icon name="sparkle" size={15} /> Generate
+                <Icon name="sparkle" size={15} /> Make cards
               </Button>
             </div>
             <ul className="border-t border-line-soft">

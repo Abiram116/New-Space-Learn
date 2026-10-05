@@ -52,7 +52,7 @@ it('shows a spinner and does not navigate while auth is still resolving', () => 
   mockAuth = { loading: true, session: null }
   renderCallback()
 
-  expect(screen.getByText(/finishing sign-in/i)).toBeInTheDocument()
+  expect(screen.getByText(/signing you in/i)).toBeInTheDocument()
   expect(navigate).not.toHaveBeenCalled()
   expect(play).not.toHaveBeenCalled()
 })

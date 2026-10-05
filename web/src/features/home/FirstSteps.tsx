@@ -15,9 +15,9 @@ import { cn } from '../../lib/cn'
 import type { Checklist, StepId } from './checklist'
 
 const WHAT: Record<StepId, string> = {
-  material: 'A PDF, slides or lecture notes, dropped into a topic.',
-  practice: 'Turn what you added into a deck or a quiz in one go.',
-  tutor: 'Ask about your material. Every answer cites the page.',
+  material: 'A PDF, slides or lecture notes. Add them to a topic.',
+  practice: 'Turn your file into cards or a quiz.',
+  tutor: 'Ask about your file. Every answer shows the page.',
 }
 
 export type StepTarget =
@@ -43,7 +43,7 @@ export function FirstSteps({
     <section aria-labelledby="first-steps-title" className={cn('ruled flex flex-col gap-4 pb-5', className)}>
       <div className="flex items-baseline gap-3">
         <h2 id="first-steps-title" className="nameplate text-[20px] text-ink">
-          Get set up
+          Let's get started
         </h2>
         <span className="setcode">
           {doneCount} of {steps.length} done

@@ -168,15 +168,15 @@ describe('Generate quiz says which topic it draws on', () => {
     generateQuiz.mockResolvedValue(quiz({ id: 'quiz-new' }))
     renderView()
     const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: /Generate quiz/ }))
+    await user.click(await screen.findByRole('button', { name: /Make a quiz/ }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Generate a quiz' })
+    const dialog = await screen.findByRole('dialog', { name: 'Make a quiz' })
     const picker = within(dialog).getByRole('button', { name: /Topic/ })
     expect(picker).toHaveTextContent('FSD › Attention')
 
     await user.click(picker)
     await user.click(within(dialog).getByText('Deep Learning › Autoencoders'))
-    await user.click(within(dialog).getByRole('button', { name: 'Generate' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Make quiz' }))
     await waitFor(() => expect(generateQuiz).toHaveBeenCalled())
     expect(generateQuiz.mock.calls[0][0]).toBe(SUBSPACE_B.id)
   })

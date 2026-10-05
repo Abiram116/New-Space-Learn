@@ -43,7 +43,7 @@ export function Sidebar({
   // Disabled state needs a reason attached to it, not just a dimmer colour.
   // A greyed-out nav item with no explanation reads as broken, not as
   // "do this first" — the dim alone doesn't say what "this" is.
-  const whyDisabled = 'Add a topic to a subject to unlock this'
+  const whyDisabled = 'Add a topic to a subject first'
   const nav: {
     to: string
     icon: IconName

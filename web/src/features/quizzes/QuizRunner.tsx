@@ -53,16 +53,16 @@ import { useImmersive } from '../../components/layout/immersive'
 const MIN_READ_MS = 250
 
 const NICE = [
-  'Correct.',
+  'Correct!',
   'That’s the one.',
-  'Right — and for the right reason.',
-  'Got it.',
+  'Right, and for the right reason.',
+  'You got it.',
   'Yes, exactly that.',
-  'Clean.',
+  'Nice one.',
 ]
 
 /** Said on a run of three or more. Earned, so it can be louder. */
-const STREAK = ['Three in a row.', 'Four straight.', 'Five clean.', 'Still going.']
+const STREAK = ['Three in a row!', 'Four in a row!', 'Five in a row!', 'Keep it going!']
 
 export type RunnerState = {
   index: number
@@ -387,7 +387,7 @@ export function QuizRunner({
           {isRevealed &&
             (isLast ? (
               <Button onClick={finish} disabled={busy} size={compact ? 'sm' : 'md'}>
-                {busy ? 'Scoring…' : error ? 'Try again' : 'See results'}
+                {busy ? 'Checking…' : error ? 'Try again' : 'See results'}
               </Button>
             ) : (
               <Button onClick={() => setIndex((i) => i + 1)} size={compact ? 'sm' : 'md'}>
@@ -432,8 +432,8 @@ export function QuizRunner({
           title="Leave this quiz?"
           description={
             answeredCount > 0
-              ? `You've answered ${answeredCount} of ${total}. Answers are only saved when you see your results, so this attempt won't count.`
-              : 'Nothing has been answered yet, so there is nothing to lose.'
+              ? `You've answered ${answeredCount} of ${total}. Your answers are saved only when you see your results, so this try won't count.`
+              : "You haven't answered anything yet, so nothing will be lost."
           }
           confirmLabel="Leave quiz"
           destructive
@@ -523,7 +523,7 @@ export function QuizRunner({
                 className="ml-auto min-w-[10rem]"
               >
                 {isLast ? (
-                  busy ? 'Scoring…' : error ? 'Try again' : 'See results'
+                  busy ? 'Checking…' : error ? 'Try again' : 'See results'
                 ) : (
                   <>
                     Next <Icon name="arrowRight" size={15} />
@@ -562,8 +562,8 @@ export function QuizRunner({
         title="Leave this quiz?"
         description={
           answeredCount > 0
-            ? `You've answered ${answeredCount} of ${total}. Answers are only saved when you see your results, so this attempt won't count.`
-            : 'Nothing has been answered yet, so there is nothing to lose.'
+            ? `You've answered ${answeredCount} of ${total}. Your answers are saved only when you see your results, so this try won't count.`
+            : "You haven't answered anything yet, so nothing will be lost."
         }
         confirmLabel="Leave quiz"
         destructive
@@ -605,7 +605,7 @@ function ProgressHeader({
           type="button"
           onClick={onExit}
           disabled={exitDisabled}
-          title={exitDisabled ? 'Scoring your quiz — one moment' : undefined}
+          title={exitDisabled ? 'Checking your answers. One moment.' : undefined}
           className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted transition-colors cursor-pointer hover:text-ink disabled:cursor-default disabled:opacity-40"
         >
           <Icon name="arrowLeft" size={12} /> Leave
@@ -793,7 +793,7 @@ function Verdict({
           tag the student model scores you on. */}
       {!correct && subtopic && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <span className="setcode">Worth revising</span>
+          <span className="setcode">Study this</span>
           <span className="rounded-full bg-coral-soft px-2 py-0.5 text-[11px] font-semibold text-coral-deep">
             {subtopic}
           </span>
@@ -844,7 +844,7 @@ function StageHeader({
           type="button"
           onClick={onLeave}
           disabled={leaveDisabled}
-          title={leaveDisabled ? 'Scoring your quiz — one moment' : undefined}
+          title={leaveDisabled ? 'Checking your answers. One moment.' : undefined}
           className={cn(
             '-ml-2 inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1.5 font-medium text-muted',
             't-control duration-150 hover:bg-line-soft hover:text-ink',
@@ -1062,7 +1062,7 @@ function StageVerdict({
 
       {!correct && subtopic && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="setcode stage-label">Worth revising</span>
+          <span className="setcode stage-label">Study this</span>
           <span className="stage-label rounded-full bg-coral-soft px-2.5 py-1 font-semibold text-coral-deep">
             {subtopic}
           </span>

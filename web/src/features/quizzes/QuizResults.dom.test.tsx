@@ -58,7 +58,7 @@ describe('personal best badge', () => {
   it('a strictly higher score shows the badge with both numbers', () => {
     show({ score: 80, previous_best: 60, attempts: 2 })
     expect(screen.getByTestId('quiz-best-badge')).toHaveTextContent(
-      'New personal best · 60% → 80%',
+      'New best! 60% → 80%',
     )
     expect(screen.queryByTestId('quiz-best-line')).not.toBeInTheDocument()
     expect(celebrateQuiz.mock.calls[0][0]).toMatchObject({ score: 80, previousBest: 60 })
@@ -72,13 +72,13 @@ describe('personal best badge', () => {
   it('an equal score is not a best: quiet line only', () => {
     show({ score: 80, previous_best: 80, attempts: 3 })
     expect(screen.queryByTestId('quiz-best-badge')).not.toBeInTheDocument()
-    expect(screen.getByTestId('quiz-best-line')).toHaveTextContent('Best: 80% · attempt 3')
+    expect(screen.getByTestId('quiz-best-line')).toHaveTextContent('Best: 80% · try 3')
   })
 
   it('a lower score keeps the standing best in the quiet line', () => {
     show({ score: 60, previous_best: 80, attempts: 4 }, 3)
     expect(screen.queryByTestId('quiz-best-badge')).not.toBeInTheDocument()
-    expect(screen.getByTestId('quiz-best-line')).toHaveTextContent('Best: 80% · attempt 4')
+    expect(screen.getByTestId('quiz-best-line')).toHaveTextContent('Best: 80% · try 4')
   })
 
   it('a result without the server facts (older API) says nothing', () => {

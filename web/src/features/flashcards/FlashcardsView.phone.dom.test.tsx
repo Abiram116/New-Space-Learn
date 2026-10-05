@@ -141,7 +141,7 @@ describe('phone deck list', () => {
     listAllDecks.mockResolvedValue([])
     renderView()
     await waitFor(() => expect(screen.getByText('No decks yet')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /Generate a deck/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Make a deck/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start a deck' })).toBeInTheDocument()
   })
 })

@@ -29,7 +29,7 @@ export function NewSpaceModal({
   const submit = async () => {
     setErr(null)
     if (name.trim().length < 1) {
-      setErr('Give this subject a short name.')
+      setErr('Give your subject a short name.')
       return
     }
     setBusy(true)

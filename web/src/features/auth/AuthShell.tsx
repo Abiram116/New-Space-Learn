@@ -115,7 +115,7 @@ const PIECES: Piece[] = [
     kind: 'Answer',
     tone: 'brand',
     title: 'Why does a price ceiling cause shortages?',
-    body: 'Held under the market price, demand outruns supply — and the gap has to clear some other way, usually queues.',
+    body: 'When the price is held low, more people want it than there is to go around. So people end up waiting in line.',
     code: 'micro-ch7.pdf · p.88',
     x: 5,
     y: 36,
@@ -195,10 +195,10 @@ const PIECES: Piece[] = [
   },
   {
     icon: 'doc',
-    kind: 'Source',
+    kind: 'File',
     tone: 'sky',
     title: 'thermo-lecture-04.pdf',
-    body: '41 pages · indexed',
+    body: '41 pages · ready',
     x: 79,
     y: 80,
     w: 210,
@@ -246,8 +246,8 @@ function ArtifactField() {
           <span className="text-brand">Keep the page.</span>
         </h2>
         <p className="mt-3 max-w-[19rem] text-[14px] leading-relaxed text-ink-3">
-          Every answer cites the page it came from — then becomes a card, a note
-          or a quiz that keeps testing you long after you've closed the PDF.
+          Every answer shows the page it came from. Then turn it into a card, a note
+          or a quiz that helps you remember it long after you close the PDF.
         </p>
       </div>
 

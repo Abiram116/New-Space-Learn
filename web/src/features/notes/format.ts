@@ -43,8 +43,8 @@ export function labelFor(f: Filter, notes: Note[] | null): string {
 
 export function originLabel(origin: Note['origin']): string {
   if (origin === 'user') return 'Written by me'
-  if (origin === 'doc') return 'From a document'
-  return 'Notes agent'
+  if (origin === 'doc') return 'From a file'
+  return 'Written by AI'
 }
 
 /**
@@ -59,11 +59,11 @@ export function originLabel(origin: Note['origin']): string {
  * compact form — it says what happened once, not every time it happened.
  */
 export function provenanceLabel(note: Pick<Note, 'origin' | 'touched_by_user' | 'touched_by_agent'>): string {
-  if (note.origin === 'doc') return 'From a document'
+  if (note.origin === 'doc') return 'From a file'
   if (note.origin === 'agent') {
-    return note.touched_by_user ? 'Created by AI · Edited by you' : 'Created by AI'
+    return note.touched_by_user ? 'Made by AI · Edited by you' : 'Made by AI'
   }
-  return note.touched_by_agent ? 'Created by you · Edited by AI' : 'Created by you'
+  return note.touched_by_agent ? 'Made by you · Edited by AI' : 'Made by you'
 }
 
 export function relativeTime(iso: string): string {

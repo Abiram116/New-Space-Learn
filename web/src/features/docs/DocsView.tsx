@@ -163,7 +163,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       await deleteDocument(deleteId)
       setDocs((prev) => (prev ? prev.filter((d) => d.id !== deleteId) : prev))
       setDeleteId(null)
-      show('Document deleted.', 'success')
+      show('File deleted.', 'success')
     } catch (err) {
       // Unlike notes/decks/skills, `DELETE /documents/{id}` 404s if the row
       // is already gone rather than being a silent no-op — without the
@@ -181,7 +181,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       try {
         const updated = await reprocessDocument(id)
         setDocs((prev) => (prev ? prev.map((d) => (d.id === id ? updated : d)) : prev))
-        show('Reprocessing…', 'info')
+        show('Reading your file again…', 'info')
       } catch (err) {
         showError(err)
       }
@@ -192,8 +192,8 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
   const deleteDialog = (
     <ConfirmDialog
       open={Boolean(deleteId)}
-      title="Delete this document?"
-      description="Its chunks are removed from the knowledge base. Notes and chats stay."
+      title="Delete this file?"
+      description="Your notes and chats will stay."
       confirmLabel="Delete"
       onCancel={() => setDeleteId(null)}
       onConfirm={del}
@@ -236,7 +236,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       onDrop={onDrop}
     >
       <SubspaceHeader
-        title="Documents"
+        title="Files"
         actions={
           <>
             <input
@@ -257,7 +257,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
         <RelatedTopics subspaceId={subspaceId} />
 
-        {loading && <PageSpinner label="Loading documents…" />}
+        {loading && <PageSpinner label="Loading your files…" />}
 
         {error && !loading && (
           <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
@@ -270,9 +270,9 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
             <EmptyState
               className="w-full max-w-lg"
               icon="doc"
-              title="No sources yet"
+              title="No files yet"
               bot={{ agent: 'tutor', say: 'emptyDocs' }}
-              description="Add a PDF, markdown, plain-text, CSV, or image file. It gets chunked and embedded so answers in this topic can cite pages."
+              description="Add a PDF, text, CSV or image file. We'll read it so answers in this topic can show the page they came from."
               action={
                 <Button size="lg" onClick={onPick}>
                   <Icon name="upload" size={15} /> Upload a file
@@ -327,7 +327,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
               className="flex min-h-[124px] cursor-pointer flex-col items-center justify-center gap-2 p-3.5 text-[13px] text-muted transition-colors hover:border-brand/50 hover:text-brand-deep"
             >
               <Icon name="upload" size={20} />
-              Drop files, or click to browse
+              Drop files here, or click to pick
             </DashedCard>
           </div>
         )}

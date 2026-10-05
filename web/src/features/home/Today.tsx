@@ -98,7 +98,7 @@ export function Today({
       <Page>
         <EmptyState
           icon="offline"
-          title="Couldn't load Today"
+          title="We couldn't open Today"
           bot={{ agent: 'tutor', say: 'error', mood: 'oops' }}
           description={error}
           action={
@@ -158,7 +158,7 @@ export function Today({
             )}
             <p className="text-[16px] leading-relaxed text-ink-3">
               {welcome
-                ? 'Good to see you. No need to clear everything at once — a few minutes today is plenty to get going again.'
+                ? 'Good to see you! No need to do it all at once. A few minutes today is plenty.'
                 : brief.data?.body}
             </p>
           </>
@@ -169,8 +169,8 @@ export function Today({
       {empty ? (
         <>
           <PrimaryAction
-            label="Add material"
-            detail={`Photos or files, into ${topics[0].subspace.name}`}
+            label="Add a file"
+            detail={`A photo or a file, for ${topics[0].subspace.name}`}
             href={`${topics[0].link}/docs?add=1`}
             icon="upload"
           />
@@ -219,7 +219,7 @@ const ACTION_ICON: Record<TodayAction['kind'], IconName> = {
 
 function actionDetail(a: TodayAction): string {
   if (a.kind === 'review') return a.detail
-  if (a.kind === 'suggestion') return 'Picked from how your quizzes are going'
+  if (a.kind === 'suggestion') return 'Picked from how your quizzes went'
   return a.detail
 }
 
@@ -339,7 +339,7 @@ function Rhythm({ stats, loading }: { stats: Stats | null; loading: boolean }) {
             />
             <span className={cn('text-[12px] font-semibold', d.today ? 'text-brand' : 'text-faint')}>
               {d.label}
-              <span className="sr-only">{d.active ? ' — studied' : ' — no study'}</span>
+              <span className="sr-only">{d.active ? ' — studied' : ' — did not study'}</span>
             </span>
           </li>
         ))}
@@ -388,7 +388,7 @@ function RetakeRow({ spaces }: { spaces: Space[] }) {
       to={`${base}/quizzes?q=${quiz.id}`}
       icon="quiz"
       tone="text-coral"
-      title={`Retake: ${quiz.topic || quiz.subspace_name || 'quiz'}`}
+      title={`Try again: ${quiz.topic || quiz.subspace_name || 'quiz'}`}
       meta={`Best ${quiz.best_score}%${quiz.attempts && quiz.attempts > 1 ? ` · ${quiz.attempts} tries` : ''}`}
     />
   )
@@ -488,8 +488,8 @@ function FirstTopic({ spaces }: { spaces: Space[] }) {
     setErr(null)
     const subj = subject.trim()
     const top = topic.trim()
-    if (!existing && !subj) return setErr('Give it a short name — you can rename it later.')
-    if (existing && !top) return setErr('Give the topic a short name.')
+    if (!existing && !subj) return setErr('Give it a short name. You can change it later.')
+    if (existing && !top) return setErr('Give your topic a short name.')
     setBusy(true)
     try {
       const space = existing ?? (await createSpace({ name: subj, tone: 'brand' }))
@@ -505,8 +505,8 @@ function FirstTopic({ spaces }: { spaces: Space[] }) {
     <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
       <p className="text-[16px] leading-relaxed text-ink-3">
         {existing
-          ? `Add a first topic to ${existing.name}, then bring in your material — a photo of your notes works.`
-          : 'Name what you’re studying, then bring in your material — a photo of your notes works.'}
+          ? `Add a first topic to ${existing.name}, then add a file. A photo of your notes works too.`
+          : 'Name what you’re studying, then add a file. A photo of your notes works too.'}
       </p>
       {!existing && (
         <label className="flex flex-col gap-1.5">
@@ -536,7 +536,7 @@ function FirstTopic({ spaces }: { spaces: Space[] }) {
       </label>
       {err && <p className="text-[14px] font-semibold text-coral-deep">{err}</p>}
       <Button type="submit" size="xl" disabled={busy} aria-busy={busy} className="w-full">
-        {busy ? 'Creating…' : 'Next: add material'}
+        {busy ? 'Creating…' : 'Next: add a file'}
         {!busy && <Icon name="arrowRight" size={16} />}
       </Button>
     </form>
@@ -564,7 +564,7 @@ export function DesktopNote() {
         <Icon name="chat" size={18} className="mt-0.5 shrink-0 text-sky" />
         <p className="text-[15px] leading-relaxed text-ink-3">
           On your phone, Space Learn is for revising: cards, quizzes and reading your notes.
-          The chat tutor and deep note-writing are on a computer, where there’s room for them.
+          Chatting with the tutor and writing notes work best on a computer.
         </p>
       </div>
       <Button variant="secondary" size="lg" onClick={() => void send()} disabled={busy} className="min-h-12 w-full">

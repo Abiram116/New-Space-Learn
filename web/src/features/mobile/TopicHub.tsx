@@ -74,7 +74,7 @@ function Hub({ space, subspace, base }: { space: Space; subspace: Subspace; base
           />
           <MobileRow to={`${base}/quizzes`} icon="quiz" role="test" label="Quizzes" count={counts.quizzes ?? 0} />
           <MobileRow to={`${base}/notes`} icon="note" role="read" label="Notes" count={counts.notes ?? 0} />
-          <MobileRow to={`${base}/docs`} icon="doc" role="source" label="Sources" count={counts.docs ?? 0} />
+          <MobileRow to={`${base}/docs`} icon="doc" role="source" label="Files" count={counts.docs ?? 0} />
         </RowGroup>
 
         <Link
@@ -85,8 +85,8 @@ function Hub({ space, subspace, base }: { space: Space; subspace: Subspace; base
             <Icon name="upload" size={18} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-[16px] font-semibold text-ink">Add material</span>
-            <span className="mt-0.5 block text-[13px] text-faint">A PDF, slides or text to revise from</span>
+            <span className="block text-[16px] font-semibold text-ink">Add a file</span>
+            <span className="mt-0.5 block text-[13px] text-faint">A PDF, slides or text to study from</span>
           </span>
           <Icon name="chevronRight" size={17} className="shrink-0 text-faint" />
         </Link>
@@ -136,8 +136,8 @@ function ReviewCard({
   if (failed) {
     return (
       <div className="cardstock rounded-2xl p-4">
-        <p className="text-[16px] font-semibold text-ink">Couldn't check what's due</p>
-        <p className="mt-1 text-[14px] leading-relaxed text-muted">Your cards are fine — the list just didn't load.</p>
+        <p className="text-[16px] font-semibold text-ink">We couldn't check what's due</p>
+        <p className="mt-1 text-[14px] leading-relaxed text-muted">Your cards are fine. The list just didn't load.</p>
         <Button variant="secondary" className="mt-3 w-full" onClick={onRetry}>
           Try again
         </Button>
@@ -173,11 +173,11 @@ function ReviewCard({
   const next =
     cards > 0
       ? quizzes > 0
-        ? { title: "You're caught up", body: `Nothing due in ${plural(cards, 'card')}. They come back when they're ready to test you.`, to: `${base}/quizzes`, cta: 'Quiz yourself instead' }
-        : { title: "You're caught up", body: `Nothing due in ${plural(cards, 'card')}. They come back when they're ready to test you.`, to: `${base}/flashcards`, cta: 'Browse your cards' }
+        ? { title: "You're caught up", body: `Nothing due in ${plural(cards, 'card')}. They'll come back when it's time.`, to: `${base}/quizzes`, cta: 'Try a quiz instead' }
+        : { title: "You're caught up", body: `Nothing due in ${plural(cards, 'card')}. They'll come back when it's time.`, to: `${base}/flashcards`, cta: 'Browse your cards' }
       : docs > 0
-        ? { title: 'No cards yet', body: 'Make a deck from your sources and it will turn up here when cards are due.', to: `${base}/flashcards`, cta: 'Make cards' }
-        : { title: 'Nothing to revise yet', body: 'Add a PDF, slides or text first. Cards and quizzes are made from it.', to: `${base}/docs`, cta: 'Add material' }
+        ? { title: 'No cards yet', body: 'Make a deck from your files. Cards will show up here when they are due.', to: `${base}/flashcards`, cta: 'Make cards' }
+        : { title: 'Nothing to revise yet', body: "Add a PDF, slides or text first. We'll make cards and quizzes from it.", to: `${base}/docs`, cta: 'Add a file' }
 
   return (
     <div className="cardstock rounded-2xl p-4">

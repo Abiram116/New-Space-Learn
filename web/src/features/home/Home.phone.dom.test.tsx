@@ -162,9 +162,9 @@ describe('Today, on a phone', () => {
     getCachedStats.mockResolvedValue(stats({ docs_indexed: 0, cards_due: 0 }))
     renderHome()
 
-    const add = await screen.findByRole('link', { name: /Add material/ })
+    const add = await screen.findByRole('link', { name: /Add a file/ })
     expect(add).toHaveAttribute('href', '/sp-1/sub-1/docs?add=1')
-    expect(screen.getByText(/chat tutor and deep note-writing are on a computer/)).toBeInTheDocument()
+    expect(screen.getByText(/Chatting with the tutor and writing notes work best on a computer/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Send myself the link/ }))
     await waitFor(() => expect(share).toHaveBeenCalledWith({ title: 'Space Learn', url: `${window.location.origin}/` }))
@@ -192,7 +192,7 @@ describe('Today, on a phone', () => {
 
     const user = userEvent.setup()
     await user.type(await screen.findByPlaceholderText('e.g. Biology'), 'Chemistry')
-    await user.click(screen.getByRole('button', { name: /Next: add material/ }))
+    await user.click(screen.getByRole('button', { name: /Next: add a file/ }))
 
     await waitFor(() => expect(createSpace).toHaveBeenCalledWith({ name: 'Chemistry', tone: 'brand' }))
     expect(addSubspace).toHaveBeenCalledWith('new-sp', 'Chemistry')
@@ -232,7 +232,7 @@ describe('Home on desktop', () => {
     getCachedStats.mockResolvedValue(stats({ docs_indexed: 1, composition: { chat_messages: 0, cards_reviewed: 0, quizzes_taken: 0 } }))
     renderHome()
 
-    const band = await screen.findByRole('region', { name: 'Get set up' })
+    const band = await screen.findByRole('region', { name: "Let's get started" })
     expect(within(band).getByText('1 of 3 done')).toBeInTheDocument()
     const steps = within(band).getAllByRole('listitem')
     expect(steps[1]).toHaveAttribute('aria-current', 'step')
@@ -247,7 +247,7 @@ describe('Home on desktop', () => {
     renderHome()
 
     await screen.findByText('Current streak')
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Get set up' })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('region', { name: "Let's get started" })).not.toBeInTheDocument())
   })
 
   it('offers the questions a phone sign-up skipped, and answering clears the offer', async () => {

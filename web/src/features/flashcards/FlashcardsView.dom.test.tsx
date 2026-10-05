@@ -160,7 +160,7 @@ describe('a specific deck has its own URL, like Notes and Quizzes already do', (
     expect(await screen.findByRole('button', { name: /All decks/ })).toBeInTheDocument()
     await waitFor(() => expect(listCards).toHaveBeenCalledWith('deck-1'))
     expect(screen.getByRole('heading', { name: 'Transformer basics' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Generate a deck/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Make a deck/ })).not.toBeInTheDocument()
   })
 
   it('going back to the grid re-fetches the deck list', async () => {
@@ -207,9 +207,9 @@ describe('generating cards lands you on the deck they went into', () => {
     renderView()
 
     await waitFor(() => expect(screen.getByText('No decks yet')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Generate a deck/ }))
-    const dialog = await screen.findByRole('dialog', { name: 'Generate a deck' })
-    await user.click(within(dialog).getByRole('button', { name: 'Generate' }))
+    await user.click(screen.getByRole('button', { name: /Make a deck/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Make a deck' })
+    await user.click(within(dialog).getByRole('button', { name: 'Make cards' }))
 
     await waitFor(() => expect(listCards).toHaveBeenCalledWith('deck-new'))
     expect(await screen.findByRole('button', { name: /All decks/ })).toBeInTheDocument()

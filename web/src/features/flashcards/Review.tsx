@@ -193,7 +193,7 @@ export function Review({
     <ConfirmDialog
       open={confirmLeave}
       title="End this session?"
-      description={`You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your grades are saved, and the rest stay due for next time.`}
+      description={`You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your answers are saved, and the rest will wait for next time.`}
       confirmLabel="End session"
       onCancel={() => setConfirmLeave(false)}
       onConfirm={() => {
@@ -414,11 +414,10 @@ export function Review({
                 {/* The number under each grade is the single least obvious thing
                     on this screen, and it is the whole mechanic. */}
                 <Tip id="cards-grades-v1" icon="clock">
-                  The number under each grade is when you'll see this card next.
-                  <strong className="font-semibold text-ink-3"> Again</strong> resets
-                  it to one day; <strong className="font-semibold text-ink-3">Easy</strong>{' '}
-                  pushes it furthest out. Answer honestly — the schedule only works
-                  if the grades are true.
+                  The number under each button is when you'll see this card again.
+                  <strong className="font-semibold text-ink-3"> Again</strong> brings
+                  it back soon; <strong className="font-semibold text-ink-3">Easy</strong>{' '}
+                  waits the longest. Be honest, it works best that way.
                 </Tip>
               </div>
             </div>
@@ -464,7 +463,7 @@ export function Review({
                     </div>
                   )}
                   {mode.index + 1 >= mode.cards.length && (
-                    <div className="stage-label px-0.5 text-faint">Last card in this session.</div>
+                    <div className="stage-label px-0.5 text-faint">This is the last card.</div>
                   )}
                 </div>
               </div>

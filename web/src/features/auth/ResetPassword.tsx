@@ -51,14 +51,14 @@ export function ResetPassword() {
       void play('threshold', () => {
         navigate('/home', { replace: true })
       })
-      show('Password updated.', 'success')
+      show('Password changed.', 'success')
     } catch (err) {
       setErrors({ form: friendlyMessage(err) })
       setBusy(false)
     }
   }
 
-  if (loading || !session) return <PageSpinner label="Finishing sign-in…" />
+  if (loading || !session) return <PageSpinner label="Signing you in…" />
 
   return (
     <AuthShell
@@ -66,10 +66,10 @@ export function ResetPassword() {
         <>
           Set a new password.
           <br />
-          Make it one only you know.
+          Pick one only you know.
         </>
       }
-      subtitle="You're signed in from the reset link — pick a new password to finish."
+      subtitle="You're signed in. Pick a new password to finish."
       footer={
         <>
           Changed your mind?{' '}

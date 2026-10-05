@@ -9,9 +9,9 @@ export const statusMeta: Record<
   { note: string; icon: IconName; tone: Tone; barClass: string }
 > = {
   uploading: { note: 'Uploading', icon: 'upload', tone: 'sky', barClass: 'bg-sky' },
-  processing: { note: 'Embedding chunks', icon: 'clock', tone: 'sun', barClass: 'bg-sun' },
-  ready: { note: 'Indexed for citations', icon: 'check', tone: 'mint', barClass: 'bg-mint' },
-  failed: { note: 'Failed', icon: 'alert', tone: 'coral', barClass: 'bg-coral' },
+  processing: { note: 'Getting it ready', icon: 'clock', tone: 'sun', barClass: 'bg-sun' },
+  ready: { note: 'Ready for questions', icon: 'check', tone: 'mint', barClass: 'bg-mint' },
+  failed: { note: 'Didn\'t work', icon: 'alert', tone: 'coral', barClass: 'bg-coral' },
 }
 
 export function SourceItem({
@@ -103,7 +103,7 @@ export function SourceItem({
               onClick={onReprocess}
               className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-brand-soft px-3 text-[13px] font-bold text-brand-deep cursor-pointer"
             >
-              <Icon name="refresh" size={13} /> Reprocess
+              <Icon name="refresh" size={13} /> Read again
             </button>
           )}
           {onDelete && (

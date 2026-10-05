@@ -198,7 +198,7 @@ function Inner({
       setNotes((prev) => (prev ? [note, ...prev] : [note]))
       select(note.id)
       setNoteBriefOpen(false)
-      show('Note written.', 'success')
+      show('Your note is ready.', 'success')
     } catch (err) {
       // Dialog stays open on failure, same as the chat agent's version of
       // this — a rate limit or dropped connection shouldn't cost the brief
@@ -373,8 +373,8 @@ function Inner({
                     f === 'all'
                       ? 'Every note in this topic'
                       : f === 'ai'
-                        ? 'Notes the AI has written or edited — some may also be yours'
-                        : 'Notes you have written or edited — some may also be AI-written'
+                        ? 'Notes the AI wrote or changed. Some may be yours too.'
+                        : 'Notes you wrote or changed. Some may be the AI’s too.'
                   }
                   className={cn(
                     'min-h-10 flex-1 rounded-[10px] px-2 py-1 text-[13px] transition-colors cursor-pointer',
@@ -427,7 +427,7 @@ function Inner({
                 icon="note"
                 title="No notes yet"
                 bot={{ agent: 'notes', say: 'emptyNotes' }}
-                description="Start a blank one, or have the AI write one from what's indexed here."
+                description="Start a blank note, or let the AI write one from your files."
                 action={
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button variant="secondary" onClick={() => setNoteBriefOpen(true)}>
@@ -558,7 +558,7 @@ function Inner({
             <EmptyState
               icon="note"
               title="Pick a note to read"
-              description="Or create one — the editor autosaves as you type."
+              description="Or make a new one. Your note saves as you type."
               action={<Button onClick={newBlank}>New note</Button>}
             />
           ) : null}

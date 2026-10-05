@@ -74,13 +74,13 @@ describe('phone quiz list', () => {
     const bar = document.querySelector('[data-sticky-action-bar]') as HTMLElement
     await user.click(within(bar).getByRole('button', { name: 'New quiz' }))
     // Modal renders as a bottom sheet on phones.
-    expect(await screen.findByRole('dialog', { name: 'Generate a quiz' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Make a quiz' })).toBeInTheDocument()
   })
 
   it('an empty library leads with one big generate button', async () => {
     listAllQuizzes.mockResolvedValue([])
     renderView()
     await waitFor(() => expect(screen.getByText('No quizzes yet')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /Generate a quiz/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Make a quiz/ })).toBeInTheDocument()
   })
 })

@@ -117,12 +117,12 @@ export function PhoneDocs({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         <PhoneTitle
-          title="Material"
+          title="Files"
           hideTitle
-          sub={docs && docs.length + uploads.length > 0 ? `${docs.length + uploads.length} source${docs.length + uploads.length === 1 ? '' : 's'}` : undefined}
+          sub={docs && docs.length + uploads.length > 0 ? `${docs.length + uploads.length} file${docs.length + uploads.length === 1 ? '' : 's'}` : undefined}
         />
 
-        {loading && <PageSpinner label="Loading documents…" />}
+        {loading && <PageSpinner label="Loading your files…" />}
 
         {error && !loading && (
           <div className="mx-4 rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[15px] text-coral-deep">
@@ -147,7 +147,7 @@ export function PhoneDocs({
         )}
 
         {!isEmpty && !loading && (
-          <ul className="border-t border-line-soft" aria-label="Material">
+          <ul className="border-t border-line-soft" aria-label="Files">
             {uploads.map((u) => (
               <li key={u.key} className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
                 <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', toneSoft.sky, toneText.sky)}>
@@ -178,32 +178,32 @@ export function PhoneDocs({
         {!isEmpty && (
           <StickyActionBar>
             <Button size="xl" className="min-h-14 flex-1" onClick={() => setAddOpen(true)}>
-              <Icon name="plus" size={18} /> Add material
+              <Icon name="plus" size={18} /> Add a file
             </Button>
           </StickyActionBar>
         )}
       </div>
 
-      <BottomSheet open={addOpen} onClose={closeAdd} title="Add material">
+      <BottomSheet open={addOpen} onClose={closeAdd} title="Add a file">
         <div className="flex flex-col gap-3 pb-1">
           <BigOption
             icon={<CameraIcon size={26} />}
             title={photos > 0 ? 'Take another photo' : 'Take a photo'}
-            sub={photos > 0 ? 'One page at a time — as many as you like' : 'Notes, a whiteboard, a textbook page'}
+            sub={photos > 0 ? 'One page at a time, as many as you like' : 'Notes, a whiteboard, a textbook page'}
             onClick={() => camRef.current?.click()}
             primary
           />
           <BigOption
             icon={<FolderIcon size={26} />}
             title="Choose from files"
-            sub="PDF, markdown, text, CSV or images"
+            sub="PDF, text, CSV or images"
             onClick={() => fileRef.current?.click()}
           />
           {photos > 0 && (
             <div className="flex items-center gap-3 rounded-xl bg-mint-soft px-4 py-3" role="status">
               <Icon name="check" size={18} className="text-mint-deep" />
               <p className="min-w-0 flex-1 text-[15px] text-mint-deep">
-                {photos} photo{photos === 1 ? '' : 's'} on the way. I’ll read {photos === 1 ? 'it' : 'them'} in the background.
+                {photos} photo{photos === 1 ? '' : 's'} added. I’ll read {photos === 1 ? 'it' : 'them'} in the background.
               </p>
               <Button size="md" variant="secondary" onClick={closeAdd}>
                 Done
@@ -221,7 +221,7 @@ export function PhoneDocs({
           sheet.target
             ? [
                 ...(sheet.target.status === 'processing' || sheet.target.status === 'failed'
-                  ? [{ label: 'Reprocess', icon: 'refresh' as const, onSelect: () => onReprocess(sheet.target!.id) }]
+                  ? [{ label: 'Read again', icon: 'refresh' as const, onSelect: () => onReprocess(sheet.target!.id) }]
                   : []),
                 { label: 'Delete', icon: 'trash', danger: true, onSelect: () => onDelete(sheet.target!.id) },
               ]

@@ -47,7 +47,7 @@ describe('OfflineBanner bots', () => {
     expect(text).toMatch(/up to a minute/i)
 
     await act(async () => void (await vi.advanceTimersByTimeAsync(2_500)))
-    expect(screen.getByRole('status')).toHaveTextContent(/connected again/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/back online/i)
     expect(bot()?.dataset.mood).toBe('waking')
     await act(async () => void (await vi.advanceTimersByTimeAsync(2_400)))
     expect(bot()?.dataset.mood).toBe('happy')
@@ -77,6 +77,6 @@ describe('OfflineBanner bots', () => {
     render(<OfflineBanner />)
     await flush()
     expect(bot()).toBeNull()
-    expect(screen.getByRole('status')).toHaveTextContent(/reconnecting to the database/i)
+    expect(screen.getByRole('status')).toHaveTextContent(/getting things connected/i)
   })
 })

@@ -137,12 +137,12 @@ export function QuizResults({
               className="inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-2.5 py-1 text-[12px] font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
             >
               <Icon name="sparkle" size={12} />
-              New personal best · {verdict.previous}% → {verdict.score}%
+              New best! {verdict.previous}% → {verdict.score}%
             </div>
           )}
           {verdict.kind === 'later' && (
             <p data-testid="quiz-best-line" className="text-[12px] tabular-nums text-muted">
-              Best: {verdict.best}% · attempt {verdict.attempts}
+              Best: {verdict.best}% · try {verdict.attempts}
             </p>
           )}
 
@@ -170,7 +170,7 @@ export function QuizResults({
 
           {weakConcepts.length > 0 && (
             <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-              <span className="setcode">Revise these</span>
+              <span className="setcode">Study these</span>
               <div className="flex flex-wrap gap-1.5">
                 {weakConcepts.map(([tag, n]) => (
                   <span
@@ -267,12 +267,12 @@ export function QuizResults({
                 className="stage-label inline-flex items-center gap-1.5 self-start rounded-full bg-mint-soft px-3 py-1.5 font-semibold text-mint-deep motion-safe:animate-[verdictIn_320ms_var(--ease-sl)_both]"
               >
                 <Icon name="sparkle" size={14} />
-                New personal best · {verdict.previous}% → {verdict.score}%
+                New best! {verdict.previous}% → {verdict.score}%
               </div>
             )}
             {verdict.kind === 'later' && (
               <p data-testid="quiz-best-line" className="stage-label tabular-nums text-muted">
-                Best: {verdict.best}% · attempt {verdict.attempts}
+                Best: {verdict.best}% · try {verdict.attempts}
               </p>
             )}
 
@@ -298,7 +298,7 @@ export function QuizResults({
 
             {weakConcepts.length > 0 && (
               <div className="flex flex-col gap-2">
-                <span className="stage-label font-semibold text-ink-3">Revise these</span>
+                <span className="stage-label font-semibold text-ink-3">Study these</span>
                 <div className="flex flex-wrap gap-1.5">
                   {weakConcepts.map(([tag, n]) => (
                     <span
@@ -378,7 +378,7 @@ export function QuizResults({
             <div id="quiz-review-list" role="list" className="flex flex-col gap-2.5" data-testid="quiz-review">
               {shown.length === 0 && (
                 <p className="stage-body rounded-2xl border border-mint/30 bg-mint-soft/40 px-5 py-4 text-mint-deep">
-                  Nothing missed — a clean sheet.
+                  You got them all right. Great job!
                 </p>
               )}
               <Stagger step={30} max={180}>

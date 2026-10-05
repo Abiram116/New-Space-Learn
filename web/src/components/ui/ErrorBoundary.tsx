@@ -34,10 +34,10 @@ export class ErrorBoundary extends Component<Props, State> {
         <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-coral-soft text-coral-deep">
           <Icon name="alert" size={24} />
         </span>
-        <h1 className="font-display text-2xl font-semibold">Something went sideways</h1>
+        <h1 className="font-display text-2xl font-semibold">Something went wrong</h1>
         <p className="text-sm text-muted">
-          The page hit an unexpected error. Try again, and if it keeps happening,
-          reload — your work is saved.
+          This page ran into a problem. Try again. If it keeps happening,
+          reload the page. Your work is saved.
         </p>
         <div className="flex gap-2">
           {/* Hand-rolled buttons here used to set `text-white` on the brand

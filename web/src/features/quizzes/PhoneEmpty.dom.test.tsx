@@ -62,21 +62,21 @@ function quizzes(addMaterialHref: string | null) {
 describe('empty lists on a topic without sources', () => {
   it('cards: Add material leads, Start a deck stays, no Generate', () => {
     decks('/s/a/b/docs?add=1')
-    expect(screen.getByRole('button', { name: /add material/i })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /add a file/i })).toBeTruthy()
     expect(screen.getByRole('button', { name: /start a deck/i })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /generate a deck/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /make a deck/i })).toBeNull()
     expect(screen.queryByText(/you've indexed/i)).toBeNull()
   })
 
   it('cards: with sources it still leads with Generate', () => {
     decks(null)
-    expect(screen.getByRole('button', { name: /generate a deck/i })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /add material/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /make a deck/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /add a file/i })).toBeNull()
   })
 
   it('quizzes: Add material replaces Generate when there is nothing to draw from', () => {
     quizzes('/s/a/b/docs?add=1')
-    expect(screen.getByRole('button', { name: /add material/i })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /generate a quiz/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /add a file/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /make a quiz/i })).toBeNull()
   })
 })

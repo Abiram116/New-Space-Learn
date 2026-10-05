@@ -165,7 +165,7 @@ export function PhoneQuizStage(p: PhoneQuizProps) {
                 )}
                 {!isCorrect && q.subtopic && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-[12.5px] font-semibold text-muted">Worth revising</span>
+                    <span className="text-[12.5px] font-semibold text-muted">Study this</span>
                     <span className="rounded-full bg-coral-soft px-2.5 py-1 text-[13px] font-semibold text-coral-deep">
                       {q.subtopic}
                     </span>
@@ -185,7 +185,7 @@ export function PhoneQuizStage(p: PhoneQuizProps) {
               >
                 {p.isLast ? (
                   p.busy ? (
-                    'Scoring…'
+                    'Checking…'
                   ) : p.error ? (
                     'Try again'
                   ) : (

@@ -186,7 +186,7 @@ export function Profile() {
             )}
             <p className="mt-1 truncate text-[13px] text-muted">
               {email}
-              {joined ? ` · collecting since ${joined}` : ''}
+              {joined ? ` · here since ${joined}` : ''}
             </p>
           </div>
           {/* Only one action here. Profile is where you read your record;
@@ -231,8 +231,8 @@ export function Profile() {
         {d && !stats.loading && d.spaces_count === 0 && d.docs_indexed === 0 && (
           <EmptyState
             icon="seal"
-            title="Nothing on the record yet"
-            description="This is where your streak, badges and study history collect. Make a subject, add a topic, and the ledger starts filling itself in."
+            title="Nothing here yet"
+            description="Your streak, badges and study history will show up here. Make a subject and add a topic to get started."
             action={<Button onClick={() => navigate('/home')}>Go to Home</Button>}
           />
         )}
@@ -252,8 +252,8 @@ export function Profile() {
             words so it never has to be inferred from the geometry. */}
         <section className="flex flex-col">
           <div className="flex items-baseline gap-2 pb-1">
-            <h2 className="nameplate text-[20px] text-ink">Standing</h2>
-            <span className="setcode ml-auto">against your own best</span>
+            <h2 className="nameplate text-[20px] text-ink">Your progress</h2>
+            <span className="setcode ml-auto">compared to your best</span>
           </div>
 
           {stats.loading ? (
@@ -271,7 +271,7 @@ export function Profile() {
                 value={d.streak_days}
                 against={Math.max(d.max_streak, 1)}
                 unit={d.streak_days === 1 ? 'day' : 'days'}
-                reference={d.max_streak > 0 ? `best ${d.max_streak}` : 'no record yet'}
+                reference={d.max_streak > 0 ? `best ${d.max_streak}` : 'no best yet'}
                 tone="brand"
               />
               <Measure
@@ -295,7 +295,7 @@ export function Profile() {
                 value={d.quiz_average ?? 0}
                 against={100}
                 unit={d.quiz_average != null ? '%' : ''}
-                reference={d.quiz_average != null ? 'of 100' : 'none taken yet'}
+                reference={d.quiz_average != null ? 'of 100' : 'no quizzes yet'}
                 empty={d.quiz_average == null}
                 tone="mint"
                 stacked={phone}
@@ -311,9 +311,9 @@ export function Profile() {
             "reference that means nothing" the material system warns about. */}
         {d && (
           <section className="flex flex-wrap items-baseline gap-x-8 gap-y-2 border-t border-line pt-4">
-            <span className="setcode-strong">Built so far</span>
+            <span className="setcode-strong">So far you have</span>
             <Built value={d.spaces_count} one="subject" many="subjects" />
-            <Built value={d.docs_indexed} one="source" many="sources" />
+            <Built value={d.docs_indexed} one="file" many="files" />
             <Built
               value={d.badges.filter((b) => b.earned).length}
               one="badge"
@@ -330,7 +330,7 @@ export function Profile() {
             non-empty — no invented facts, no padded-out placeholders. */}
         {student.data && hasFocusSignal(student.data) && (
           <section className="flex flex-col gap-3 border-t border-line pt-4">
-            <span className="setcode-strong">Where to focus</span>
+            <span className="setcode-strong">What to work on</span>
 
             {student.data.top_misconceptions && student.data.top_misconceptions.length > 0 && (
               <div className="flex flex-col gap-1.5 text-[13px]">
@@ -349,7 +349,7 @@ export function Profile() {
               <div className="flex flex-col gap-1.5 text-[13px]">
                 {student.data.root_causes.map((r, i) => (
                   <p key={i} className="text-ink-2">
-                    Struggles with {r.because_of.join(', ')} — likely because of {r.concept}.
+                    Having trouble with {r.because_of.join(', ')}? It may come from {r.concept}.
                   </p>
                 ))}
               </div>
@@ -361,7 +361,7 @@ export function Profile() {
                   <p key={i} className="text-ink-2">
                     Fading: {s.label}
                     {s.days_since_activity != null &&
-                      `, last practised ${s.days_since_activity} day${s.days_since_activity === 1 ? '' : 's'} ago`}
+                      `, last practiced ${s.days_since_activity} day${s.days_since_activity === 1 ? '' : 's'} ago`}
                   </p>
                 ))}
               </div>
@@ -376,7 +376,7 @@ export function Profile() {
                         {a.topic}
                         {a.subject && <span className="text-faint"> · {a.subject}</span>}
                       </span>
-                      <span className="shrink-0 text-coral-deep">{a.average}% avg</span>
+                      <span className="shrink-0 text-coral-deep">{a.average}% average</span>
                     </div>
                     {(a.recall_mastery != null || a.application_mastery != null) && (
                       <MasterySplit recall={a.recall_mastery} application={a.application_mastery} />
@@ -450,7 +450,7 @@ export function Profile() {
                   window, not a fixed number of minutes — without this, the
                   darkest cell reads as "a lot" with no way to know if that
                   means 20 minutes or 3 hours short of hovering every cell. */}
-              <span className="text-[12.5px] text-faint">— relative to your busiest day here</span>
+              <span className="text-[12.5px] text-faint">— compared to your busiest day</span>
             </div>
           </Ledger>
 

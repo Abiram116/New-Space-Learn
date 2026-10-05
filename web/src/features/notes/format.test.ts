@@ -92,29 +92,29 @@ describe('originLabel', () => {
 })
 
 describe('provenanceLabel', () => {
-  it('reads "Created by AI" for an untouched AI note', () => {
+  it('reads "Made by AI" for an untouched AI note', () => {
     expect(provenanceLabel(note({ origin: 'agent', touched_by_agent: true, touched_by_user: false })))
-      .toBe('Created by AI')
+      .toBe('Made by AI')
   })
 
-  it('reads "Created by you" for an untouched user note', () => {
+  it('reads "Made by you" for an untouched user note', () => {
     expect(provenanceLabel(note({ origin: 'user', touched_by_user: true, touched_by_agent: false })))
-      .toBe('Created by you')
+      .toBe('Made by you')
   })
 
-  it('reads "Created by AI · Edited by you" once a user has edited an AI note', () => {
+  it('reads "Made by AI · Edited by you" once a user has edited an AI note', () => {
     expect(provenanceLabel(note({ origin: 'agent', touched_by_agent: true, touched_by_user: true })))
-      .toBe('Created by AI · Edited by you')
+      .toBe('Made by AI · Edited by you')
   })
 
-  it('reads "Created by you · Edited by AI" once AI has touched a user note', () => {
+  it('reads "Made by you · Edited by AI" once AI has touched a user note', () => {
     expect(provenanceLabel(note({ origin: 'user', touched_by_user: true, touched_by_agent: true })))
-      .toBe('Created by you · Edited by AI')
+      .toBe('Made by you · Edited by AI')
   })
 
-  it('reads "From a document" for a doc-origin note regardless of touched flags', () => {
+  it('reads "From a file" for a doc-origin note regardless of touched flags', () => {
     expect(provenanceLabel(note({ origin: 'doc', touched_by_user: true, touched_by_agent: true })))
-      .toBe('From a document')
+      .toBe('From a file')
   })
 })
 

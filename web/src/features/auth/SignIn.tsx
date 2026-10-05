@@ -36,8 +36,8 @@ export function SignIn() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const nextErrors: typeof errors = {}
-    if (!isEmail(email)) nextErrors.email = 'Enter a valid email.'
-    if (password.length < 6) nextErrors.password = 'At least 6 characters.'
+    if (!isEmail(email)) nextErrors.email = 'Please enter a valid email.'
+    if (password.length < 6) nextErrors.password = 'Use at least 6 characters.'
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) return
     setBusy(true)
@@ -63,13 +63,13 @@ export function SignIn() {
 
   const resend = async () => {
     if (!isEmail(email)) {
-      setErrors({ email: 'Enter your email above first.' })
+      setErrors({ email: 'Type your email above first.' })
       return
     }
     setResendBusy(true)
     try {
       await resendConfirmation(email)
-      show('Sent — check your inbox.', 'success')
+      show('Sent! Check your inbox.', 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
     } finally {
@@ -90,12 +90,12 @@ export function SignIn() {
 
   const forgot = async () => {
     if (!isEmail(email)) {
-      setErrors({ email: 'Enter your email above first.' })
+      setErrors({ email: 'Type your email above first.' })
       return
     }
     try {
       await sendPasswordReset(email)
-      show('Check your inbox for a reset link.', 'success')
+      show('Check your inbox for a link to reset your password.', 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
     }
