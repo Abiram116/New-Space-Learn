@@ -187,8 +187,18 @@ def validate_answers(
 
 def _client_address(request: Request) -> str:
     """Best-effort address of the sender, for rate limiting only (never stored).
-    Behind the host's proxy the socket peer is the proxy, so the forwarded
-    header is used; it can be forged, which is why there is an overall cap too."""
+
+    Behind the host's proxy the socket peer is the proxy, so a header has to
+    say who connected. Render sits behind Cloudflare, which sets
+    `CF-Connecting-IP` itself and overwrites any value a client sent — so that
+    one is preferred. `X-Forwarded-For` is only a fallback: proxies append to
+    it, so its first entry is whatever the client chose to put there, and
+    trusting it let one sender rotate addresses at will to get a fresh limit
+    each time. The overall caps remain the backstop either way."""
+    for header in ("cf-connecting-ip", "true-client-ip"):
+        value = request.headers.get(header, "").strip()
+        if value:
+            return value[:64]
     forwarded = request.headers.get("x-forwarded-for", "")
     first = forwarded.split(",")[0].strip()
     return (first or (request.client.host if request.client else "") or "unknown")[:64]

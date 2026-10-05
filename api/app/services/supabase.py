@@ -96,24 +96,37 @@ _jwks: dict[str, dict[str, Any]] = {}
 _jwks_fetched_at = 0.0
 #: Long, because keys rotate rarely and an unknown `kid` forces a refetch anyway.
 _JWKS_TTL_S = 3600.0
+#: The most often an unknown `kid` may trigger a refetch (see `_get_signing_key`).
+_JWKS_MIN_REFRESH_S = 60.0
+_jwks_attempted_at = -_JWKS_MIN_REFRESH_S
+
+#: What every access token for a signed-in student carries. Anything else that
+#: this project's keys happen to sign (the anon and service keys themselves,
+#: tokens minted for another audience) is not a student's session.
+_AUDIENCE = "authenticated"
+_DECODE_OPTIONS = {"require_exp": True, "require_sub": True, "require_aud": True, "verify_aud": True}
 
 
 async def _get_signing_key(kid: str) -> dict[str, Any] | None:
     """The public key for `kid`, fetching the key set if it is not known yet.
 
     A `kid` we have never seen forces a refetch even inside the TTL — that is
-    what makes key rotation a non-event rather than an outage, and it cannot be
-    abused into hammering the endpoint because the result is cached either way.
+    what makes key rotation a non-event rather than an outage. But only once
+    per `_JWKS_MIN_REFRESH_S`: the `kid` is chosen by whoever sent the token,
+    so without that floor a stream of made-up kids (no sign-in needed) turned
+    every request into a key-set fetch against Supabase.
     """
     now = time.monotonic()
     if kid in _jwks and now - _jwks_fetched_at < _JWKS_TTL_S:
         return _jwks[kid]
-    await _refresh_jwks()
+    if now - _jwks_attempted_at >= _JWKS_MIN_REFRESH_S:
+        await _refresh_jwks()
     return _jwks.get(kid)
 
 
 async def _refresh_jwks() -> None:
-    global _jwks_fetched_at
+    global _jwks_fetched_at, _jwks_attempted_at
+    _jwks_attempted_at = time.monotonic()
     try:
         client = await get_client()
         r = await client.get(
@@ -179,22 +192,34 @@ async def _verify_uncached(token: str) -> dict[str, Any]:
         raise Unauthorized("Sign-in required.") from None
     alg = header.get("alg", "")
     kid = header.get("kid")
-    if kid and alg.startswith(("ES", "RS")):
-        key = await _get_signing_key(kid)
+    if not isinstance(alg, str) or not (alg == "HS256" or alg.startswith(("ES", "RS"))):
+        # `none`, or an algorithm Supabase never signs with: not worth a call out.
+        raise Unauthorized("Sign-in required.")
+    if alg.startswith(("ES", "RS")):
+        key = await _get_signing_key(kid) if isinstance(kid, str) and kid else None
         if key is not None:
             try:
+                # The key's own algorithm, never the one the token names for
+                # itself: a token must not choose how it is checked.
                 return jwt.decode(
                     token,
                     key,
-                    algorithms=[alg],
-                    audience="authenticated",
-                    options={"verify_aud": False},
+                    algorithms=[key.get("alg") or alg],
+                    audience=_AUDIENCE,
+                    options=_DECODE_OPTIONS,
                 )
             except JWTError:
-                # A token that fails against a key we hold is genuinely bad —
-                # but the network path gives Supabase the final word rather
-                # than us guessing, and it is only reached on real failures.
-                pass
+                # Checked against a key we hold and refused (bad signature,
+                # expired, wrong audience): that is a final answer. Asking
+                # Supabase again would only hand an unauthenticated caller a
+                # way to make us call out on every request.
+                raise Unauthorized("Your session has expired.") from None
+        if _jwks:
+            # We hold this project's keys and none of them is this `kid`
+            # (refetched above if it was worth asking): not one of its tokens.
+            raise Unauthorized("Sign-in required.")
+        # No key set at all (Supabase unreachable when we asked): fall through
+        # to the network check, which fails closed if Supabase is down too.
 
     if settings.supabase_jwt_secret and alg == "HS256":
         try:
@@ -202,8 +227,8 @@ async def _verify_uncached(token: str) -> dict[str, Any]:
                 token,
                 settings.supabase_jwt_secret,
                 algorithms=["HS256"],
-                audience="authenticated",
-                options={"verify_aud": False},
+                audience=_AUDIENCE,
+                options=_DECODE_OPTIONS,
             )
             return claims
         except JWTError:

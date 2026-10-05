@@ -56,7 +56,7 @@ async def list_all_quizzes(
             "quizzes",
             filters={"user_id": f"eq.{user.id}"},
             order="created_at.desc",
-            limit=min(limit, 500),
+            limit=max(1, min(limit, 500)),
         ),
         supabase.db_select(
             "subspaces", filters={"user_id": f"eq.{user.id}"}, select="id,subject_id,name"

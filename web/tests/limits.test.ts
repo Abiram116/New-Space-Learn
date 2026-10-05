@@ -116,6 +116,14 @@ describe('client limits mirror the API schema', () => {
       'ProductFeedbackIn.answers', // a count of answers, not a string length
       'ProductFeedbackIn.page', // the current address, sliced before sending
       'ProductFeedbackIn.website', // the bot trap; no person types in it
+      // Bounds that exist to refuse abuse, not to fit what a person types:
+      'SkillCreate.description', // no input; copied from a library skill
+      'SkillUpdate.description', // no input; copied from a library skill
+      'QuizSubmit.answers', //  one per question, built by the quiz screen
+      'FeedbackQuestionCreate.options', // a list count; each choice is feedbackOption
+      'FeedbackQuestionCreate.detail_options', // picked from the options above
+      'FeedbackQuestionUpdate.options', // a list count; each choice is feedbackOption
+      'FeedbackQuestionUpdate.detail_options', // picked from the options above
     ])
     const unmirrored = [...SCHEMA.keys()].filter((k) => !mirrored.has(k) && !skip.has(k))
     expect(unmirrored).toEqual([])

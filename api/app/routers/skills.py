@@ -9,7 +9,7 @@ import contextlib
 from fastapi import APIRouter, Depends
 
 from ..deps import CurrentUser, get_current_user
-from ..errors import Forbidden, NotFound
+from ..errors import NotFound
 from ..guards import assert_subspace
 from ..schemas import OkOut, SkillCreate, SkillOut, SkillUpdate
 from ..services import supabase
@@ -138,9 +138,19 @@ async def list_active_skills(
     # actually expect: the skill they turned on more recently is the one that
     # takes precedence over an older one still switched on.
     rows = await supabase.db_select(
-        "skills", filters={"id": f"in.({ids})"}, order="created_at.asc"
+        "skills", filters=usable_skills_filter(user.id, ids), order="created_at.asc"
     )
     return [_to_skill(r) for r in rows]
+
+
+def usable_skills_filter(user_id: str, ids: str) -> dict[str, str]:
+    """`ids` narrowed to the skills this user may use: the library and their own.
+
+    The activation row alone is not proof — it names a skill id, and a row that
+    reached the table some other way (a direct database write, or a skill that
+    changed hands) would otherwise read another account's private instructions
+    back out under the service key, which ignores RLS."""
+    return {"id": f"in.({ids})", "or": f"(is_library.eq.true,user_id.eq.{user_id})"}
 
 
 @router.post(
@@ -201,4 +211,6 @@ async def _assert_can_use_skill(user_id: str, skill_id: str) -> None:
     if not rows:
         raise NotFound("Skill not found.")
     if not _can_use_skill(rows[0], user_id):
-        raise Forbidden("You can't use another user's private skill.")
+        # 404, like every other guard: a 403 here confirmed that another
+        # account's private skill exists under this id.
+        raise NotFound("Skill not found.")

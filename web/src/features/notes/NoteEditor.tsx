@@ -60,6 +60,7 @@ import { useIsMobile } from '../../lib/useIsMobile'
 import { ActionSheet } from '../quizzes/phoneKit'
 import { useImmersive } from '../../components/layout/immersive'
 import { PhoneFormatBar } from './PhoneFormatBar'
+import { isSafeExternalHref } from '../../lib/safeRedirect'
 import './phone.css'
 
 const lowlight = createLowlight(common)
@@ -459,11 +460,13 @@ export function NoteEditor({
           const url = new URL(href, window.location.origin)
           if (url.origin === window.location.origin) {
             navigate(url.pathname + url.search + url.hash)
-          } else {
+          } else if (isSafeExternalHref(href)) {
+            // Web and mail only: a note's text can come from a model reading an
+            // uploaded file, and `window.open('javascript:…')` runs script.
             window.open(href, '_blank', 'noopener,noreferrer')
           }
         } catch {
-          window.open(href, '_blank', 'noopener,noreferrer')
+          // Unparseable: not something to open.
         }
         return true
       },

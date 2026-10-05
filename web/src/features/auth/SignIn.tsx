@@ -16,6 +16,7 @@ import { AuthShell } from './AuthShell'
 import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { safeNext } from '../../lib/safeRedirect'
 
 export function SignIn() {
   const phone = useIsMobile()
@@ -31,7 +32,8 @@ export function SignIn() {
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendBusy, setResendBusy] = useState(false)
 
-  const next = params.get('next') || '/home'
+  // Never trusted as-is: see safeNext.
+  const next = safeNext(params.get('next'))
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()

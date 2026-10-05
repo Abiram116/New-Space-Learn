@@ -48,6 +48,7 @@ from ..services.chat_context import recent_history
 from ..services.embeddings import embed_question
 from ..services.llm import get_llm
 from ..services.ratelimit import consume_llm_quota
+from .skills import usable_skills_filter
 
 log = logging.getLogger("space_learn.chat")
 router = APIRouter()
@@ -68,7 +69,7 @@ async def list_messages(
             "chat_messages",
             filters={"user_id": f"eq.{user.id}", "subspace_id": f"eq.{subspace_id}"},
             order="created_at.asc",
-            limit=min(limit, 500),
+            limit=max(1, min(limit, 500)),
         ),
     )
     return [
@@ -568,12 +569,12 @@ async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
     if hit is not None:
         return hit
     began = time.monotonic()
-    skills = await _read_active_skills(subspace_id)
+    skills = await _read_active_skills(user_id, subspace_id)
     _SKILLS.set(user_id, subspace_id, skills, read_at=began)
     return skills
 
 
-async def _read_active_skills(subspace_id: str) -> list[dict]:
+async def _read_active_skills(user_id: str, subspace_id: str) -> list[dict]:
     # Safe without a user filter only because the caller proves this subspace
     # belongs to the user before anything read here is used — the service-role key
     # ignores RLS.
@@ -590,5 +591,5 @@ async def _read_active_skills(subspace_id: str) -> list[dict]:
     # last one in `active_skill_instructions`, per `for_skill`'s own
     # docstring) could vary between two requests with the same active set.
     return await supabase.db_select(
-        "skills", filters={"id": f"in.({ids})"}, order="created_at.asc"
+        "skills", filters=usable_skills_filter(user_id, ids), order="created_at.asc"
     )

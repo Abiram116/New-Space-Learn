@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -25,7 +26,7 @@ from .errors import (
     handle_unexpected,
     handle_validation_error,
 )
-from .middleware import RequestGuard
+from .middleware import RequestGuard, SecurityHeaders
 from .routers import (
     admin_usage,
     documents,
@@ -52,6 +53,8 @@ logging.basicConfig(
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("space_learn.main")
 
+_WARM_DELAY_S = float(os.environ.get("EMBEDDING_WARM_DELAY_S", "3"))
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -59,7 +62,7 @@ async def lifespan(_: FastAPI):
     # than awaited: startup must not block on it, or Render's health check
     # times out waiting for a model download. See embeddings.warm_provider for
     # why the first upload can't be allowed to pay this cost itself.
-    warm = asyncio.create_task(embeddings.warm_provider())
+    warm = asyncio.create_task(embeddings.warm_provider(delay=_WARM_DELAY_S))
     # Uploads a restart or deploy interrupted carry on from their last stored
     # chunk.
     resume = asyncio.create_task(ingest.resume_pending())
@@ -117,10 +120,16 @@ def create_app() -> FastAPI:
     # network error.
     app.add_middleware(RequestGuard)
 
+    # Hardening headers on every response, including refusals made by the
+    # guard above and errors. Inside CORS, like the guard.
+    app.add_middleware(SecurityHeaders)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
-        allow_credentials=True,
+        # The browser sends a bearer token, never a cookie, so there are no
+        # credentials for CORS to carry — and none for another site to ride on.
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

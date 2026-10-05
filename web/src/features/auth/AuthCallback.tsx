@@ -17,6 +17,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useHandoff } from '../transitions/Handoff'
+import { safeNext } from '../../lib/safeRedirect'
 
 export function AuthCallback() {
   const { loading, session } = useAuth()
@@ -38,7 +39,7 @@ export function AuthCallback() {
     // Password-reset emails point here with `?reset=1` — Supabase has just
     // turned the recovery link into a session, and the only sane next stop
     // is the screen that lets them actually set a new password.
-    const dest = params.get('reset') === '1' ? '/auth/reset-password' : params.get('next') || '/home'
+    const dest = params.get('reset') === '1' ? '/auth/reset-password' : safeNext(params.get('next'))
     void play('threshold', () => {
       navigate(dest, { replace: true })
     })

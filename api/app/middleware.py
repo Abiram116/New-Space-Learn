@@ -101,3 +101,40 @@ async def _reject(send: Send) -> None:
         }
     )
     await send({"type": "http.response.body", "body": body})
+
+
+#: Sent on every response. The API serves JSON and an event stream, never a
+#: page, so the strictest settings cost nothing: nothing may be framed,
+#: sniffed into another type, run as a document, or followed by a referrer.
+SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"no-referrer"),
+    (b"content-security-policy", b"default-src 'none'; frame-ancestors 'none'"),
+    (b"strict-transport-security", b"max-age=63072000; includeSubDomains"),
+    (b"cross-origin-resource-policy", b"same-site"),
+)
+
+
+class SecurityHeaders:
+    """Adds `SECURITY_HEADERS` to every HTTP response, without overriding a
+    header a route set on purpose. Pure ASGI for the same reason as
+    `RequestGuard`: the chat stream must not be buffered."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def with_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _ in headers}
+                headers.extend(h for h in SECURITY_HEADERS if h[0] not in present)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, with_headers)

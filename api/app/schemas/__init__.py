@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
@@ -48,8 +48,13 @@ class SubspaceUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+#: Every row id is a UUID (36 characters). Ids arriving in a body are bounded
+#: like any other text, so a megabyte "id" is refused before it reaches a query.
+ID_MAX = 64
+
+
 class SubspaceLinkCreate(BaseModel):
-    linked_subspace_id: str
+    linked_subspace_id: str = Field(min_length=1, max_length=ID_MAX)
 
 
 # ── Chat ───────────────────────────────────────────────────────────────
@@ -251,10 +256,14 @@ class FlashcardOut(BaseModel):
     last_review_at: datetime | None = None
 
 
+#: A card's "where this came from" line ("notes.pdf · p. 4").
+CARD_SOURCE_MAX = 300
+
+
 class FlashcardCreate(BaseModel):
     front: str = Field(min_length=1, max_length=500)
     back: str = Field(min_length=1, max_length=2000)
-    source: str | None = None
+    source: str | None = Field(default=None, max_length=CARD_SOURCE_MAX)
 
 
 class GradeIn(BaseModel):
@@ -267,7 +276,7 @@ class GradeIn(BaseModel):
 class FlashcardUpdate(BaseModel):
     front: str | None = Field(default=None, min_length=1, max_length=500)
     back: str | None = Field(default=None, min_length=1, max_length=2000)
-    source: str | None = None
+    source: str | None = Field(default=None, max_length=CARD_SOURCE_MAX)
 
 
 class CardsGenerate(BaseModel):
@@ -395,7 +404,8 @@ class QuizGenerate(BaseModel):
 
 
 class QuizSubmit(BaseModel):
-    answers: list[int]
+    #: One per question; a quiz has at most 20 (`QuizGenerate.count`).
+    answers: list[int] = Field(max_length=100)
     #: Wall-clock seconds the student spent on the quiz. Client-reported and
     #: therefore advisory — it is a study signal, never a grade input.
     duration_seconds: int | None = Field(default=None, ge=0, le=24 * 3600)
@@ -436,24 +446,36 @@ class SkillOut(BaseModel):
     is_library: bool
 
 
+#: Bounds on the parts of a Skill that are free text. Its instructions reach
+#: every prompt in a topic it is switched on for, so none of it is unbounded.
+SKILL_ICON_MAX = 40
+SKILL_CAPABILITIES_MAX = 10
+SkillCapability = Field(min_length=1, max_length=40)
+
+
 class SkillCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
-    icon: str = "skill"  # an Icon name in the frontend set, never an emoji
+    #: An Icon name in the frontend set, never an emoji.
+    icon: str = Field(default="skill", min_length=1, max_length=SKILL_ICON_MAX)
     tone: Tone = "brand"
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=500)
     instructions: str = Field(min_length=1, max_length=4000)
-    capabilities: list[str] = Field(default_factory=lambda: ["docs", "quiz"])
+    capabilities: list[Annotated[str, SkillCapability]] = Field(
+        default_factory=lambda: ["docs", "quiz"], max_length=SKILL_CAPABILITIES_MAX
+    )
     memory_scope: MemoryScope = "session"
     output_format: str | None = Field(default=None, max_length=300)
 
 
 class SkillUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
-    icon: str | None = None
+    icon: str | None = Field(default=None, min_length=1, max_length=SKILL_ICON_MAX)
     tone: Tone | None = None
-    description: str | None = None
+    description: str | None = Field(default=None, max_length=500)
     instructions: str | None = Field(default=None, min_length=1, max_length=4000)
-    capabilities: list[str] | None = None
+    capabilities: list[Annotated[str, SkillCapability]] | None = Field(
+        default=None, max_length=SKILL_CAPABILITIES_MAX
+    )
     memory_scope: MemoryScope | None = None
     output_format: str | None = Field(default=None, max_length=300)
 
@@ -549,8 +571,8 @@ class FeedbackIn(BaseModel):
     """
 
     surface: Literal["chat", "note", "quiz", "cards"]
-    target_id: str
-    subspace_id: str
+    target_id: str = Field(min_length=1, max_length=ID_MAX)
+    subspace_id: str = Field(min_length=1, max_length=ID_MAX)
     kind: str = Field(min_length=1, max_length=40)
     concept: str | None = Field(default=None, max_length=120)
 
@@ -761,21 +783,23 @@ class FeedbackQuestionOut(BaseModel):
 class FeedbackQuestionCreate(BaseModel):
     prompt: str = Field(min_length=3, max_length=200)
     kind: QuestionKind
-    options: list[str] = Field(default_factory=list)
-    detail_options: list[str] = Field(default_factory=list)
+    #: Trimmed, de-duplicated and capped at FEEDBACK_OPTIONS_MAX in the handler;
+    #: this only stops an absurd list from being parsed at all.
+    options: list[str] = Field(default_factory=list, max_length=50)
+    detail_options: list[str] = Field(default_factory=list, max_length=50)
     required: bool = True
 
 
 class FeedbackQuestionUpdate(BaseModel):
     prompt: str | None = Field(default=None, min_length=3, max_length=200)
-    options: list[str] | None = None
-    detail_options: list[str] | None = None
+    options: list[str] | None = Field(default=None, max_length=50)
+    detail_options: list[str] | None = Field(default=None, max_length=50)
     required: bool | None = None
     active: bool | None = None
 
 
 class FeedbackReorder(BaseModel):
-    ids: list[str] = Field(min_length=1, max_length=100)
+    ids: list[Annotated[str, Field(min_length=1, max_length=ID_MAX)]] = Field(min_length=1, max_length=100)
 
 
 class FeedbackAnswerIn(BaseModel):
