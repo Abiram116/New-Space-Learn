@@ -110,13 +110,13 @@ describe('on a phone', () => {
       ['Cards', '/sp/sub/flashcards', '12'],
       ['Quizzes', '/sp/sub/quizzes', '2'],
       ['Notes', '/sp/sub/notes', '5'],
-      ['Sources', '/sp/sub/docs', '3'],
+      ['Files', '/sp/sub/docs', '3'],
     ]) {
       const row = screen.getByRole('link', { name: new RegExp(`^${label}`) })
       expect(row).toHaveAttribute('href', href)
       expect(row).toHaveTextContent(count)
     }
-    expect(screen.getByRole('link', { name: /Add material/ })).toHaveAttribute('href', '/sp/sub/docs')
+    expect(screen.getByRole('link', { name: /Add a file/ })).toHaveAttribute('href', '/sp/sub/docs')
   })
 
   it('explains that chat is on desktop at a chat address, with ways to revise instead', async () => {

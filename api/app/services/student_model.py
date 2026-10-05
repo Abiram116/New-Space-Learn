@@ -930,6 +930,11 @@ _SNAPSHOT_TTL_S = 20.0
 _SNAPSHOT_MAX_USERS = 500
 _snapshots: dict[str, tuple[float, Snapshot]] = {}
 _building: dict[str, asyncio.Task[Snapshot]] = {}
+#: The last snapshot built outside a write request, with when it began building.
+#: Unlike `_snapshots` it survives `invalidate_reads` (a chat turn's own message)
+#: and is only dropped by a real write. Read by chat alone, which can tolerate a
+#: minute or two of age; see `snapshot(max_age=...)`.
+_recent: dict[str, tuple[float, Snapshot]] = {}
 #: Set for the life of a request that writes (see `deps.get_current_user`). A
 #: snapshot built inside such a request is read BEFORE that request's own
 #: writes land (a chat turn reads it, then saves the message and bumps today's
@@ -945,9 +950,19 @@ def begin_write(user_id: str) -> None:
     _in_write.set(True)
 
 
+def invalidate_reads(user_id: str) -> None:
+    """Stop serving the cached snapshot to pages (Home, Profile), but keep the
+    recent one chat is allowed to reuse. For a chat turn: it adds one message
+    and a minute of study time, which the next page should show, and which
+    changes nothing a prompt is built from."""
+    _snapshots.pop(user_id, None)
+    _building.pop(user_id, None)
+
+
 def invalidate(user_id: str) -> None:
     """Forget `user_id`'s snapshot — they just changed something."""
     _snapshots.pop(user_id, None)
+    _recent.pop(user_id, None)
     # A build already in flight may have read the old rows; let it finish for
     # whoever is waiting, but do not let its result be kept.
     _building.pop(user_id, None)
@@ -957,18 +972,32 @@ def reset_cache() -> None:
     """Test hook — forget everything."""
     _snapshots.clear()
     _building.clear()
+    _recent.clear()
 
 
-async def snapshot(user_id: str) -> Snapshot:
+async def snapshot(user_id: str, *, max_age: float | None = None) -> Snapshot:
     """The student's snapshot: a recent one if nothing has changed since,
-    otherwise built now. Callers arriving together share one build."""
+    otherwise built now. Callers arriving together share one build.
+
+    `max_age` (seconds) lets a caller that does not need the very latest accept
+    the last snapshot built for this student if it is that young and no write
+    has happened since. Chat uses it: its prompt needs the student's weak
+    concepts and preferences, which a quiz or a feedback tap (both writes)
+    would have cleared, not the message count from a minute ago."""
     if _in_write.get():
         # Built for this write request only; never shared, never kept.
         return await _build_snapshot(user_id)
 
+    now = time.monotonic()
     hit = _snapshots.get(user_id)
-    if hit and hit[0] > time.monotonic():
+    if hit and hit[0] > now:
         return hit[1]
+    if max_age is not None and _SNAPSHOT_TTL_S > 0:
+        recent = _recent.get(user_id)
+        if recent and now - recent[0] <= max_age:
+            return recent[1]
+
+    started = now
 
     task = _building.get(user_id)
     if task is None:
@@ -986,6 +1015,10 @@ async def snapshot(user_id: str) -> Snapshot:
         if len(_snapshots) >= _SNAPSHOT_MAX_USERS:
             _snapshots.clear()
         _snapshots[user_id] = (time.monotonic() + _SNAPSHOT_TTL_S, snap)
+        if _SNAPSHOT_TTL_S > 0:
+            if len(_recent) >= _SNAPSHOT_MAX_USERS:
+                _recent.clear()
+            _recent[user_id] = (started, snap)
     return snap
 
 
@@ -1326,8 +1359,12 @@ async def get(user_id: str) -> StudentModelOut:
     snapshot. Reads the bandit's own read-through cache
     (`style_bandit._cached_reads`), so this costs no additional query on a
     warm cache — see that module's read-cache section."""
+    # The bandit's two reads do not depend on the snapshot; on a cold cache they
+    # were two more round trips after it, one after the other.
+    warm = asyncio.ensure_future(style_bandit.prefetch_reads(user_id))
     snap = await snapshot(user_id)
     model = snap.to_model()
+    await warm
 
     subject_by_subspace = {t.subspace_id: t.subject_id for t in snap.topics if t.subject_id}
     subject_names = {t.subject_id: t.subject for t in snap.topics if t.subject_id}

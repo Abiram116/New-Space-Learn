@@ -114,8 +114,16 @@ export function invalidate(prefix: string): void {
   }
 }
 
+const clearHooks = new Set<() => void>()
+
+/** For other per-account stores (not keyed entries) to be dropped with this one at sign-out. */
+export function onCleared(fn: () => void): void {
+  clearHooks.add(fn)
+}
+
 /** Everything, for sign-out — the next account must not inherit this one's data. */
 export function clearCache(): void {
+  clearHooks.forEach((fn) => fn())
   epoch++
   inflight.clear()
   store.clear()

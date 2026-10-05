@@ -10,10 +10,11 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, replace
 from typing import Any
 
-from . import followup, guardrails, retrieval, supabase
+from . import followup, guardrails, readcache, retrieval, supabase
 from .voice import COMPANION_VOICE, DIAGRAM_RULE, DIAGRAM_SHORT, shape_for, wants_diagram
 
 
@@ -62,17 +63,27 @@ async def retrieve(subspace_id: str, question: str, *, k: int = 6) -> list[Retri
     return await retrieve_with_links(subspace_id, question, [], k=k)
 
 
+#: Links change only when the student links or unlinks a topic (a write: see `readcache`).
+_LINKS = readcache.UserCache[list[str]](maxsize=512, ttl=300.0)
+
+
 async def linked_subspace_ids(user_id: str, subspace_id: str) -> list[str]:
     """The other subspaces this one is explicitly linked to (see Linked
     Subspaces in docs/v2-review.md) — the input `retrieve_with_links` needs.
     Shared so chat and every generation endpoint (notes, quizzes, cards) draw
     on the same linked material rather than chat alone seeing it."""
+    hit = _LINKS.get(user_id, subspace_id)
+    if hit is not None:
+        return list(hit)
+    began = time.monotonic()
     links = await supabase.db_select(
         "subspace_links",
         filters={"user_id": f"eq.{user_id}", "subspace_id": f"eq.{subspace_id}"},
         select="linked_subspace_id",
     )
-    return [row["linked_subspace_id"] for row in links]
+    ids = [row["linked_subspace_id"] for row in links]
+    _LINKS.set(user_id, subspace_id, ids, read_at=began)
+    return list(ids)
 
 
 async def retrieve_with_links(

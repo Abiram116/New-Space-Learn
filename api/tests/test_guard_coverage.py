@@ -253,7 +253,8 @@ def test_every_authenticated_route_requires_a_user():
         source = inspect.getsource(route.endpoint)
         # `require_admin` is its own lock: a token from the shared admin
         # password, belonging to no account (see `services/admin_gate`).
-        if "get_current_user" not in source and "require_admin" not in source:
+        # `get_chat_user` is `get_current_user` minus the up-front cache drop (see deps).
+        if not any(g in source for g in ("get_current_user", "get_chat_user", "require_admin")):
             public.append(f"{path} ({route.endpoint.__name__})")
     assert not public, "These routes don't require authentication:\n  " + "\n  ".join(public)
 

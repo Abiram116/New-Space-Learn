@@ -16,6 +16,9 @@ async def recent_history(
     rows = await supabase.db_select(
         "chat_messages",
         filters={"user_id": f"eq.{user_id}", "subspace_id": f"eq.{subspace_id}"},
+        # Not `*`: the stored citations, retrieval trace and style on each row are
+        # several times the text, and only the text is used here.
+        select="role,content",
         order="created_at.desc",
         limit=limit,
     )

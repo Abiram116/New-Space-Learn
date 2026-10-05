@@ -81,14 +81,26 @@ def _key(user_id: str, subspace_id: str) -> str:
     return f"{user_id}:{subspace_id}"
 
 
-def lookup(user_id: str, subspace_id: str, question: str, vector: list[float], fp: str) -> Cached | None:
-    """A stored answer for this question, if the same sources and settings produced it."""
+def lookup(
+    user_id: str, subspace_id: str, question: str, vector: list[float] | None, fp: str
+) -> Cached | None:
+    """A stored answer for this question, if the same sources and settings produced it.
+
+    Without a `vector` only the same words match, which needs no embedding."""
     for entry in _STORE.get(_key(user_id, subspace_id)) or []:
         if entry.fingerprint != fp:
             continue
-        if _norm(entry.question) == _norm(question) or _cosine(entry.vector, vector) >= SIMILARITY:
+        if _norm(entry.question) == _norm(question):
+            return entry
+        if vector is not None and _cosine(entry.vector, vector) >= SIMILARITY:
             return entry
     return None
+
+
+def has_entries(user_id: str, subspace_id: str, fp: str) -> bool:
+    """Whether anything is stored under these exact sources and settings, i.e. whether
+    embedding a question to compare it could possibly find a match."""
+    return any(e.fingerprint == fp for e in _STORE.get(_key(user_id, subspace_id)) or [])
 
 
 def store(

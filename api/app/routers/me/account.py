@@ -6,6 +6,7 @@ they should do next, which is `brief.py`."""
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
@@ -76,8 +77,11 @@ def _skipped_style(explicit: object) -> bool:
 async def get_student_model(
     user: CurrentUser = Depends(get_current_user),
 ) -> StudentModelOut:
-    row = await _ensure_settings_row(user.id)
-    model = await student_model_service.get(user.id)
+    # The web app holds the whole screen on this answer at every sign-in (the
+    # first-run gate), so nothing here waits for anything it does not need.
+    row, model = await asyncio.gather(
+        _ensure_settings_row(user.id), student_model_service.get(user.id)
+    )
     return model.model_copy(
         update={"intake_skipped_style": _skipped_style(row.get("student_model"))}
     )

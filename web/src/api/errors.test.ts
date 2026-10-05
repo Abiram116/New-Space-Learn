@@ -98,7 +98,7 @@ describe('isReadable', () => {
 describe('friendlyMessage never shows unreadable text', () => {
   it('replaces a server message that is not a sentence with the code\'s own', () => {
     const err = new ApiError('upstream_unavailable', '{}', 500)
-    expect(friendlyMessage(err)).toBe('A service we depend on is offline. Try again shortly.')
+    expect(friendlyMessage(err)).toBe("Something we rely on isn't working right now. Please try again soon.")
   })
 
   it('keeps a server sentence that is readable', () => {
@@ -111,7 +111,7 @@ describe('friendlyMessage never shows unreadable text', () => {
 
   it('shows an Error written for the screen, and hides one that is not', () => {
     expect(friendlyMessage(new Error('big.png is over 4MB — resize it first.'))).toContain('over 4MB')
-    expect(friendlyMessage(new Error('Cannot read properties of undefined'))).toBe('Something went wrong.')
-    expect(friendlyMessage('a string')).toBe('Something went wrong.')
+    expect(friendlyMessage(new Error('Cannot read properties of undefined'))).toBe('Something went wrong. Please try again.')
+    expect(friendlyMessage('a string')).toBe('Something went wrong. Please try again.')
   })
 })

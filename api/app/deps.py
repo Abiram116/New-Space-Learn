@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from fastapi import Header, Request
 
 from .errors import Forbidden, Unauthorized
-from .services import admin_gate, student_model, supabase
+from .services import admin_gate, readcache, student_model, supabase
 
 
 @dataclass(slots=True)
@@ -42,7 +42,21 @@ async def get_current_user(
     # One rule here covers every write endpoint, including ones written later.
     if request.method not in _READ_METHODS:
         student_model.begin_write(user.id)
+        readcache.note_write(user.id)
     return user
+
+
+async def get_chat_user(authorization: str | None = Header(default=None)) -> CurrentUser:
+    """`get_current_user` for the chat POST, which is a write only in the sense
+    that it stores a message.
+
+    Dropping the student's caches up front, as every other write does, made each
+    chat turn rebuild what it had just read a moment before: the whole snapshot
+    (a heavy query plus a few hundred rows of arithmetic) and the topic's skills
+    and links. A turn changes none of what a prompt is built from, and it clears
+    the Home/Profile snapshot itself once its message is saved (see
+    `subspace_chat`)."""
+    return await _authenticate(authorization)
 
 
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

@@ -17,6 +17,7 @@ Two properties matter more than the wording:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -58,6 +59,9 @@ def _short(name: str, limit: int = 34) -> str:
     return f"{cut or clean[:limit]}…"
 
 router = APIRouter()
+
+#: The longest Home waits for the model's line before showing the plain one.
+_MODEL_WAIT_S = 5.0
 
 
 # ── Re-entry brief ─────────────────────────────────────────────────────
@@ -170,7 +174,7 @@ async def brief(
             "different angle on what is true now."
         )
 
-    try:
+    async def write() -> list[str]:
         parts: list[str] = []
         with usage.task("brief"):
             async for delta in get_llm().stream_chat(
@@ -185,6 +189,14 @@ async def brief(
                 temperature=0.7,
             ):
                 parts.append(delta)
+        return parts
+
+    try:
+        # Home waits on this line. A model that is slow or rate-limited (the client
+        # retries and falls back for up to a minute) must not hold the whole page:
+        # past a few seconds the deterministic copy is shown, and not cached, so the
+        # next render tries the model again.
+        parts = await asyncio.wait_for(write(), _MODEL_WAIT_S)
         lines = [ln.strip() for ln in "".join(parts).strip().split("\n") if ln.strip()]
     except Exception:
         # The home page must render regardless.

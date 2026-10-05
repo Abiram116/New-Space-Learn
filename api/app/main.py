@@ -63,11 +63,15 @@ async def lifespan(_: FastAPI):
     # Uploads a restart or deploy interrupted carry on from their last stored
     # chunk.
     resume = asyncio.create_task(ingest.resume_pending())
+    # Open the connections the first request would otherwise open itself.
+    connections = [asyncio.create_task(supabase.warm()), asyncio.create_task(llm.warm())]
 
     yield
 
     warm.cancel()
     resume.cancel()
+    for task in connections:
+        task.cancel()
     await ingest.drain()
     await supabase.close_client()
     await llm.close_llm()

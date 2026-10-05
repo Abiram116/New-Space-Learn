@@ -161,6 +161,12 @@ class GroqLLM:
                     "Content-Type": "application/json",
                 },
                 timeout=httpx.Timeout(settings.groq_timeout_s, connect=5.0),
+                # See the same note in `supabase.get_client`: with httpx's 5-second
+                # default every answer after a pause opened a new TLS connection to
+                # Groq before the first word could start.
+                limits=httpx.Limits(
+                    max_connections=20, max_keepalive_connections=5, keepalive_expiry=45.0
+                ),
             )
         return self._client
 
@@ -367,6 +373,20 @@ def get_llm() -> LLM:
     if _llm is None:
         _llm = GroqLLM() if settings.llm_configured else StubLLM()
     return _llm
+
+
+async def warm() -> None:
+    """Open the connection to Groq ahead of the first question, so it does not pay
+    for DNS and a TLS handshake (about a third of a second from here) before its
+    first word. Best-effort: never raises, and costs no tokens."""
+    llm = get_llm()
+    if not isinstance(llm, GroqLLM):
+        return
+    try:
+        client = await llm._get()  # noqa: SLF001
+        await client.get("/models", timeout=5.0)
+    except Exception:  # noqa: BLE001 — a warm-up must never matter
+        log.info("groq warm-up skipped", exc_info=True)
 
 
 async def close_llm() -> None:

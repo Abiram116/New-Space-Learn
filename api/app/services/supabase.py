@@ -55,7 +55,15 @@ async def get_client() -> httpx.AsyncClient:
             base_url=settings.supabase_url.rstrip("/"),
             headers=_service_headers(),
             timeout=httpx.Timeout(20.0, connect=5.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            # httpx drops an idle connection after 5 seconds by default. A student
+            # reads an answer for longer than that, so the next request on every page
+            # paid a fresh TCP + TLS handshake to another country (about two round
+            # trips) — and a page that reads in parallel paid one per read. The
+            # database's proxy keeps idle connections open far longer than this, and
+            # a socket it did close is noticed before reuse and replaced.
+            limits=httpx.Limits(
+                max_connections=20, max_keepalive_connections=10, keepalive_expiry=45.0
+            ),
         )
     return _client
 
@@ -97,10 +105,15 @@ async def _get_signing_key(kid: str) -> dict[str, Any] | None:
     what makes key rotation a non-event rather than an outage, and it cannot be
     abused into hammering the endpoint because the result is cached either way.
     """
-    global _jwks_fetched_at
     now = time.monotonic()
     if kid in _jwks and now - _jwks_fetched_at < _JWKS_TTL_S:
         return _jwks[kid]
+    await _refresh_jwks()
+    return _jwks.get(kid)
+
+
+async def _refresh_jwks() -> None:
+    global _jwks_fetched_at
     try:
         client = await get_client()
         r = await client.get(
@@ -108,16 +121,23 @@ async def _get_signing_key(kid: str) -> dict[str, Any] | None:
             headers={"apikey": settings.supabase_service_role_key},
         )
         if r.status_code >= 400:
-            return None
+            return
         keys = {k["kid"]: k for k in r.json().get("keys", []) if k.get("kid")}
     except (httpx.HTTPError, ValueError, KeyError):
         # Never fatal: the network path below is still a correct answer.
-        return None
+        return
     if keys:
         _jwks.clear()
         _jwks.update(keys)
-        _jwks_fetched_at = now
-    return _jwks.get(kid)
+        _jwks_fetched_at = time.monotonic()
+
+
+async def warm() -> None:
+    """Open the connection to Supabase and fetch the signing keys before the first
+    student needs them, so their first request does not pay for the handshake and
+    the key fetch on top of its own work. Best-effort: never raises."""
+    if settings.supabase_configured:
+        await _refresh_jwks()
 
 
 async def verify_access_token(token: str) -> dict[str, Any]:
@@ -131,6 +151,27 @@ async def verify_access_token(token: str) -> dict[str, Any]:
     `/auth/v1/user` and let Supabase be the final word.
     """
 
+    # A token checked a moment ago needs no second signature check. A page load sends
+    # half a dozen requests with the same token, and an ES256 check is real CPU on
+    # this machine (about half a millisecond here, ten times that on the free tier).
+    cached = _token_cache.get(token)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+
+    claims = await _verify_uncached(token)
+    exp = claims.get("exp")
+    # Never kept past the token's own expiry.
+    ttl = _TOKEN_CACHE_TTL_S
+    if isinstance(exp, int | float):
+        ttl = min(ttl, float(exp) - time.time())
+    if ttl > 0:
+        if len(_token_cache) > _TOKEN_CACHE_MAX:
+            _token_cache.clear()
+        _token_cache[token] = (time.monotonic() + ttl, claims)
+    return claims
+
+
+async def _verify_uncached(token: str) -> dict[str, Any]:
     # Asymmetric first — it is what this project actually issues.
     try:
         header = jwt.get_unverified_header(token)
@@ -179,20 +220,8 @@ async def verify_access_token(token: str) -> dict[str, Any]:
                     "project's legacy HS256 secret to skip the hop entirely."
                 )
 
-    cached = _token_cache.get(token)
-    if cached and cached[0] > time.monotonic():
-        return cached[1]
-
-    claims = await _verify_via_network(token)
-
-    # Cache briefly, keyed by the token itself. A Supabase access token is
-    # already short-lived and is re-verified the moment this window lapses, so
-    # the exposure is bounded — while a single page load stops paying for the
-    # same verification a dozen times over.
-    if len(_token_cache) > _TOKEN_CACHE_MAX:
-        _token_cache.clear()
-    _token_cache[token] = (time.monotonic() + _TOKEN_CACHE_TTL_S, claims)
-    return claims
+    # The caller caches what comes back, for no longer than the token lives.
+    return await _verify_via_network(token)
 
 
 async def _verify_via_network(token: str) -> dict[str, Any]:

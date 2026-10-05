@@ -96,6 +96,17 @@ def _fresh_quotas():
 
 
 @pytest.fixture(autouse=True)
+def _fresh_read_cache():
+    """Per-student read copies (skills, links) are kept for a while in production
+    and cleared by writes; tests edit the fake database directly, so start empty."""
+    from app.services import readcache
+
+    readcache.reset()
+    yield
+    readcache.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_student_model_cache(monkeypatch: pytest.MonkeyPatch):
     """The snapshot is kept for a few seconds per user in production, and every
     write through the API clears it. Tests change the fake database directly,

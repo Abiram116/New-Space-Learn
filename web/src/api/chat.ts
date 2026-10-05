@@ -3,8 +3,33 @@ import { notifyProgress } from '../lib/progressEvents'
 import { ApiError } from './errors'
 import type { ChatMessage, Citation } from './types'
 
-export const listMessages = (subspaceId: string) =>
+const fetchMessages = (subspaceId: string) =>
   apiFetch<ChatMessage[]>(`/subspaces/${subspaceId}/messages`)
+
+/** Histories asked for ahead of a visit (`lib/prefetch`), each handed to the first
+ *  `listMessages` that wants it and then forgotten. */
+const primed = new Map<string, { at: number; promise: Promise<ChatMessage[]> }>()
+/** Past this a prefetched history is not trusted: it may predate a message. */
+const PRIMED_MAX_AGE_MS = 20_000
+
+/** Start loading a topic's history so opening it finds the answer already there. */
+export function prefetchMessages(subspaceId: string): void {
+  const held = primed.get(subspaceId)
+  if (held && Date.now() - held.at < PRIMED_MAX_AGE_MS) return
+  const promise = fetchMessages(subspaceId)
+  primed.set(subspaceId, { at: Date.now(), promise })
+  // A failed head start is not an error: the page asks again for itself.
+  promise.catch(() => {
+    if (primed.get(subspaceId)?.promise === promise) primed.delete(subspaceId)
+  })
+}
+
+export const listMessages = (subspaceId: string) => {
+  const held = primed.get(subspaceId)
+  primed.delete(subspaceId)
+  if (held && Date.now() - held.at < PRIMED_MAX_AGE_MS) return held.promise
+  return fetchMessages(subspaceId)
+}
 
 export type ChatStreamEvent =
   | { type: 'token'; delta: string }

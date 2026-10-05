@@ -17,13 +17,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
 from ..config import settings
-from ..deps import CurrentUser, get_current_user
+from ..deps import CurrentUser, get_chat_user, get_current_user
 from ..errors import ApiError
 from ..guards import assert_subspace
 from ..schemas import ChatMessageOut, ChatSend, Citation
@@ -37,6 +38,7 @@ from ..services import (
     personalization,
     rag,
     ratelimit,
+    readcache,
     retrieval,
     student_model,
     supabase,
@@ -86,64 +88,79 @@ async def list_messages(
 async def send_chat(
     subspace_id: str,
     body: ChatSend,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(get_chat_user),
 ) -> StreamingResponse:
-    subspace = await assert_subspace(user.id, subspace_id)
-    # Bounce over-eager callers before we do any DB or LLM work.
-    # Validated before the quota is charged, so a rejected attachment does not
-    # cost the student a request. Invalid images are dropped, not refused —
-    # the text is the question, the image is an attachment to it.
-    images = guardrails.validate_images(body.images)
-    # An image costs more: it is a larger request, a slower model, and more
-    # tokens in and out. Charging it as one plain turn would let a student
-    # burn the free-tier budget three times faster than the quota implies.
-    quota_cost = 2 if images else 1
-    await consume_llm_quota(user.id, cost=quota_cost, daily=True)
-    # Two waves, not six sequential awaits.
+    # This is the highest-traffic request in the app, and every database read in
+    # it is a round trip to another country before the model call can even start.
+    # So nothing waits for anything it does not depend on:
     #
-    # This is the highest-traffic request in the app and every one of these was
-    # a separate round trip to a remote Postgres before the model call even
-    # started. Only two real dependencies exist: the history window needs the
-    # active skills' `memory_scope`, and retrieval needs the linked subspace
-    # ids. Everything else was sequential by habit.
-    settings_row, active_skills, linked_ids, snap = await asyncio.gather(
-        _fetch_settings(user.id),
-        _active_skills(user.id, subspace_id),
-        rag.linked_subspace_ids(user.id, subspace_id),
-        student_model.snapshot(user.id),
-    )
+    #   * the ownership check, the snapshot, the topic's skills and links are all
+    #     started at once. The check gates everything that is USED (a request for
+    #     someone else's topic is refused before any of it is read back), but it
+    #     does not have to finish before the other reads begin: each of them is
+    #     already scoped to this student or this topic, and their results are
+    #     dropped unread if the check fails.
+    #   * history needs only the skills (for its window size), and retrieval needs
+    #     only the history (a follow-up is searched as the question it stands for)
+    #     and the links, so that chain overlaps with the snapshot.
+    #   * the student's own message is saved while the model starts, not before it.
+    #
+    # `settings` comes out of the snapshot (it carries the whole settings row) and
+    # the snapshot may be a couple of minutes old: see `student_model.snapshot`.
+    subspace_t = asyncio.ensure_future(assert_subspace(user.id, subspace_id))
+    snap_t = asyncio.ensure_future(student_model.snapshot(user.id, max_age=_SNAPSHOT_MAX_AGE_S))
+    links_t = asyncio.ensure_future(rag.linked_subspace_ids(user.id, subspace_id))
+    skills_t = asyncio.ensure_future(_active_skills(user.id, subspace_id))
 
-    history_limit = _history_limit(active_skills)
-    # `render_chat`, not `render` — the snapshot is already in hand above,
-    # and chat (unlike quiz/cards/notes/brief) also runs the style bandit:
-    # see `personalization.render_chat` / `style_bandit` for why chat is the
-    # one task with a Thompson-sampled experiment layer. It depends on
-    # nothing `recent_history`/`retrieve_with_links` produce (and they don't
-    # depend on it either), so it runs alongside them rather than after —
-    # style_bandit's own reads are cached per user, but on a cold cache this
-    # is the difference between adding a full extra round trip to the
-    # request and adding none.
-    #
-    # Retrieval needs the history too — a follow-up is searched as the question
-    # it stands for — so it waits on the same fetch rather than a second one,
-    # and still overlaps with everything else.
-    history_task = asyncio.ensure_future(recent_history(user.id, subspace_id, limit=history_limit))
+    async def load_history() -> list[dict[str, str]]:
+        active = await skills_t
+        return await recent_history(user.id, subspace_id, limit=_history_limit(active))
+
+    history_t = asyncio.ensure_future(load_history())
+    reads = (subspace_t, snap_t, links_t, skills_t, history_t)
+    try:
+        subspace = await subspace_t
+        # Bounce over-eager callers before we do any model work.
+        # Validated before the quota is charged, so a rejected attachment does not
+        # cost the student a request. Invalid images are dropped, not refused —
+        # the text is the question, the image is an attachment to it.
+        images = guardrails.validate_images(body.images)
+        # An image costs more: it is a larger request, a slower model, and more
+        # tokens in and out. Charging it as one plain turn would let a student
+        # burn the free-tier budget three times faster than the quota implies.
+        quota_cost = 2 if images else 1
+        await consume_llm_quota(user.id, cost=quota_cost, daily=True)
+    except BaseException:
+        _abandon(reads)
+        raise
 
     async def find_sources() -> retrieval.Retrieval:
-        earlier = _before_this_question(await history_task, body.text, body.regenerate)
+        earlier = _before_this_question(await history_t, body.text, body.regenerate)
         return await rag.search(
             body.text,
             subspace_id=subspace_id,
-            linked_subspace_ids=linked_ids,
+            linked_subspace_ids=await links_t,
             history=earlier,
             topic=subspace["name"],
         )
 
-    prior, found, (student_context, prefs_applied, style_applied) = await asyncio.gather(
-        history_task,
-        find_sources(),
-        personalization.render_chat(snap, subspace_id, user.id),
-    )
+    # `render_chat`, not `render` — chat (unlike quiz/cards/notes/brief) also runs
+    # the style bandit: see `personalization.render_chat` / `style_bandit` for why
+    # chat is the one task with a Thompson-sampled experiment layer. It depends on
+    # nothing history or retrieval produce, so it runs alongside them.
+    async def personalise():
+        return await personalization.render_chat(await snap_t, subspace_id, user.id)
+
+    try:
+        prior, found, (student_context, prefs_applied, style_applied), snap, active_skills = (
+            await asyncio.gather(history_t, find_sources(), personalise(), snap_t, skills_t)
+        )
+    except BaseException:
+        _abandon(reads)
+        ratelimit.refund(user.id, quota_cost)
+        raise
+    settings_row = snap.settings or {}
+    history_limit = _history_limit(active_skills)
     retrieved = [rag.as_retrieved(c) for c in found.chunks]
     messages, citations_meta = rag.build_prompt(
         subspace_name=subspace["name"],
@@ -177,12 +194,10 @@ async def send_chat(
         and found.query.how == "as-is"
         and bool(retrieved)
     )
-    cache_vec: list[float] = []
     cache_fp = ""
     cached: answer_cache.Cached | None = None
     if cacheable:
         try:
-            cache_vec = (await embed_question([body.text]))[0]
             cache_fp = answer_cache.fingerprint(
                 chunk_ids=[c.id for c in found.chunks],
                 flags={
@@ -193,20 +208,28 @@ async def send_chat(
                     "doubtful": found.confidence == "weak",
                 },
             )
-            cached = answer_cache.lookup(user.id, subspace_id, body.text, cache_vec, cache_fp)
+            # The same words need no vector. A reworded question does, but only when
+            # an answer to something is stored under these exact sources: embedding a
+            # question costs real CPU on this machine, and on a first question
+            # there is nothing to compare it with.
+            cached = answer_cache.lookup(user.id, subspace_id, body.text, None, cache_fp)
+            if cached is None and answer_cache.has_entries(user.id, subspace_id, cache_fp):
+                vector = (await embed_question([body.text]))[0]
+                cached = answer_cache.lookup(user.id, subspace_id, body.text, vector, cache_fp)
         except Exception:  # noqa: BLE001 — a cache that fails must never fail the answer
             log.warning("answer cache unavailable", exc_info=True)
             cacheable = False
 
-    # Persist the user's turn immediately so refresh shows it even mid-stream.
+    # Persist the user's turn so refresh shows it even mid-stream — but alongside the
+    # model call, not ahead of it (it is awaited before the first word goes out).
     # Skipped on a regenerate: the question is already on the record from the
     # first attempt, and this is another attempt at the same one, not a new
     # turn — inserting it again would show the question twice for one answer
     # that changed.
-    user_row: dict | None = None
+    user_insert_t: asyncio.Future | None = None
     if not body.regenerate:
-        user_row = (
-            await supabase.db_insert(
+        user_insert_t = asyncio.ensure_future(
+            supabase.db_insert(
                 "chat_messages",
                 {
                     "user_id": user.id,
@@ -215,7 +238,7 @@ async def send_chat(
                     "content": body.text,
                 },
             )
-        )[0]
+        )
 
     # When the large model has used nearly all of its day, go to the small one on purpose:
     # the answer starts at once, instead of failing against a spent allowance first.
@@ -230,6 +253,18 @@ async def send_chat(
         if images
         else (settings.groq_model_fast if large_nearly_spent else None)
     )
+
+    user_row: dict | None = None
+
+    async def user_saved() -> None:
+        """The student's message is on the record. Awaited before the first word of
+        the answer goes out, so an answer never appears for a question that was lost."""
+        nonlocal user_row
+        if user_insert_t is not None and user_row is None:
+            user_row = (await user_insert_t)[0]
+
+    if user_insert_t is not None:
+        user_insert_t.add_done_callback(_quiet)
 
     async def gen() -> AsyncIterator[bytes]:
         buffer: list[str] = []
@@ -251,6 +286,7 @@ async def send_chat(
                 ratelimit.refund(user.id, quota_cost)
                 log.info("chat turn answered from the answer cache subspace=%s user=%s", subspace_id, user.id)
                 suggestion = cached.suggestion
+                await user_saved()
                 for piece in answer_cache.pieces(cached.answer):
                     buffer.append(piece)
                     yield _sse("token", {"delta": piece})
@@ -263,12 +299,14 @@ async def send_chat(
                         # The trailing "[[next: …]]" line is held back and never shown.
                         shown = follow.feed(delta)
                         if shown:
+                            await user_saved()
                             buffer.append(shown)
                             yield _sse("token", {"delta": shown})
                 tail, suggestion = follow.finish()
                 if tail:
                     buffer.append(tail)
                     yield _sse("token", {"delta": tail})
+            await user_saved()
             assistant_text = "".join(buffer).strip() or "(no reply)"
             # The model was told to cite only the sources it was given, but an
             # instruction isn't a guarantee. A marker pointing at a source that
@@ -317,46 +355,55 @@ async def send_chat(
                 ],
                 sorted(used_markers),
             )
-            saved = await supabase.db_insert(
-                "chat_messages",
-                {
-                    "user_id": user.id,
-                    "subspace_id": subspace_id,
-                    "role": "assistant",
-                    "content": assistant_text,
-                    "citations": citations_meta or None,
-                    # What shaped this answer. Feedback about it is only
-                    # interpretable against the settings that produced it —
-                    # "this helped" says nothing without knowing what was
-                    # applied. Also the hook Phase 4's strategy label needs.
-                    "meta": {
-                        "chars": len(assistant_text),
-                        "had_sources": bool(citations_meta),
-                        "skill_ids": [s["id"] for s in active_skills],
-                        "prefs_applied": prefs_applied,
-                        # {key: value} for the three style dimensions in
-                        # force on this message (real preference or sampled
-                        # experiment) — `style_bandit` reads this back to
-                        # score a later feedback tap against it.
-                        "style": cached.style if cached is not None else style_applied,
-                        # What was searched for, what came back and what was
-                        # used — so "why did it answer that?" can be read off
-                        # the message instead of re-run.
-                        "retrieval": found.trace(),
-                        # Kept so the suggestion is still in the box after a reload.
-                        "suggestion": suggestion,
+            # Saving the answer and filing it for next time (which embeds the question,
+            # real work for this CPU) overlap; neither waits for the other.
+            remember = (
+                _remember_answer(
+                    user.id, subspace_id, body.text, cache_fp, assistant_text, suggestion, style_applied
+                )
+                if cacheable and cached is None
+                else _nothing()
+            )
+            saved, _ = await asyncio.gather(
+                supabase.db_insert(
+                    "chat_messages",
+                    {
+                        "user_id": user.id,
+                        "subspace_id": subspace_id,
+                        "role": "assistant",
+                        "content": assistant_text,
+                        "citations": citations_meta or None,
+                        # What shaped this answer. Feedback about it is only
+                        # interpretable against the settings that produced it —
+                        # "this helped" says nothing without knowing what was
+                        # applied. Also the hook Phase 4's strategy label needs.
+                        "meta": {
+                            "chars": len(assistant_text),
+                            "had_sources": bool(citations_meta),
+                            "skill_ids": [s["id"] for s in active_skills],
+                            "prefs_applied": prefs_applied,
+                            # {key: value} for the three style dimensions in
+                            # force on this message (real preference or sampled
+                            # experiment) — `style_bandit` reads this back to
+                            # score a later feedback tap against it.
+                            "style": cached.style if cached is not None else style_applied,
+                            # What was searched for, what came back and what was
+                            # used — so "why did it answer that?" can be read off
+                            # the message instead of re-run.
+                            "retrieval": found.trace(),
+                            # Kept so the suggestion is still in the box after a reload.
+                            "suggestion": suggestion,
+                        },
                     },
-                },
+                ),
+                remember,
             )
             saved_id = saved[0]["id"] if saved else None
-            if cacheable and cached is None and cache_vec:
-                answer_cache.store(user.id, subspace_id, body.text, cache_vec, cache_fp, assistant_text, suggestion, style_applied)
-            await activity.touch_subspace(subspace_id)
-            await activity.bump(
-                user.id,
-                chat_messages=1,
-                study_seconds=activity.SECONDS_PER_CHAT_MESSAGE,
-            )
+            # The bookkeeping (the topic's "last opened", today's counters) is not
+            # something the student is waiting for, and it is three more round
+            # trips in a row. It runs after the answer is out; a task of its own so
+            # that a closed tab cannot cancel it half-way.
+            _spawn(_after_turn(user.id, subspace_id))
             # Fire-and-forget: folds older turns into the topic's rolling
             # summary once enough have scrolled out of the live history
             # window. Scheduled, not awaited — must never delay this
@@ -406,6 +453,69 @@ async def send_chat(
 # ── Internals ──────────────────────────────────────────────────────────
 
 
+#: How old the snapshot chat builds its prompt from may be. A quiz, a feedback tap or a
+#: settings change clears it regardless (see `deps.get_chat_user`); this only bounds
+#: how long the passing of time alone is ignored.
+_SNAPSHOT_MAX_AGE_S = 120.0
+
+_background: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> None:
+    """Run `coro` to completion on its own: not tied to the response, and kept
+    referenced so it cannot be collected half-way."""
+    task = asyncio.ensure_future(coro)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
+def _quiet(future: asyncio.Future) -> None:
+    """Mark a future's failure as seen. Its owner may never get to look (the
+    request failed first), and an unseen failure is logged as a warning at exit."""
+    if not future.cancelled():
+        future.exception()
+
+
+def _abandon(futures) -> None:
+    for future in futures:
+        future.add_done_callback(_quiet)
+        future.cancel()
+
+
+async def _nothing() -> None:
+    return None
+
+
+async def _after_turn(user_id: str, subspace_id: str) -> None:
+    await asyncio.gather(
+        activity.touch_subspace(subspace_id),
+        activity.bump(
+            user_id,
+            chat_messages=1,
+            study_seconds=activity.SECONDS_PER_CHAT_MESSAGE,
+        ),
+    )
+    # Home and Profile should count this message; the snapshot chat itself reuses
+    # does not need to (see `student_model.invalidate_reads`).
+    student_model.invalidate_reads(user_id)
+
+
+async def _remember_answer(
+    user_id: str,
+    subspace_id: str,
+    question: str,
+    fingerprint: str,
+    answer: str,
+    suggestion: str | None,
+    style: dict | None,
+) -> None:
+    try:
+        vector = (await embed_question([question]))[0]
+        answer_cache.store(user_id, subspace_id, question, vector, fingerprint, answer, suggestion, style)
+    except Exception:  # noqa: BLE001 — a cache that fails must never fail the answer
+        log.warning("answer cache could not store this answer", exc_info=True)
+
+
 def _before_this_question(history: list[dict[str, str]], question: str, regenerate: bool) -> list[dict[str, str]]:
     """The conversation as it stood before this question was asked.
 
@@ -448,19 +558,25 @@ def _history_limit(active_skills: list[dict]) -> int:
     )
 
 
-async def _fetch_settings(user_id: str) -> dict:
-    rows = await supabase.db_select(
-        "user_settings", filters={"user_id": f"eq.{user_id}"}, limit=1
-    )
-    return rows[0] if rows else {}
-
-
+_SKILLS = readcache.UserCache[list[dict]](maxsize=512, ttl=120.0)
 
 
 async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
-    # Safe without a user filter only because the caller already proved this
-    # subspace belongs to `user_id` — the service-role key ignores RLS.
-    _ = user_id
+    """The skills switched on for this topic. Read on every turn, changed only when
+    the student toggles one (a write, which clears this: see `readcache`)."""
+    hit = _SKILLS.get(user_id, subspace_id)
+    if hit is not None:
+        return hit
+    began = time.monotonic()
+    skills = await _read_active_skills(subspace_id)
+    _SKILLS.set(user_id, subspace_id, skills, read_at=began)
+    return skills
+
+
+async def _read_active_skills(subspace_id: str) -> list[dict]:
+    # Safe without a user filter only because the caller proves this subspace
+    # belongs to the user before anything read here is used — the service-role key
+    # ignores RLS.
     links = await supabase.db_select(
         "subspace_skills",
         filters={"subspace_id": f"eq.{subspace_id}"},
@@ -476,4 +592,3 @@ async def _active_skills(user_id: str, subspace_id: str) -> list[dict]:
     return await supabase.db_select(
         "skills", filters={"id": f"in.({ids})"}, order="created_at.asc"
     )
-
