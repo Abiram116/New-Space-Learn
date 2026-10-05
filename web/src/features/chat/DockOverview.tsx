@@ -2,14 +2,16 @@
  * The dock's first screen: four plain sections, the same for every topic, so a
  * student learns it once.
  *
- *   Your material        the files answers come from, and Add files
- *   Make from this chat  Notes · Quiz · Cards — three buttons, nothing else
+ *   Your material        the files answers come from, and Add files — with
+ *                        the topics linked to this one drawn as a small map
+ *   Make from this chat  Notes · Quiz · Cards — three tiles that say, when
+ *                        they can't be pressed yet, what they are waiting for
  *   Saved here           this topic's notes, quizzes and cards (and what's due)
  *   How I answer         the skill that's on, as one chip, with Change
  *
  * One button on the screen is orange: the one that does the next useful thing
- * (see `dockNext`). Everything else is quiet. Rarely used things — linked
- * topics, the list of questions asked — fold away behind a small row.
+ * (see `dockNext`). Everything else is quiet. The list of questions asked
+ * folds away behind a small row.
  *
  * An earlier version had two layouts (a step-by-step guide for new topics, a
  * summary for busy ones). Two layouts meant two things to learn, and the step
@@ -23,10 +25,10 @@ import { Icon, type IconName } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
-import { RelatedTopics } from '../spaces/RelatedTopics'
 import { AGENT_ICON, AGENT_TONE, type AgentKey } from './agents'
 import type { AgentBusy } from './ContextDock'
 import { DockSectionHead, Spinner } from './dockParts'
+import { DockLinkedTopics } from './DockLinkedTopics'
 import { nextStep, type Progress } from './dockNext'
 import { jumpToQuestion, worthAnotherGo, type DockLists } from './DockInsights'
 import { DockSkills } from './DockSkills'
@@ -34,10 +36,10 @@ import { DockSources, sourcesState, type SourcesHandle } from './DockSources'
 import type { DockPanel } from './DockPanels'
 
 /** The three things a chat can be turned into, with their short names. */
-const MAKES: { make: AgentKey; word: string; does: string }[] = [
-  { make: 'notes', word: 'Notes', does: 'Save the last answer as a note' },
-  { make: 'quiz', word: 'Quiz', does: 'Make a quiz to test yourself' },
-  { make: 'flashcards', word: 'Cards', does: 'Turn this into flashcards' },
+const MAKES: { make: AgentKey; word: string; does: string; ready: string; blocked: string }[] = [
+  { make: 'notes', word: 'Notes', does: 'Save the last answer as a note', ready: 'Save last answer', blocked: 'After an answer' },
+  { make: 'quiz', word: 'Quiz', does: 'Make a quiz to test yourself', ready: 'Test yourself', blocked: 'Needs a file' },
+  { make: 'flashcards', word: 'Cards', does: 'Turn this into flashcards', ready: 'Practise recall', blocked: 'Needs a file' },
 ]
 
 /** How many files are listed before pointing at the rest. */
@@ -105,23 +107,23 @@ export function DockOverview({
 
   return (
     <>
-      <header className="flex min-h-[3.25rem] shrink-0 items-center gap-2 border-b border-line py-2 pl-3.5 pr-2">
-        <span aria-hidden className={cn('h-2 w-2 shrink-0 rounded-full', dot, files.kind === 'reading' && 'animate-pulse')} />
-        <p role="status" className="min-w-0 flex-1 truncate text-[13.5px] font-extrabold text-ink">
+      <header className="flex min-h-14 shrink-0 items-center gap-2.5 border-b border-line py-2 pl-4 pr-2">
+        <span aria-hidden className={cn('h-2.5 w-2.5 shrink-0 rounded-full', dot, files.kind === 'reading' && 'animate-pulse')} />
+        <p role="status" className="min-w-0 flex-1 truncate text-[15px] font-extrabold text-ink">
           {files.title}
         </p>
         <button
           type="button"
           onClick={() => onOpenPanel('help')}
-          className="flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
+          className="flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
         >
-          <Icon name="help" size={14} /> Help
+          <Icon name="help" size={16} /> Help
         </button>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-3.5 pb-4 pt-3.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-7 overflow-y-auto overflow-x-hidden px-4 pb-5 pt-4">
         {/* ── Your material ── */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <DockSources
             ref={sources}
             subspaceId={subspaceId}
@@ -138,58 +140,77 @@ export function DockOverview({
             <button
               type="button"
               onClick={focusChat}
-              className="flex min-h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-mint-soft/60 px-3 text-left text-[12.5px] font-semibold text-mint-deep transition-colors hover:bg-mint-soft"
+              className="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-[12px] bg-mint-soft/70 px-3.5 text-left text-[14px] font-semibold text-mint-deep transition-colors hover:bg-mint-soft"
             >
-              <Icon name="chat" size={14} className="shrink-0" />
+              <Icon name="chat" size={17} className="shrink-0" />
               <span className="flex-1">All set. Ask me anything in the chat.</span>
-              <Icon name="arrowLeft" size={13} className="shrink-0" />
+              <Icon name="arrowLeft" size={15} className="shrink-0" />
             </button>
           )}
-          <LinkedTopics subspaceId={subspaceId} />
         </div>
 
+        {/* ── Linked topics: part of "your material", drawn as a small map ── */}
+        <DockLinkedTopics subspaceId={subspaceId} />
+
         {/* ── Make from this chat ── */}
-        <section aria-labelledby="dock-make-label" className="flex flex-col gap-2">
+        <section aria-labelledby="dock-make-label" className="flex flex-col gap-2.5">
           <DockSectionHead id="dock-make-label">Make from this chat</DockSectionHead>
           <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="dock-make-label">
-            {MAKES.map(({ make, word, does }) => {
+            {MAKES.map(({ make, word, does, ready, blocked }) => {
               const working = busy[make] === true
-              const lead = next.kind === make && canMake[make] && !working
+              const can = canMake[make]
+              const lead = next.kind === make && can && !working
               return (
                 <button
                   key={make}
                   type="button"
                   onClick={() => onRunAgent(make)}
-                  disabled={!canMake[make] || working}
+                  disabled={!can || working}
                   aria-busy={working || undefined}
-                  aria-label={working ? `${word}: making…` : `${word}: ${does.toLowerCase()}`}
-                  title={canMake[make] ? does : make === 'notes' ? 'Ready after your first answer' : 'Ready once a file is read'}
+                  aria-label={working ? `${word}: making…` : can ? `${word}: ${does.toLowerCase()}` : `${word}: ${blocked.toLowerCase()}`}
+                  title={can ? does : make === 'notes' ? 'Ready after your first answer' : 'Ready once a file is read'}
                   className={cn(
-                    'group flex min-h-[4.75rem] flex-col items-center justify-center gap-1.5 rounded-[12px] border px-1 py-2.5 t-control duration-200',
+                    'group relative flex min-h-[7.25rem] flex-col items-center justify-center gap-1.5 rounded-[14px] border px-1.5 pb-3 pt-3.5 text-center t-control duration-200',
                     'cursor-pointer disabled:cursor-not-allowed',
-                    lead
-                      ? 'border-brand bg-brand-tint shadow-[0_6px_18px_-10px_rgba(255,90,60,0.7)] hover:bg-brand-soft'
-                      : 'border-line bg-raised hover:border-ink-3/60',
-                    !canMake[make] && 'opacity-55 hover:border-line',
+                    !can
+                      ? 'border-dashed border-line-dash bg-transparent'
+                      : lead
+                        ? 'border-brand bg-brand-tint shadow-[0_8px_22px_-12px_rgba(255,90,60,0.75)] hover:-translate-y-0.5 hover:bg-brand-soft'
+                        : 'cardstock hover:-translate-y-0.5 hover:border-ink-3/50',
                     working && 'cursor-progress',
                   )}
                 >
                   <span
                     className={cn(
-                      'grid h-9 w-9 place-items-center rounded-[10px] transition-transform',
-                      canMake[make] && !working && 'group-hover:-translate-y-0.5',
-                      toneSoft[AGENT_TONE[make]],
-                      toneText[AGENT_TONE[make]],
+                      'grid h-11 w-11 place-items-center rounded-[12px] transition-transform',
+                      can && !working && 'group-hover:scale-105',
+                      can ? `${toneSoft[AGENT_TONE[make]]} ${toneText[AGENT_TONE[make]]}` : 'bg-line-soft text-faint',
                     )}
                   >
-                    {working ? <Spinner size={15} /> : <Icon name={AGENT_ICON[make]} size={18} />}
+                    {working ? (
+                      <Spinner size={18} />
+                    ) : can ? (
+                      <Icon name={AGENT_ICON[make]} size={21} />
+                    ) : (
+                      <Icon name="lock" size={17} />
+                    )}
                   </span>
-                  <span className="text-[12.5px] font-bold text-ink">{working ? 'Making…' : word}</span>
+                  <span className={cn('text-[15px] font-bold leading-tight', can ? 'text-ink' : 'text-ink-3')}>
+                    {working ? 'Making…' : word}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-[12px] font-medium leading-tight',
+                      !can ? 'text-faint' : lead ? 'text-brand-deep' : 'text-muted',
+                    )}
+                  >
+                    {working ? 'One moment' : can ? ready : blocked}
+                  </span>
                 </button>
               )
             })}
           </div>
-          {makeHint && <p className="text-[11.5px] leading-snug text-muted">{makeHint}</p>}
+          {makeHint && <p className="text-[13px] leading-snug text-muted">{makeHint}</p>}
         </section>
 
         {/* ── Saved here ── */}
@@ -222,17 +243,21 @@ function Saved({
 }) {
   const nothing = counts.notes + counts.quizzes + counts.decks === 0
   const retake = worthAnotherGo([...lists.quizzes])
+  const latestNote = [...lists.notes]
+    .filter((n) => n.title)
+    .sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''))[0]?.title
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
   return (
-    <section aria-labelledby="dock-saved-label" className="flex flex-col gap-2">
+    <section aria-labelledby="dock-saved-label" className="flex flex-col gap-2.5">
       <DockSectionHead id="dock-saved-label">Saved in this topic</DockSectionHead>
-      {nothing && <p className="text-[11.5px] leading-snug text-muted">Nothing yet. What you make shows up here.</p>}
-      <ul className="flex flex-col overflow-hidden rounded-[10px] border border-line bg-raised">
+      {nothing && <p className="text-[13px] leading-snug text-muted">Nothing yet. What you make shows up here.</p>}
+      <ul className="cardstock flex flex-col overflow-hidden rounded-[14px]">
         <SavedRow
           icon="note"
           tone="brand"
           label="Notes"
           detail={counts.notes > 0 ? String(counts.notes) : undefined}
+          sub={latestNote ? `Latest: ${latestNote}` : undefined}
           onOpen={() => onOpenPanel('notes')}
         />
         <SavedRow
@@ -255,7 +280,7 @@ function Saved({
                 type="button"
                 onClick={onReviewDue}
                 className={cn(
-                  'mr-2 inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[12px] font-bold t-control duration-200',
+                  'mr-3 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-bold t-control duration-200',
                   leadReview
                     ? 'bg-brand text-[#1a120f] hover:brightness-110'
                     : 'bg-sun-soft text-sun-deep hover:brightness-125',
@@ -294,24 +319,29 @@ function SavedRow({
         type="button"
         onClick={onOpen}
         aria-label={detail ? `${label}, ${detail}` : label}
-        className="group flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors hover:bg-line-soft"
+        className="group flex min-h-[3.75rem] min-w-0 flex-1 cursor-pointer items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-line-soft"
       >
-        <span className={cn('grid h-7 w-7 shrink-0 place-items-center rounded-md', toneSoft[tone], toneText[tone])}>
-          <Icon name={icon} size={14} />
+        <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-[10px]', toneSoft[tone], toneText[tone])}>
+          <Icon name={icon} size={19} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[13px] font-bold text-ink">{label}</span>
+          <span className="block text-[15px] font-bold leading-snug text-ink">{label}</span>
           {/* With a button beside it there's no room on the right, so the count moves under the name. */}
           {(sub || (action && detail)) && (
-            <span className="block truncate text-[11.5px] text-muted">{sub ?? detail}</span>
+            <span className="mt-0.5 block truncate text-[13px] leading-snug text-muted">{sub ?? detail}</span>
           )}
         </span>
         {!action && (
-          <span className={cn('shrink-0 text-[12px] tabular-nums', detail ? 'font-semibold text-ink-3' : 'text-faint')}>
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-2.5 py-0.5 text-[13px] tabular-nums',
+              detail ? 'bg-line-soft font-bold text-ink-2' : 'text-faint',
+            )}
+          >
             {detail ?? 'None'}
           </span>
         )}
-        <Icon name="chevronRight" size={13} className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
+        <Icon name="chevronRight" size={16} className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
       </button>
       {action}
     </li>
@@ -320,31 +350,13 @@ function SavedRow({
 
 /* ── Folded rows ────────────────────────────────────────────────────────── */
 
-/**
- * Other topics the AI also reads from. Rarely changed, so it is one quiet row;
- * the links (and the request that reads them) only load when it is opened.
- */
-function LinkedTopics({ subspaceId }: { subspaceId: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="flex flex-col gap-2">
-      <Fold open={open} onToggle={() => setOpen((v) => !v)} icon="doc" label="Linked topics" hint="Use notes from another topic too" />
-      {open && (
-        <div className="flex flex-col gap-1.5 pl-1">
-          <RelatedTopics subspaceId={subspaceId} layout="stack" />
-        </div>
-      )}
-    </div>
-  )
-}
-
 /** A long chat is hard to find your way around: what you asked, newest first. */
 function Questions({ questions }: { questions: DockLists['questions'] }) {
   const [open, setOpen] = useState(false)
   if (questions.length === 0) return null
   const outline = [...questions].reverse()
   return (
-    <div className="mt-auto flex flex-col gap-1.5 border-t border-line-soft pt-3">
+    <div className="mt-auto flex flex-col gap-1.5 border-t border-line-soft pt-4">
       <Fold
         open={open}
         onToggle={() => setOpen((v) => !v)}
@@ -360,9 +372,9 @@ function Questions({ questions }: { questions: DockLists['questions'] }) {
                 type="button"
                 onClick={() => jumpToQuestion(q.id)}
                 title={q.text}
-                className="group flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
+                className="group flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[14px] text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
               >
-                <span className="w-4 shrink-0 text-right font-mono text-[10.5px] text-faint">{outline.length - i}</span>
+                <span className="w-5 shrink-0 text-right text-[12.5px] font-semibold tabular-nums text-faint">{outline.length - i}</span>
                 <span className="min-w-0 flex-1 truncate">{q.text}</span>
               </button>
             </li>
@@ -391,14 +403,14 @@ function Fold({
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="group flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-1.5 text-left transition-colors hover:bg-line-soft"
+      className="group flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 text-left transition-colors hover:bg-line-soft"
     >
-      <Icon name={icon} size={13} className="shrink-0 text-ink-3" />
-      <span className="text-[12.5px] font-bold text-ink-2 group-hover:text-ink">{label}</span>
-      {!open && <span className="min-w-0 flex-1 truncate text-[11.5px] text-faint">{hint}</span>}
+      <Icon name={icon} size={16} className="shrink-0 text-ink-3" />
+      <span className="text-[14px] font-bold text-ink-2 group-hover:text-ink">{label}</span>
+      {!open && <span className="min-w-0 flex-1 truncate text-[13px] text-faint">{hint}</span>}
       <Icon
         name="chevronDown"
-        size={13}
+        size={16}
         className={cn('ml-auto shrink-0 text-faint transition-transform', open && 'rotate-180')}
       />
     </button>
@@ -409,13 +421,13 @@ function Fold({
 function Waiting() {
   return (
     <>
-      <div className="flex min-h-[3.25rem] shrink-0 items-center border-b border-line px-3.5">
-        <Skeleton className="h-4 w-40 rounded" />
+      <div className="flex min-h-14 shrink-0 items-center border-b border-line px-4">
+        <Skeleton className="h-5 w-44 rounded" />
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 p-3.5">
-        <Skeleton className="h-16 rounded-[10px]" />
-        <Skeleton className="h-20 rounded-[10px]" />
-        <Skeleton className="h-28 rounded-[10px]" />
+      <div className="flex min-h-0 flex-1 flex-col gap-5 p-4">
+        <Skeleton className="h-20 rounded-[12px]" />
+        <Skeleton className="h-28 rounded-[14px]" />
+        <Skeleton className="h-44 rounded-[14px]" />
       </div>
     </>
   )

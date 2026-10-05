@@ -52,21 +52,21 @@ export function DockHelp() {
         <DockSectionHead id="help-how">How it works</DockSectionHead>
         <ol className="flex flex-col gap-2">
           {STEPS.map((s, i) => (
-            <li key={s.title} className="cardstock flex items-center gap-3 rounded-[10px] px-3 py-2.5">
+            <li key={s.title} className="cardstock flex items-center gap-3 rounded-[12px] px-3 py-3">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand-deep">
                 <Icon name={s.icon} size={17} />
               </span>
               <div className="min-w-0">
-                <p className="text-[13px] font-bold text-ink">
-                  <span className="mr-1.5 font-mono text-[11.5px] text-faint">{i + 1}</span>
+                <p className="text-[15px] font-bold text-ink">
+                  <span className="mr-1.5 text-[13px] font-semibold tabular-nums text-faint">{i + 1}</span>
                   {s.title}
                 </p>
-                <p className="mt-0.5 text-[12px] leading-snug text-muted">{s.body}</p>
+                <p className="mt-0.5 text-[13.5px] leading-snug text-muted">{s.body}</p>
               </div>
             </li>
           ))}
         </ol>
-        <p className="text-[12px] leading-relaxed text-muted">
+        <p className="text-[13.5px] leading-relaxed text-muted">
           Tip: type <Key>/notes</Key>, <Key>/quiz</Key> or <Key>/flashcards</Key> in the chat to make one fast.
         </p>
       </section>
@@ -76,7 +76,7 @@ export function DockHelp() {
         <div className="flex flex-col gap-1.5">
           {FIXES.map((f) => (
             <details key={f.problem} className="group cardstock rounded-[10px]">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 py-2 text-[12.5px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
+              <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2 px-3 py-2 text-[14.5px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
                 <span className="flex-1 leading-snug">{f.problem}</span>
                 <Icon
                   name="chevronDown"
@@ -84,7 +84,7 @@ export function DockHelp() {
                   className="shrink-0 text-faint transition-transform group-open:rotate-180"
                 />
               </summary>
-              <p className="px-3 pb-3 text-[12px] leading-snug text-muted">{f.fix}</p>
+              <p className="px-3 pb-3 text-[13.5px] leading-snug text-muted">{f.fix}</p>
             </details>
           ))}
         </div>
@@ -98,8 +98,8 @@ export function DockHelp() {
         >
           <Icon name="lock" size={15} className="shrink-0 text-ink-3" />
           <span className="min-w-0 flex-1">
-            <span className="block text-[12.5px] font-bold text-ink">How your files are used</span>
-            <span className="block text-[11.5px] text-muted">Privacy, in plain words</span>
+            <span className="block text-[15px] font-bold text-ink">How your files are used</span>
+            <span className="block text-[13px] text-muted">Privacy, in plain words</span>
           </span>
           <Icon name="chevronRight" size={14} className="shrink-0 text-faint" />
         </Link>

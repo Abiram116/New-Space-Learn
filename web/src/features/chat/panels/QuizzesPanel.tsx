@@ -17,7 +17,9 @@ import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
 import { quizHref } from '../../../lib/fromChat'
 import { useAsync } from '../../../lib/useAsync'
-import { DockAction, DockEmpty, DockSectionHead } from '../dockParts'
+import { cn } from '../../../lib/cn'
+import { SOLID_AT } from '../DockInsights'
+import { DockAction, DockEmpty, DockFooter, DockMeter, DockSectionHead } from '../dockParts'
 
 export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
   const navigate = useNavigate()
@@ -41,53 +43,87 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
 
   const list = weakestFirst(quizzes.data ?? [])
 
-  return (
-    // `flex-1`, not `min-h-full`: a percentage min-height has to resolve against
-    // an ancestor chain of definite heights, and one scroll container in that
-    // chain is enough to collapse it. A flex item that grows needs nothing from
-    // its ancestors.
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <DockSectionHead id="quizzes-panel-label">{list.length > 0 ? `Quizzes · ${list.length}` : 'Quizzes'}</DockSectionHead>
+  const taken = list.filter((q) => typeof q.best_score === 'number')
+  const toRetry = list.filter((q) => typeof q.best_score !== 'number' || q.best_score < SOLID_AT).length
+  const summary =
+    list.length === 0
+      ? undefined
+      : [
+          taken.length > 0
+            ? `Average best ${Math.round(taken.reduce((n, q) => n + (q.best_score ?? 0), 0) / taken.length)}%`
+            : 'None taken yet',
+          toRetry > 0 && taken.length > 0 ? `${toRetry} worth a go` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
 
-      <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+  return (
+    // Sized by its content, not stretched: the main button follows the list
+    // (see `DockFooter`) instead of waiting at the bottom of an empty column.
+    <div className="flex flex-col gap-3">
+      <DockSectionHead id="quizzes-panel-label" hint={summary}>
+        {list.length > 0 ? `Quizzes · ${list.length}` : 'Quizzes'}
+      </DockSectionHead>
+
+      <div className="flex flex-col gap-2">
         {quizzes.loading ? (
-          <Skeleton className="h-12 rounded-[10px]" />
+          <Skeleton className="h-[4.5rem] rounded-[12px]" />
         ) : quizzes.error ? (
           // A failed fetch used to fall through to `list.length === 0` and
           // read as "you've never generated a quiz here" — silently wrong.
-          <p className="text-[12px] text-coral-deep">{quizzes.error}</p>
+          <p className="text-[13.5px] text-coral-deep">{quizzes.error}</p>
         ) : list.length === 0 ? (
           <DockEmpty icon="quiz" title="No quizzes yet">
             Make one from your files and it shows up here.
           </DockEmpty>
         ) : (
           <Stagger step={18} max={140}>
-            {list.map((q) => (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => navigate(quizHref(base, q.id))}
-                className="flex w-full items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors cursor-pointer hover:border-brand/40"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-semibold leading-snug text-ink">
-                    {q.topic || 'Quiz'}
+            {list.map((q) => {
+              const best = typeof q.best_score === 'number' ? Math.round(q.best_score) : null
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => navigate(quizHref(base, q.id))}
+                  className="group flex w-full cursor-pointer items-center gap-3 rounded-[12px] border border-line bg-raised px-3 py-3 text-left t-control duration-200 hover:border-sky/40 hover:bg-line-soft"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-sky-soft text-sky-deep">
+                    <Icon name="quiz" size={17} />
                   </span>
-                  <span className="mt-0.5 block text-[11.5px] text-muted">{quizMeta(q)}</span>
-                </span>
-                <span className="setcode flex shrink-0 items-center gap-1 text-ink-3">
-                  {typeof q.best_score === 'number' ? 'Retake' : 'Take'}
-                  <Icon name="arrowRight" size={11} />
-                </span>
-              </button>
-            ))}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold leading-snug text-ink">
+                      {q.topic || 'Quiz'}
+                    </span>
+                    <span className="mt-0.5 block text-[13px] text-muted">{quizMeta(q)}</span>
+                    {best !== null && (
+                      <span className="mt-1.5 block">
+                        <DockMeter value={best} tone={best >= SOLID_AT ? 'mint' : best >= 50 ? 'sun' : 'coral'} />
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      'inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[13px] font-bold t-control duration-200',
+                      best === null
+                        ? 'bg-sky-soft text-sky-deep group-hover:brightness-125'
+                        : 'border border-line text-ink-2 group-hover:border-ink-3/60 group-hover:text-ink',
+                    )}
+                  >
+                    {best === null ? 'Take' : 'Retake'}
+                    <Icon name="arrowRight" size={13} />
+                  </span>
+                </button>
+              )
+            })}
           </Stagger>
         )}
       </div>
 
-      <DockAction busy={generating} busyLabel="Writing questions…" onClick={generate}>
-        Make a quiz
-      </DockAction>
+      <DockFooter>
+        <DockAction busy={generating} busyLabel="Writing questions…" onClick={generate}>
+          Make a quiz
+        </DockAction>
+      </DockFooter>
     </div>
   )
 }
@@ -96,7 +132,7 @@ export function QuizzesPanel({ subspaceId, base }: { subspaceId: string; base: s
 function quizMeta(q: Quiz): string {
   const n = q.questions.length
   const parts = [`${n} question${n === 1 ? '' : 's'}`]
-  if (typeof q.best_score === 'number') parts.push(`best ${Math.round(q.best_score)}%`)
+  parts.push(typeof q.best_score === 'number' ? `best ${Math.round(q.best_score)}%` : 'not taken yet')
   return parts.join(' · ')
 }
 

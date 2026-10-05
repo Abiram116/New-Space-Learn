@@ -24,7 +24,7 @@ import { useRef } from 'react'
 import type { Document } from '../../api/types'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import type { AgentKey } from './agents'
-import { DockAction, DockLink, DockSectionHead } from './dockParts'
+import { DockAction, DockFooter, DockLink, DockSectionHead } from './dockParts'
 import { DockHelp } from './DockHelp'
 import { DockSources, type SourcesHandle } from './DockSources'
 import { CardsPanel } from './panels/CardsPanel'
@@ -93,34 +93,35 @@ function DocsPanel({
   const sources = useRef<SourcesHandle>(null)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
-        <div className="flex flex-col gap-2">
-          <DockSources
-            ref={sources}
-            subspaceId={subspaceId}
-            docs={docs}
-            loading={loading}
-            error={error}
-            onChanged={onChanged}
-            addButton="none"
-          />
-          {docs.length > 0 && (
-            <p className="text-[11.5px] leading-snug text-faint">I read all of these when you ask a question.</p>
-          )}
-        </div>
-
-        <section aria-labelledby="dock-related-label" className="flex flex-col gap-2">
-          <DockSectionHead id="dock-related-label">Linked topics</DockSectionHead>
-          <p className="text-[11.5px] leading-snug text-faint">Link another topic and I’ll answer from its files too.</p>
-          <RelatedTopics subspaceId={subspaceId} layout="stack" />
-        </section>
+    <div className="flex flex-col gap-7">
+      <div className="flex flex-col gap-2">
+        <DockSources
+          ref={sources}
+          subspaceId={subspaceId}
+          docs={docs}
+          loading={loading}
+          error={error}
+          onChanged={onChanged}
+          addButton="none"
+        />
+        {docs.length > 0 && (
+          <p className="text-[13px] leading-snug text-muted">I read all of these when you ask a question.</p>
+        )}
       </div>
 
-      <DockLink to={`${base}/docs`}>Open all files</DockLink>
-      <DockAction icon="plus" onClick={() => sources.current?.choose()}>
-        Add files
-      </DockAction>
+      <section aria-labelledby="dock-related-label" className="flex flex-col gap-2.5">
+        <DockSectionHead id="dock-related-label" hint="Link another topic and I’ll answer from its files too.">
+          Linked topics
+        </DockSectionHead>
+        <RelatedTopics subspaceId={subspaceId} layout="stack" />
+      </section>
+
+      <DockFooter>
+        <DockLink to={`${base}/docs`}>Open all files</DockLink>
+        <DockAction icon="plus" onClick={() => sources.current?.choose()}>
+          Add files
+        </DockAction>
+      </DockFooter>
     </div>
   )
 }

@@ -15,7 +15,9 @@ import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
 import { deckHref, reviewDeckHref } from '../../../lib/fromChat'
 import { useAsync } from '../../../lib/useAsync'
-import { DockAction, DockEmpty, DockLink, DockSectionHead } from '../dockParts'
+import { Icon } from '../../../components/ui/Icon'
+import { cn } from '../../../lib/cn'
+import { DockAction, DockEmpty, DockFooter, DockLink, DockMeter, DockSectionHead } from '../dockParts'
 
 export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: string }) {
   const navigate = useNavigate()
@@ -23,64 +25,87 @@ export function CardsPanel({ subspaceId, base }: { subspaceId: string; base: str
   const list = decks.data ?? []
   const due = list.reduce((n, d) => n + d.due, 0)
 
+  const cards = list.reduce((n, d) => n + d.total, 0)
+  const summary =
+    list.length === 0
+      ? undefined
+      : `${cards === 1 ? '1 card' : `${cards} cards`} · ${due > 0 ? `${due} due now` : 'all caught up'}`
+
   return (
-    // See QuizzesPanel: `flex-1` rather than `min-h-full`, so filling the dock
-    // doesn't depend on a percentage resolving through a scroll container.
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {due > 0 && (
-        <div className="flex items-baseline gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2">
-          <span className="nameplate text-[20px] tabular-nums text-ink">{due}</span>
-          <span className="text-[12px] text-ink-2">due now</span>
-        </div>
-      )}
+    // Sized by its content (see QuizzesPanel): the main button follows the list.
+    <div className="flex flex-col gap-3">
+      <DockSectionHead id="cards-panel-label" hint={summary}>
+        {list.length > 0 ? `Flashcards · ${list.length}` : 'Flashcards'}
+      </DockSectionHead>
 
-      <DockSectionHead id="cards-panel-label">{list.length > 0 ? `Flashcards · ${list.length}` : 'Flashcards'}</DockSectionHead>
-
-      <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+      <div className="flex flex-col gap-2">
         {decks.loading ? (
-          <Skeleton className="h-12 rounded-[10px]" />
+          <Skeleton className="h-[4.5rem] rounded-[12px]" />
         ) : decks.error ? (
           // Same fix as QuizzesPanel's own list — a failed fetch used to
           // read as "you've never made a deck here".
-          <p className="text-[12px] text-coral-deep">{decks.error}</p>
+          <p className="text-[13.5px] text-coral-deep">{decks.error}</p>
         ) : list.length === 0 ? (
           <DockEmpty icon="deck" title="No flashcards yet">
             Make some from your files and they show up here.
           </DockEmpty>
         ) : (
           <Stagger step={18} max={140}>
-            {list.map((d) => (
-              <div
-                key={d.id}
-                className="flex items-center gap-2 rounded-[10px] border border-line bg-raised px-2.5 py-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => navigate(deckHref(base, d.id))}
-                  className="min-w-0 flex-1 cursor-pointer truncate text-left text-[12.5px] leading-snug text-ink-3 transition-colors hover:text-ink"
-                  title="Open this deck"
+            {list.map((d) => {
+              const known = Math.round(d.known_pct ?? 0)
+              return (
+                <div
+                  key={d.id}
+                  className={cn(
+                    'flex items-center gap-3 rounded-[12px] border bg-raised px-3 py-3',
+                    d.due > 0 ? 'border-sun/30' : 'border-line',
+                  )}
                 >
-                  {d.name}
-                </button>
-                {d.due > 0 ? (
                   <button
                     type="button"
-                    onClick={() => navigate(reviewDeckHref(base, d.id))}
-                    className="shrink-0 cursor-pointer rounded-full border border-ink-3/60 px-2.5 py-1 text-[11px] font-bold text-ink t-control duration-200 hover:border-ink hover:bg-line-soft"
+                    onClick={() => navigate(deckHref(base, d.id))}
+                    className="group flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+                    title="Open this deck"
                   >
-                    Review {d.due}
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-sun-soft text-sun-deep">
+                      <Icon name="deck" size={17} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-bold leading-snug text-ink transition-colors group-hover:text-sun-deep">
+                        {d.name}
+                      </span>
+                      <span className="mt-0.5 block text-[13px] text-muted">
+                        {d.total === 1 ? '1 card' : `${d.total} cards`} · {known}% known
+                      </span>
+                      <span className="mt-1.5 block">
+                        <DockMeter value={known} tone={known >= 80 ? 'mint' : 'sun'} />
+                      </span>
+                    </span>
                   </button>
-                ) : (
-                  <span className="setcode shrink-0">done</span>
-                )}
-              </div>
-            ))}
+                  {d.due > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(reviewDeckHref(base, d.id))}
+                      className="inline-flex min-h-9 shrink-0 cursor-pointer items-center rounded-full bg-sun-soft px-3.5 text-[13px] font-bold text-sun-deep t-control duration-200 hover:brightness-125"
+                    >
+                      Review {d.due}
+                    </button>
+                  ) : (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-[13px] font-semibold text-mint-deep">
+                      <Icon name="check" size={14} /> Done
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </Stagger>
         )}
       </div>
 
-      <DockLink to={`${base}/flashcards`}>Open all flashcards</DockLink>
-      <MakeCards subspaceId={subspaceId} onMade={decks.refresh} />
+      <DockFooter>
+        <DockLink to={`${base}/flashcards`}>Open all flashcards</DockLink>
+        <MakeCards subspaceId={subspaceId} onMade={decks.refresh} />
+      </DockFooter>
     </div>
   )
 }

@@ -4,7 +4,7 @@
  * This page is account-wide and has no on/off switches and no topic: you add
  * skills here (from the library, or written yourself) and turn them on for a
  * topic from the chat sidebar, where the topic is already obvious.
- * - "Library" cards clone the built-in template into the user's own skills so
+ * - "Ready-made" (library) cards clone the built-in template into the user's own skills so
  *   they can be edited without touching the shared row.
  * - The editor panel is a single form used for both create and update; when
  *   `selectedId` is null it saves a new skill.
@@ -29,7 +29,6 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Textarea } from '../../components/ui/Input'
 import { Modal, ModalFooter } from '../../components/ui/Modal'
-import { SectionLabel } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import {
   LIBRARY_CATEGORY,
@@ -258,7 +257,7 @@ export function SkillsView() {
         output_format: lib.output_format,
       })
       setOwn((prev) => (prev ? [created, ...prev] : [created]))
-      show(`Added "${lib.name}" — activate it below to apply to this space.`, 'success')
+      show(`Added “${lib.name}”. Switch it on from any topic’s chat.`, 'success')
     } catch (err) {
       showError(err)
     }
@@ -275,7 +274,7 @@ export function SkillsView() {
         placeholder="Socratic Tutor"
       />
 
-      <div className="flex flex-col gap-1.5 text-[12.5px]">
+      <div className="flex flex-col gap-1.5 text-[13.5px]">
         <span className="font-semibold text-muted">Icon &amp; colour</span>
         <div className="flex gap-1.5">
           {SKILL_ICON_CHOICES.map((choice) => {
@@ -366,10 +365,10 @@ export function SkillsView() {
         value={form.instructions}
         onChange={(e) => setForm({ ...form, instructions: e.target.value })}
         placeholder="Ask one guiding question at a time. Never reveal the full answer until I've attempted it twice…"
-        hint="Written in second person. Kept as a system prompt when this skill is active."
+        hint="Talk to me directly, like “Ask me one question at a time.” I follow this whenever the skill is on."
       />
 
-      <div className="flex flex-col gap-1.5 text-[12.5px]">
+      <div className="flex flex-col gap-1.5 text-[13.5px]">
         <span className="font-semibold text-muted">Remembers</span>
         {/* The toggle above already controls WHERE this skill applies — every
             space it's switched on in, forever, until switched off. This
@@ -378,9 +377,9 @@ export function SkillsView() {
             saying outright, because "Everything" sitting one row under a
             per-space activation toggle reads like "every space" if you
             don't stop to check — it isn't; it's still this topic only. */}
-        <p className="text-[12.5px] leading-snug text-faint">
-          How much of this topic's chat history it can see when answering —
-          not where it's active. It stays scoped to this space either way.
+        <p className="text-[13px] leading-snug text-faint">
+          How much of the topic&rsquo;s chat I look back at when answering. It
+          never reads other topics&rsquo; chats.
         </p>
         <div className="flex flex-wrap gap-1.5">
           {MEMORY_SCOPE_OPTIONS.map((opt) => (
@@ -409,7 +408,7 @@ export function SkillsView() {
         value={form.output_format ?? ''}
         onChange={(e) => setForm({ ...form, output_format: e.target.value })}
         placeholder="e.g. bullet points only, or one short paragraph"
-        hint="Optional — a formatting rule added on top of the instructions above."
+        hint="Optional. A rule for how answers look, on top of the instructions."
         className="resize-none overflow-hidden"
       />
 
@@ -459,25 +458,41 @@ export function SkillsView() {
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
-          <p className="text-[14px] leading-relaxed text-muted">
-            Skills change how the AI talks — tutor personas with their own rules.
-            Add some from the library or write your own. You turn them on for a
-            topic from the sidebar in that topic&rsquo;s chat.
+        <div className="min-w-0 flex-1 overflow-y-auto px-4 pb-10 pt-6 sm:px-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-9">
+          {/* One friendly line: what a skill is, and where it gets switched on. */}
+          <p className="flex items-start gap-3 rounded-[14px] border border-line bg-raised/60 px-4 py-3.5 text-[15px] leading-relaxed text-ink-2">
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[10px] bg-brand-soft text-brand-deep">
+              <Icon name="skill" size={17} />
+            </span>
+            <span>
+              Skills change <b className="font-bold text-ink">how I talk to you</b> — like a strict examiner or a patient tutor.
+              Add some here, then switch them on in any topic&rsquo;s chat.
+            </span>
           </p>
 
-          <SectionLabel>YOUR SKILLS</SectionLabel>
+          <section aria-labelledby="skills-mine" className="flex flex-col gap-4">
+            <div className="flex items-baseline gap-2.5">
+              <h2 id="skills-mine" className="font-display text-[20px] font-extrabold tracking-[-0.01em] text-ink">
+                Your skills
+              </h2>
+              {own && own.length > 0 && (
+                <span className="rounded-full bg-line-soft px-2.5 py-0.5 text-[13px] font-bold tabular-nums text-ink-2">
+                  {own.length}
+                </span>
+              )}
+            </div>
 
           {loading && (
             <div className="grid gap-3 md:grid-cols-2">
               {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-24" />
+                <Skeleton key={i} className="h-32 rounded-[14px]" />
               ))}
             </div>
           )}
 
           {error && !loading && (
-            <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <div className="rounded-xl bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
               {error}
             </div>
           )}
@@ -488,57 +503,81 @@ export function SkillsView() {
                 <EmptyState
                   icon="skill"
                   title="No skills yet"
-                  description="Write your own, or add a template from the library below."
+                  description="Write your own, or add a ready-made one from below."
                   action={<Button onClick={() => openEditor(null)}>Write a skill</Button>}
                 />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {own.map((skill) => {
+                    const editing = editorOpen && selectedId === skill.id
                     return (
                     <Card
                       key={skill.id}
-                      className="group flex flex-col gap-2 p-3.5 transition-transform duration-200 hover:-translate-y-0.5"
+                      className={cn(
+                        'group relative flex flex-col gap-3 rounded-[16px] p-4 transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5',
+                        editing && 'ring-2 ring-brand',
+                      )}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-start gap-3">
                         <span
                           className={cn(
-                            'grid h-8 w-8 shrink-0 place-items-center rounded-[10px]',
+                            'grid h-11 w-11 shrink-0 place-items-center rounded-[12px]',
                             toneSoft[skill.tone],
                             toneText[skill.tone],
                           )}
                         >
-                          <Icon name={resolveSkillIcon(skill.icon)} size={16} />
+                          <Icon name={resolveSkillIcon(skill.icon)} size={20} />
                         </span>
-                        <button
-                          onClick={() => openEditor(skill.id)}
-                          className={cn(
-                            'min-h-10 min-w-0 flex-1 truncate text-left text-[15px] font-bold cursor-pointer',
-                            selectedId === skill.id && 'text-brand',
+                        <div className="min-w-0 flex-1">
+                          <button
+                            onClick={() => openEditor(skill.id)}
+                            className={cn(
+                              'block max-w-full truncate text-left text-[17px] font-bold leading-snug cursor-pointer transition-colors hover:text-brand-deep',
+                              'after:absolute after:inset-0 after:rounded-[16px] after:content-[""]',
+                              editing ? 'text-brand-deep' : 'text-ink',
+                            )}
+                          >
+                            {skill.name}
+                          </button>
+                          {skill.description ? (
+                            <p className="mt-1 text-[14px] leading-snug text-muted line-clamp-2">
+                              {skill.description}
+                            </p>
+                          ) : (
+                            <p className="mt-1 text-[14px] leading-snug text-faint">No description yet.</p>
                           )}
-                        >
-                          {skill.name}
-                        </button>
+                        </div>
+                        {editing && (
+                          <span className="shrink-0 rounded-full bg-brand px-2.5 py-0.5 text-[12px] font-bold text-[#1a120f]">
+                            Editing
+                          </span>
+                        )}
                       </div>
-                      {skill.description && (
-                        <p className="text-[13px] text-muted line-clamp-2">
-                          {skill.description}
-                        </p>
-                      )}
                       {/* CSS Grid stretches every card in a row to match the
                           tallest one — a short description next to a longer
                           neighbour's left dead air below this row instead of
                           between it and the description above. mt-auto turns
                           that into a footer that actually sits at the
                           card's bottom edge, however tall the card gets. */}
-                      <div className="mt-auto flex items-center gap-3 text-[12.5px] text-faint">
+                      <div className="mt-auto flex items-center gap-2 border-t border-line-soft pt-3 text-[13px] text-muted">
+                        <Icon name="clock" size={14} className="shrink-0 text-faint" />
                         <span>
                           Remembers {MEMORY_SCOPE_OPTIONS.find((o) => o.value === skill.memory_scope)?.label.toLowerCase() ?? 'this session'}
                         </span>
                         <button
                           onClick={() => setConfirmDelete(skill.id)}
-                          className="-my-2 ml-auto min-h-10 rounded-md px-2 text-muted transition-[opacity,color] cursor-pointer hover:text-coral-deep pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
+                          aria-label={`Remove ${skill.name}`}
+                          className="relative z-[1] ml-auto inline-flex min-h-9 cursor-pointer items-center rounded-full px-3 font-semibold text-muted transition-[opacity,color,background-color] hover:bg-coral-soft hover:text-coral-deep pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:opacity-100"
                         >
                           Remove
+                        </button>
+                        <button
+                          onClick={() => openEditor(skill.id)}
+                          aria-hidden
+                          tabIndex={-1}
+                          className="relative z-[1] inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
+                        >
+                          <Icon name="pencil" size={14} /> Edit
                         </button>
                       </div>
                     </Card>
@@ -548,16 +587,23 @@ export function SkillsView() {
               )}
             </>
           )}
+          </section>
 
-          <SectionLabel className="mt-1">FROM THE LIBRARY</SectionLabel>
+          <section aria-labelledby="skills-library" className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <h2 id="skills-library" className="font-display text-[20px] font-extrabold tracking-[-0.01em] text-ink">
+                Ready-made skills
+              </h2>
+              <p className="text-[14px] text-muted">Add one to your skills with a click. You can change it after.</p>
+            </div>
           {library === null ? (
-            <div className="flex gap-2.5">
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]">
               {[0, 1, 2].map((i) => (
-                <Skeleton key={i} className="h-20 flex-1" />
+                <Skeleton key={i} className="h-36 rounded-[14px]" />
               ))}
             </div>
           ) : library.length === 0 ? (
-            <p className="text-[12.5px] text-muted">The library is empty right now.</p>
+            <p className="text-[14px] text-muted">The library is empty right now.</p>
           ) : (
             // Ten cards in one undifferentiated row read as a wall, not a
             // menu — grouped by what each skill is actually for, "which one
@@ -565,47 +611,55 @@ export function SkillsView() {
             // of reading all ten descriptions. Shelves only exist for the
             // fixed library set (see LIBRARY_CATEGORY); nothing here reads
             // or needs a schema field.
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-6">
               {libraryShelves.map(({ category, skills }) => (
-                <div key={category ?? '__other'} className="flex flex-col gap-1.5">
-                  {category && <span className="setcode">{category}</span>}
-                  <div className="flex flex-wrap gap-2.5 text-[12.5px]">
+                <div key={category ?? '__other'} className="flex flex-col gap-2.5">
+                  {category && <h3 className="text-[14px] font-bold text-ink-3">{category}</h3>}
+                  <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(16rem,1fr))]">
                     {skills.map((lib) => {
                       const owned = ownNames.has(lib.name)
                       return (
-                      <Card key={lib.id} className="min-w-56 flex-1 p-3 transition-transform duration-200 hover:-translate-y-0.5">
-                        <div className="flex items-center gap-2">
+                      <Card
+                        key={lib.id}
+                        className={cn(
+                          'flex flex-col gap-2 rounded-[14px] p-4 transition-transform duration-200',
+                          owned ? 'opacity-80' : 'hover:-translate-y-0.5',
+                        )}
+                      >
+                        <div className="flex items-center gap-2.5">
                           <span
                             className={cn(
-                              'grid h-7 w-7 shrink-0 place-items-center rounded-md',
+                              'grid h-10 w-10 shrink-0 place-items-center rounded-[11px]',
                               toneSoft[lib.tone],
                               toneText[lib.tone],
                             )}
                           >
-                            <Icon name={resolveSkillIcon(lib.icon)} size={14} />
+                            <Icon name={resolveSkillIcon(lib.icon)} size={18} />
                           </span>
-                          <b className="text-[14px]">{lib.name}</b>
+                          <b className="min-w-0 text-[16px] font-bold leading-snug text-ink">{lib.name}</b>
                         </div>
                         {lib.description && (
-                          <div className="mt-1 text-[13px] leading-snug text-muted">{lib.description}</div>
+                          <p className="text-[14px] leading-snug text-muted">{lib.description}</p>
                         )}
+                        <div className="mt-auto pt-1">
                         {owned ? (
                           // Already cloned — a second "Add" produced a second,
                           // identical card with no way to tell the two apart
                           // short of opening each one. Disabled rather than
                           // hidden: still confirms the skill IS in your list,
                           // just not addable again.
-                          <span className="mt-2 flex items-center gap-1 font-semibold text-faint">
-                            <Icon name="check" size={12} /> Added
+                          <span className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-mint-soft px-3 text-[13.5px] font-bold text-mint-deep">
+                            <Icon name="check" size={14} /> Added
                           </span>
                         ) : (
                           <button
                             onClick={() => cloneLibrary(lib)}
-                            className="mt-2 -mb-1.5 min-h-10 rounded-md pr-3 text-[13.5px] font-semibold text-brand cursor-pointer hover:text-brand-300"
+                            className="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full border border-brand/50 px-3.5 text-[13.5px] font-bold text-brand-deep t-control duration-200 hover:border-brand hover:bg-brand-soft"
                           >
-                            Add →
+                            <Icon name="plus" size={14} /> Add to my skills
                           </button>
                         )}
+                        </div>
                       </Card>
                       )
                     })}
@@ -614,6 +668,8 @@ export function SkillsView() {
               ))}
             </div>
           )}
+          </section>
+          </div>
         </div>
 
         {/* At xl the editor is a panel that lives beside the list; below xl
@@ -645,7 +701,7 @@ export function SkillsView() {
       <ConfirmDialog
         open={Boolean(confirmDelete)}
         title="Delete this skill?"
-        description="It'll also stop being applied in any space where it's active."
+        description="It’ll also turn off in every topic where it’s on."
         confirmLabel="Delete"
         onCancel={() => setConfirmDelete(null)}
         onConfirm={del}

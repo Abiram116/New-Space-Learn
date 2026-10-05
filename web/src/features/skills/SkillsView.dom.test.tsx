@@ -163,7 +163,7 @@ describe('the custom icon option', () => {
         expect.objectContaining({ icon: 'flame', tone: 'jade' }),
       ),
     )
-  })
+  }, 15_000) // types two fields key by key; slow when the whole suite runs at once
 
   it('closes and resets when the editor closes', async () => {
     const user = userEvent.setup()
@@ -188,7 +188,7 @@ describe('adding a library skill', () => {
     renderView()
     await screen.findByText('Exam Cram')
 
-    await user.click(screen.getByRole('button', { name: 'Add →' }))
+    await user.click(screen.getByRole('button', { name: 'Add to my skills' }))
 
     await waitFor(() =>
       expect(createSkill).toHaveBeenCalledWith(
@@ -213,7 +213,7 @@ describe('a library skill already added once', () => {
     renderView()
 
     await screen.findByText('Added')
-    expect(screen.queryByRole('button', { name: 'Add →' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add to my skills' })).not.toBeInTheDocument()
   })
 
   it('does not call createSkill even if Add is somehow triggered again', async () => {
@@ -253,6 +253,17 @@ describe('the account-wide Skills page', () => {
     await screen.findByText('Socratic Tutor')
     expect(listSkills).toHaveBeenCalledTimes(1)
     expect(listLibrarySkills).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('the skill you are editing', () => {
+  it('is marked on its card while the editor is open, and unmarked after', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await user.click(await screen.findByRole('button', { name: 'Socratic Tutor' }))
+    expect(await screen.findByText('Editing')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByText('Editing')).not.toBeInTheDocument()
   })
 })
 

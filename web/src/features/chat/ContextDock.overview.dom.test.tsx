@@ -33,6 +33,7 @@ vi.mock('../../api/notes', () => api)
 vi.mock('../../api/quizzes', () => api)
 vi.mock('../../api/flashcards', () => api)
 vi.mock('../spaces/RelatedTopics', () => ({ RelatedTopics: () => <div>the linked topics list</div> }))
+vi.mock('./DockLinkedTopics', () => ({ DockLinkedTopics: () => <div>the linked topics map</div> }))
 vi.mock('./panels/CardsPanel', () => ({ CardsPanel: () => null }))
 vi.mock('./panels/NotesPanel', () => ({ NotesPanel: () => null }))
 vi.mock('./panels/QuizzesPanel', () => ({ QuizzesPanel: () => null }))
@@ -217,13 +218,20 @@ describe('ContextDock overview', () => {
     target.remove()
   })
 
-  it('keeps linked topics behind one small row, loaded only when opened', async () => {
+  it('draws the linked topics as a map right under your files, not folded away', async () => {
     api.listDocuments.mockResolvedValue([doc(1)])
     renderDock({ questionsAsked: 1 })
-    const row = await screen.findByRole('button', { name: /Linked topics/ })
-    expect(screen.queryByText('the linked topics list')).not.toBeInTheDocument()
-    await userEvent.setup().click(row)
-    expect(screen.getByText('the linked topics list')).toBeInTheDocument()
+    expect(await screen.findByText('the linked topics map')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Linked topics/ })).not.toBeInTheDocument()
+  })
+
+  it('says why a tile cannot be pressed yet, on the tile itself', async () => {
+    api.listDocuments.mockResolvedValue([])
+    renderDock()
+    await screen.findByText('No files yet')
+    expect(make('Quiz')).toHaveTextContent('Needs a file')
+    expect(make('Cards')).toHaveTextContent('Needs a file')
+    expect(make('Notes')).toHaveTextContent('After an answer')
   })
 
   it('lets you remove a file that is ready, after asking first', async () => {

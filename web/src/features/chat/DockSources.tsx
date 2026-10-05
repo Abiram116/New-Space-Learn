@@ -110,32 +110,32 @@ export function DockSourceRow({
   const detail = [kindLabel(doc), sizeLabel(doc.size_bytes)].filter(Boolean).join(' · ')
 
   return (
-    <li className={cn('cardstock flex items-start gap-2.5 rounded-[10px] px-2.5 py-2.5', failed && 'ring-1 ring-coral/25')}>
-      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-line-soft text-ink-3">
-        <Icon name={fileIcon(doc.mime_type)} size={15} />
+    <li className={cn('cardstock flex min-h-[3.75rem] items-start gap-3 rounded-[12px] px-3 py-3', failed && 'ring-1 ring-coral/25')}>
+      <span className={cn('mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-[10px]', failed ? 'bg-coral-soft text-coral-deep' : 'bg-sky-soft text-sky-deep')}>
+        <Icon name={fileIcon(doc.mime_type)} size={18} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-bold leading-tight text-ink" title={doc.name}>
+        <p className="truncate text-[15px] font-bold leading-snug text-ink" title={doc.name}>
           {doc.name}
         </p>
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11.5px] leading-tight">
-          <span className={cn('inline-flex items-center gap-1 font-bold', toneText[tone])}>
-            <span aria-hidden className={cn('h-1.5 w-1.5 rounded-full bg-current', pending && 'animate-pulse')} />
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] leading-tight">
+          <span className={cn('inline-flex items-center gap-1.5 font-bold', toneText[tone])}>
+            <span aria-hidden className={cn('h-2 w-2 rounded-full bg-current', pending && 'animate-pulse')} />
             {status}
           </span>
           {detail && <span className="text-faint">· {detail}</span>}
         </p>
         {pending && (
-          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line-soft">
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line-soft">
             <div
-              className="h-1 w-full origin-left bg-sun t-meter duration-300"
+              className="h-1.5 w-full origin-left bg-sun t-meter duration-300"
               style={{ transform: `scaleX(${(live ?? 40) / 100})` }}
             />
           </div>
         )}
         {failed && (
           <div className="mt-1.5 flex flex-col items-start gap-1.5">
-            {doc.error && <p className="text-[11.5px] leading-snug text-muted">{doc.error}</p>}
+            {doc.error && <p className="text-[13px] leading-snug text-muted">{doc.error}</p>}
             <div className="flex items-center gap-1.5">
               {onRetry && (
                 <button
@@ -143,20 +143,20 @@ export function DockSourceRow({
                   onClick={onRetry}
                   disabled={retrying}
                   className={cn(
-                    'inline-flex min-h-7 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[11.5px] font-bold',
+                    'inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[13px] font-bold',
                     toneSoft.coral,
                     toneText.coral,
                     'hover:brightness-110 disabled:cursor-progress disabled:opacity-60',
                   )}
                 >
-                  {retrying ? <Spinner size={11} /> : <Icon name="refresh" size={12} />} Try again
+                  {retrying ? <Spinner size={13} /> : <Icon name="refresh" size={14} />} Try again
                 </button>
               )}
               {onRemove && (
                 <button
                   type="button"
                   onClick={onRemove}
-                  className="inline-flex min-h-7 cursor-pointer items-center rounded-full px-2.5 text-[11.5px] font-bold text-muted transition-colors hover:text-ink"
+                  className="inline-flex min-h-9 cursor-pointer items-center rounded-full px-3 text-[13px] font-bold text-muted transition-colors hover:text-ink"
                 >
                   Remove
                 </button>
@@ -171,9 +171,9 @@ export function DockSourceRow({
           onClick={onDelete}
           aria-label={`Remove ${doc.name}`}
           title="Remove this file"
-          className="-mr-1 grid h-7 w-7 shrink-0 cursor-pointer place-items-center rounded-md text-faint transition-colors hover:bg-coral-soft hover:text-coral-deep"
+          className="-mr-1 grid h-9 w-9 shrink-0 cursor-pointer place-items-center rounded-lg text-faint transition-colors hover:bg-coral-soft hover:text-coral-deep"
         >
-          <Icon name="trash" size={14} />
+          <Icon name="trash" size={16} />
         </button>
       )}
     </li>
@@ -336,18 +336,18 @@ export const DockSources = forwardRef<
       {loading && docs.length === 0 ? (
         <div className="flex flex-col gap-2">
           {[0, 1].map((i) => (
-            <Skeleton key={i} className="h-14 rounded-[10px]" />
+            <Skeleton key={i} className="h-16 rounded-[12px]" />
           ))}
         </div>
       ) : error && docs.length === 0 ? (
-        <p className="text-[12px] text-muted">{error}</p>
+        <p className="text-[13.5px] text-muted">{error}</p>
       ) : empty ? (
         // Nothing here yet: the box IS the button, and the one thing to do.
         <button
           type="button"
           onClick={choose}
           className={cn(
-            'group flex cursor-pointer flex-col items-center gap-1.5 rounded-[12px] border border-dashed px-4 py-5 text-center t-control duration-200',
+            'group flex cursor-pointer items-center gap-3.5 rounded-[14px] border border-dashed px-3.5 py-3.5 text-left t-control duration-200',
             dragging
               ? 'border-brand bg-brand-soft'
               : addButton === 'primary'
@@ -357,16 +357,18 @@ export const DockSources = forwardRef<
         >
           <span
             className={cn(
-              'mb-1 grid h-11 w-11 place-items-center rounded-full bg-brand text-[#1a120f] transition-transform group-hover:-translate-y-0.5',
+              'grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand text-[#1a120f] transition-transform group-hover:-translate-y-0.5',
               !dragging && 'dock-float',
               dragging && 'scale-110',
             )}
           >
-            <Icon name="upload" size={19} />
+            <Icon name="upload" size={21} />
           </span>
-          <span className="text-[13.5px] font-bold text-ink">Add your notes or PDFs</span>
-          <span className="text-[11.5px] leading-snug text-muted">I’ll answer from them, with page numbers.</span>
-          <span className="text-[11px] text-faint">Drop them here, or click · up to 20 MB each</span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[15px] font-bold leading-snug text-ink">Add your notes or PDFs</span>
+            <span className="text-[13px] leading-snug text-muted">I’ll answer from them, with page numbers.</span>
+            <span className="text-[12px] text-faint">Drop here or click · up to 20 MB each</span>
+          </span>
         </button>
       ) : (
         <>
@@ -387,9 +389,9 @@ export const DockSources = forwardRef<
             <button
               type="button"
               onClick={onSeeAll}
-              className="flex min-h-8 w-fit cursor-pointer items-center gap-1.5 rounded-md px-1 text-[12px] font-semibold text-muted transition-colors hover:text-ink"
+              className="flex min-h-9 w-fit cursor-pointer items-center gap-1.5 rounded-md px-1 text-[13.5px] font-semibold text-muted transition-colors hover:text-ink"
             >
-              See all {docs.length} files <Icon name="arrowRight" size={12} />
+              See all {docs.length} files <Icon name="arrowRight" size={14} />
             </button>
           )}
           {addButton !== 'none' && (
@@ -398,14 +400,14 @@ export const DockSources = forwardRef<
               onClick={choose}
               disabled={uploading}
               className={cn(
-                'flex min-h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] px-3 text-[13px] font-bold t-control duration-200',
+                'flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] px-3 text-[14px] font-bold t-control duration-200',
                 'disabled:cursor-progress disabled:opacity-60',
                 addButton === 'primary'
                   ? 'bg-brand text-[#1a120f] hover:brightness-110 active:scale-[0.98]'
                   : 'border border-dashed border-line-dash text-ink-2 hover:border-brand/50 hover:text-ink',
               )}
             >
-              {uploading ? <Spinner size={13} /> : <Icon name="plus" size={14} />}
+              {uploading ? <Spinner size={15} /> : <Icon name="plus" size={16} />}
               {uploading ? 'Adding…' : 'Add files'}
             </button>
           )}
@@ -430,20 +432,20 @@ export const DockSources = forwardRef<
 function SendingRow({ sending }: { sending: Sending }) {
   const of = sending.total > 1 ? ` (${sending.index} of ${sending.total})` : ''
   return (
-    <li role="status" className="cardstock flex items-start gap-2.5 rounded-[10px] px-2.5 py-2.5">
-      <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-brand-soft text-brand-deep">
-        <Spinner size={14} />
+    <li role="status" className="cardstock flex items-start gap-3 rounded-[12px] px-3 py-3">
+      <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-brand-soft text-brand-deep">
+        <Spinner size={16} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-bold leading-tight text-ink" title={sending.name}>
+        <p className="truncate text-[15px] font-bold leading-snug text-ink" title={sending.name}>
           {sending.name}
         </p>
-        <p className="mt-1 text-[11.5px] font-bold leading-tight text-brand-deep">
+        <p className="mt-1 text-[13px] font-bold leading-tight text-brand-deep">
           Uploading… {sending.percent}%{of}
         </p>
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-line-soft">
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line-soft">
           <div
-            className="h-1 w-full origin-left bg-brand t-meter duration-300"
+            className="h-1.5 w-full origin-left bg-brand t-meter duration-300"
             style={{ transform: `scaleX(${Math.max(4, sending.percent) / 100})` }}
           />
         </div>

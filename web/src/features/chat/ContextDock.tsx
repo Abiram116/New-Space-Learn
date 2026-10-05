@@ -75,7 +75,7 @@ export function ActiveSkillStrip({ subspaceId }: { subspaceId: string }) {
     <button
       type="button"
       onClick={() => setOpen(true)}
-      className="setcode ml-auto shrink-0 cursor-pointer font-bold text-brand-deep"
+      className="ml-auto min-h-9 shrink-0 cursor-pointer rounded-full px-3 text-[13.5px] font-bold text-brand-deep transition-colors hover:bg-brand-soft"
     >
       {label}
     </button>
@@ -83,26 +83,26 @@ export function ActiveSkillStrip({ subspaceId }: { subspaceId: string }) {
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2.5 lg:hidden">
         {list.length === 0 ? (
           <>
-            <span className="setcode shrink-0">How I answer</span>
-            <span className="shrink-0 rounded-full bg-line-soft px-2.5 py-1 text-[11.5px] font-bold text-ink-2">Normal</span>
+            <span className="shrink-0 text-[13px] font-bold text-ink-3">How I answer</span>
+            <span className="shrink-0 rounded-full bg-line-soft px-3 py-1 text-[13px] font-bold text-ink-2">Normal</span>
             {change('Change')}
           </>
         ) : (
           <>
-            <span className="setcode shrink-0">How I answer</span>
+            <span className="shrink-0 text-[13px] font-bold text-ink-3">How I answer</span>
             {list.map((skill) => (
               <span
                 key={skill.id}
                 className={cn(
-                  'flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-bold',
+                  'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-bold',
                   toneSoft[skill.tone],
                   toneText[skill.tone],
                 )}
               >
-                <Icon name="skill" size={12} />
+                <Icon name="skill" size={14} />
                 {skill.name}
               </span>
             ))}
@@ -144,8 +144,8 @@ export function ActiveAgentsStrip({
   busy?: AgentBusy
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-line bg-surface px-5 py-2 lg:hidden">
-      <span className="setcode shrink-0">Make from this chat</span>
+    <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-t border-line bg-surface px-5 py-2.5 lg:hidden">
+      <span className="shrink-0 text-[13px] font-bold text-ink-3">Make from this chat</span>
       {AGENTS.map((key) => (
         <button
           key={key}
@@ -154,13 +154,13 @@ export function ActiveAgentsStrip({
           disabled={busy[key]}
           aria-busy={busy[key] || undefined}
           className={cn(
-            'flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-bold transition-colors cursor-pointer',
+            'flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13.5px] font-bold transition-colors cursor-pointer',
             toneSoft[AGENT_TONE[key]],
             toneText[AGENT_TONE[key]],
             'hover:brightness-95 disabled:cursor-progress disabled:hover:brightness-100',
           )}
         >
-          {busy[key] ? <Spinner /> : <Icon name={AGENT_ICON[key]} size={12} />}
+          {busy[key] ? <Spinner size={14} /> : <Icon name={AGENT_ICON[key]} size={15} />}
           {busy[key] ? AGENT_BUSY_LABELS[key] : AGENT_LABELS[key]}
         </button>
       ))}
@@ -287,23 +287,23 @@ export function ContextDock({
             view.shellAnimation,
           )}
         >
-          <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+          <div className="flex min-h-14 shrink-0 items-center gap-2 border-b border-line px-3 py-2">
             <button
               type="button"
               onClick={onClosePanel}
-              className="flex min-h-8 items-center gap-1 rounded-[8px] px-1.5 py-1 text-[12.5px] text-ink-3 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
+              className="flex min-h-10 items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-[14px] font-semibold text-ink-2 transition-colors cursor-pointer hover:bg-line-soft hover:text-ink"
             >
-              <Icon name="arrowLeft" size={13} /> Back
+              <Icon name="arrowLeft" size={16} /> Back
             </button>
             {view.panel === 'help' ? (
-              <span className="setcode ml-auto pr-1">Help</span>
+              <span className="ml-auto pr-2 text-[14px] font-extrabold text-ink">Help</span>
             ) : (
               <button
                 type="button"
                 onClick={() => onOpenPanel('help')}
-                className="ml-auto flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
+                className="ml-auto flex min-h-9 cursor-pointer items-center gap-1.5 rounded-full px-3 text-[13.5px] font-bold text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
               >
-                <Icon name="help" size={14} /> Help
+                <Icon name="help" size={16} /> Help
               </button>
             )}
           </div>

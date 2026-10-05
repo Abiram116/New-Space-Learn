@@ -1,0 +1,60 @@
+/* The linked-topics constellation in the chat dock. Transform and opacity
+   only, so nothing here costs layout; every animation stops under reduced
+   motion and the map reads the same standing still. */
+
+@keyframes ltmNodeIn {
+  from {
+    opacity: 0;
+    transform: translate(var(--ltm-dx, 0), var(--ltm-dy, 0)) scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ltmSpokeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* A spark that travels down a spoke into the centre: what a link does — the
+   other topic's files flow into this one's answers. */
+@keyframes ltmFlow {
+  0% { opacity: 0; transform: translate(var(--ltm-fx), var(--ltm-fy)) scale(0.6); }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(0, 0) scale(1); }
+}
+
+@keyframes ltmBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  50% { transform: scale(1.06); opacity: 0.9; }
+}
+
+.ltm-node-in {
+  animation: ltmNodeIn 520ms var(--ease-out-expo) both;
+}
+.ltm-spoke-in {
+  animation: ltmSpokeIn 600ms ease-out both;
+}
+.ltm-flow {
+  animation: ltmFlow 2.4s var(--ease-in-out-sl) 3 both;
+}
+.ltm-breathe {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ltmBreathe 4.8s ease-in-out 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ltm-node-in,
+  .ltm-spoke-in,
+  .ltm-flow,
+  .ltm-breathe {
+    animation: none !important;
+  }
+  .ltm-flow {
+    display: none;
+  }
+}

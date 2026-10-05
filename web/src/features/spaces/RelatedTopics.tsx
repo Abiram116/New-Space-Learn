@@ -10,13 +10,10 @@
  * retrieval, never replaces the topic's own material.
  */
 
-import { useCallback, useEffect, useState } from 'react'
-import { createSubspaceLink, deleteSubspaceLink, listSubspaceLinks } from '../../api/spaces'
-import type { Subspace } from '../../api/types'
+import { useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
-import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { useSpaces } from './SpacesProvider'
+import { useSubspaceLinks } from './useSubspaceLinks'
 
 export function RelatedTopics({
   subspaceId,
@@ -26,47 +23,12 @@ export function RelatedTopics({
   subspaceId: string
   layout?: 'row' | 'stack'
 }) {
-  const { spaces } = useSpaces()
-  const { showError, show } = useToast()
-  const [links, setLinks] = useState<Subspace[] | null>(null)
+  const { links, candidates, add: link, remove } = useSubspaceLinks(subspaceId)
   const [picking, setPicking] = useState(false)
-
-  useEffect(() => {
-    setLinks(null)
-    listSubspaceLinks(subspaceId)
-      .then(setLinks)
-      .catch((err) => showError(err))
-  }, [subspaceId, showError])
-
-  const candidates = spaces
-    .flatMap((sp) => sp.subspaces.map((sub) => ({ ...sub, spaceName: sp.name })))
-    .filter((sub) => sub.id !== subspaceId && !links?.some((l) => l.id === sub.id))
-
-  const add = useCallback(
-    async (linkedId: string) => {
-      setPicking(false)
-      try {
-        await createSubspaceLink(subspaceId, linkedId)
-        setLinks(await listSubspaceLinks(subspaceId))
-      } catch (err) {
-        showError(err)
-      }
-    },
-    [subspaceId, showError],
-  )
-
-  const remove = useCallback(
-    async (linkedId: string) => {
-      try {
-        await deleteSubspaceLink(subspaceId, linkedId)
-        setLinks((prev) => (prev ? prev.filter((l) => l.id !== linkedId) : prev))
-        show('Link removed.', 'success')
-      } catch (err) {
-        showError(err)
-      }
-    },
-    [subspaceId, show, showError],
-  )
+  const add = (linkedId: string) => {
+    setPicking(false)
+    void link(linkedId)
+  }
 
   if (links === null) return null
 

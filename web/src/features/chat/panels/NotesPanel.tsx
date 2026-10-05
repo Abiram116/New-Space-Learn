@@ -24,7 +24,8 @@ import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
 import { useAsync } from '../../../lib/useAsync'
 import type { AgentKey } from '../agents'
-import { DockAction, DockEmpty, DockLink, DockSectionHead } from '../dockParts'
+import { DockAction, DockEmpty, DockFooter, DockLink, DockSectionHead } from '../dockParts'
+import { notePreview, relativeTime } from '../../notes/format'
 
 /* Lazy, deliberately.
    The editor is the largest chunk in the app (~270KB gzipped — Tiptap,
@@ -125,15 +126,25 @@ export function NotesPanel({
     )
   }
 
+  const byAi = list.filter((n) => n.origin !== 'user').length
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <DockSectionHead id="notes-panel-label">{list.length > 0 ? `Notes · ${list.length}` : 'Notes'}</DockSectionHead>
+    <div className="flex flex-col gap-3">
+      <DockSectionHead
+        id="notes-panel-label"
+        hint={
+          list.length > 0
+            ? `${list.length === 1 ? '1 note' : `${list.length} notes`} in this topic${byAi > 0 ? ` · ${byAi} made by AI` : ''}`
+            : undefined
+        }
+      >
+        {list.length > 0 ? `Notes · ${list.length}` : 'Notes'}
+      </DockSectionHead>
 
-      <div className="-mr-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
+      <div className="flex flex-col gap-2">
         {notes.loading ? (
           <>
-            <Skeleton className="h-12 rounded-[10px]" />
-            <Skeleton className="h-12 rounded-[10px]" />
+            <Skeleton className="h-[4.5rem] rounded-[12px]" />
+            <Skeleton className="h-[4.5rem] rounded-[12px]" />
           </>
         ) : list.length === 0 ? (
           <DockEmpty icon="note" title="No notes yet">
@@ -141,37 +152,48 @@ export function NotesPanel({
           </DockEmpty>
         ) : (
           <Stagger step={18} max={140}>
-            {list.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => setOpenId(n.id)}
-                className="block w-full rounded-[10px] border border-line bg-raised px-2.5 py-2 text-left transition-colors cursor-pointer hover:border-brand/40"
-              >
-                <div className="leading-snug text-[12.5px] font-semibold text-ink">
-                  {n.title || 'Untitled note'}
-                </div>
-                <div className="setcode mt-0.5 flex items-center gap-1.5">
-                  {n.origin !== 'user' && (
-                    <span className="relative inline-flex shrink-0">
-                      <Icon name="note" size={9} className="text-sky-deep" />
-                      <Icon
-                        name="sparkle"
-                        size={5}
-                        filled
-                        className="absolute -right-0.5 -top-0.5 text-sky-deep"
-                      />
+            {list.map((n) => {
+              const preview = notePreview(n.body_md ?? '', 90)
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setOpenId(n.id)}
+                  className="group flex w-full cursor-pointer items-start gap-3 rounded-[12px] border border-line bg-raised px-3 py-3 text-left t-control duration-200 hover:border-brand/40 hover:bg-line-soft"
+                >
+                  <span className="relative mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-brand-soft text-brand-deep">
+                    <Icon name="note" size={17} />
+                    {n.origin !== 'user' && (
+                      <Icon name="sparkle" size={9} filled className="absolute -right-0.5 -top-0.5 text-sky-deep" />
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold leading-snug text-ink">
+                      {n.title || 'Untitled note'}
                     </span>
-                  )}
-                  {n.origin === 'user' ? 'Written by me' : 'Written by AI'}
-                </div>
-              </button>
-            ))}
+                    {preview && (
+                      <span className="mt-0.5 block truncate text-[13px] leading-snug text-ink-3">{preview}</span>
+                    )}
+                    <span className="mt-1 block text-[12.5px] text-muted">
+                      {n.origin === 'user' ? 'Written by me' : 'Written by AI'}
+                      {n.updated_at && ` · ${relativeTime(n.updated_at)}`}
+                    </span>
+                  </span>
+                  <Icon
+                    name="chevronRight"
+                    size={15}
+                    className="mt-2.5 shrink-0 text-faint transition-transform group-hover:translate-x-0.5"
+                  />
+                </button>
+              )
+            })}
           </Stagger>
         )}
       </div>
-      <DockLink to={`${base}/notes`}>Open all notes</DockLink>
-      <DockAction onClick={() => onRunAgent('notes')}>Save last answer as a note</DockAction>
+      <DockFooter>
+        <DockLink to={`${base}/notes`}>Open all notes</DockLink>
+        <DockAction onClick={() => onRunAgent('notes')}>Save last answer as a note</DockAction>
+      </DockFooter>
     </div>
   )
 }
