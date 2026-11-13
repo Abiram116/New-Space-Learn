@@ -1,7 +1,7 @@
 import { apiFetch, apiFetchRaw } from './client'
 import { notifyProgress } from '../lib/progressEvents'
 import { ApiError } from './errors'
-import type { ChatMessage, Citation } from './types'
+import type { ChatMessage, Citation, Grounding } from './types'
 
 export const listMessages = (subspaceId: string) =>
   apiFetch<ChatMessage[]>(`/subspaces/${subspaceId}/messages`)
@@ -23,6 +23,9 @@ export type ChatStreamEvent =
       content: string | null
       /** One question the student might ask next, written with the answer; null when there isn't a good one. */
       suggestion: string | null
+      /** What made this answer the student's own, as short phrases. */
+      personal?: string[]
+      grounding?: Grounding | null
     }
   | { type: 'error'; code: string; message: string }
 
@@ -44,10 +47,13 @@ export async function* streamChat(
    *  rather than uploaded first: a pasted image belongs to one turn, not to
    *  the topic's indexed material. */
   images: string[] = [],
+  /** This topic's own strictness, when the student chose one; left out, the
+   *  account-wide "Answer only from my docs" setting decides. */
+  scope?: 'files' | 'subject' | null,
 ): AsyncGenerator<ChatStreamEvent> {
   const res = await apiFetchRaw(`/subspaces/${subspaceId}/chat`, {
     method: 'POST',
-    body: { text, regenerate, images },
+    body: scope ? { text, regenerate, images, scope } : { text, regenerate, images },
     signal,
     // A long, thoughtful answer can legitimately take longer than the
     // client's default request timeout to finish streaming — this call
@@ -114,6 +120,8 @@ function parseSseEvent(raw: string): ChatStreamEvent | null {
         citations: (data.citations as Citation[]) ?? [],
         content: (data.content as string | undefined) ?? null,
         suggestion: typeof data.suggestion === 'string' ? data.suggestion : null,
+        personal: Array.isArray(data.personal) ? data.personal.filter((x): x is string => typeof x === 'string') : [],
+        grounding: parseGrounding(data.grounding),
       }
     case 'error':
       return {
@@ -123,5 +131,21 @@ function parseSseEvent(raw: string): ChatStreamEvent | null {
       }
     default:
       return null
+  }
+}
+
+/** Questions to open a topic's chat with, written from its own files. */
+export const getStarters = (subspaceId: string) =>
+  apiFetch<{ questions: string[] }>(`/subspaces/${subspaceId}/starters`)
+
+function parseGrounding(raw: unknown): Grounding | null {
+  if (!raw || typeof raw !== 'object') return null
+  const g = raw as Record<string, unknown>
+  const checked = Number(g.checked)
+  if (!Number.isFinite(checked) || checked <= 0) return null
+  return {
+    checked,
+    backed: Math.max(0, Number(g.backed) || 0),
+    shaky: Array.isArray(g.shaky) ? g.shaky.filter((x): x is string => typeof x === 'string').slice(0, 2) : [],
   }
 }

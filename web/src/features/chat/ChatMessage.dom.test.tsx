@@ -49,6 +49,22 @@ describe('Add to note, wired into a real chat message', () => {
     expect(screen.getByRole('button', { name: 'Add to note' })).toBeInTheDocument()
   })
 
+  it('has a Copy on any finished answer, not only the latest one', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    render(
+      <MemoryRouter>
+        <ToastProvider>
+          <ChatMessage message={message({ id: 'srv-stopped-1' })} subspaceId="s1" />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Copy answer' }))
+    expect(writeText).toHaveBeenCalledWith('Self-attention lets tokens weigh each other.')
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
+  })
+
   it('does not show on the transient streaming bubble (no subspaceId passed)', () => {
     render(
       <MemoryRouter>
@@ -114,8 +130,10 @@ describe('citations are actually clickable, not just styled to look like it', ()
     await user.click(screen.getByRole('button', { name: /Sources · 1/ }))
     await user.click(screen.getByRole('button', { name: /Attention Is All You Need/ }))
     const cited = await screen.findByText('The cited text itself.')
-    expect(cited).toHaveAttribute('data-cited')
-    expect(screen.getByText('Before the cited text.')).not.toHaveAttribute('data-cited')
+    // The cited block is marked and labelled; the text around it is not.
+    expect(cited.closest('[data-cited]')).not.toBeNull()
+    expect(screen.getByText('What the answer used')).toBeInTheDocument()
+    expect(screen.getByText('Before the cited text.').closest('[data-cited]')).toBeNull()
     expect(getPassage).toHaveBeenCalledWith('doc-9', expect.any(String), expect.any(String))
     // And the file itself is one step further.
     expect(screen.getByRole('link', { name: /Open the file/ })).toHaveAttribute('href', '/s/space-1/sub-1/docs?d=doc-9')
@@ -171,7 +189,7 @@ describe('reply typography and streaming', () => {
 
   it('shows the typing indicator until the first token', () => {
     render(wrap(<ChatMessage message={message({ id: 'pending', content: '\u2026' })} streaming />))
-    expect(screen.getByRole('status', { name: 'Thinking' })).toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Thinking…' })).toBeInTheDocument()
   })
 
   it('wraps tables so they scroll instead of squashing', () => {
@@ -188,5 +206,25 @@ describe('reply typography and streaming', () => {
     // Placeholder first (raw source), KaTeX once lazily loaded.
     expect(container.textContent).not.toContain('\\(')
     await vi.waitFor(() => expect(container.querySelector('.katex')).not.toBeNull())
+  })
+})
+
+describe('the grounding check under an answer', () => {
+  it('says how much of it the files back, and names what to double-check', () => {
+    render(
+      <MemoryRouter>
+        <ChatMessage
+          message={{
+            id: 'm1',
+            role: 'assistant',
+            content: 'Dropout reduces overfitting.',
+            created_at: '2026-01-01T00:00:00Z',
+            grounding: { checked: 3, backed: 2, shaky: ['Dropout was invented in 1850.'] },
+          }}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/2 of 3 claims found in them/)).toBeInTheDocument()
+    expect(screen.getByText(/Worth double-checking: “Dropout was invented in 1850.”/)).toBeInTheDocument()
   })
 })

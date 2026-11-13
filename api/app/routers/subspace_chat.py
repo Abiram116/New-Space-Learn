@@ -38,13 +38,16 @@ from ..services import (
     rag,
     ratelimit,
     retrieval,
+    smalltalk,
     student_model,
     supabase,
     usage,
+    why,
 )
-from ..services.chat_context import recent_history
+from ..services.chat_context import recent_history, topic_context
 from ..services.embeddings import embed_question
-from ..services.llm import get_llm
+from ..services.llm import get_llm, model_for
+from ..services.query_resolver import Query
 from ..services.ratelimit import consume_llm_quota
 
 log = logging.getLogger("space_learn.chat")
@@ -77,6 +80,8 @@ async def list_messages(
             citations=[Citation(**c) for c in (r.get("citations") or [])] or None,
             created_at=r["created_at"],
             suggestion=followup.clean((r.get("meta") or {}).get("suggestion")),
+            personal=[str(x) for x in ((r.get("meta") or {}).get("personal") or [])][:5] or None,
+            grounding=_grounding_out((r.get("meta") or {}).get("grounding")),
         )
         for r in rows
     ]
@@ -114,6 +119,15 @@ async def send_chat(
     )
 
     history_limit = _history_limit(active_skills)
+    # Where this turn is happening — subject, topic, linked topics, exam goal —
+    # from rows already in hand: no extra query. It disambiguates every term
+    # ("transformer" under Deep Learning is the architecture) and bounds what
+    # the tutor will help with. See `chat_context.TopicContext`.
+    ctx = topic_context(subspace, topics=snap.topics, linked_ids=linked_ids, settings=settings_row)
+    scope = _scope(body.scope, settings_row)
+    # A message that tries to change the tutor's role or rules. Never blocked —
+    # the prompt's scope block decides what to do — but noted, and never cached.
+    override = guardrails.looks_like_override(body.text)
     # `render_chat`, not `render` — the snapshot is already in hand above,
     # and chat (unlike quiz/cards/notes/brief) also runs the style bandit:
     # see `personalization.render_chat` / `style_bandit` for why chat is the
@@ -129,17 +143,24 @@ async def send_chat(
     # and still overlaps with everything else.
     history_task = asyncio.ensure_future(recent_history(user.id, subspace_id, limit=history_limit))
 
-    async def find_sources() -> retrieval.Retrieval:
+    async def find_sources() -> tuple[retrieval.Retrieval, bool]:
         earlier = _before_this_question(await history_task, body.text, body.regenerate)
-        return await rag.search(
+        # "Hi", "thanks", "ok": nothing to look up, so nothing is — no follow-up
+        # rewrite (a model call), no embedding, no search. Decided in code, from
+        # a list of phrases (`services/smalltalk.py`); an image is always a question.
+        if not images and smalltalk.is_small_talk(body.text, earlier):
+            return retrieval.Retrieval(Query(body.text, body.text)), True
+        found = await rag.search(
             body.text,
             subspace_id=subspace_id,
             linked_subspace_ids=linked_ids,
             history=earlier,
-            topic=subspace["name"],
+            topic=ctx.topic,
+            subject=ctx.subject,
         )
+        return found, False
 
-    prior, found, (student_context, prefs_applied, style_applied) = await asyncio.gather(
+    prior, (found, small_talk), (student_context, prefs_applied, style_applied) = await asyncio.gather(
         history_task,
         find_sources(),
         personalization.render_chat(snap, subspace_id, user.id),
@@ -160,12 +181,15 @@ async def send_chat(
         question=body.text,
         retrieved=retrieved,
         images=images,
-        answer_only_from_docs=bool(settings_row.get("answer_only_from_docs", True)),
+        answer_only_from_docs=scope == "files",
         always_show_citations=bool(settings_row.get("always_show_citations", True)),
         student_context=student_context,
         memory_summary=subspace.get("memory_summary") or "",
         sources_doubtful=found.confidence == "weak",
-        suggest_followup=True,
+        suggest_followup=not small_talk,
+        small_talk=small_talk,
+        context=ctx,
+        override_attempt=override,
     )
 
     # A question asked before, on the same sources and settings, is answered from what
@@ -174,6 +198,8 @@ async def send_chat(
         settings.answer_cache_enabled
         and not body.regenerate
         and not images
+        and not small_talk
+        and not override
         and found.query.how == "as-is"
         and bool(retrieved)
     )
@@ -186,7 +212,11 @@ async def send_chat(
             cache_fp = answer_cache.fingerprint(
                 chunk_ids=[c.id for c in found.chunks],
                 flags={
-                    "only_docs": bool(settings_row.get("answer_only_from_docs", True)),
+                    "scope": scope,
+                    # Everything the prompt names that changes an answer: a renamed
+                    # topic, a new link or a new exam goal is a different answer.
+                    "context": ctx.key(),
+                    "mentions": ctx.mentions(body.text),
                     "cite": bool(settings_row.get("always_show_citations", True)),
                     "skills": sorted(s["id"] for s in active_skills),
                     "prefs": prefs_applied,
@@ -217,19 +247,18 @@ async def send_chat(
             )
         )[0]
 
-    # When the large model has used nearly all of its day, go to the small one on purpose:
-    # the answer starts at once, instead of failing against a spent allowance first.
-    # (An image needs the vision model whatever the allowance.)
-    large_nearly_spent = usage.near_daily_limit(
-        settings.groq_model, settings.groq_daily_token_limit, settings.groq_switch_at
-    )
-    if large_nearly_spent and not images:
-        log.warning("large model nearly out of its daily tokens; answering this turn with the small one")
-    model_for_turn = (
-        settings.groq_model_vision
-        if images
-        else (settings.groq_model_fast if large_nearly_spent else None)
-    )
+    # A regenerate REPLACES the answer it redoes. The answers already given to
+    # this question are noted now and removed once the new one is saved, so a
+    # failed attempt leaves the old answer in place and a good one leaves
+    # exactly one — not a pile of attempts under the same question.
+    superseded: list[str] = await _answers_to_replace(user.id, subspace_id) if body.regenerate else []
+
+    # The model for this turn comes from the routing table (services/llm.py):
+    # an image needs the vision model; small talk goes to the small one; and a
+    # large model with nearly all of its day used is swapped for the small one
+    # on purpose, so the answer starts at once instead of failing later.
+    chat_task = "chat.smalltalk" if small_talk else "chat"
+    model_for_turn = model_for(chat_task, images=bool(images))
 
     async def gen() -> AsyncIterator[bytes]:
         buffer: list[str] = []
@@ -255,10 +284,13 @@ async def send_chat(
                     buffer.append(piece)
                     yield _sse("token", {"delta": piece})
             else:
-                with usage.task("chat"):
+                with usage.task(chat_task):
                     async for delta in get_llm().stream_chat(
                         messages,
                         model=model_for_turn,
+                        # Answering from their files is retrieval, not
+                        # invention: less randomness, fewer made-up details.
+                        temperature=0.2 if scope == "files" else 0.3,
                     ):
                         # The trailing "[[next: …]]" line is held back and never shown.
                         shown = follow.feed(delta)
@@ -269,6 +301,11 @@ async def send_chat(
                 if tail:
                     buffer.append(tail)
                     yield _sse("token", {"delta": tail})
+                # A suggestion that drifted off the material and the topic is
+                # dropped in code, whatever the prompt said.
+                suggestion = followup.on_topic(
+                    suggestion, [r.content for r in retrieved] + [ctx.topic, ctx.subject, *ctx.linked]
+                )
             assistant_text = "".join(buffer).strip() or "(no reply)"
             # The model was told to cite only the sources it was given, but an
             # instruction isn't a guarantee. A marker pointing at a source that
@@ -290,6 +327,11 @@ async def send_chat(
             assistant_text, moved = rag.repoint_citations(assistant_text, [r.content for r in retrieved])
             if moved:
                 log.info("moved %d citation marker(s) to the source that supports them", moved)
+            # Then the clear cases word overlap can settle: a padded extra marker is dropped, a
+            # marker moves to the source that holds the whole sentence. See `rag.tighten_citations`.
+            assistant_text, tightened = rag.tighten_citations(assistant_text, [r.content for r in retrieved])
+            if tightened:
+                log.info("tightened %d citation marker(s)", tightened)
             # The retrieval audit trail. `chat_messages.citations` is the
             # user-facing record (doc, locator, snippet, kept forever on the
             # row) — this is the operator-facing one: which chunks the vector
@@ -303,7 +345,7 @@ async def send_chat(
                 "chat turn subspace=%s user=%s query=%s confidence=%s retrieved=%s cited=%s",
                 subspace_id,
                 user.id,
-                found.query.how,
+                "small-talk" if small_talk else found.query.how,
                 found.confidence,
                 [
                     {
@@ -317,6 +359,26 @@ async def send_chat(
                 ],
                 sorted(used_markers),
             )
+            # How much of the answer its own citations back, checked against the
+            # student's files (no model call). Shown under the answer.
+            grounded = (
+                {"checked": 0, "backed": 0, "shaky": []}
+                if small_talk
+                else rag.grounding(assistant_text, [r.content for r in retrieved])
+            )
+            # What made this answer yours, in words (`services/why.py`): shown
+            # under the reply and kept with it, so it survives a reload.
+            personal = (
+                []
+                if small_talk
+                else why.explain(
+                    ctx=ctx,
+                    style=cached.style if cached is not None else style_applied,
+                    weak=personalization.chat_focus(snap, subspace_id),
+                    sources=[c["document_name"] for c in (citations_meta or []) if c.get("marker") in used_markers],
+                    scope=scope,
+                )
+            )
             saved = await supabase.db_insert(
                 "chat_messages",
                 {
@@ -324,7 +386,7 @@ async def send_chat(
                     "subspace_id": subspace_id,
                     "role": "assistant",
                     "content": assistant_text,
-                    "citations": citations_meta or None,
+                    "citations": _used_sources(citations_meta, used_markers) or None,
                     # What shaped this answer. Feedback about it is only
                     # interpretable against the settings that produced it —
                     # "this helped" says nothing without knowing what was
@@ -343,13 +405,39 @@ async def send_chat(
                         # used — so "why did it answer that?" can be read off
                         # the message instead of re-run.
                         "retrieval": found.trace(),
+                        # Nothing was searched because nothing was asked.
+                        "small_talk": small_talk,
+                        # How strictly this topic keeps to the files ("files" or
+                        # "subject"), and whether the message tried to change the rules.
+                        "scope": scope,
+                        "override": override,
                         # Kept so the suggestion is still in the box after a reload.
                         "suggestion": suggestion,
+                        "personal": personal,
+                        "grounding": grounded,
                     },
                 },
             )
             saved_id = saved[0]["id"] if saved else None
-            if cacheable and cached is None and cache_vec:
+            if saved_id and superseded:
+                for old_id in superseded:
+                    try:
+                        await supabase.db_delete(
+                            "chat_messages",
+                            filters={"id": f"eq.{old_id}", "user_id": f"eq.{user.id}"},
+                        )
+                    except Exception:  # noqa: BLE001 — a leftover old answer must never fail the new one
+                        log.warning("could not remove superseded answer %s", old_id, exc_info=True)
+            # Only a real answer is kept: a scope refusal or "not covered" must
+            # never be handed to the next, on-topic wording of a question.
+            if (
+                cacheable
+                and cached is None
+                and cache_vec
+                and answer_cache.worth_keeping(
+                    assistant_text, cite=bool(settings_row.get("always_show_citations", True))
+                )
+            ):
                 answer_cache.store(user.id, subspace_id, body.text, cache_vec, cache_fp, assistant_text, suggestion, style_applied)
             await activity.touch_subspace(subspace_id)
             await activity.bump(
@@ -367,7 +455,7 @@ async def send_chat(
                 {
                     "message_id": saved_id,
                     "user_message_id": user_row["id"] if user_row else None,
-                    "citations": citations_meta,
+                    "citations": _used_sources(citations_meta, used_markers),
                     # The canonical stored text. Tokens were already streamed
                     # raw, so if any marker was stripped above the client's
                     # buffer now differs from what's in the database — it
@@ -376,6 +464,8 @@ async def send_chat(
                     "content": assistant_text,
                     # One question the student might ask next, or null.
                     "suggestion": suggestion,
+                    "personal": personal,
+                    "grounding": grounded,
                 },
             )
         except ApiError as e:
@@ -406,6 +496,47 @@ async def send_chat(
 # ── Internals ──────────────────────────────────────────────────────────
 
 
+async def _answers_to_replace(user_id: str, subspace_id: str) -> list[str]:
+    """Ids of the assistant messages after the student's latest question —
+    the answers a regenerate is replacing."""
+    rows = await supabase.db_select(
+        "chat_messages",
+        select="id,role",
+        filters={"user_id": f"eq.{user_id}", "subspace_id": f"eq.{subspace_id}"},
+        order="created_at.desc",
+        limit=8,
+    )
+    out: list[str] = []
+    for r in rows:
+        if r.get("role") == "user":
+            break
+        if r.get("role") == "assistant":
+            out.append(r["id"])
+    return out
+
+
+def _used_sources(citations: list[dict], used: set[int]) -> list[dict]:
+    """The sources an answer actually cited, with their original marker numbers.
+
+    Retrieval hands the model several candidate sources; an answer may lean on
+    two of them, or on none (a refusal, a greeting, "that is not in your
+    files"). Saving and showing all of them said "Answered from 6 sources" under
+    an answer that used no source at all. Markers keep their numbers, so the
+    text's [[3]] still points at source 3."""
+    return [c for c in citations if c.get("marker") in used]
+
+
+def _grounding_out(raw: object) -> dict | None:
+    """The stored check, or None when there is nothing to show."""
+    if not isinstance(raw, dict) or not raw.get("checked"):
+        return None
+    return {
+        "checked": int(raw["checked"]),
+        "backed": int(raw.get("backed") or 0),
+        "shaky": [str(x)[:140] for x in (raw.get("shaky") or [])][:2],
+    }
+
+
 def _before_this_question(history: list[dict[str, str]], question: str, regenerate: bool) -> list[dict[str, str]]:
     """The conversation as it stood before this question was asked.
 
@@ -418,6 +549,18 @@ def _before_this_question(history: list[dict[str, str]], question: str, regenera
         if history[i].get("role") == "user" and history[i].get("content") == question:
             return history[:i]
     return history
+
+
+def _scope(requested: str | None, settings_row: dict) -> str:
+    """The topic's strictness for this turn: "files" or "subject".
+
+    Chosen per topic in the chat when the client sends one; otherwise the
+    account-wide `answer_only_from_docs` decides ("files" when on, which is
+    the default). Either way the tutor keeps to the topic and subject — scope
+    is about where answers may come FROM, not what it will talk about."""
+    if requested in ("files", "subject"):
+        return requested
+    return "files" if bool(settings_row.get("answer_only_from_docs", True)) else "subject"
 
 
 def _sse(event: str, data: dict) -> bytes:

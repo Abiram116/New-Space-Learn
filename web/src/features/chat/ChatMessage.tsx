@@ -5,9 +5,11 @@ import type { ChatMessage as Message, Citation } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
 import { Rise } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
+import { useSlowState } from '../../lib/useSlowState'
 import { AddToNoteButton } from './AddToNote'
+import type { Grounding } from '../../api/types'
 import { FeedbackChips } from './FeedbackChips'
-import { MarkdownMessage } from './MarkdownMessage'
+import { MarkdownMessage, MathText } from './MarkdownMessage'
 import { PassagePreview } from './PassagePreview'
 import './chat.css'
 
@@ -82,13 +84,14 @@ export const ChatMessage = memo(function ChatMessage({
             about, which inverts the hierarchy. `brand-soft` still reads as
             "this one is mine" without shouting it. */}
         <div id={`msg-${message.id}`} className="scroll-mt-24 rounded-[18px_18px_5px_18px] border border-brand/25 bg-brand-soft px-4 py-2.5 text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [overflow-wrap:anywhere]">
-          {message.content}
+          <MathText content={message.content} />
         </div>
       </Rise>
     )
   }
 
   const citations = message.citations ?? []
+  const hasFeedbackRow = feedback !== undefined && !feedback.messageId.startsWith('srv-')
 
   const body = (
     <>
@@ -104,15 +107,9 @@ export const ChatMessage = memo(function ChatMessage({
         bubble — an answer doesn't need a container to say "not yours" when
         the only other thing on screen is visibly theirs. */}
     <div className="flex flex-col gap-3">
-      {citations.length > 0 && (
-        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-muted">
-          <span className="grid h-5 w-5 place-items-center rounded-md bg-brand-soft text-brand-deep">
-            <Icon name="sparkle" size={11} filled />
-          </span>
-          Answered from {citations.length} source{citations.length === 1 ? '' : 's'}
-        </div>
-      )}
-
+      {/* No "Answered from N sources" line up here: "Sources · N" sits right under the
+          answer and says the same thing, and the [1] markers in the text already show
+          which claim leans on which. */}
       {message.content === '\u2026' ? (
         <Thinking />
       ) : (
@@ -124,6 +121,11 @@ export const ChatMessage = memo(function ChatMessage({
           onCite={base ? setViewing : undefined}
         />
       )}
+
+      {!streaming && message.content !== '\u2026' && (message.personal?.length ?? 0) > 0 && (
+        <MadeForYou lines={message.personal ?? []} />
+      )}
+      {!streaming && message.grounding && message.grounding.checked > 0 && <Grounded g={message.grounding} />}
 
       {citations.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -181,13 +183,17 @@ export const ChatMessage = memo(function ChatMessage({
           and gating this the way FeedbackRow gates on "last + complete"
           would make it disappear the moment you asked a follow-up. */}
       {subspaceId && message.content !== '…' && (
-        <AddToNoteButton subspaceId={subspaceId} content={message.content} />
+        <AddToNoteButton subspaceId={subspaceId} content={message.content} citations={message.citations ?? undefined} />
       )}
+      {/* The row of thumbs below has its own Copy, but only under the latest
+          saved answer. Everywhere else (older answers, one cut short by Stop)
+          this is the Copy. */}
+      {subspaceId && message.content !== '…' && !hasFeedbackRow && <CopyAnswer content={message.content} />}
     </div>
     {/* A `srv-` id means the server sent no message_id (an older backend), so
         there is nothing to attach feedback to — the row is skipped rather than
         posting against an id the server would reject. */}
-    {feedback && !feedback.messageId.startsWith('srv-') && (
+    {hasFeedbackRow && feedback && (
       <FeedbackRow feedback={feedback} content={message.content} />
     )}
       <PassagePreview citation={viewing} base={base} onClose={() => setViewing(null)} />
@@ -195,6 +201,30 @@ export const ChatMessage = memo(function ChatMessage({
   )
   return instant ? <div>{body}</div> : <Rise distance={6}>{body}</Rise>
 })
+
+function CopyAnswer({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    // A browser may refuse the clipboard; nothing worth a toast.
+    void navigator.clipboard
+      ?.writeText(content)
+      .then(() => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1500)
+      })
+      .catch(() => undefined)
+  }
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-label={copied ? 'Copied' : 'Copy answer'}
+      className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[12.5px] text-muted transition-colors hover:text-ink"
+    >
+      <Icon name={copied ? 'check' : 'copy'} size={12} /> {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
 
 function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content: string }) {
   const { onOffered, reason } = feedback
@@ -224,18 +254,88 @@ function FeedbackRow({ feedback, content }: { feedback: MessageFeedback; content
 /**
  * The gap between sending and the first token.
  *
- * Three dots rising in sequence — the same beat as a card being dealt, so the
+ * Three dots rising in sequence, with the word beside them — the same beat as a card being dealt, so the
  * wait belongs to this world rather than borrowing a generic chat spinner. It
  * holds the height of one line of reply text so the bubble doesn't jump when
  * real text replaces it. Keyframes live in chat.css, where reduced motion
  * turns them into three still dots.
  */
 function Thinking() {
+  // Dots alone were easy to miss on a turn with no sources line above them,
+  // so the wait is also said in words — and said differently once it is long.
+  const phase = useSlowState(true)
+  const label =
+    phase === 'stalled'
+      ? 'Still working. The server may be waking up.'
+      : phase === 'slow'
+        ? 'Still thinking…'
+        : 'Thinking…'
   return (
-    <div className="chat-think" role="status" aria-label="Thinking">
+    <div className="chat-think" role="status" aria-label={label}>
       <span />
       <span />
       <span />
+      <p aria-hidden className="ml-1 text-[14px] font-medium text-muted">{label}</p>
+    </div>
+  )
+}
+
+
+/**
+ * What made this answer yours, in a line under it.
+ *
+ * Every phrase comes from what the server really used for this turn
+ * (`services/why.py`): the subject the words were read in, the weak spot it
+ * aimed at, the explanation style the student has shown they like. It is the
+ * visible difference from asking a general chatbot, and the feedback chips
+ * below are how to change it.
+ */
+function MadeForYou({ lines }: { lines: string[] }) {
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-snug text-muted"
+      aria-label="What shaped this answer"
+    >
+      <span className="flex items-center gap-1.5 font-semibold text-brand-deep">
+        <Icon name="target" size={12} />
+        Made for you
+      </span>
+      {lines.map((l, i) => (
+        <span key={l} className="flex items-center gap-2">
+          {i > 0 && <span aria-hidden className="text-faint">·</span>}
+          {l}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/**
+ * The guardrail the student can see: each cited claim was checked against the
+ * file it cites (`rag.grounding`, no model call). All backed reads as a quiet
+ * confirmation; anything that was not says exactly which sentence to check,
+ * instead of leaving a confident tone to do the persuading.
+ */
+function Grounded({ g }: { g: Grounding }) {
+  const all = g.backed >= g.checked
+  return (
+    <div className="flex flex-col gap-1 text-[12px] leading-snug text-muted" aria-label="Checked against your files">
+      <p className="flex items-center gap-1.5">
+        <Icon name="check" size={12} className={all ? 'text-mint-deep' : 'text-faint'} />
+        <span>
+          Checked against your files:{' '}
+          <span className="font-semibold text-ink-2">
+            {g.backed} of {g.checked} {g.checked === 1 ? 'claim' : 'claims'} found in them
+          </span>
+        </span>
+      </p>
+      {g.shaky.length > 0 && (
+        <ul className="ml-[18px] flex flex-col gap-0.5 text-faint">
+          {g.shaky.map((t) => (
+            <li key={t}>Worth double-checking: “{t}”</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
