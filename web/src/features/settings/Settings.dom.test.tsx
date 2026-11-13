@@ -9,7 +9,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
 
@@ -24,6 +24,12 @@ vi.mock('../../auth/AuthProvider', () => ({
 
 const updateStudentModel = vi.hoisted(() => vi.fn())
 vi.mock('../../api/me', () => ({
+  getLimits: vi.fn().mockResolvedValue({
+    answers: { per_day: 30, left_today: 24, burst: 6, per_minute: 4, quiz_costs: 2 },
+    files: { max_mb: 20, max_passages: 1200, passage_chars: 900, scan_pages: 12 },
+    messages: { max_chars: 4000, images_per_message: 3 },
+    models: { chat: 'openai/gpt-oss-120b', fast: 'openai/gpt-oss-20b' },
+  }),
   getSettings: vi.fn().mockResolvedValue({
     daily_goal: 20,
     streak_freeze_enabled: true,
@@ -54,12 +60,20 @@ vi.mock('../../api/auth', () => ({ signOutLocally: vi.fn() }))
 vi.mock('../../api/supabase', () => ({ getSupabase: vi.fn() }))
 
 import { Settings } from './Settings'
+import { getSettings, getStudentModel, updateSettings } from '../../api/me'
 
-function renderSettings() {
+/** Shows where the router is, and whether it got there by push or replace. */
+function Where() {
+  const { search } = useLocation()
+  return <output data-testid="where">{`${useNavigationType()} ${search}`}</output>
+}
+
+function renderSettings(entry = '/settings') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <ToastProvider>
         <Settings />
+        <Where />
       </ToastProvider>
     </MemoryRouter>,
   )
@@ -190,5 +204,101 @@ describe('Settings › Account', () => {
     await user.type(screen.getByLabelText('Your name'), 'Samira')
     await user.click(save)
     expect(setDisplayName).toHaveBeenCalledWith('Samira')
+  })
+})
+
+describe('when the preferences fail to load', () => {
+  it('offers a retry that brings the section back, rather than a dead red line', async () => {
+    vi.mocked(getStudentModel).mockRejectedValueOnce(new Error('offline'))
+    const user = userEvent.setup()
+    renderSettings()
+
+    const alert = await screen.findByRole('alert')
+    expect(screen.queryByText('When something is new to you, what makes it click?')).not.toBeInTheDocument()
+
+    await user.click(within(alert).getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('When something is new to you, what makes it click?')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('the loading spinner', () => {
+  it('waits on what the open section shows — not on Account, which needs neither list', async () => {
+    let finish: (v: unknown) => void = () => {}
+    vi.mocked(getSettings).mockReturnValueOnce(new Promise((resolve) => (finish = resolve)) as never)
+    const user = userEvent.setup()
+    renderSettings()
+
+    // Learning has its own data, so it shows without the preferences.
+    await screen.findByText('When something is new to you, what makes it click?')
+    expect(screen.queryByText('Loading preferences…')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Account' }))
+    expect(screen.queryByText('Loading preferences…')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: 'Study' }))
+    expect(screen.getByText('Loading preferences…')).toBeInTheDocument()
+
+    finish({ daily_goal: 20, streak_freeze_enabled: true, answer_only_from_docs: false, always_show_citations: true })
+    expect(await screen.findByText('Daily goal')).toBeInTheDocument()
+  })
+})
+
+describe('the open tab and the URL', () => {
+  it('opens the tab the link names, and replaces the URL when another is chosen', async () => {
+    const user = userEvent.setup()
+    renderSettings('/settings?section=study')
+    expect(screen.getByRole('tab', { name: 'Study' })).toHaveAttribute('aria-selected', 'true')
+
+    await user.click(screen.getByRole('tab', { name: 'About & legal' }))
+    expect(screen.getByRole('tab', { name: 'About & legal' })).toHaveAttribute('aria-selected', 'true')
+    // Replaced, so Back leaves Settings rather than walking back through tabs.
+    expect(screen.getByTestId('where')).toHaveTextContent('REPLACE ?section=about-legal')
+  })
+
+  it('does not claim the name and password save by themselves', () => {
+    renderSettings()
+    expect(screen.queryByText(/Everything here saves/)).not.toBeInTheDocument()
+    expect(screen.getByText(/except your name and password/)).toBeInTheDocument()
+  })
+})
+
+describe('two switches changed quickly', () => {
+  it('puts back only the one whose save failed', async () => {
+    let failFirst: (e: Error) => void = () => {}
+    vi.mocked(updateSettings)
+      .mockReturnValueOnce(new Promise((_, reject) => (failFirst = reject)) as never)
+      .mockResolvedValueOnce({
+        daily_goal: 20,
+        streak_freeze_enabled: false,
+        answer_only_from_docs: true,
+        always_show_citations: true,
+      } as never)
+    const user = userEvent.setup()
+    renderSettings('/settings?section=study')
+
+    const freeze = await screen.findByRole('switch', { name: 'Streak freeze' })
+    const docsOnly = screen.getByRole('switch', { name: 'Answer only from my docs' })
+    await user.click(freeze)
+    await user.click(docsOnly)
+    await waitFor(() => expect(docsOnly).toBeChecked())
+    expect(freeze).not.toBeChecked()
+
+    failFirst(new Error('offline'))
+
+    await waitFor(() => expect(freeze).toBeChecked())
+    expect(docsOnly).toBeChecked()
+  })
+})
+
+describe('the free-tier limits', () => {
+  it('shows the real numbers and what is left of today, on the Study tab', async () => {
+    renderSettings()
+    await userEvent.setup().click(screen.getByRole('tab', { name: 'Study' }))
+    expect(await screen.findByText('Free-tier limits')).toBeInTheDocument()
+    expect(await screen.findByText(/of 30 left/)).toBeInTheDocument()
+    expect(screen.getByText(/Up to 20 MB each/)).toBeInTheDocument()
+    expect(screen.getByText(/gpt-oss-120b writes answers/)).toBeInTheDocument()
   })
 })

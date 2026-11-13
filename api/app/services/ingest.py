@@ -128,7 +128,14 @@ async def _run(doc: dict, data: bytes | None, *, fresh: bool) -> None:
             {"status": "failed", "error": "We couldn't read this PDF. It may be damaged; try saving it again and re-uploading."},
         )
     except _NoText as e:
-        await _set(doc_id, {"status": "failed", "error": str(e) or "No readable text found."})
+        await _set(
+            doc_id,
+            {
+                "status": "failed",
+                "error": str(e)
+                or "No readable text found in this file. If it is a scan or a photo, upload it as images; if it is empty, try another file.",
+            },
+        )
     except UpstreamUnavailable as e:
         log.warning("ingestion upstream failure for %s: %s", doc_id, e)
         await _set(doc_id, {"status": "failed", "error": str(e)[:200]})

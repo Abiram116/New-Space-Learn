@@ -118,6 +118,18 @@ async def consume_llm_quota(user_id: str, *, cost: float = 1.0, daily: bool = Fa
     bucket.tokens -= cost
 
 
+def daily_status(user_id: str) -> dict[str, float]:
+    """What the student has spent of today's free answers, by our own count.
+
+    Read-only: shown in Settings so the limit is something a student can see
+    coming instead of a refusal they meet. Same window and weights as
+    `consume_llm_quota` (a chat answer costs 1, a quiz 2)."""
+    limit = float(settings.llm_daily_quota)
+    now = time.time()
+    used = sum(c for ts, c in _daily.get(user_id, ()) if now - ts < DAILY_WINDOW_S)
+    return {"limit": limit, "used": round(min(used, limit), 1), "left": round(max(0.0, limit - used), 1)}
+
+
 def refund(user_id: str, cost: float = 1.0) -> None:
     """Give back a charge for a call that produced no answer (it failed, or it was served
     from the cache): the per-minute tokens and the newest matching entry of the day."""

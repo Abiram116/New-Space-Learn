@@ -21,6 +21,12 @@ vi.mock('../../auth/AuthProvider', () => ({
   }),
 }))
 vi.mock('../../api/me', () => ({
+  getLimits: vi.fn().mockResolvedValue({
+    answers: { per_day: 30, left_today: 24, burst: 6, per_minute: 4, quiz_costs: 2 },
+    files: { max_mb: 20, max_passages: 1200, passage_chars: 900, scan_pages: 12 },
+    messages: { max_chars: 4000, images_per_message: 3 },
+    models: { chat: 'openai/gpt-oss-120b', fast: 'openai/gpt-oss-20b' },
+  }),
   getSettings: vi.fn().mockResolvedValue({
     daily_goal: 20,
     streak_freeze_enabled: true,

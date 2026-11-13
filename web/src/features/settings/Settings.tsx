@@ -31,6 +31,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deleteAccount,
+  exportMyData,
   getSettings,
   getStudentModel,
   updateSettings,
@@ -64,9 +65,11 @@ import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
 import { NAME_MAX } from '../onboarding/steps'
 import { LearningPanel } from './LearningPanel'
 import { Shortcuts } from './Shortcuts'
+import { LimitsCard } from './LimitsCard'
 import { Pill, SaveTell, SettingRow, SettingsCard, SpringSwitch, StreakDots, GoalRing, Stepper } from './parts'
 import { PANEL_ID, SettingsHeader, SettingsNav, TabSwap } from './SettingsChrome'
 import { setBotsEnabled, useBotsEnabled } from '../../lib/botPreference'
+import { suggestSwitch } from '../../lib/localSwitch'
 
 const SECTIONS = ['Learning', 'Study', 'Account', 'Feedback', 'About & legal'] as const
 type Section = (typeof SECTIONS)[number]
@@ -87,11 +90,16 @@ export function Settings() {
 
   const phone = useIsMobile()
   const botsOn = useBotsEnabled()
-  const [active, setActive] = useState<Section>('Learning')
+  const suggestOn = suggestSwitch.use()
+  // The open tab is the URL's (`/settings?section=feedback`), so a reload
+  // stays on it and a tab can be linked. Replaced, not pushed: tabs are one
+  // page, and Back should leave Settings. (Phones push; see `PhoneSettings`.)
+  const [params, setParams] = useSearchParams()
+  const active: Section = sectionFromSlug(params.get('section')) ?? 'Learning'
   const [dir, setDir] = useState(0)
   const select = (next: Section) => {
     setDir(Math.sign(SECTIONS.indexOf(next) - SECTIONS.indexOf(active)))
-    setActive(next)
+    setParams({ section: sectionSlug(next) }, { replace: true })
   }
   const [prefs, setPrefs] = useState<Prefs | null>(null)
   const [student, setStudent] = useState<StudentModel | null>(null)
@@ -127,7 +135,9 @@ export function Settings() {
     }
   }
 
-  useEffect(() => {
+  // Also what "Try again" runs. A failed load used to leave a red line and
+  // nothing else: no retry, and on Learning and Study no controls either.
+  const load = useCallback(() => {
     getSettings()
       .then(setPrefs)
       .catch((err) => setError(friendlyMessage(err)))
@@ -145,22 +155,25 @@ export function Settings() {
       .then(setLearned)
       .catch(() => undefined)
   }, [])
+  useEffect(() => load(), [load])
 
   const patch = useCallback(
     async (fieldKey: string, updates: Partial<Prefs>) => {
       if (!prefs) return
-      const optimistic = { ...prefs, ...updates }
-      setPrefs(optimistic)
+      setPrefs((now) => (now ? { ...now, ...updates } : now))
       setSavingKey(fieldKey)
       try {
         const updated = await updateSettings(updates)
-        setPrefs(updated)
+        // Only the keys this save sent. Two switches flipped quickly are two
+        // requests, and the whole reply (or, on failure, the whole snapshot
+        // from before) used to undo the other one.
+        setPrefs((now) => (now ? { ...now, ...only(updated, updates) } : updated))
         flashSaved(fieldKey)
       } catch (err) {
-        setPrefs(prefs)
+        setPrefs((now) => (now ? putBack(now, prefs, updates) : now))
         showError(err)
       } finally {
-        setSavingKey(null)
+        setSavingKey((key) => (key === fieldKey ? null : key))
       }
     },
     [prefs, showError, flashSaved],
@@ -176,19 +189,20 @@ export function Settings() {
       // A choice made while typed words for the same field are still waiting
       // to save replaces them: the older, queued value must not land on top.
       if (textTimers.current[fieldKey]) clearTimeout(textTimers.current[fieldKey])
-      const optimistic = { ...student, ...updates }
-      setStudent(optimistic)
+      setStudent((now) => (now ? { ...now, ...updates } : now))
       setSavingKey(fieldKey)
       try {
         const updated = await updateStudentModel(updates)
-        setStudent(updated)
+        // Only the keys this save sent, as in `patch`: the whole reply would
+        // also put back words still being typed in another field.
+        setStudent((now) => (now ? { ...now, ...only(updated, updates) } : updated))
         writeCache(STUDENT_MODEL_KEY, updated)
         flashSaved(fieldKey)
       } catch (err) {
-        setStudent(student)
+        setStudent((now) => (now ? putBack(now, student, updates) : now))
         showError(err)
       } finally {
-        setSavingKey(null)
+        setSavingKey((key) => (key === fieldKey ? null : key))
       }
     },
     [student, showError, flashSaved],
@@ -249,6 +263,7 @@ export function Settings() {
   }
 
   const [newPassword, setNewPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [passwordBusy, setPasswordBusy] = useState(false)
 
   const changePassword = async () => {
@@ -266,6 +281,25 @@ export function Settings() {
       showError(err)
     } finally {
       setPasswordBusy(false)
+    }
+  }
+
+  const [exporting, setExporting] = useState(false)
+  /** The student's own data as a JSON file, saved by the browser. */
+  const downloadMyData = async () => {
+    setExporting(true)
+    try {
+      const data = await exportMyData()
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'space-learn-export.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      showError(err)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -334,12 +368,29 @@ export function Settings() {
   const panel = (active: Section) => (
     <>
       {error && (
-        <div className="col-span-full rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
+        <div
+          role="alert"
+          className="col-span-full flex flex-wrap items-center justify-between gap-3 rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[14px] text-coral-deep"
+        >
           {error}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setError(null)
+              load()
+            }}
+          >
+            <Icon name="refresh" size={13} /> Try again
+          </Button>
         </div>
       )}
 
-      {!prefs && !error && (
+      {/* Each section waits on what IT shows. Learning reads the student
+          model and Study the preferences; waiting on preferences alone left
+          Learning blank when they arrived first, and spun above Account,
+          Feedback and About, which need neither. */}
+      {!error && (active === 'Learning' ? !student : active === 'Study' ? !prefs : false) && (
         <div className="col-span-full">
           <PageSpinner label="Loading preferences…" />
         </div>
@@ -434,13 +485,19 @@ export function Settings() {
                 label="Always show citations"
                 hint="Marks which part of your documents each answer came from."
                 saved={savedKey === 'always_show_citations'}
-                last={phone}
               >
                 <SpringSwitch
                   label="Always show citations"
                   checked={prefs.always_show_citations}
                   onChange={(v) => patch('always_show_citations', { always_show_citations: v })}
                 />
+              </SettingRow>
+              <SettingRow
+                label="Suggest what to ask"
+                hint="Questions about your own files to start a chat with, and one to ask next after each answer. Saved on this device."
+                last={phone}
+              >
+                <SpringSwitch label="Suggest what to ask" checked={suggestOn} onChange={suggestSwitch.set} />
               </SettingRow>
               {!phone && (
                 <SettingRow label="Show the agent bots" hint="Nova and the crew, while the AI works. Saved on this device." last>
@@ -459,6 +516,9 @@ export function Settings() {
               <Shortcuts />
             </div>
           )}
+          <Rise className="col-span-full">
+            <LimitsCard />
+          </Rise>
         </>
       )}
 
@@ -473,9 +533,14 @@ export function Settings() {
                   void saveName()
                 }}
               >
-                <span aria-hidden className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] bg-brand-soft text-[13px] font-semibold text-brand-deep">
+                <Link
+                  to="/profile"
+                  aria-label="Open your profile"
+                  title="Open your profile"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-[13px] bg-brand-soft text-[13px] font-semibold text-brand-deep ring-brand/40 transition-shadow hover:ring-2"
+                >
                   {initials}
-                </span>
+                </Link>
                 <div className="min-w-0 flex-1">
                   <Input
                     value={name}
@@ -495,6 +560,12 @@ export function Settings() {
                   {nameBusy ? 'Saving…' : 'Save'}
                 </Button>
               </form>
+              <Link
+                to="/profile"
+                className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-muted transition-colors hover:text-ink"
+              >
+                View your profile <Icon name="arrowRight" size={12} />
+              </Link>
             </SettingsCard>
           </Rise>
 
@@ -508,14 +579,29 @@ export function Settings() {
                     void changePassword()
                   }}
                 >
-                  <Input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New password"
-                    autoComplete="new-password"
-                    aria-label="New password"
-                  />
+                  <div className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="New password"
+                        autoComplete="new-password"
+                        aria-label="New password"
+                      />
+                    </div>
+                    {/* One field, no "type it twice": seeing it is the check. */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-pressed={showPassword}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </Button>
+                  </div>
                   {/* Same label while busy so the button does not change width. */}
                   <Button
                     type="submit"
@@ -558,6 +644,19 @@ export function Settings() {
                     {othersBusy ? 'Signing out…' : 'Sign out of other devices'}
                   </Button>
                 </div>
+              </div>
+            </SettingsCard>
+          </Rise>
+
+          <Rise delay={120} className="col-span-full">
+            <SettingsCard icon="doc" title="Your data" hint="Everything you put in or made here, as one file. Yours to keep.">
+              <div className="flex items-center justify-between gap-4 text-[14px]">
+                <p className="max-w-xl text-muted">
+                  Subjects, notes, cards, quizzes, chats and your settings. Uploaded files and search data are not included.
+                </p>
+                <Button variant="secondary" onClick={() => void downloadMyData()} disabled={exporting} className="shrink-0">
+                  {exporting ? 'Preparing…' : 'Download my data'}
+                </Button>
               </div>
             </SettingsCard>
           </Rise>
@@ -741,6 +840,23 @@ export function Settings() {
       {deleteDialog}
     </div>
   )
+}
+
+/** The values in `from` for just the keys that were `sent`. */
+function only<T extends object>(from: T, sent: Partial<T>): Partial<T> {
+  const out: Partial<T> = {}
+  for (const key of Object.keys(sent) as (keyof T)[]) out[key] = from[key]
+  return out
+}
+
+/** Undo a failed save: only the keys it `sent`, and only where the value is
+ *  still the one it set — a newer change to the same setting stays. */
+function putBack<T extends object>(now: T, before: T, sent: Partial<T>): T {
+  const out = { ...now }
+  for (const key of Object.keys(sent) as (keyof T)[]) {
+    if (Object.is(now[key], sent[key])) out[key] = before[key]
+  }
+  return out
 }
 
 // ── Phones: a grouped list, then one section at a time ─────────────────

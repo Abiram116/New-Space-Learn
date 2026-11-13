@@ -29,4 +29,12 @@ export const updateStudentModel = (patch: StudentModelPatch) =>
 
 /** Irreversible. The caller must have its own confirmation step — this
  *  function does not ask twice. */
+export type Limits = {
+  answers: { per_day: number; left_today: number; burst: number; per_minute: number; quiz_costs: number }
+  files: { max_mb: number; max_passages: number; passage_chars: number; scan_pages: number }
+  messages: { max_chars: number; images_per_message: number }
+  models: { chat: string; fast: string }
+}
+export const getLimits = () => apiFetch<Limits>('/me/limits')
+export const exportMyData = () => apiFetch<Record<string, unknown>>('/me/export')
 export const deleteAccount = () => apiFetch<{ ok: true }>('/me', { method: 'DELETE' })

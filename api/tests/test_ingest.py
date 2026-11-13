@@ -151,7 +151,10 @@ async def test_scheduling_twice_runs_one_job(store):
 async def test_an_empty_file_fails_with_copy_not_a_stack_trace(store):
     ingest.schedule(DOC, b"   ")
     await _finish()
-    assert store.doc_patches[-1] == {"status": "failed", "error": "No readable text found."}
+    patch = store.doc_patches[-1]
+    assert patch["status"] == "failed"
+    # Copy a student can act on: says what was wrong and what to try, no stack trace.
+    assert patch["error"].startswith("No readable text found") and "try another file" in patch["error"]
 
 
 async def test_an_unexpected_error_is_logged_not_shown(store, monkeypatch):
