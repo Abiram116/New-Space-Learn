@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     llm_burst: float = 6.0
     llm_refill_per_minute: float = 4.0
     llm_daily_quota: float = 30.0
+    # Accounts exempt from the per-student pace and daily allowance: the developers and
+    # testers, comma-separated Supabase user ids. The shared model allowance still applies.
+    llm_unlimited_user_ids: str = ""
     # The large model's daily token allowance, and how much of it is used before chat
     # starts going to the small model on purpose rather than failing mid-answer.
     groq_daily_token_limit: int = 200_000

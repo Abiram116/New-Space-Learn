@@ -78,9 +78,19 @@ def _daily_wait_s(entries: deque[tuple[float, float]], now: float, cost: float, 
     return DAILY_WINDOW_S
 
 
+def is_unlimited(user_id: str) -> bool:
+    """A developer or tester account, named in LLM_UNLIMITED_USER_IDS. Exempt from OUR
+    per-student limits only; Groq's own limits on the one shared key still apply."""
+    ids = {i.strip() for i in settings.llm_unlimited_user_ids.split(",") if i.strip()}
+    return user_id in ids
+
+
 async def consume_llm_quota(user_id: str, *, cost: float = 1.0, daily: bool = False) -> None:
     """Take `cost` from the student's per-minute bucket (and, with `daily`, from their
     rolling-day allowance), or raise RateLimited. Nothing is taken unless both pass."""
+
+    if is_unlimited(user_id):
+        return
 
     now = time.monotonic()
     wall = time.time()
