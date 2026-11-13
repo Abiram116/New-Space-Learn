@@ -280,7 +280,7 @@ function Saved({
                 type="button"
                 onClick={onReviewDue}
                 className={cn(
-                  'mr-3 inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-bold t-control duration-200',
+                  'inline-flex min-h-10 w-full cursor-pointer items-center justify-center gap-1.5 rounded-full px-3.5 text-[13.5px] font-bold t-control duration-200',
                   leadReview
                     ? 'bg-brand text-[#1a120f] hover:brightness-110'
                     : 'bg-sun-soft text-sun-deep hover:brightness-125',
@@ -314,7 +314,7 @@ function SavedRow({
   onOpen: () => void
 }) {
   return (
-    <li className="flex items-center border-b border-line-soft last:border-b-0">
+    <li className="flex flex-col border-b border-line-soft last:border-b-0">
       <button
         type="button"
         onClick={onOpen}
@@ -326,7 +326,7 @@ function SavedRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-bold leading-snug text-ink">{label}</span>
-          {/* With a button beside it there's no room on the right, so the count moves under the name. */}
+          {/* With a button below, the count moves under the name. */}
           {(sub || (action && detail)) && (
             <span className="mt-0.5 block truncate text-[13px] leading-snug text-muted">{sub ?? detail}</span>
           )}
@@ -343,7 +343,7 @@ function SavedRow({
         )}
         <Icon name="chevronRight" size={16} className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5" />
       </button>
-      {action}
+      {action && <div className="px-3 pb-3">{action}</div>}
     </li>
   )
 }
