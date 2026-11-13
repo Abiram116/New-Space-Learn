@@ -145,6 +145,12 @@ def test_ungrounded_turns_say_so_explicitly() -> None:
     assert "Answering from your own knowledge is fine" in flat
 
 
+def test_files_only_turns_with_no_sources_do_not_invite_outside_knowledge() -> None:
+    flat = _system(retrieved=[], only_docs=True).replace("\n", " ")
+    assert "Answering from your own knowledge is fine" not in flat
+    assert "Do not answer from your own knowledge" in flat
+
+
 def test_the_citation_rule_only_appears_when_citations_are_on() -> None:
     assert "Never invent a citation marker" in _system(cite=True)
     assert "Never invent a citation marker" not in _system(cite=False)

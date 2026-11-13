@@ -71,3 +71,18 @@ def fit_history(history: list[dict[str, str]], *, max_chars: int | None = None) 
     while len(fitted) > 2 and sum(len(m["content"]) for m in fitted) > ceiling:
         fitted.pop(0)
     return fitted
+
+
+def estimate_tokens(messages: list[dict]) -> int:
+    """Roughly how many tokens `messages` cost as a prompt: characters ÷ 4, the usual
+    rule for English, plus a few per message for the chat template. For deciding,
+    not for billing (Groq's own count comes back in `usage`). Image parts count
+    their text only; the vision model has its own allowance."""
+    chars = 0
+    for m in messages:
+        content = m.get("content")
+        if isinstance(content, str):
+            chars += len(content)
+        elif isinstance(content, list):
+            chars += sum(len(p.get("text") or "") for p in content if isinstance(p, dict))
+    return chars // 4 + 4 * len(messages)

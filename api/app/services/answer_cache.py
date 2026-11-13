@@ -14,10 +14,14 @@ fresh one. An answer is reused only when ALL of these hold:
 - **the sources are the same.** The answer is keyed on exactly which passages
   retrieval returned. Edit, remove or add a file and the passages change, so the
   old answer is not offered.
-- **the settings are the same:** answer-only-from-documents, citations, which
-  skills are on, and the student's real preferences. (Not the sampled style: it changes on
+- **the settings are the same:** the topic's scope ("files" or "subject"),
+  citations, which skills are on, the student's real preferences, and the
+  context the prompt names (subject, topic, linked topics, exam goal). (Not the sampled style: it changes on
   every message by design, and would make a hit impossible. The stored answer keeps the
   style it was written in, and is recorded with it.)
+- **it was an answer.** A refusal, an off-topic redirect or "not covered" is
+  never stored (`worth_keeping`), and nor is a reply to a message that tried
+  to change the tutor's rules.
 - **no image, and not a regenerate.** Pressing regenerate asks for a different
   answer; it must never be handed the same one.
 - **the question means the same:** the same text, or a very close vector.
@@ -105,6 +109,28 @@ def store(
     entries = [e for e in (_STORE.get(key) or []) if e.fingerprint != fp or _norm(e.question) != _norm(question)]
     entries.append(Cached(question, tuple(vector), fp, answer, suggestion, style))
     _STORE.set(key, entries[-PER_TOPIC:])
+
+
+#: An answer shorter than this, with no citation in it, is not kept.
+MIN_UNCITED_CHARS = 240
+
+
+def worth_keeping(answer: str, *, cite: bool) -> bool:
+    """Whether a freshly written answer may be stored for re-use.
+
+    A cached answer is only as good as the reason it was written. What must
+    never be kept: a scope refusal ("I'm here for Transformer — try a general
+    assistant for that"), a "your files don't cover this", or a request for
+    clarification. Those are short and cite nothing, and a reworded question
+    that IS on-topic would otherwise be handed the refusal. So: with citations
+    on, an answer that cites nothing is not kept; with them off, a short one
+    is not kept. The cost of a wrong "no" is one ordinary model call."""
+    text = answer.strip()
+    if not text or text == "(no reply)":
+        return False
+    if cite:
+        return bool(re.search(r"\[\[\d+\]\]", text))
+    return len(text) >= MIN_UNCITED_CHARS
 
 
 def clear() -> None:

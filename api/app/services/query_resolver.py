@@ -45,7 +45,7 @@ _POINTING = re.compile(
 _CONTINUING = re.compile(r"^\s*(and|so|but|then|also|ok(ay)?|why|how come|what about|how about|which one)\b", re.IGNORECASE)
 _WORD = re.compile(r"[\w'+-]+")
 
-_PROMPT = """Rewrite the student's latest question so it can be understood with no conversation: name the thing it refers to. Keep it one short question. Do not answer it. Reply with the rewritten question only.
+_PROMPT = """Rewrite the student's latest question so it can be understood with no conversation: name the thing it refers to, in the sense it has in the topic below. Keep it one short question. Do not answer it. Reply with the rewritten question only.
 
 Topic: {topic}
 Previous question: {previous}
@@ -63,12 +63,16 @@ class Query:
     standalone: str
     #: How `standalone` was reached: "as-is", "rewritten" or "joined".
     how: str = "as-is"
+    #: The topic's name, added to the keyword search of a question too short to
+    #: name its own subject (see `with_topic_hint`). Empty almost always.
+    hint: str = ""
 
     @property
     def keywords(self) -> str:
         """What to search by keyword: the student's own words always count,
-        plus whatever the rewrite named."""
-        return self.original if self.how == "as-is" else f"{self.original} {self.standalone}"
+        plus whatever the rewrite named, plus the topic for a bare one-word ask."""
+        words = self.original if self.how == "as-is" else f"{self.original} {self.standalone}"
+        return f"{words} {self.hint}" if self.hint else words
 
 
 def leans_on_history(question: str, history: list[dict[str, str]]) -> bool:
@@ -141,3 +145,35 @@ async def resolve(
     if not rewritten or len(rewritten) < 8 or "\n" in text.strip() and len(text) > MAX_QUERY_CHARS:
         return joined
     return Query(question, rewritten, "rewritten")
+
+
+#: A question with at most this many words is too short to name its subject.
+HINT_MAX_WORDS = 2
+_HINT_STOP = frozenset("a an the of and or in on to for is are what why how explain define".split())
+
+
+def topic_label(topic: str, subject: str = "") -> str:
+    """How the resolver is told where a question was asked: "Deep Learning › Transformer"."""
+    topic, subject = topic.strip(), subject.strip()
+    return f"{subject} › {topic}" if subject and topic else topic or subject
+
+
+def with_topic_hint(query: Query, topic: str) -> Query:
+    """Add the topic's name to the keyword search of a bare one- or two-word
+    question asked as-is ("attention?", "examples").
+
+    Keyword search ranks by any word that matches, so the topic name pulls
+    the passages about *this* topic's sense of the word to the top. Only for
+    these tiny questions: on a longer one it would add a word every chunk in
+    the topic shares, and blur the coverage check that decides whether the
+    files answer it. Never for a rewrite (it already names its subject) and
+    never when the topic is already in the question."""
+    if query.how != "as-is" or not topic.strip():
+        return query
+    words = [w.lower() for w in _WORD.findall(query.original)]
+    if not words or len(words) > HINT_MAX_WORDS:
+        return query
+    topic_words = [w.lower() for w in _WORD.findall(topic) if w.lower() not in _HINT_STOP]
+    if not topic_words or set(topic_words) <= set(words):
+        return query
+    return Query(query.original, query.standalone, query.how, " ".join(topic_words)[:80])

@@ -165,6 +165,7 @@ class Retrieval:
         return {
             "query": self.query.standalone if self.query.how != "as-is" else None,
             "how": self.query.how,
+            "hint": self.query.hint or None,
             "confidence": self.confidence,
             "candidates": [
                 {
@@ -276,16 +277,24 @@ async def retrieve(
     linked_subspace_ids: Sequence[str] = (),
     history: list[dict[str, str]] | None = None,
     topic: str = "",
+    subject: str = "",
     config: RetrievalConfig = DEFAULT,
     store: Store | None = None,
     embed: Embed = embed_question,
     complete: query_resolver.Complete | None = None,
 ) -> Retrieval:
     question = question.replace("\x00", "")  # PostgreSQL text cannot hold it
+    # `topic` and `subject` disambiguate: a follow-up is rewritten in the
+    # subject's sense of its words, and a bare one-word question is searched
+    # alongside the topic's name. Both are no-ops when not given.
     if config.resolve_followups and history:
-        query = await query_resolver.resolve(question, history, topic=topic, complete=complete)
+        query = await query_resolver.resolve(
+            question, history, topic=query_resolver.topic_label(topic, subject), complete=complete
+        )
     else:
         query = Query(question.strip(), question.strip())
+    if config.resolve_followups and topic:
+        query = query_resolver.with_topic_hint(query, topic)
 
     vectors = await embed([config.query_prefix + query.standalone])
     if not vectors:

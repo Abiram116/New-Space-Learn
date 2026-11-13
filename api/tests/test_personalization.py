@@ -128,3 +128,59 @@ async def test_render_chat_persists_the_sampled_strategy_to_meta_style(monkeypat
     _, _, style_values = await personalization.render_chat(snap, "sub-1", "user-1")
 
     assert style_values["teaching.strategy"] == "socratic"
+
+
+# ── What chat knows about results ───────────────────────────────────────
+
+
+def _attempt(quiz_id: str, subspace_id: str, score: int, days_ago: int) -> sm.QuizAttempt:
+    from datetime import timedelta
+
+    from app.services import clock
+
+    at = (clock.today() - timedelta(days=days_ago)).isoformat() + "T09:00:00+00:00"
+    return sm.QuizAttempt(quiz_id=quiz_id, subspace_id=subspace_id, score=score, at=at)
+
+
+def test_chat_is_told_this_topics_quiz_results_and_cards_due():
+    """"How did I do on my last quiz?" needs the score on the record, and
+    only this topic's: another topic's 100% is not an answer here."""
+    from dataclasses import replace
+
+    topic = replace(_topic("sub-1", "subject-a"), cards_due=4, cards_total=12)
+    snap = replace(
+        _snap([topic, _topic("sub-2", "subject-a")]),
+        quiz_attempts=(  # newest first, as `snapshot()` builds it
+            _attempt("q1", "sub-1", 60, 2),
+            _attempt("q9", "sub-2", 100, 3),
+            _attempt("q1", "sub-1", 80, 5),
+            _attempt("q2", "sub-1", 40, 9),
+        ),
+    )
+    block = personalization.render(snap, "chat", subspace_id="sub-1")
+
+    assert "last quiz 60% 2 days ago" in block
+    assert "best on that quiz 80% in 2 tries" in block
+    assert "3 attempts here, average 60%" in block
+    assert "4 of 12 flashcards due now" in block
+    assert "100%" not in block
+    # Cheap: one line, well under the budget a chat turn can spare.
+    [line] = [ln for ln in block.splitlines() if "Their results here" in ln]
+    assert len(line.split()) <= 60
+
+
+def test_chat_is_told_nothing_about_results_that_do_not_exist():
+    """No quiz taken and no cards made: no line at all, rather than an empty
+    record the model would feel invited to fill in."""
+    from dataclasses import replace
+
+    snap = replace(
+        _snap([_topic("sub-1", "subject-a")]),
+        quiz_attempts=(_attempt("q9", "sub-2", 100, 1),),
+    )
+    assert personalization.render(snap, "chat", subspace_id="sub-1") == ""
+    # One quiz, taken once: the score, and no "best" or "average" made of one number.
+    once = replace(snap, quiz_attempts=(_attempt("q1", "sub-1", 70, 0),))
+    block = personalization.render(once, "chat", subspace_id="sub-1")
+    assert "last quiz 70% today. Use it" in block
+    assert "best" not in block and "average" not in block and "flashcards" not in block
