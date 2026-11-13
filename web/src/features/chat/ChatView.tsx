@@ -762,8 +762,14 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
           streaming={streaming}
           // An empty chat offers three to pick from instead of the one in the box.
           suggestion={
-            suggestOn && hasReadyFile && !isEmpty
-              ? (followUp ?? nextSuggestion(starters.data?.questions ?? [], userMessagesInOrder))
+            // Any chat with something in it, files or not: a topic made of notes
+            // and conversation deserves the → as much as one made of PDFs.
+            suggestOn && !isEmpty
+              ? (followUp ??
+                nextSuggestion(
+                  hasReadyFile ? (starters.data?.questions ?? []) : topicStarters(subspaceName, spaceName),
+                  userMessagesInOrder,
+                ))
               : undefined
           }
           // An empty chat opens with questions about this topic's own files;

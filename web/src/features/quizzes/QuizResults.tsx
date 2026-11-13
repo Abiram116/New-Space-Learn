@@ -13,6 +13,7 @@
  * strip — present, checkable, not competing.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Quiz, QuizResult } from '../../api/types'
 import { Button } from '../../components/ui/Button'
@@ -515,7 +516,7 @@ function MissedQuestion({
             compact ? 'text-[12.5px]' : 'text-[13.5px]',
           )}
         >
-          {question}
+          <MathText content={question} />
         </span>
       </div>
       <div className="mt-2 flex flex-col gap-1 text-[12.5px]">
@@ -527,11 +528,11 @@ function MissedQuestion({
         )}
         <div className="flex items-start gap-1.5 text-mint-deep">
           <Icon name="check" size={11} className="mt-0.5 shrink-0" />
-          <span className="font-semibold">{answer}</span>
+          <span className="font-semibold"><MathText content={answer} /></span>
         </div>
       </div>
       {explanation && (
-        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2">{explanation}</p>
+        <p className="mt-1.5 text-[12.5px] leading-relaxed text-ink-2"><MathText content={explanation} /></p>
       )}
       {/* The specific confusion behind the wrong pick — one line, only when
           this question was tagged for it (task 3/8: quizzes generated before
@@ -574,7 +575,7 @@ function CorrectStrip({ items }: { items: { q: Quiz['questions'][number]; i: num
             >
               <Icon name="check" size={11} className="mt-1 shrink-0 text-mint-deep" />
               <div className="min-w-0">
-                <div className="leading-snug text-ink-2">{q.q}</div>
+                <div className="leading-snug text-ink-2"><MathText content={q.q} /></div>
                 <div className="mt-0.5 font-semibold text-mint-deep">
                   {q.choices[q.answer_index]}
                 </div>
@@ -609,10 +610,10 @@ function StageCorrectRow({ number, question, answer }: { number: number; questio
     >
       <span className="stage-label mt-[0.2em] w-6 shrink-0 font-mono tabular-nums text-faint">{number}</span>
       <div className="min-w-0 flex-1">
-        <p className="stage-body leading-snug text-ink-2">{question}</p>
+        <p className="stage-body leading-snug text-ink-2"><MathText content={question} /></p>
         <p className="stage-label mt-1 flex items-start gap-1.5 font-semibold text-mint-deep">
           <Icon name="check" size={14} className="mt-[0.2em] shrink-0" />
-          <span className="min-w-0">{answer}</span>
+          <span className="min-w-0"><MathText content={answer} /></span>
         </p>
       </div>
     </div>
@@ -644,7 +645,7 @@ function StageMissedRow({
     >
       <span className="stage-label mt-[0.25em] w-6 shrink-0 font-mono tabular-nums text-coral-deep">{number}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-[clamp(1rem,0.85rem+0.35cqw,1.1875rem)] font-semibold leading-snug text-ink">{question}</p>
+        <p className="text-[clamp(1rem,0.85rem+0.35cqw,1.1875rem)] font-semibold leading-snug text-ink"><MathText content={question} /></p>
 
         <dl className="stage-body mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 @max-[36rem]:grid-cols-1 @max-[36rem]:gap-y-0.5">
           <dt className="stage-label pt-[0.15em] text-muted">Your answer</dt>
@@ -661,12 +662,12 @@ function StageMissedRow({
           <dt className="stage-label pt-[0.15em] text-muted @max-[36rem]:mt-2">Correct</dt>
           <dd className="flex items-start gap-1.5 font-semibold text-mint-deep">
             <Icon name="check" size={15} className="mt-[0.25em] shrink-0" />
-            <span>{answer}</span>
+            <span><MathText content={answer} /></span>
           </dd>
         </dl>
 
         {explanation && (
-          <p className="stage-body mt-3 max-w-[68ch] leading-relaxed text-ink-2">{explanation}</p>
+          <p className="stage-body mt-3 max-w-[68ch] leading-relaxed text-ink-2"><MathText content={explanation} /></p>
         )}
         {/* The specific confusion behind the wrong pick — only when this
             question was tagged for it. */}

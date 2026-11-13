@@ -235,8 +235,16 @@ async def generate_quiz(
     # one — so falling back to the model's own title (or, failing that, the
     # first question's subtopic) is what keeps the quiz list from filling up
     # with "Untitled topic". Only reached for placeholders when unconfigured.
+    # A quiz from one note is named for that note: the model otherwise names it
+    # after the TOPIC ("Autoencoder quiz" for a note on integration).
+    note_title = (
+        material.sources[0].document_name.removeprefix("Note: ").strip()
+        if settings.llm_configured and material.kind == "note" and material.sources
+        else None
+    )
     topic = (
         body.topic
+        or (f"Quiz on {note_title}"[:140] if note_title else None)
         or generated_title
         or (questions[0].subtopic if questions and questions[0].subtopic else None)
         or label

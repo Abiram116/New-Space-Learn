@@ -21,6 +21,7 @@
  * would drift and the second one would be the neglected one.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { submitQuiz } from '../../api/quizzes'
 import type { Quiz, QuizResult } from '../../api/types'
@@ -386,7 +387,7 @@ function Runner({ quiz, compact = false, onFinished, onExit: leave, draftKey = q
               compact ? 'text-[13.5px]' : 'text-[15.5px]',
             )}
           >
-            {q.q}
+            <MathText content={q.q} />
           </div>
 
           <div className="mt-3 flex flex-col gap-2">
@@ -531,7 +532,7 @@ function Runner({ quiz, compact = false, onFinished, onExit: leave, draftKey = q
             id={stemId}
             className="stage-stem mt-[clamp(20px,3.2dvh,40px)] font-semibold leading-[1.3] tracking-[-0.01em] text-ink"
           >
-            {q.q}
+            <MathText content={q.q} />
           </h2>
 
           <div
@@ -755,7 +756,7 @@ function Choice({
           letter
         )}
       </span>
-      <span className="min-w-0 flex-1 leading-snug">{text}</span>
+      <span className="min-w-0 flex-1 leading-snug"><MathText content={text} /></span>
     </button>
   )
 }
@@ -823,7 +824,7 @@ function Verdict({
 
       {!correct && (
         <p className={cn('mt-1.5 leading-relaxed text-ink-2', compact ? 'text-[12px]' : 'text-[13px]')}>
-          The answer is <b className="text-ink">{answerText}</b>.
+          The answer is <b className="text-ink"><MathText content={answerText} /></b>.
         </p>
       )}
 
@@ -834,7 +835,7 @@ function Verdict({
             compact ? 'text-[12px]' : 'text-[13px]',
           )}
         >
-          {explanation}
+          <MathText content={explanation} />
         </p>
       )}
 
@@ -1033,7 +1034,7 @@ function StageChoice({
           letter
         )}
       </span>
-      <span className="min-w-0 flex-1">{text}</span>
+      <span className="min-w-0 flex-1"><MathText content={text} /></span>
       {note && (
         <span
           className={cn(
@@ -1102,12 +1103,12 @@ function StageVerdict({
 
       {!correct && (
         <p className="stage-body mt-2 leading-relaxed text-ink-2">
-          The answer is <b className="text-ink">{answerText}</b>.
+          The answer is <b className="text-ink"><MathText content={answerText} /></b>.
         </p>
       )}
 
       {explanation && (
-        <p className="stage-body mt-2 max-w-[68ch] leading-relaxed text-ink-2">{explanation}</p>
+        <p className="stage-body mt-2 max-w-[68ch] leading-relaxed text-ink-2"><MathText content={explanation} /></p>
       )}
 
       {!correct && subtopic && (

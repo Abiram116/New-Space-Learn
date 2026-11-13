@@ -11,6 +11,7 @@
  * leave live in QuizRunner); this file is layout and touch feel only.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useEffect, useRef, type Ref } from 'react'
 import type { Quiz } from '../../api/types'
 import { Button } from '../../components/ui/Button'
@@ -94,7 +95,7 @@ export function PhoneQuizStage(p: PhoneQuizProps) {
               id={stemId}
               className="text-[19px] font-semibold leading-[1.35] tracking-[-0.005em] text-ink [text-wrap:pretty]"
             >
-              {q.q}
+              <MathText content={q.q} />
             </h2>
           </div>
         </div>
@@ -161,7 +162,7 @@ export function PhoneQuizStage(p: PhoneQuizProps) {
                   </p>
                 )}
                 {q.explanation && (
-                  <p className="mt-2 text-[16px] leading-relaxed text-ink-2">{q.explanation}</p>
+                  <p className="mt-2 text-[16px] leading-relaxed text-ink-2"><MathText content={q.explanation ?? ''} /></p>
                 )}
                 {!isCorrect && q.subtopic && (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -289,7 +290,7 @@ function PhoneChoice({
       >
         {revealed && isAnswer ? <Icon name="check" size={17} /> : revealed && picked ? <Icon name="close" size={17} /> : letter}
       </span>
-      <span className="min-w-0 flex-1">{text}</span>
+      <span className="min-w-0 flex-1"><MathText content={text} /></span>
     </button>
   )
 }
