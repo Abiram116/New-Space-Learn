@@ -182,6 +182,8 @@ describe('review keyboard', () => {
   it('after the flip Good is highlighted, and Enter confirms it', () => {
     render(<Harness />)
     press('Enter')
+    expect(screen.getByText('front a')).toBeInTheDocument() // Enter alone does not flip
+    press(' ')
     expect(gradeButton('Good')).toHaveAttribute('data-active')
     read()
     press('Enter')
@@ -199,7 +201,7 @@ describe('review keyboard', () => {
     press('ArrowUp') // stops at Again
     expect(gradeButton('Again')).toHaveAttribute('data-active')
     read()
-    press(' ')
+    press('Enter')
     expect(gradeCard).toHaveBeenCalledWith('a', 'again')
     // Again re-queues the card at the tail.
     expect(latest?.kind === 'review' && latest.cards.map((c) => c.id)).toEqual(['a', 'b', 'a'])
@@ -256,6 +258,6 @@ describe('review keyboard', () => {
     render(<Harness />)
     expect(screen.getByTestId('key-hints')).toHaveTextContent(/Flip the card/)
     press(' ')
-    expect(screen.getByTestId('key-hints')).toHaveTextContent(/Confirm/)
+    expect(screen.getByTestId('key-hints')).toHaveTextContent(/Next card/)
   })
 })

@@ -9,16 +9,16 @@ describe('reviewKeyAction', () => {
     expect(DEFAULT_GRADE_HIGHLIGHT).toBe(2)
   })
 
-  it('face-up: Space / Enter flip, and nothing grades a card you have not turned', () => {
+  it('face-up: Space flips; Enter and the rest do nothing to a card you have not turned', () => {
     expect(reviewKeyAction(' ', front)).toEqual({ type: 'flip' })
-    expect(reviewKeyAction('Enter', front)).toEqual({ type: 'flip' })
-    for (const key of ['1', '4', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
+    for (const key of ['Enter', '1', '4', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) {
       expect(reviewKeyAction(key, front)).toBeNull()
     }
   })
 
-  it('flipped: Space / Enter confirm the highlighted grade', () => {
-    expect(reviewKeyAction(' ', back)).toEqual({ type: 'grade', index: 2 })
+  it('flipped: Space only flips back; Enter confirms the highlighted grade', () => {
+    expect(reviewKeyAction(' ', back)).toEqual({ type: 'flip' })
+    expect(reviewKeyAction('Enter', back)).toEqual({ type: 'grade', index: 2 })
     expect(reviewKeyAction('Enter', { ...back, highlight: 0 })).toEqual({ type: 'grade', index: 0 })
   })
 

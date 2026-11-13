@@ -31,7 +31,7 @@ import { cn } from '../../lib/cn'
 import { nextIntervalLabel } from '../../lib/schedule'
 import { stripMarkdown } from '../../lib/text'
 import { EASE } from '../../components/celebrate/easing'
-import { anyModalOpen, isConfirmKey, stageKeyGate } from '../quizzes/keys'
+import { anyModalOpen, stageKeyGate } from '../quizzes/keys'
 import { Kbd, KeyHints, StageCount, type KeyHint } from '../quizzes/StageKit'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { useImmersive } from '../../components/layout/immersive'
@@ -257,7 +257,7 @@ export function Review({
       if (gate !== 'handle' || !action) return
       if (
         action.type === 'grade' &&
-        isConfirmKey(e.key) &&
+        e.key === 'Enter' &&
         performance.now() - flippedAt.current < MIN_READ_MS
       ) {
         return
@@ -305,7 +305,8 @@ export function Review({
   const hints: KeyHint[] = mode.flipped
     ? [
         { keys: ['left', 'right'], label: 'Choose grade' },
-        { keys: ['Enter'], label: 'Confirm' },
+        { keys: ['Space'], label: 'Flip back' },
+        { keys: ['Enter'], label: 'Next card' },
       ]
     : [{ keys: ['Space'], label: 'Flip the card' }]
 

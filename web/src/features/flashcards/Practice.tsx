@@ -17,7 +17,7 @@ import { useReducedMotion } from '../../components/ui/motion'
 import { EASE } from '../../components/celebrate/easing'
 import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
-import { anyModalOpen, isConfirmKey, stageKeyGate } from '../quizzes/keys'
+import { anyModalOpen, stageKeyGate } from '../quizzes/keys'
 import { PhoneTopRow } from '../quizzes/phoneKit'
 import { Kbd, StageCount } from '../quizzes/StageKit'
 import { PhoneFace } from './PhoneReview'
@@ -73,8 +73,13 @@ export function Practice({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const action = isConfirmKey(e.key)
-        ? advance
+      // Space only flips (and flips back); Enter is the one that moves on.
+      const action = e.key === ' ' || e.key === 'Spacebar'
+        ? flip
+        : e.key === 'Enter'
+          ? () => {
+              if (stateRef.current.mode.flipped) go(1)
+            }
         : e.key === 'ArrowRight'
           ? () => go(1)
           : e.key === 'ArrowLeft'
