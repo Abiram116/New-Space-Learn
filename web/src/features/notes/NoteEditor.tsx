@@ -20,27 +20,18 @@ import { useNavigate } from 'react-router-dom'
 import { LIMITS } from '../../lib/limits'
 import { Editor, EditorContent, useEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import StarterKit from '@tiptap/starter-kit'
-import Underline from '@tiptap/extension-underline'
-import Placeholder from '@tiptap/extension-placeholder'
-import Link from '@tiptap/extension-link'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import { TableKit } from '@tiptap/extension-table'
-import { DetailsContent, DetailsSummary } from '@tiptap/extension-details'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import { createLowlight, common } from 'lowlight'
-import { Markdown } from 'tiptap-markdown'
-import { AI_PLACEHOLDER, clearAiPlaceholder } from './aiPlaceholder'
+import { AI_PLACEHOLDER, clearAiPlaceholder, locateAiPlaceholder } from './aiPlaceholder'
+import { aiPendingRange, setAiPending } from './aiMarks'
 import { handleCodeBlockTextInput, handleCodeBlockBackspace } from './codeBlockAutoClose'
-import { DetailsWithMarkdown } from './detailsMarkdown'
 import { healEscapedHtml } from './healHtml'
-import { preserveLatexBackslashes } from './mathMarkdown'
-import { MathPreview } from './mathPreview'
+import { markdownForEditor, protectMath } from './mathMarkdown'
+import { noteExtensions } from './noteExtensions'
+import { insertMath } from './mathCommands'
+import { onNoteChange } from './noteSync'
 import { landInFreshParagraph } from './landInFreshParagraph'
-import { ImageBlock } from './ImageBlock'
 import { BLOCK_ICON, BLOCKS, HEADINGS, MARKS, SELECTION_ACTIONS } from './toolbar'
-import { originLabel, relativeTime, sourceLine } from './format'
+import { relativeTime, sourceLine } from './format'
+import { AuthorBadge } from './AuthorBadge'
 import {
   availableCommands,
   readContext,
@@ -50,7 +41,6 @@ import {
 } from './slashMenu'
 import { noteAiInline, updateNote } from '../../api/notes'
 import type { Note } from '../../api/types'
-import { Chip } from '../../components/ui/Bits'
 import { Icon } from '../../components/ui/Icon'
 import { Select } from '../../components/ui/Select'
 import { Rise } from '../../components/ui/motion'
@@ -61,8 +51,10 @@ import { ActionSheet } from '../quizzes/phoneKit'
 import { useImmersive } from '../../components/layout/immersive'
 import { PhoneFormatBar } from './PhoneFormatBar'
 import './phone.css'
+import './notes.css'
 
-const lowlight = createLowlight(common)
+/** What a note with no title is called: the placeholder, the list, and what is saved. */
+const UNTITLED = 'Untitled note'
 
 /** Offered in the code block's language picker. */
 const CODE_LANGUAGES = [
@@ -76,6 +68,7 @@ const SECTION_LABEL: Record<SlashSection, string> = {
   lists: 'Lists',
   structure: 'Structure',
   code: 'Code',
+  math: 'Math',
 }
 
 export function NoteEditor({
@@ -123,7 +116,8 @@ export function NoteEditor({
   // this), but actually leaving the page is not. This is the browser's own
   // native confirmation, not a new persistence system.
   useEffect(() => {
-    if (status !== 'saving') return
+    // A failed save is unsaved work too: the text on screen is not on the server.
+    if (status !== 'saving' && status !== 'error') return
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       e.returnValue = ''
@@ -160,7 +154,7 @@ export function NoteEditor({
   const aiTouchedRef = useRef(false)
 
   const saveBody = useCallback(
-    (markdown: string) => {
+    (markdown: string, delay = 800) => {
       if (markdown === savedBodyRef.current) return
       setStatus('saving')
       if (bodyTimer.current) window.clearTimeout(bodyTimer.current)
@@ -173,14 +167,21 @@ export function NoteEditor({
             ...(aiTouched ? { ai_touched: true } : {}),
           })
           savedBodyRef.current = markdown
-          onPatch({ body_md: updated.body_md, updated_at: updated.updated_at })
+          // Who-wrote-it flags too: an accepted `/ai` answer turns "You" into
+          // "You + AI", and the badge should say so without a reload.
+          onPatch({
+            body_md: updated.body_md,
+            updated_at: updated.updated_at,
+            touched_by_user: updated.touched_by_user,
+            touched_by_agent: updated.touched_by_agent,
+          })
           setStatus('saved')
           window.setTimeout(() => setStatus('idle'), 1500)
         } catch (err) {
           setStatus('error')
           showError(err)
         }
-      }, 800)
+      }, delay)
     },
     [note.id, onPatch, showError],
   )
@@ -276,12 +277,28 @@ export function NoteEditor({
       if (!editor) return
       setAiBusy(true)
       editor.chain().deleteRange({ from, to }).insertContentAt(from, AI_PLACEHOLDER).run()
+      // Where it really landed (see `locateAiPlaceholder`), drawn as the AI's
+      // own pending text rather than words that look typed — see aiMarks.ts.
+      const landed = locateAiPlaceholder(editor, from)
+      let at = landed ?? from
+      if (landed !== null) {
+        editor.view.dispatch(
+          setAiPending(editor.state.tr, { from: at, to: at + AI_PLACEHOLDER.length }),
+        )
+      }
 
       // Removing the placeholder is pure ProseMirror logic with no React in
       // it — see `aiPlaceholder.ts` for what it has to survive (a failed
       // request, and a student who kept typing while it was in flight) and
-      // for the tests that drive it with a real editor.
-      const clearPlaceholder = () => clearAiPlaceholder(editor, from)
+      // for the tests that drive it with a real editor. Typing above the
+      // placeholder moves it; the marked range is mapped through those edits,
+      // so the removal follows it instead of checking where it used to be.
+      const clearPlaceholder = () => {
+        at = aiPendingRange(editor.state)?.from ?? at
+        const cleared = clearAiPlaceholder(editor, at)
+        editor.view.dispatch(setAiPending(editor.state.tr, null))
+        return cleared
+      }
 
       try {
         // @ts-expect-error — added by the Markdown extension's storage
@@ -317,12 +334,12 @@ export function NoteEditor({
         // followed by a plain heading, both already round-tripping exactly
         // as written. Skipped on an empty note — there is nothing yet for a
         // divider to divide.
-        const hasContentBefore = editor.state.doc.textBetween(0, from, '\n').trim().length > 0
-        const markdown = preserveLatexBackslashes(
+        const hasContentBefore = editor.state.doc.textBetween(0, at, '\n').trim().length > 0
+        const markdown = protectMath(
           (hasContentBefore ? '---\n\n' : '') + content_md + sourceLine(citations, base),
         )
         if (clearPlaceholder()) {
-          editor.chain().insertContentAt(from, markdown).run()
+          editor.chain().insertContentAt(at, markdown).run()
         } else {
           // The anchor moved under us, so append at the caret instead of
           // guessing — losing the position is not a reason to lose the answer.
@@ -345,68 +362,21 @@ export function NoteEditor({
     [subspaceId, base, showError],
   )
 
+  // One list for the editor and its tests — see noteExtensions.ts. Built once
+  // per mount: a fresh array each render would hand Tiptap new extension
+  // objects to compare on every keystroke.
+  const extensions = useMemo(() => noteExtensions(), [])
+
   const editor = useEditor({
-    extensions: [
-      // `codeBlock: false` because CodeBlockLowlight REPLACES it. Registering
-      // both throws a duplicate-node error and the editor fails to mount.
-      StarterKit.configure({ codeBlock: false }),
-      CodeBlockLowlight.configure({
-        lowlight,
-        defaultLanguage: 'plaintext',
-      }),
-      Underline,
-      Placeholder.configure({
-        // The one piece of discovery this editor needs. There is no permanent
-        // toolbar any more, so this line is where `/` is learned.
-        placeholder: 'Write, or press / to ask the tutor and add blocks…',
-      }),
-      TaskList,
-      // Nested to-dos, because revision checklists are naturally hierarchical.
-      TaskItem.configure({ nested: true }),
-      Link.configure({ openOnClick: false, autolink: true }),
-      // Images are stored as data URLs in the note's markdown. That keeps the
-      // whole note self-contained with no storage bucket, no upload endpoint
-      // and nothing to clean up when a note is deleted — at the cost of note
-      // size, which is why the editor caps what it will accept.
-      //
-      // ImageBlock, not the stock Image: resize handles, alignment and a
-      // caption, all encoded back into standard markdown image syntax so the
-      // note stays a real markdown document. See ImageBlock.tsx.
-      ImageBlock.configure({ inline: false, allowBase64: true }),
-      TableKit.configure({ table: { resizable: true } }),
-      // Toggle blocks. A long revision note is mostly things you already know
-      // — being able to fold a section away is what keeps it usable in week
-      // ten rather than something you scroll past.
-      DetailsWithMarkdown.configure({
-        persist: true,
-        HTMLAttributes: { class: 'notes-toggle' },
-        // The extension's default button sets only an aria-label — no
-        // visible glyph at all, so the disclosure control renders as an
-        // empty, invisible box. Draw the same chevron used elsewhere in the
-        // app (see Icon.tsx's 'chevronRight') and rotate it in place.
-        renderToggleButton: ({ element, isOpen }) => {
-          element.setAttribute('aria-label', isOpen ? 'Collapse section' : 'Expand section')
-          if (!element.querySelector('svg')) {
-            element.innerHTML =
-              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 6 6 6-6 6"/></svg>'
-          }
-          const svg = element.querySelector('svg')
-          if (svg) svg.style.transform = isOpen ? 'rotate(90deg)' : 'rotate(0deg)'
-        },
-      }),
-      DetailsSummary,
-      DetailsContent,
-      Markdown.configure({ html: false, transformPastedText: true }),
-      // Renders `\[...\]` / `\(...\)` LaTeX as live KaTeX — see mathPreview.ts.
-      MathPreview,
-    ],
+    extensions,
     // Healed on the way in. Notes written before the backend stopped
     // emitting escaped HTML have `&amp;lt;p&amp;gt;` saved in them, and every
     // save added another layer — see healHtml.ts. Repairing here means
     // opening the note fixes it, and the effect below writes the clean
     // version back so it stays fixed.
     //
-    // `preserveLatexBackslashes` only runs while `!touched_by_user` — once
+    // `protectMath` (see `markdownForEditor`) only runs while
+    // `!touched_by_user` — once
     // true, `body_md` has been through at least one frontend save, and
     // `prosemirror-markdown`'s own serializer already escapes `\`/`[`/`]`
     // correctly on the way out (confirmed by reading its `esc()` method).
@@ -419,9 +389,7 @@ export function NoteEditor({
     // it". Before that first save, `body_md` is guaranteed to still be
     // whatever the backend wrote directly (a fresh AI-generated note, or a
     // blank one) — never serialized, still needing the fix.
-    content: note.touched_by_user
-      ? healEscapedHtml(note.body_md)
-      : preserveLatexBackslashes(healEscapedHtml(note.body_md)),
+    content: markdownForEditor(note.body_md, note.touched_by_user),
     editorProps: {
       attributes: {
         // `notes-doc` ONLY — `chat-md` used to be applied alongside it and the
@@ -500,7 +468,11 @@ export function NoteEditor({
         const prompt = text.slice(4).trim()
         if (!prompt) return false
         event.preventDefault()
-        void runInlineAi(prompt, $from.before(), $from.after())
+        // The paragraph's TEXT range, not its node range — the same reason
+        // the slash menu tracks `start()`→`pos` (see `trackSlash`): replacing
+        // the node put the placeholder in a fresh paragraph one position
+        // later than `runInlineAi` then looked for it.
+        void runInlineAi(prompt, $from.start(), $from.end())
         return true
       },
       handleTextInput: (view, from, to, text) => handleCodeBlockTextInput(view, from, to, text),
@@ -516,6 +488,38 @@ export function NoteEditor({
   useEffect(() => {
     editorRef.current = editor
   }, [editor])
+
+  /* "Add to note" from chat, while this note is open — here, in the dock, or
+     in another tab (see noteSync.ts). Without this the next autosave wrote
+     this editor's older copy over the added answer. With nothing unsaved the
+     new body simply replaces what is shown; with unsaved typing, replacing
+     would lose that instead, so the same addition is appended to this copy
+     and saved along with it. */
+  const statusRef = useRef(status)
+  statusRef.current = status
+  useEffect(() => {
+    if (!editor) return
+    return onNoteChange((msg) => {
+      if (msg.noteId !== note.id || editor.isDestroyed) return
+      const dirty = statusRef.current === 'saving' || statusRef.current === 'error'
+      if (dirty) {
+        aiTouchedRef.current = true
+        editor.chain().insertContentAt(editor.state.doc.content.size, msg.addition).run()
+        return
+      }
+      editor.commands.setContent(markdownForEditor(msg.body_md, msg.touched_by_user), {
+        emitUpdate: false,
+      })
+      // @ts-expect-error — added by the Markdown extension's storage
+      savedBodyRef.current = editor.storage.markdown.getMarkdown()
+      onPatch({
+        body_md: msg.body_md,
+        updated_at: msg.updated_at,
+        touched_by_user: msg.touched_by_user,
+        touched_by_agent: msg.touched_by_agent,
+      })
+    })
+  }, [editor, note.id, onPatch])
 
   // Phone only: the formatting bar lives exactly as long as the editor has focus.
   useEffect(() => {
@@ -726,23 +730,45 @@ export function NoteEditor({
     return () => document.removeEventListener('keydown', onKey, true)
   }, [slash, matches, slashIndex, applyCommand])
 
+  // What the server holds for the title, so a retry knows whether it is behind.
+  const savedTitleRef = useRef(note.title)
+  const saveTitle = useCallback(
+    (next: string, delay = 800) => {
+      // The server refuses an empty title. Clearing the field to retype it (and
+      // pausing) used to fail the save with a validation error; an emptied title
+      // is saved as the same "Untitled note" the placeholder shows.
+      const value = next.trim() ? next : UNTITLED
+      if (titleTimer.current) window.clearTimeout(titleTimer.current)
+      if (value === savedTitleRef.current) return
+      setStatus('saving')
+      titleTimer.current = window.setTimeout(async () => {
+        try {
+          const updated = await updateNote(note.id, { title: value })
+          savedTitleRef.current = value
+          onPatch({ title: updated.title, updated_at: updated.updated_at })
+          setStatus('saved')
+          window.setTimeout(() => setStatus('idle'), 1500)
+        } catch (err) {
+          setStatus('error')
+          showError(err)
+        }
+      }, delay)
+    },
+    [note.id, onPatch, showError],
+  )
   useEffect(() => {
     if (title === note.title) return
-    setStatus('saving')
-    if (titleTimer.current) window.clearTimeout(titleTimer.current)
-    titleTimer.current = window.setTimeout(async () => {
-      try {
-        const updated = await updateNote(note.id, { title })
-        onPatch({ title: updated.title, updated_at: updated.updated_at })
-        setStatus('saved')
-        window.setTimeout(() => setStatus('idle'), 1500)
-      } catch (err) {
-        setStatus('error')
-        showError(err)
-      }
-    }, 800)
+    saveTitle(title)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title])
+
+  /** "Couldn't save" is a button: send whatever the server is still missing, now. */
+  const retrySave = useCallback(() => {
+    saveTitle(title, 0)
+    const ed = editorRef.current
+    // @ts-expect-error — added by the Markdown extension's storage
+    if (ed) saveBody(ed.storage.markdown.getMarkdown(), 0)
+  }, [saveTitle, saveBody, title])
 
   const statusLine = (
     <span className={cn('flex items-center gap-1.5', aiBusy ? 'setcode-hot' : 'setcode', phone && 'text-[12.5px]')}>
@@ -761,9 +787,18 @@ export function NoteEditor({
           <Icon name="check" size={11} /> Saved
         </span>
       ) : status === 'error' ? (
-        <span className="flex items-center gap-1 text-coral-deep">
-          <Icon name="alert" size={11} /> Couldn’t save
-        </span>
+        // The edit is still on screen and not on the server. Typing again would
+        // retry, but nothing said so; this does it without touching the note.
+        <button
+          type="button"
+          onClick={retrySave}
+          className={cn(
+            'flex cursor-pointer items-center gap-1 rounded-md text-coral-deep underline-offset-2 hover:underline',
+            phone && 'phone-tap min-h-11 px-1',
+          )}
+        >
+          <Icon name="alert" size={11} /> Couldn’t save. Retry
+        </button>
       ) : (
         `Edited ${relativeTime(note.updated_at)}`
       )}
@@ -802,20 +837,9 @@ export function NoteEditor({
           <Icon name="arrowLeft" size={13} /> Notes
         </button>
 
-        {note.origin !== 'user' && (
-          <Chip active>
-            <span className="relative inline-flex shrink-0">
-              <Icon name="note" size={13} />
-              <Icon
-                name="sparkle"
-                size={7}
-                filled
-                className="absolute -right-1 -top-1 text-brand"
-              />
-            </span>
-            {originLabel(note.origin)}
-          </Chip>
-        )}
+        {/* Who wrote this note, for every note — the same mark as the list
+            (see AuthorBadge), with its word beside it. */}
+        <AuthorBadge note={note} size={18} showLabel />
 
         {/* Save state is a fact about the document, so it reads as one line of
             plain text rather than a badge — a green "Saved" pill on every
@@ -928,28 +952,21 @@ export function NoteEditor({
               of a note look like something to fill in rather than something to
               write. */}
           {phone ? (
-            <PhoneTitleField
+            <TitleField
               value={title}
               onChange={setTitle}
               onEnter={() => editorRef.current?.commands.focus('start')}
             />
           ) : (
-          <input
+          <TitleField
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={LIMITS.noteTitle}
-            placeholder="Untitled note"
-            aria-label="Note title"
-            className={cn(
-              'nameplate w-full border-0 bg-transparent p-0 leading-tight text-ink outline-none placeholder:text-faint',
-              compact ? 'text-[20px]' : 'text-[clamp(26px,3.2vw,36px)]',
-            )}
+            onChange={setTitle}
+            onEnter={() => editorRef.current?.commands.focus('start')}
+            size={compact ? 'text-[20px]' : 'text-[clamp(26px,3.2vw,36px)]'}
           />
           )}
           {/* Who wrote it, quietly, where a reader looks first. */}
-          {phone && note.origin !== 'user' && (
-            <p className="-mt-1 text-[12.5px] text-faint">{originLabel(note.origin)}</p>
-          )}
+          {phone && <AuthorBadge note={note} size={18} showLabel className="-mt-1" />}
           <div ref={editorSurfaceRef} className="relative min-h-0 flex-1">
             {/* Language picker, shown only while the caret is inside a code
                 block. A permanent control would be a dead widget on every note
@@ -987,7 +1004,11 @@ export function NoteEditor({
               <div
                 className="min-h-[60dvh] flex-1"
                 onClick={(e) => {
-                  if (!(e.target as HTMLElement).closest('.ProseMirror a, .ProseMirror img, .ProseMirror button, .ProseMirror input')) {
+                  // Only the blank page below the note. A tap on the text is
+                  // already handled by the editor, which puts the caret where
+                  // you tapped; sending it to the end from here as well made it
+                  // impossible to edit the middle of a note on a phone.
+                  if (!(e.target as HTMLElement).closest('.ProseMirror')) {
                     editor?.chain().focus('end').run()
                   }
                 }}
@@ -1242,18 +1263,21 @@ export function NoteEditor({
 }
 
 /**
- * The title on a phone: it wraps instead of clipping at the edge, because a
- * reader should see the whole thing. Still one logical line — Enter moves to
- * the body rather than adding a break.
+ * The note title: it wraps instead of clipping at the edge, because a reader should
+ * see the whole thing (it used to be a one-line input on desktop, which cut a long
+ * title off mid-word). Still one logical line — Enter moves to the body rather than
+ * adding a break.
  */
-function PhoneTitleField({
+function TitleField({
   value,
   onChange,
   onEnter,
+  size = 'text-[26px]',
 }: {
   value: string
   onChange: (v: string) => void
   onEnter: () => void
+  size?: string
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
@@ -1278,7 +1302,10 @@ function PhoneTitleField({
       placeholder="Untitled note"
       aria-label="Note title"
       enterKeyHint="next"
-      className="nameplate block w-full resize-none overflow-hidden min-h-11 border-0 bg-transparent px-0 py-2.5 text-[26px] leading-tight text-ink outline-none placeholder:text-faint"
+      className={cn(
+        'nameplate block w-full resize-none overflow-hidden min-h-11 border-0 bg-transparent px-0 py-2.5 leading-tight text-ink outline-none placeholder:text-faint',
+        size,
+      )}
     />
   )
 }
@@ -1442,6 +1469,31 @@ function SelectionBar({
                 {m.icon ? <Icon name={m.icon} size={12} /> : m.label}
               </Cell>
             ))}
+          </Group>
+
+          {/* Turns the selected text into a formula — `x^2` typed as plain
+              text becomes `\(x^2\)` and renders. */}
+          <Group label="Math">
+            <Cell
+              active={false}
+              title="Inline math — wraps the selection in \( \)"
+              onClick={() => {
+                insertMath(editor, false)
+                setOpen(false)
+              }}
+            >
+              x²
+            </Cell>
+            <Cell
+              active={false}
+              title="Equation on its own line — \[ \]"
+              onClick={() => {
+                insertMath(editor, true)
+                setOpen(false)
+              }}
+            >
+              ∑
+            </Cell>
           </Group>
 
           <Group label="Block">

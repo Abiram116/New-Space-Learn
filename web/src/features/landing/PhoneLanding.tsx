@@ -20,6 +20,7 @@ import { useTrustLinks } from '../trust/useTrustLinks'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
+import { Icon3D } from '../../components/ui/Icon3D'
 import { Logo } from '../../components/ui/Logo'
 import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
@@ -28,20 +29,20 @@ import { sendLink, shareMessage } from '../home/share'
 
 const WHAT: { icon: IconName; tone: string; title: string; body: string }[] = [
   {
-    icon: 'doc',
-    tone: 'text-sky',
+    icon: 'citePage',
+    tone: 'text-sky bg-sky-soft ring-sky/25',
     title: 'Answers that cite the page',
     body: 'Upload a PDF or your notes. Every answer points at the page it came from.',
   },
   {
     icon: 'deck',
-    tone: 'text-sun',
+    tone: 'text-sun bg-sun-soft ring-sun/25',
     title: 'Cards that come back on time',
     body: 'Spaced repetition: a card returns when you’re about to forget it, not on a fixed rota.',
   },
   {
     icon: 'quiz',
-    tone: 'text-coral',
+    tone: 'text-coral bg-coral-soft ring-coral/25',
     title: 'Quizzes that name the weak spot',
     body: 'Scored, with the subtopics you missed named — so revision has somewhere to start.',
   },
@@ -99,8 +100,8 @@ export function PhoneLanding() {
             One page in. <span className="text-brand">Notes, cards, and a test</span> out.
           </h1>
           <p className="text-[16.5px] leading-relaxed text-ink-3" style={rise(120)}>
-            Upload what you’re studying and revise it as cards and quizzes, with every answer
-            traced to its page.
+            For the weeks before an exam, GATE or an interview. Upload what you’re studying and
+            revise it as cards and quizzes, with every answer traced to its page.
           </p>
         </section>
 
@@ -133,7 +134,10 @@ export function PhoneLanding() {
         <ul className="mt-9 flex flex-col">
           {WHAT.map((w) => (
             <li key={w.title} className="flex gap-3.5 border-t border-line py-4 last:border-b">
-              <Icon name={w.icon} size={18} className={`mt-0.5 shrink-0 ${w.tone}`} />
+              {/* The same lit, extruded marks as the desktop columns, at thumb size. */}
+              <span aria-hidden className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ring-1 ring-inset ${w.tone}`}>
+                <Icon3D name={w.icon} size={19} lifted />
+              </span>
               <div className="min-w-0">
                 <h2 className="text-[16px] font-semibold text-ink">{w.title}</h2>
                 <p className="mt-1 text-[14.5px] leading-relaxed text-muted">{w.body}</p>

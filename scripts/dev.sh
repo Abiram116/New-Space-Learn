@@ -17,6 +17,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# Port precedence: shell env > .env > default. Lets a machine where :8000 is
+# taken (another service) pin SpaceLearn's API elsewhere in one place.
+env_file_value() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- || true; }
+API_PORT="${API_PORT:-$(env_file_value API_PORT)}"
 API_PORT="${API_PORT:-8000}"
 WEB_PORT="${WEB_PORT:-5173}"
 
@@ -42,7 +46,16 @@ fi
 
 # ── port collision check ────────────────────────────────────────────────
 
-port_busy() { lsof -i ":$1" -sTCP:LISTEN -t >/dev/null 2>&1; }
+# `lsof` only sees the current user's processes, so a root/container-owned
+# listener (e.g. Docker on :8000) slips past it and requests then hit the wrong
+# app with a confusing 404. `ss` sees every listener.
+port_busy() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnH "sport = :$1" 2>/dev/null | grep -q .
+  else
+    lsof -i ":$1" -sTCP:LISTEN -t >/dev/null 2>&1
+  fi
+}
 
 for p in "$API_PORT" "$WEB_PORT"; do
   if port_busy "$p"; then

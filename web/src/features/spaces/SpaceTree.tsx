@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LIMITS } from '../../lib/limits'
+import { nameHint } from '../../lib/nameHint'
 import { isOpenIn, toggleIn } from './treeState'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { toneDot, toneText } from '../../lib/tone'
+import { toneText } from '../../lib/tone'
 import { friendlyMessage } from '../../api/errors'
 import { useToast } from '../../components/ui/Toast'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { resolveTopicSegments, subspacePath } from '../../lib/nav'
 import { useSpaces } from './SpacesProvider'
+import { SubjectIcon } from './SubjectIcon'
 
 /**
  * The row owns its background — hover and "you are here" — so the name and its
@@ -44,6 +46,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const params = useParams()
   const {
     spaces,
+    error,
+    refresh,
     addSubspace,
     deleteSpace,
     deleteSubspace,
@@ -79,6 +83,17 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   // blur-triggered second call (which runs after React flushes the render
   // that removed the input) sees the id already in flight and returns.
   const committingRename = useRef<Set<string>>(new Set())
+  // Escape has to win over that same unmount-blur. Pressing Escape removes the
+  // input, the removal blurs it, and the blur handler commits — so "cancel"
+  // saved the half-typed name anyway. The id cancelled here is skipped once by
+  // the commit that follows, and cleared whenever a rename starts.
+  const cancelledRename = useRef<string | null>(null)
+  // The new-topic field has the same three ways to fire twice (Enter then the
+  // unmount blur, Enter twice while the request is out, Escape then the blur),
+  // and here a second fire is a second topic. It only commits while "live":
+  // set when the field opens, cleared the moment it is submitted or cancelled,
+  // and set again only if the request failed and the field is still there.
+  const topicFieldLive = useRef(false)
 
   /* Both the reader and the writer come from `treeState`, which is the point:
      they used to be separate expressions with different ideas of the default,
@@ -89,6 +104,8 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
     setCollapsed((prev) => toggleIn(prev, id, spaces, spaceId))
 
   const commitTopic = async (spaceId: string) => {
+    if (!topicFieldLive.current) return
+    topicFieldLive.current = false
     const name = newTopic.trim()
     if (!name) {
       setAddingIn(null)
@@ -101,11 +118,23 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       const parent = spaces.find((s) => s.id === spaceId)
       navigate(parent ? subspacePath(parent, created) : `/${spaceId}/${created.id}`)
     } catch (e) {
+      // The field stays open with what was typed, so it can be sent again.
+      topicFieldLive.current = true
       show(friendlyMessage(e), 'error')
     }
   }
 
+  const cancelTopic = () => {
+    topicFieldLive.current = false
+    setAddingIn(null)
+    setNewTopic('')
+  }
+
   const commitRename = async (id: string) => {
+    if (cancelledRename.current === id) {
+      cancelledRename.current = null
+      return
+    }
     if (committingRename.current.has(id)) return
     committingRename.current.add(id)
     try {
@@ -122,6 +151,10 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   const commitRenameSubspace = async (id: string) => {
+    if (cancelledRename.current === id) {
+      cancelledRename.current = null
+      return
+    }
     if (committingRename.current.has(id)) return
     committingRename.current.add(id)
     try {
@@ -175,6 +208,26 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   return (
     <div className="flex min-w-0 flex-col gap-1 text-[15px]">
+      {/* An empty rail has to say which kind of empty it is. A failed load and
+          a new account both arrive here as zero subjects, and showing nothing
+          for either left the rail blank with no way to try again. */}
+      {spaces.length === 0 &&
+        (error ? (
+          <div role="alert" className="flex flex-col items-start gap-1 px-2.5 py-2 text-[13.5px] leading-snug text-muted">
+            <span>Couldn’t load your subjects.</span>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="min-h-10 cursor-pointer font-semibold text-brand-deep hover:underline pointer-coarse:min-h-11"
+            >
+              Try again
+            </button>
+          </div>
+        ) : (
+          <p className="px-2.5 py-2 text-[13.5px] leading-snug text-muted">
+            No subjects yet. Use the + above to add your first.
+          </p>
+        ))}
       {spaces.map((space) => {
         const open = isOpen(space.id)
         return (
@@ -194,7 +247,10 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                   onBlur={() => commitRename(space.id)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') commitRename(space.id)
-                    if (e.key === 'Escape') setRenamingSpace(null)
+                    if (e.key === 'Escape') {
+                      cancelledRename.current = space.id
+                      setRenamingSpace(null)
+                    }
                   }}
                   maxLength={LIMITS.spaceName}
                   aria-label={`Rename ${space.name}`}
@@ -223,7 +279,9 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                 >
                   <Icon name="chevronRight" size={14} />
                 </span>
-                <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
+                {/* The subject's own icon in its tone — which subject this
+                    is, at a glance, rather than a bare colour bar. */}
+                <SubjectIcon space={space} size="sm" />
                 <span className="truncate">{space.name}</span>
               </button>
               )}
@@ -261,6 +319,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                       label: 'Rename',
                       icon: 'pencil',
                       onSelect: () => {
+                        cancelledRename.current = null
                         setRenamingSpace(space.id)
                         setRenameText(space.name)
                       },
@@ -295,7 +354,10 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                         onBlur={() => commitRenameSubspace(sub.id)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') commitRenameSubspace(sub.id)
-                          if (e.key === 'Escape') setRenamingSubspace(null)
+                          if (e.key === 'Escape') {
+                            cancelledRename.current = sub.id
+                            setRenamingSubspace(null)
+                          }
                         }}
                         maxLength={LIMITS.subspaceName}
                   aria-label={`Rename ${sub.name}`}
@@ -329,6 +391,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                             label: 'Rename',
                             icon: 'pencil',
                             onSelect: () => {
+                              cancelledRename.current = null
                               setRenamingSubspace(sub.id)
                               setRenameText(sub.name)
                             },
@@ -346,6 +409,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                 ))}
 
                 {addingIn === space.id ? (
+                  <>
                   <input
                     autoFocus
                     value={newTopic}
@@ -353,18 +417,21 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
                     onBlur={() => commitTopic(space.id)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') commitTopic(space.id)
-                      if (e.key === 'Escape') {
-                        setAddingIn(null)
-                        setNewTopic('')
-                      }
+                      if (e.key === 'Escape') cancelTopic()
                     }}
                     maxLength={LIMITS.subspaceName}
                     placeholder="New topic"
+                    aria-label={`New topic in ${space.name}`}
                     className={cn(EDIT_FIELD, 'text-[14.5px] font-medium')}
                   />
+                  {nameHint(newTopic) && (
+                    <p className="px-2.5 pb-1 text-[12px] leading-snug text-muted">{nameHint(newTopic)}</p>
+                  )}
+                  </>
                 ) : (
                   <button
                     onClick={() => {
+                      topicFieldLive.current = true
                       setAddingIn(space.id)
                       setNewTopic('')
                     }}
@@ -381,7 +448,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
 
       <ConfirmDialog
         open={Boolean(confirmDeleteSpace)}
-        title="Delete this space?"
+        title="Delete this subject?"
         description="Everything inside it — topics, chats, notes, cards, quizzes — will be permanently deleted."
         confirmLabel="Delete"
         onCancel={() => setConfirmDeleteSpace(null)}

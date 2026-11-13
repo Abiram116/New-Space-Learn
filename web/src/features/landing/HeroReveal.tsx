@@ -31,6 +31,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { SplitText } from 'gsap/SplitText'
 import { DUR, EASE, STAGGER } from './language'
 import { useReducedMotion } from '../../components/ui/motion'
+import { isPageLocked, SCROLL_LOCK_EVENT } from '../../lib/scrollLock'
 import { CTA } from './wow'
 
 gsap.registerPlugin(ScrollTrigger, SplitText)
@@ -48,7 +49,37 @@ export function HeroReveal({
   const sectionRef = useRef<HTMLDivElement>(null)
   const copyRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [shouldLoad, setShouldLoad] = useState(false)
+
+  // The clip plays only while you can see it. Scrolled past (the feature
+  // columns and the close cover it) or under a trust card, a decoding video
+  // is a full-frame repaint every frame for nothing — under a card it also
+  // makes the browser redo the backdrop blur on every one of them.
+  useEffect(() => {
+    if (reduced) return
+    const frame = frameRef.current
+    const video = videoRef.current
+    if (!frame || !video) return
+    let onScreen = true
+    const sync = () => {
+      if (onScreen && !isPageLocked()) {
+        if (video.paused) video.play?.()?.catch(() => {})
+      } else if (!video.paused) {
+        video.pause?.()
+      }
+    }
+    const io = new IntersectionObserver(([e]) => {
+      onScreen = e.isIntersecting
+      sync()
+    })
+    io.observe(frame)
+    window.addEventListener(SCROLL_LOCK_EVENT, sync)
+    return () => {
+      io.disconnect()
+      window.removeEventListener(SCROLL_LOCK_EVENT, sync)
+    }
+  }, [reduced])
 
   // Fetch only as the hero is actually reached.
   useEffect(() => {
@@ -272,6 +303,7 @@ export function HeroReveal({
         className="absolute left-1/2 top-[11svh] aspect-video h-[80svh] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[20px] border border-line bg-well shadow-[0_24px_70px_-40px_rgba(0,0,0,0.9)]"
       >
         <video
+          ref={videoRef}
           poster={poster}
           muted
           loop
@@ -332,9 +364,10 @@ function HeroCopy() {
         One page in. <span className="text-brand">Notes, cards, and a test</span> out.
       </h1>
       <p data-hero-tail className="mt-5 max-w-md text-[14.5px] leading-relaxed text-ink-3">
-        Upload what you're studying. Every answer cites the exact page it came
-        from, then turns into the note, the deck, or the quiz you actually
-        need — without leaving the conversation.
+        For the weeks before an exam, GATE, or an interview. Upload what you're
+        studying and say what for: every answer cites the exact page it came
+        from and is written for your date, then turns into the note, the deck,
+        or the quiz you actually need.
       </p>
       {/* Same CTA component as the close. The hero used to use the app's
           bevelled Button while the close used a glowing hand-rolled link —

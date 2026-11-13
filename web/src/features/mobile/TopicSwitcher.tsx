@@ -22,6 +22,7 @@ import { Skeleton } from '../../components/ui/Skeleton'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { LIMITS } from '../../lib/limits'
+import { nameHint } from '../../lib/nameHint'
 import { subspacePath } from '../../lib/nav'
 import { toneDot } from '../../lib/tone'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
@@ -208,7 +209,7 @@ function SubjectGroup({
         <li>
           {adding ? (
             <form
-              className="flex items-center gap-2 px-3 py-2"
+              className="flex flex-wrap items-center gap-2 px-3 py-2"
               onSubmit={(e) => {
                 e.preventDefault()
                 void submit()
@@ -235,6 +236,7 @@ function SubjectGroup({
               <Button type="submit" disabled={busy} aria-busy={busy}>
                 Add
               </Button>
+              {nameHint(name) && <p className="basis-full text-[13px] leading-snug text-muted">{nameHint(name)}</p>}
             </form>
           ) : (
             <button

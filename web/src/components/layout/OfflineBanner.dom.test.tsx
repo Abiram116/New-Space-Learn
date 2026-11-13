@@ -41,6 +41,26 @@ afterEach(() => {
 })
 
 describe('OfflineBanner', () => {
+  it('does not poll while healthy: one check on load, then nothing until the tab is revisited', async () => {
+    checkReady.mockResolvedValue({ ready: true, database: true, embeddings: true })
+    render(<OfflineBanner />)
+    await flush()
+    expect(checkReady).toHaveBeenCalledTimes(1)
+
+    // Ten minutes of a healthy app asks the server for nothing.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10 * 60_000)
+    })
+    expect(checkReady).toHaveBeenCalledTimes(1)
+
+    // Coming back to the tab after a while checks once.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    await flush()
+    expect(checkReady).toHaveBeenCalledTimes(2)
+  })
+
   it('renders nothing while the backend is healthy', async () => {
     checkReady.mockResolvedValue({ ready: true, database: true, embeddings: true })
     const { container } = render(<OfflineBanner />)

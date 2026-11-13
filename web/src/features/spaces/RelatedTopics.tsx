@@ -10,7 +10,7 @@
  * retrieval, never replaces the topic's own material.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createSubspaceLink, deleteSubspaceLink, listSubspaceLinks } from '../../api/spaces'
 import type { Subspace } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
@@ -30,13 +30,47 @@ export function RelatedTopics({
   const { showError, show } = useToast()
   const [links, setLinks] = useState<Subspace[] | null>(null)
   const [picking, setPicking] = useState(false)
+  // A failed load used to leave `links` null for good, and null renders
+  // nothing — the whole control vanished behind a toast, with no way to link
+  // or unlink until the page was reloaded.
+  const [failed, setFailed] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  const load = useCallback(() => {
+    listSubspaceLinks(subspaceId)
+      .then((list) => {
+        setLinks(list)
+        setFailed(false)
+      })
+      .catch((err) => {
+        setFailed(true)
+        showError(err)
+      })
+  }, [subspaceId, showError])
 
   useEffect(() => {
     setLinks(null)
-    listSubspaceLinks(subspaceId)
-      .then(setLinks)
-      .catch((err) => showError(err))
-  }, [subspaceId, showError])
+    setFailed(false)
+    load()
+  }, [load])
+
+  // The picker is a popover: Escape or a click anywhere else puts it away. It
+  // used to stay open over the page until its own button was pressed again.
+  useEffect(() => {
+    if (!picking) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPicking(false)
+    }
+    const onDown = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) setPicking(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('mousedown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('mousedown', onDown)
+    }
+  }, [picking])
 
   const candidates = spaces
     .flatMap((sp) => sp.subspaces.map((sub) => ({ ...sub, spaceName: sp.name })))
@@ -68,7 +102,21 @@ export function RelatedTopics({
     [subspaceId, show, showError],
   )
 
-  if (links === null) return null
+  if (links === null) {
+    if (!failed) return null
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setFailed(false)
+          load()
+        }}
+        className="flex min-h-9 cursor-pointer items-center gap-1.5 self-start rounded-full border border-dashed border-line-dash px-3.5 py-1 text-[13.5px] text-muted transition-colors hover:border-brand hover:text-brand-deep pointer-coarse:min-h-11"
+      >
+        <Icon name="refresh" size={13} /> Couldn’t load related topics. Try again
+      </button>
+    )
+  }
 
   return (
     <div
@@ -97,8 +145,10 @@ export function RelatedTopics({
           </button>
         </span>
       ))}
-      <div className={cn('relative', layout === 'stack' && 'w-full')}>
+      <div ref={pickerRef} className={cn('relative', layout === 'stack' && 'w-full')}>
         <button
+          type="button"
+          aria-expanded={picking}
           onClick={() => setPicking((v) => !v)}
           className={cn(
             'flex min-h-9 items-center gap-1.5 rounded-full border border-dashed border-line-dash px-3.5 py-1 pointer-coarse:min-h-11',

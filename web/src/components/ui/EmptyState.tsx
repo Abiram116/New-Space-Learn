@@ -67,7 +67,7 @@ export function EmptyState({
             <Icon3D name={icon} size={20} lifted />
           </span>
           <div className="max-w-sm">
-            <h3 className="nameplate text-[19px] text-ink">{title}</h3>
+            <h3 className="nameplate text-balance text-[19px] leading-[1.12] text-ink">{title}</h3>
             {description && <p className="mt-1.5 text-[14px] leading-relaxed text-muted">{description}</p>}
           </div>
         </>

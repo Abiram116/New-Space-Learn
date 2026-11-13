@@ -43,8 +43,11 @@ type Phase = 'online' | 'waking' | 'offline' | 'back'
  *  (useBotMood's `wakeMs`) and smile, short enough not to linger. */
 export const BACK_MS = 3_400
 
-/** Steady-state heartbeat once everything's healthy. */
-const HEALTHY_POLL_MS = 15_000
+/** No steady-state heartbeat: while everything is healthy this asks nothing of the
+ *  server. It re-checks once when the tab comes back into view or the network
+ *  returns, and no more often than this. (It used to poll every 15 seconds for as
+ *  long as the app was open, which is a request a minute-and-a-half of nothing.) */
+const RECHECK_MIN_GAP_MS = 60_000
 /** Retry cadence once the server has answered but isn't ready yet — fast,
  *  because a cold start finishing is usually seconds away, not minutes. */
 const WAKING_POLL_MS = 2_500
@@ -113,12 +116,30 @@ export function OfflineBanner() {
       }
       hadTrouble = false
       setDetail(null)
-      schedule(HEALTHY_POLL_MS)
+      // Healthy: stop asking. `recheck` below wakes it again on focus / online.
     }
+
+    // A check when the student returns to the tab or the network comes back, so a
+    // server that went away while they were elsewhere is noticed without a timer
+    // running the whole time. Skipped while a poll is already scheduled (trouble)
+    // and rate-limited while healthy.
+    let lastCheck = Date.now()
+    const recheck = () => {
+      if (!mounted || timer !== undefined && hadTrouble) return
+      if (document.visibilityState === 'hidden') return
+      if (Date.now() - lastCheck < RECHECK_MIN_GAP_MS && !hadTrouble) return
+      lastCheck = Date.now()
+      window.clearTimeout(timer)
+      void poll()
+    }
+    document.addEventListener('visibilitychange', recheck)
+    window.addEventListener('online', recheck)
 
     void poll()
     return () => {
       mounted = false
+      document.removeEventListener('visibilitychange', recheck)
+      window.removeEventListener('online', recheck)
       if (timer) window.clearTimeout(timer)
       window.clearTimeout(backTimer)
     }
