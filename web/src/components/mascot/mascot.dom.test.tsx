@@ -55,6 +55,36 @@ describe('Bot', () => {
     vi.useRealTimers()
   })
 
+  it('reacts to a poke, and a third poke in a row gets a bigger one', () => {
+    vi.useFakeTimers()
+    const { container } = render(<Bot agent="cards" />)
+    const svg = container.querySelector('svg')!
+    act(() => void svg.dispatchEvent(new Event('pointerdown')))
+    expect(svg.getAttribute('data-poke')).toBe('1')
+    act(() => void vi.advanceTimersByTime(900))
+    expect(svg).not.toHaveAttribute('data-poke')
+    for (let i = 0; i < 3; i++) act(() => void svg.dispatchEvent(new Event('pointerdown')))
+    expect(svg.getAttribute('data-poke')).toBe('3')
+    vi.useRealTimers()
+  })
+
+  it('does something small now and then while resting, and never when busy', () => {
+    vi.useFakeTimers()
+    const { container } = render(<Bot agent="quiz" mood="idle" size={96} />)
+    const svg = container.querySelector('svg')!
+    let seen = false
+    for (let t = 0; t < 30 && !seen; t++) {
+      act(() => void vi.advanceTimersByTime(500))
+      seen = svg.hasAttribute('data-life')
+    }
+    expect(seen).toBe(true)
+    cleanup()
+    const busy = render(<Bot agent="quiz" mood="working" size={96} />).container.querySelector('svg')!
+    act(() => void vi.advanceTimersByTime(30000))
+    expect(busy).not.toHaveAttribute('data-life')
+    vi.useRealTimers()
+  })
+
   it('names the tutor from BOT_NAME', () => {
     expect(AGENTS.tutor.name).toBe(BOT_NAME)
   })

@@ -40,7 +40,7 @@ function StartWithASubject({ section }: { section: GlobalSection }) {
       <EmptyState
         icon={section === 'flashcards' ? 'deck' : section === 'quizzes' ? 'quiz' : 'note'}
         title="Start with a subject"
-        description={`Your ${what} are made from the material in a topic. Add a subject and a first topic, then bring in a PDF or some notes.`}
+        description={`Your ${what} come from the files in a topic. Add a subject and a topic, then add a PDF or some notes.`}
         action={<Button onClick={() => setNewOpen(true)}>New subject</Button>}
       />
       <NewSpaceModal open={newOpen} onClose={() => setNewOpen(false)} />

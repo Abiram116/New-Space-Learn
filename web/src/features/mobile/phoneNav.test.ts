@@ -86,7 +86,7 @@ describe('the top bar', () => {
     expect(phoneTitle('/home')).toBe('Today')
     expect(phoneTitle('/s/a/b')).toBe('Topic')
     expect(phoneTitle('/s/a/b/flashcards')).toBe('Cards')
-    expect(phoneTitle('/s/a/b/docs')).toBe('Sources')
+    expect(phoneTitle('/s/a/b/docs')).toBe('Files')
     expect(phoneTitle('/profile')).toBe('You')
     expect(phoneTitle('/settings')).toBe('Settings')
   })

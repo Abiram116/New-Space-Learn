@@ -50,7 +50,7 @@ const SECTION_TITLE: Record<string, string> = {
   flashcards: 'Cards',
   quizzes: 'Quizzes',
   notes: 'Notes',
-  docs: 'Sources',
+  docs: 'Files',
   skills: 'Skills',
   chat: 'Chat',
 }
@@ -81,7 +81,7 @@ export function phoneTitle(pathname: string, search = ''): string {
  * already saying it. (Screens name themselves "Documents" where the phone
  * calls the same place "Sources" — both count.)
  */
-export const SHELL_TITLES = new Set(['Cards', 'Quizzes', 'Notes', 'Documents', 'Sources', 'Skills', 'Today', 'You', 'Settings'])
+export const SHELL_TITLES = new Set(['Cards', 'Quizzes', 'Notes', 'Documents', 'Files', 'Sources', 'Skills', 'Today', 'You', 'Settings'])
 
 /**
  * Where the top bar's Back goes, or null for a root screen. Tabs are roots;

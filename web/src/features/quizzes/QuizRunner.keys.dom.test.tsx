@@ -94,7 +94,7 @@ describe('quiz keyboard', () => {
     press('ArrowDown')
     press('Enter')
     expect(option(/beta 1/)).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByText('Correct.')).toBeInTheDocument()
+    expect(screen.getByText('Correct!')).toBeInTheDocument()
 
     press('Enter')
     expect(screen.getByRole('heading', { name: 'Question number 2?' })).toBeInTheDocument()

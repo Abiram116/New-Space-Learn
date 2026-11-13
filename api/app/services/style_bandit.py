@@ -138,6 +138,7 @@ gating check runs first and short-circuits before either `_posteriors` or
 
 from __future__ import annotations
 
+import contextlib
 import random
 import time
 from dataclasses import dataclass
@@ -516,6 +517,15 @@ async def _cached_reads(user_id: str) -> tuple[list[dict], dict[str, dict]]:
     _read_cache.pop(user_id, None)
     _read_cache[user_id] = (now, feedback_rows, by_id)
     return feedback_rows, by_id
+
+
+async def prefetch_reads(user_id: str) -> None:
+    """Fill the read cache without folding anything, so a caller that is about to
+    wait on something else (the snapshot) can have these two reads run alongside
+    it rather than after it. Never raises: whoever needs the reads asks again, and
+    gets the real error then."""
+    with contextlib.suppress(Exception):
+        await _cached_reads(user_id)
 
 
 def invalidate(user_id: str) -> None:

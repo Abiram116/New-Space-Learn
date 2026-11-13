@@ -44,7 +44,7 @@ describe('DEFAULTS has a real entry for every code the backend can send', () => 
     for (const code of codes) {
       const message = friendlyMessage(new ApiError(code as ErrorCode, '', 0))
       expect(message, `${code} resolved to the generic unknown fallback`).not.toBe(
-        'Something went wrong.',
+        'Something went wrong. Please try again.',
       )
     }
   })
@@ -53,14 +53,14 @@ describe('DEFAULTS has a real entry for every code the backend can send', () => 
     for (const code of CLIENT_ONLY.filter((c) => c !== 'unknown')) {
       const message = friendlyMessage(new ApiError(code, '', 0))
       expect(message, `${code} resolved to the generic unknown fallback`).not.toBe(
-        'Something went wrong.',
+        'Something went wrong. Please try again.',
       )
     }
   })
 
   // unknown is the one legitimate exception — it IS the fallback target.
   it('unknown itself still resolves to a real message', () => {
-    expect(friendlyMessage(new ApiError('unknown', '', 0))).toBe('Something went wrong.')
+    expect(friendlyMessage(new ApiError('unknown', '', 0))).toBe('Something went wrong. Please try again.')
   })
 })
 

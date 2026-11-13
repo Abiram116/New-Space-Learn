@@ -169,7 +169,7 @@ function Inner({
       try {
         const cards = await listCards(deckId, { dueOnly: true })
         if (cards.length === 0) {
-          show('Nothing due in this deck yet. Come back when it ripens.', 'info')
+          show('No cards are due in this deck yet. Check back later.', 'info')
           return
         }
         setMode({ kind: 'review', deckId, cards, index: 0, flipped: false, grades: [] })
@@ -222,7 +222,7 @@ function Inner({
         return
       }
       if (picked.length === 0) {
-        show('Nothing due right now. Come back when it ripens.', 'info')
+        show('No cards are due right now. Check back later.', 'info')
         return
       }
       setMode({
@@ -449,7 +449,7 @@ function Inner({
           const cards = await generateCards(topicId, { topic, count, ...sourceBody(source) })
           setGenOpen(false)
           await decks.refresh()
-          show(`Wrote ${cards.length} cards.`, 'success')
+          show(`Made ${cards.length} cards.`, 'success')
           // Land on the deck it just wrote, same as "Write with AI" selects
           // the new note and quiz generation opens the new quiz — this used
           // to leave you on the plain grid with no way to tell which of
@@ -461,7 +461,7 @@ function Inner({
       <ConfirmDialog
         open={Boolean(deleteDeckId)}
         title="Delete this deck?"
-        description="Every card in it goes too. This can't be undone."
+        description="All the cards in it will be deleted too. You can't undo this."
         confirmLabel="Delete"
         onCancel={() => setDeleteDeckId(null)}
         onConfirm={removeDeck}
@@ -511,7 +511,7 @@ function Inner({
              one empty binder pocket. The header keeps the one action the grid
              can't express. */
           <Button onClick={() => setGenOpen(true)}>
-            <Icon name="sparkle" size={14} /> Generate cards
+            <Icon name="sparkle" size={14} /> Make cards
           </Button>
         }
       />
@@ -579,8 +579,8 @@ function Inner({
             bot={{ agent: 'cards', say: 'emptyCards' }}
             description={
               addMaterialHref
-                ? `${subspaceName} has no material yet. Add a file and cards can be drafted from it, or write your own.`
-                : "Write cards yourself, or have them drafted from the material you've added."
+                ? `${subspaceName} has no material yet. Add a file and we'll make cards from it, or write your own.`
+                : 'Write your own cards, or let us make them from your files.'
             }
             action={
               <div className="flex gap-2">
@@ -589,11 +589,11 @@ function Inner({
                 </Button>
                 {addMaterialHref ? (
                   <Button onClick={() => navigate(addMaterialHref)}>
-                    <Icon name="plus" size={14} /> Add material
+                    <Icon name="plus" size={14} /> Add files
                   </Button>
                 ) : (
                   <Button onClick={() => setGenOpen(true)}>
-                    <Icon name="sparkle" size={14} /> Generate a deck
+                    <Icon name="sparkle" size={14} /> Make a deck
                   </Button>
                 )}
               </div>
@@ -794,7 +794,7 @@ function DeckDetail({
       } else if (editing) {
         const updated = await updateCard(editing.id, { front, back })
         cards.setData((prev) => (prev ? prev.map((c) => (c.id === updated.id ? updated : c)) : prev))
-        show('Card updated.', 'success')
+        show('Card saved.', 'success')
       }
       setEditing(null)
     } catch (err) {
@@ -832,7 +832,7 @@ function DeckDetail({
       <ConfirmDialog
         open={Boolean(deleteId)}
         title="Delete this card?"
-        description="It won't come back."
+        description="You can't undo this."
         confirmLabel="Delete"
         onCancel={() => setDeleteId(null)}
         onConfirm={remove}
@@ -894,7 +894,7 @@ function DeckDetail({
               <EmptyState
                 icon="deck"
                 title="This deck is empty"
-                description="Add the first question and answer. Cards you write yourself tend to stick best."
+                description="Add your first question and answer. Cards you write yourself are the easiest to remember."
                 action={
                   <div className="flex w-full flex-col gap-2">
                     <Button size="lg" onClick={() => setEditing('new')}>Add a card</Button>
@@ -1041,7 +1041,7 @@ function DeckDetail({
           <EmptyState
             icon="deck"
             title="This deck is empty"
-            description="Add the first question and answer. Cards you write yourself tend to stick best."
+            description="Add your first question and answer. Cards you write yourself are the easiest to remember."
             action={<Button onClick={() => setEditing('new')}>Add a card</Button>}
           />
         )}
@@ -1074,7 +1074,7 @@ function DeckDetail({
                       return (
                         <span
                           className="setcode mt-0.5 shrink-0 tabular-nums text-faint"
-                          title="FSRS's own probability you'd recall this card right now."
+                          title="How likely you are to remember this card right now."
                         >
                           ~{retention}%
                         </span>
@@ -1129,7 +1129,7 @@ function CardEditor({
 
   const submit = async () => {
     if (!front.trim() || !back.trim()) {
-      setError('A card needs both a question and an answer.')
+      setError('Add both a question and an answer.')
       return
     }
     setBusy(true)

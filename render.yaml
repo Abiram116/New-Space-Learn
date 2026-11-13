@@ -13,11 +13,21 @@ services:
     # start re-downloads it (the container's disk does not survive a
     # spin-down). It also runs one real inference, so a bad download fails the
     # BUILD rather than the first student's upload.
-    buildCommand: pip install uv && uv sync --frozen && uv run python scripts/prefetch_model.py
+    #
+    # --compile-bytecode + compileall: Render's disk is wiped on every
+    # spin-down, so without these every cold start recompiles every imported
+    # module from source — measured ~1.1 CPU-seconds saved on a 2s import,
+    # i.e. ~10s on 0.1 vCPU. The prefetch also writes the build-time
+    # graph-optimised copy of the model that embeddings.py loads (~80MB less
+    # resident, no optimiser pass at start).
+    buildCommand: pip install uv && uv sync --frozen --compile-bytecode && uv run --no-sync python scripts/prefetch_model.py && uv run --no-sync python -m compileall -q app
     # --no-sync: the build already installed everything. Plain `uv run` re-checks
     # and rebuilds the project on EVERY start (measured ~6s in the first deploy),
     # and a cold start is the worst latency in the product.
-    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    # --ws none: nothing here speaks WebSocket, so don't import the library.
+    # uvloop and httptools are picked automatically when installed (they are,
+    # via uvicorn[standard]).
+    startCommand: uv run --no-sync uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1 --ws none
     healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:

@@ -210,7 +210,7 @@ export function Review({
       description={
         unsaved > 0
           ? `You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. ${unsavedLine(unsaved)} Keep this page open until then. The rest stay due for next time.`
-          : `You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your grades are saved, and the rest stay due for next time.`
+          : `You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your answers are saved, and the rest will wait for next time.`
       }
       confirmLabel="End session"
       onCancel={() => setConfirmLeave(false)}
@@ -484,7 +484,7 @@ export function Review({
                     </div>
                   )}
                   {mode.index + 1 >= mode.cards.length && (
-                    <div className="stage-label px-0.5 text-faint">Last card in this session.</div>
+                    <div className="stage-label px-0.5 text-faint">This is the last card.</div>
                   )}
                 </div>
               </div>

@@ -77,7 +77,7 @@ function Offer({ model, onUpdated, className }: CardProps) {
     try {
       commit(await updateStudentModel(buildStylePatch({ styles, depth })))
       setGone(true)
-      show('Saved. The tutor will explain things that way from now on.', 'success')
+      show('Saved! The tutor will explain things your way from now on.', 'success')
     } catch (err) {
       showError(err)
     } finally {
@@ -113,8 +113,8 @@ function Offer({ model, onUpdated, className }: CardProps) {
           </h2>
           <p className="mt-0.5 text-[13.5px] leading-relaxed text-muted">
             You skipped {pending.length === 2 ? 'two questions' : 'one question'} when you signed
-            up on your phone. {pending.length === 2 ? 'They tell' : 'It tells'} the tutor how to
-            explain things to you. It takes about 20 seconds.
+            up on your phone. {pending.length === 2 ? 'They help' : 'It helps'} the tutor explain
+            things your way. It takes about 20 seconds.
           </p>
           {!open && (
             <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -50,7 +50,7 @@ describe('a failure with no explanation from our server', () => {
     )
     const err = (await apiFetch('/spaces', { method: 'POST' }).catch((e) => e)) as ApiError
     expect(err.code).toBe('upstream_unavailable')
-    expect(friendlyMessage(err)).toBe('A service we depend on is offline. Try again shortly.')
+    expect(friendlyMessage(err)).toBe("Something we rely on isn't working right now. Please try again soon.")
   })
 })
 

@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import { FirstPaintFallback } from '../components/ui/FirstPaint'
 import { isMobileNow } from '../lib/useIsMobile'
+import { warmDeepLink, watchIntent } from '../lib/prefetchTrigger'
 
 /**
  * The heaviest routes, split out of the initial bundle.
@@ -130,7 +131,16 @@ export function prefetchAuthChunks(): void {
   else window.setTimeout(warm, 1500)
 }
 
-export function prefetchRouteChunks(): void {
+// Loaded with the entry bundle, so on a deep link the topic's own reads start while
+// the rest of the app is still starting (see `lib/prefetch`).
+warmDeepLink()
+
+/**
+ * Warm every screen's code once idle, and from then on start a screen's data when a
+ * pointer rests on a link to it. Returns the function that stops listening, so a
+ * shell can hand it straight to `useEffect`.
+ */
+export function prefetchRouteChunks(): () => void {
   const warm = () => {
     void import('../features/flashcards/FlashcardsView')
     void import('../features/quizzes/QuizzesView')
@@ -150,4 +160,5 @@ export function prefetchRouteChunks(): void {
   // Safari has no requestIdleCallback; a short timer is a fine stand-in.
   if (idle) idle(warm, { timeout: 4000 })
   else window.setTimeout(warm, 2000)
+  return watchIntent()
 }

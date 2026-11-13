@@ -31,7 +31,7 @@ log = logging.getLogger("space_learn.resolver")
 #: A question this short, with a conversation before it, is taken as a follow-up.
 SHORT_WORDS = 6
 #: The longest wait for the rewrite before falling back.
-TIMEOUT_S = 2.5
+TIMEOUT_S = 1.5
 #: How much of the previous answer the rewrite sees.
 ANSWER_CHARS = 500
 MAX_QUERY_CHARS = 240

@@ -152,10 +152,10 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
           label: 'Make cards',
           alt: { to: `${materialTopic.link}/quizzes`, label: 'or a quiz' },
         }
-      : { kind: 'hint', text: 'Add material first.' },
+      : { kind: 'hint', text: 'Add a file first.' },
     tutor: materialTopic
       ? { kind: 'link', to: materialTopic.link, label: 'Ask the tutor' }
-      : { kind: 'hint', text: 'Add material first.' },
+      : { kind: 'hint', text: 'Add a file first.' },
   }
   const showChecklist = !checklist.complete && !checklistHidden && !stats.loading
   const hideTheChecklist = () => {
@@ -184,7 +184,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
       <div className="flex min-h-0 flex-1 items-center justify-center px-4">
         <EmptyState
           icon="offline"
-          title="Couldn't load your home"
+          title="We couldn't open your home page"
           bot={{ agent: 'tutor', say: 'error', mood: 'oops' }}
           description={spacesError}
           action={
@@ -1079,13 +1079,13 @@ function DueForecast({ days, action }: { days?: ForecastDay[]; action?: { label:
   return (
     <Ledger className="flex flex-col gap-4 pb-5">
       <div className="flex items-baseline justify-between">
-        <span className="setcode-strong">Coming due</span>
-        <span className="setcode">next 7 days · {total} total</span>
+        <span className="setcode-strong">Coming up</span>
+        <span className="setcode">next 7 days · {total} in all</span>
       </div>
 
       {total === 0 ? (
         <p className="text-[13.5px] text-muted">
-          Nothing scheduled yet. Cards appear here the moment you grade one.
+          Nothing coming up yet. Review a card and it will show up here.
         </p>
       ) : (
         <div className="flex h-[104px] items-end gap-2">
@@ -1124,9 +1124,8 @@ function DueForecast({ days, action }: { days?: ForecastDay[]; action?: { label:
           reader has already seen. */}
       {action && total > 0 && <LedgerAction {...action} />}
       <Tip id="home-forecast-v1" icon="clock">
-        Cards return on a schedule, not all at once. Today's column is what's
-        actually waiting — the rest is what's coming, so you can see a heavy
-        day before it lands.
+        Cards don't all come back at once. Today's bar is what's waiting now.
+        The rest is coming up, so you can see a busy day early.
       </Tip>
     </Ledger>
   )

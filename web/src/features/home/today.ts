@@ -242,7 +242,7 @@ export function chooseTodayAction({
   }
   return {
     kind: 'material',
-    label: 'Add material',
+    label: 'Add a file',
     detail: first.subspace.name,
     href: `${first.link}/docs?add=1`,
   }

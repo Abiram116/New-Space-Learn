@@ -59,12 +59,12 @@ export class ErrorBoundary extends Component<Props, State> {
           <Icon name="alert" size={24} />
         </span>
         <h1 className="font-display text-2xl font-semibold">
-          {stale ? 'This page needs a reload' : 'Something went sideways'}
+          {stale ? 'This page needs a reload' : 'Something went wrong'}
         </h1>
         <p className="text-sm text-muted">
           {stale
-            ? 'Space Learn was updated while this tab was open, or the connection dropped. Reload to carry on — your work is saved.'
-            : 'The page hit an unexpected error. Try again, and if it keeps happening, reload — your work is saved.'}
+            ? 'Space Learn was updated while this tab was open, or the connection dropped. Reload to carry on. Your work is saved.'
+            : 'This page ran into a problem. Try again. If it keeps happening, reload the page. Your work is saved.'}
         </p>
         <div className="flex gap-2">
           {/* Hand-rolled buttons here used to set `text-white` on the brand

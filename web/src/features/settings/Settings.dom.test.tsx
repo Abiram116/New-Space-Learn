@@ -103,7 +103,7 @@ describe('Settings section switcher (phones and tablets)', () => {
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
     // Only the selected tab is in the tab order (roving tabindex).
     expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1)
-    await screen.findByText('When something is new to you, what makes it click?')
+    await screen.findByText('When something is new to you, what helps it click?')
   })
 
   it('reaches Account — Sign out and, last, Delete account — by tapping its tab', async () => {
@@ -214,11 +214,11 @@ describe('when the preferences fail to load', () => {
     renderSettings()
 
     const alert = await screen.findByRole('alert')
-    expect(screen.queryByText('When something is new to you, what makes it click?')).not.toBeInTheDocument()
+    expect(screen.queryByText('When something is new to you, what helps it click?')).not.toBeInTheDocument()
 
     await user.click(within(alert).getByRole('button', { name: 'Try again' }))
 
-    expect(await screen.findByText('When something is new to you, what makes it click?')).toBeInTheDocument()
+    expect(await screen.findByText('When something is new to you, what helps it click?')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
@@ -231,14 +231,14 @@ describe('the loading spinner', () => {
     renderSettings()
 
     // Learning has its own data, so it shows without the preferences.
-    await screen.findByText('When something is new to you, what makes it click?')
-    expect(screen.queryByText('Loading preferences…')).not.toBeInTheDocument()
+    await screen.findByText('When something is new to you, what helps it click?')
+    expect(screen.queryByText('Loading your settings…')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Account' }))
-    expect(screen.queryByText('Loading preferences…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading your settings…')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Study' }))
-    expect(screen.getByText('Loading preferences…')).toBeInTheDocument()
+    expect(screen.getByText('Loading your settings…')).toBeInTheDocument()
 
     finish({ daily_goal: 20, streak_freeze_enabled: true, answer_only_from_docs: false, always_show_citations: true })
     expect(await screen.findByText('Daily goal')).toBeInTheDocument()

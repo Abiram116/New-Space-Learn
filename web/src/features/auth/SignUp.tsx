@@ -49,12 +49,12 @@ export function SignUp() {
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: typeof errors = {}
-    if (name.trim().length < 2) next.name = 'Add your name so agents can greet you.'
+    if (name.trim().length < 2) next.name = 'Add your name so we can say hi.'
     const address = email.trim()
     if (!address) next.email = 'Enter your email.'
-    else if (!isEmail(address)) next.email = 'Enter a valid email, like you@studies.edu.'
+    else if (!isEmail(address)) next.email = 'Please enter a valid email.'
     if (password.length < 8)
-      next.password = 'Use at least 8 characters — this protects your notes.'
+      next.password = 'Use at least 8 characters to keep your notes safe.'
     setErrors(next)
     if (Object.keys(next).length) return
     setBusy(true)
@@ -93,7 +93,7 @@ export function SignUp() {
     setResendBusy(true)
     try {
       await resendConfirmation(pendingEmail)
-      show('Sent — check your inbox again.', 'success')
+      show('Sent again! Check your inbox.', 'success')
       setResendWait(RESEND_WAIT_S)
     } catch (err) {
       show(friendlyMessage(err), 'error')
@@ -138,9 +138,9 @@ export function SignUp() {
       >
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border-[1.5px] border-brand-200 bg-brand-tint px-4 py-3.5 text-sm text-ink-2">
-            Open the email from Space Learn and follow the link — it'll bring
-            you straight back here, signed in. It can take a minute, and it
-            sometimes lands in spam or promotions.
+            Open the email from Space Learn and tap the link. It brings you right
+            back here, signed in. It can take a minute. Check your spam folder
+            too.
           </div>
           <Button
             type="button"
@@ -155,7 +155,7 @@ export function SignUp() {
             to="/signin"
             className="text-center text-sm font-semibold text-brand"
           >
-            Already confirmed — sign in
+            Already confirmed? Sign in
           </Link>
         </div>
       </AuthShell>
@@ -185,7 +185,7 @@ export function SignUp() {
           Start with one subject.
         </>
       }
-      subtitle="Create an account. It's free while we're in preview."
+      subtitle="Make an account. It's free while we're in preview."
       footer={
         <>
           Already have an account?{' '}
@@ -249,7 +249,7 @@ export function SignUp() {
         )}
 
         <TrustAgreement lead="By signing up">
-          Your material is used only to answer you, never sold, and you can delete it anytime.
+          Your files are only used to help you. We never sell them, and you can delete them anytime.
         </TrustAgreement>
       </form>
     </AuthShell>

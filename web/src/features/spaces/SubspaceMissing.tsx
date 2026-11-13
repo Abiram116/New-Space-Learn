@@ -34,7 +34,7 @@ export function SubspaceMissing() {
       <EmptyState
         icon="target"
         title="This topic isn't here"
-        description="It may have been renamed or deleted. Pick another topic, or head back home."
+        description="It may have been renamed or deleted. Pick another topic from the sidebar, or head back home."
         // `text-white` on the brand background used to be hand-rolled here
         // (~3.1:1 contrast, fails WCAG AA) instead of going through `Button`,
         // whose `primary` variant every other brand-colored control uses.

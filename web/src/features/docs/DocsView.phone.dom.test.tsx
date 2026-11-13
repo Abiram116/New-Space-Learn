@@ -58,7 +58,7 @@ const renderView = (entry = '/') =>
     </ToastProvider>,
   )
 
-describe('phone Add material', () => {
+describe('phone Add a file', () => {
   it('the empty state speaks to the student and offers photo + files up front', async () => {
     listDocuments.mockResolvedValue([])
     renderView()
@@ -87,8 +87,8 @@ describe('phone Add material', () => {
     uploadDocument.mockResolvedValue({ ...base, id: 'd2', name: 'Photo', status: 'processing', mime_type: 'image/jpeg' })
     renderView()
     await waitFor(() => expect(screen.getByText('chapter.pdf')).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /Add material/ }))
-    const sheet = await screen.findByRole('dialog', { name: 'Add material' })
+    await user.click(screen.getByRole('button', { name: /Add a file/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Add a file' })
     expect(within(sheet).getByRole('button', { name: /Take a photo/ })).toBeInTheDocument()
 
     const shot = new File(['x'], 'image.jpg', { type: 'image/jpeg' })
@@ -97,7 +97,7 @@ describe('phone Add material', () => {
     expect(uploadDocument.mock.calls[0][1].name).toMatch(/^Photo /)
     // Ready for the next page without reopening anything.
     expect(await within(sheet).findByRole('button', { name: /Take another photo/ })).toBeInTheDocument()
-    expect(within(sheet).getByRole('status')).toHaveTextContent('1 photo on the way')
+    expect(within(sheet).getByRole('status')).toHaveTextContent('1 photo added')
   })
 
   it('shows one clear state per row: reading a photo, ready, failed with a retry', async () => {
@@ -114,10 +114,10 @@ describe('phone Add material', () => {
     expect(screen.getByRole('button', { name: /Try again/ })).toBeInTheDocument()
   })
 
-  it('?add=1 opens the Add material sheet straight away', async () => {
+  it('?add=1 opens the Add a file sheet straight away', async () => {
     listDocuments.mockResolvedValue([{ ...base, id: 'd1', name: 'chapter.pdf', status: 'ready' }])
     renderView('/?add=1')
-    const sheet = await screen.findByRole('dialog', { name: 'Add material' })
+    const sheet = await screen.findByRole('dialog', { name: 'Add a file' })
     expect(within(sheet).getByRole('button', { name: /Take a photo/ })).toBeInTheDocument()
     expect(within(sheet).getByRole('button', { name: /Choose from files/ })).toBeInTheDocument()
   })
@@ -126,6 +126,6 @@ describe('phone Add material', () => {
     listDocuments.mockResolvedValue([{ ...base, id: 'd1', name: 'chapter.pdf', status: 'ready' }])
     renderView()
     await waitFor(() => expect(screen.getByText('chapter.pdf')).toBeInTheDocument())
-    expect(screen.queryByRole('dialog', { name: 'Add material' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add a file' })).not.toBeInTheDocument()
   })
 })

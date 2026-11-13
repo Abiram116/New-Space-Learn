@@ -87,7 +87,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'ai',
     label: 'Ask AI',
-    hint: 'Write anything from your material',
+    hint: 'Write anything from your files',
     icon: 'sparkle',
     group: 'ai',
     needs: 'nothing',
@@ -97,7 +97,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'summarise',
     label: 'Summarise',
-    hint: 'Condense to what would be tested',
+    hint: 'Shorten it to what could be on a test',
     icon: 'sparkle',
     group: 'ai',
     needs: 'text',
@@ -110,7 +110,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'explain',
     label: 'Explain simply',
-    hint: 'Rewrites it so you could repeat it back from memory',
+    hint: 'Say it in plain words you can remember',
     icon: 'skill',
     group: 'ai',
     needs: 'text',
@@ -123,7 +123,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'expand',
     label: 'Expand',
-    hint: 'Add depth and detail',
+    hint: 'Add more detail',
     icon: 'sparkle',
     group: 'ai',
     needs: 'text',
@@ -136,7 +136,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'keypoints',
     label: 'Key points',
-    hint: 'What matters for the exam',
+    hint: 'What matters most for the exam',
     icon: 'target',
     group: 'ai',
     needs: 'text',
@@ -168,7 +168,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'toc',
     label: 'Table of contents',
-    hint: 'Builds an outline from this note’s own headings',
+    hint: 'Make an outline from your headings',
     icon: 'doc',
     group: 'ai',
     needs: 'headings',
@@ -183,7 +183,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'h1',
     label: 'Heading 1',
-    hint: 'Starts a new top-level section',
+    hint: 'A big section title',
     glyph: 'H1',
     group: 'insert',
     section: 'text',
@@ -194,7 +194,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'h2',
     label: 'Heading 2',
-    hint: 'Starts a sub-section under a Heading 1',
+    hint: 'A smaller section title',
     glyph: 'H2',
     group: 'insert',
     section: 'text',
@@ -205,7 +205,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'h3',
     label: 'Heading 3',
-    hint: 'Starts a smaller sub-section under a Heading 2',
+    hint: 'An even smaller title',
     glyph: 'H3',
     group: 'insert',
     section: 'text',
@@ -216,7 +216,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'quote',
     label: 'Quote',
-    hint: 'Sets a passage apart from your own writing',
+    hint: 'Set a passage apart',
     icon: BLOCK_ICON.blockquote,
     group: 'insert',
     section: 'text',
@@ -228,7 +228,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'bullet',
     label: 'Bulleted list',
-    hint: 'For points with no set order',
+    hint: 'For points in any order',
     icon: BLOCK_ICON.bulletList,
     group: 'insert',
     section: 'lists',
@@ -239,7 +239,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'ordered',
     label: 'Numbered list',
-    hint: 'For steps that happen in sequence',
+    hint: 'For steps, one after another',
     icon: BLOCK_ICON.orderedList,
     group: 'insert',
     section: 'lists',
@@ -250,7 +250,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'todo',
     label: 'To-do list',
-    hint: 'Checkboxes you can tick off as you revise',
+    hint: 'Checkboxes to tick off as you go',
     icon: BLOCK_ICON.taskList,
     group: 'insert',
     section: 'lists',
@@ -262,7 +262,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'code',
     label: 'Code block',
-    hint: 'Monospaced, keeps whitespace, never autoformats',
+    hint: 'For code. Keeps your spacing as is.',
     icon: 'code',
     group: 'insert',
     section: 'code',
@@ -297,7 +297,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'table',
     label: 'Table',
-    hint: 'Choose rows and columns, then fill it in',
+    hint: 'Pick rows and columns, then fill it in',
     icon: 'table',
     group: 'insert',
     section: 'structure',
@@ -311,7 +311,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'toggle',
     label: 'Toggle section',
-    hint: 'Click the summary to fold the content away, or back open',
+    hint: 'Click the title to hide or show what’s inside',
     icon: 'chevronRight',
     group: 'insert',
     section: 'structure',
@@ -337,7 +337,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'divider',
     label: 'Divider',
-    hint: 'A visual break between unrelated sections',
+    hint: 'A line to separate sections',
     icon: 'minus',
     group: 'insert',
     section: 'structure',

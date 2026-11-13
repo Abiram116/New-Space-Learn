@@ -7,7 +7,7 @@ import { useEffect, useId, useRef, type CSSProperties } from 'react'
 import { AGENTS, type AgentId } from './agents'
 import type { BotProps } from './Bot'
 import { POSES } from './moods'
-import { followPointer, phaseFrom, prefersReducedMotion, watchVisibility } from './runtime'
+import { followPointer, phaseFrom, prefersReducedMotion, startLife, watchVisibility } from './runtime'
 import './mascot.css'
 
 const EYE_L = 47
@@ -140,43 +140,76 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
   const pose = POSES[mood] ?? POSES.idle
   const name = label ?? title
 
+  const small = size < 72
+  const quiet = calm || size < 56
+  const hover = boop || (!calm && size >= 56)
+
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const stopVis = watchVisibility(el)
     const stopLook = look ? followPointer(el) : undefined
-    let stopBoop: (() => void) | undefined
-    if (boop && !prefersReducedMotion()) {
+    const stopLife = startLife(el, agent, quiet)
+    let stopTouch: (() => void) | undefined
+    if (!prefersReducedMotion()) {
       const host = el.closest('[data-bot-hover]') ?? el
-      let timer = 0
+      let giggleTimer = 0
+      let pokeTimer = 0
       let last = 0
+      let pokes = 0
+      let lastPoke = 0
       const giggle = () => {
         const now = Date.now()
         if (now - last < 4000) return // a giggle, not a tic
         last = now
+        el.removeAttribute('data-life')
         el.setAttribute('data-boop', '')
-        window.clearTimeout(timer)
-        timer = window.setTimeout(() => el.removeAttribute('data-boop'), 1100)
+        window.clearTimeout(giggleTimer)
+        giggleTimer = window.setTimeout(() => el.removeAttribute('data-boop'), 1100)
       }
-      host.addEventListener('pointerenter', giggle)
       // Poking the bot itself always gets a reaction (a tap on a phone, where there is no hover).
+      // Boop once, boop again, and by the third it is giggling and throwing hearts.
       const poke = () => {
-        last = 0
-        giggle()
+        const now = Date.now()
+        pokes = now - lastPoke < 2200 ? Math.min(3, pokes + 1) : 1
+        lastPoke = now
+        el.removeAttribute('data-life')
+        el.removeAttribute('data-poke')
+        void el.getBoundingClientRect() // restart the animation on a quick second poke
+        el.setAttribute('data-poke', String(pokes))
+        window.clearTimeout(pokeTimer)
+        pokeTimer = window.setTimeout(() => el.removeAttribute('data-poke'), pokes === 3 ? 1500 : 800)
       }
+      if (hover) host.addEventListener('pointerenter', giggle)
       el.addEventListener('pointerdown', poke)
-      stopBoop = () => {
+      stopTouch = () => {
         host.removeEventListener('pointerenter', giggle)
         el.removeEventListener('pointerdown', poke)
-        window.clearTimeout(timer)
+        window.clearTimeout(giggleTimer)
+        window.clearTimeout(pokeTimer)
       }
     }
     return () => {
       stopVis()
       stopLook?.()
-      stopBoop?.()
+      stopLife()
+      stopTouch?.()
     }
-  }, [look, boop])
+  }, [look, hover, agent, quiet])
+
+  // A change of mood gets one soft settle on top of the tweened pose, so the
+  // jump from one loop to the next never reads as a cut.
+  const prevMood = useRef(mood)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || prevMood.current === mood) return
+    prevMood.current = mood
+    el.removeAttribute('data-life')
+    if (prefersReducedMotion()) return
+    el.setAttribute('data-shift', '')
+    const t = window.setTimeout(() => el.removeAttribute('data-shift'), 520)
+    return () => window.clearTimeout(t)
+  }, [mood])
 
   const style = {
     '--bc': meta.color,
@@ -208,7 +241,7 @@ export function BotFace({ agent = 'tutor', mood = 'idle', size = 96, className, 
       data-calm={calm ? '' : undefined}
       data-attn={attn ? '' : undefined}
       data-thumb={pose.thumb ? '' : undefined}
-      data-small={size < 72 ? '' : undefined}
+      data-small={small ? '' : undefined}
       viewBox="0 0 120 120"
       width={size}
       height={size}

@@ -43,7 +43,7 @@ export function NewSpaceModal({
     setErr(null)
     const subject = name.trim()
     if (subject.length < 1) {
-      setErr('Give this subject a short name.')
+      setErr('Give your subject a short name.')
       return
     }
     submitting.current = true

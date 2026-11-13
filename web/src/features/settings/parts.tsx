@@ -63,6 +63,7 @@ export function SettingsCard({
   hint,
   tell,
   tone = 'default',
+  side,
   children,
   className,
 }: {
@@ -71,6 +72,8 @@ export function SettingsCard({
   hint?: string
   tell?: ReactNode
   tone?: 'default' | 'danger' | 'hero'
+  /** A short, one-control card: when wide, the words sit left and the control right. */
+  side?: boolean
   children: ReactNode
   className?: string
 }) {
@@ -78,16 +81,17 @@ export function SettingsCard({
   return (
     <section
       className={cn(
-        't-control h-full rounded-2xl border p-5 max-sm:p-4',
+        '@container/card t-control h-full rounded-2xl border p-5 max-sm:p-4 @[68rem]/panel:p-6',
         danger
           ? 'border-coral/35 bg-coral-soft/25'
           : tone === 'hero'
-            ? 'border-brand/25 bg-gradient-to-br from-brand-tint via-surface to-surface p-6 hover:border-brand/45 max-sm:p-4'
+            ? 'border-brand/25 bg-gradient-to-br from-brand-tint via-surface to-surface p-6 hover:border-brand/45 max-sm:p-4 @[68rem]/panel:p-7'
             : 'border-line bg-surface hover:border-line-dash',
+        side && '@[46rem]/card:flex @[46rem]/card:items-center @[46rem]/card:gap-10',
         className,
       )}
     >
-      <header className="mb-4 flex items-start gap-3">
+      <header className={cn('mb-4 flex items-start gap-3', side && '@[46rem]/card:mb-0 @[46rem]/card:w-[min(24rem,42%)] @[46rem]/card:shrink-0')}>
         {icon && (
           <span
             aria-hidden
@@ -101,13 +105,13 @@ export function SettingsCard({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-h-5 items-center gap-2">
-            <h3 className={cn('font-display font-semibold leading-tight', tone === 'hero' ? 'text-[18px]' : 'text-[16px]', danger ? 'text-coral-deep' : 'text-ink')}>{title}</h3>
+            <h3 className={cn('font-display font-semibold leading-tight', tone === 'hero' ? 'text-[clamp(1.0625rem,0.95rem+0.25cqi,1.25rem)]' : 'text-[clamp(1rem,0.92rem+0.2cqi,1.125rem)]', danger ? 'text-coral-deep' : 'text-ink')}>{title}</h3>
             {tell}
           </div>
-          {hint && <p className="mt-1 text-[13px] leading-snug text-muted">{hint}</p>}
+          {hint && <p className="mt-1 max-w-[52ch] text-[13px] leading-snug text-muted">{hint}</p>}
         </div>
       </header>
-      {children}
+      {side ? <div className="min-w-0 flex-1">{children}</div> : children}
     </section>
   )
 }
@@ -120,6 +124,7 @@ export function SettingRow({
   saved,
   children,
   last,
+  tile,
 }: {
   label: string
   hint?: string
@@ -127,15 +132,23 @@ export function SettingRow({
   saved?: boolean
   children: ReactNode
   last?: boolean
+  /** In a wide card, sit as a tile in a row instead of a line in a list. */
+  tile?: boolean
 }) {
   return (
-    <div className={cn('flex min-h-14 items-center gap-4 py-3 text-[14px]', !last && 'border-b border-line-soft')}>
+    <div
+      className={cn(
+        'flex min-h-14 items-center gap-4 py-3 text-[14px]',
+        !last && 'border-b border-line-soft',
+        tile && '@[40rem]/card:items-start @[40rem]/card:rounded-xl @[40rem]/card:border @[40rem]/card:border-line-soft @[40rem]/card:bg-well @[40rem]/card:p-4',
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 font-medium text-ink">
           <span>{label}</span>
           <SaveTell saving={saving} saved={saved} />
         </div>
-        {hint && <div className="mt-0.5 text-[12.5px] leading-snug text-faint">{hint}</div>}
+        {hint && <div className="mt-0.5 max-w-[46ch] text-[12.5px] leading-snug text-faint">{hint}</div>}
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>
     </div>

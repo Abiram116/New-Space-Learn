@@ -10,13 +10,10 @@
  * retrieval, never replaces the topic's own material.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { createSubspaceLink, deleteSubspaceLink, listSubspaceLinks } from '../../api/spaces'
-import type { Subspace } from '../../api/types'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
-import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { useSpaces } from './SpacesProvider'
+import { useSubspaceLinks } from './useSubspaceLinks'
 
 export function RelatedTopics({
   subspaceId,
@@ -26,33 +23,13 @@ export function RelatedTopics({
   subspaceId: string
   layout?: 'row' | 'stack'
 }) {
-  const { spaces } = useSpaces()
-  const { showError, show } = useToast()
-  const [links, setLinks] = useState<Subspace[] | null>(null)
+  const { links, candidates, add: link, remove, failed, reload } = useSubspaceLinks(subspaceId)
   const [picking, setPicking] = useState(false)
-  // A failed load used to leave `links` null for good, and null renders
-  // nothing — the whole control vanished behind a toast, with no way to link
-  // or unlink until the page was reloaded.
-  const [failed, setFailed] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
-
-  const load = useCallback(() => {
-    listSubspaceLinks(subspaceId)
-      .then((list) => {
-        setLinks(list)
-        setFailed(false)
-      })
-      .catch((err) => {
-        setFailed(true)
-        showError(err)
-      })
-  }, [subspaceId, showError])
-
-  useEffect(() => {
-    setLinks(null)
-    setFailed(false)
-    load()
-  }, [load])
+  const add = (linkedId: string) => {
+    setPicking(false)
+    void link(linkedId)
+  }
 
   // The picker is a popover: Escape or a click anywhere else puts it away. It
   // used to stay open over the page until its own button was pressed again.
@@ -72,45 +49,12 @@ export function RelatedTopics({
     }
   }, [picking])
 
-  const candidates = spaces
-    .flatMap((sp) => sp.subspaces.map((sub) => ({ ...sub, spaceName: sp.name })))
-    .filter((sub) => sub.id !== subspaceId && !links?.some((l) => l.id === sub.id))
-
-  const add = useCallback(
-    async (linkedId: string) => {
-      setPicking(false)
-      try {
-        await createSubspaceLink(subspaceId, linkedId)
-        setLinks(await listSubspaceLinks(subspaceId))
-      } catch (err) {
-        showError(err)
-      }
-    },
-    [subspaceId, showError],
-  )
-
-  const remove = useCallback(
-    async (linkedId: string) => {
-      try {
-        await deleteSubspaceLink(subspaceId, linkedId)
-        setLinks((prev) => (prev ? prev.filter((l) => l.id !== linkedId) : prev))
-        show('Link removed.', 'success')
-      } catch (err) {
-        showError(err)
-      }
-    },
-    [subspaceId, show, showError],
-  )
-
   if (links === null) {
     if (!failed) return null
     return (
       <button
         type="button"
-        onClick={() => {
-          setFailed(false)
-          load()
-        }}
+        onClick={reload}
         className="flex min-h-9 cursor-pointer items-center gap-1.5 self-start rounded-full border border-dashed border-line-dash px-3.5 py-1 text-[13.5px] text-muted transition-colors hover:border-brand hover:text-brand-deep pointer-coarse:min-h-11"
       >
         <Icon name="refresh" size={13} /> Couldn’t load related topics. Try again

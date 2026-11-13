@@ -65,7 +65,7 @@ export function buildTitle(width: number | null, align: Align): string | null {
 /** What each placement actually does, said plainly. */
 const WRAP_LABEL: Record<Align, string> = {
   left: 'Wrap text on the right',
-  center: 'Break the text — image on its own line',
+  center: 'Put the image on its own line',
   right: 'Wrap text on the left',
 }
 

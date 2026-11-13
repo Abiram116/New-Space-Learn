@@ -31,20 +31,20 @@ const WHAT: { icon: IconName; tone: string; title: string; body: string }[] = [
   {
     icon: 'citePage',
     tone: 'text-sky bg-sky-soft ring-sky/25',
-    title: 'Answers that cite the page',
-    body: 'Upload a PDF or your notes. Every answer points at the page it came from.',
+    title: 'Answers with the page',
+    body: 'Add a PDF or your notes. Every answer shows the page it came from.',
   },
   {
     icon: 'deck',
     tone: 'text-sun bg-sun-soft ring-sun/25',
     title: 'Cards that come back on time',
-    body: 'Spaced repetition: a card returns when you’re about to forget it, not on a fixed rota.',
+    body: 'A card comes back right when you’re about to forget it.',
   },
   {
     icon: 'quiz',
     tone: 'text-coral bg-coral-soft ring-coral/25',
-    title: 'Quizzes that name the weak spot',
-    body: 'Scored, with the subtopics you missed named — so revision has somewhere to start.',
+    title: 'Quizzes that show what to study',
+    body: 'Get a score and see what you missed, so you know where to start.',
   },
 ]
 
@@ -97,11 +97,11 @@ export function PhoneLanding() {
 
         <section className="flex flex-col gap-4 pt-8">
           <h1 className="nameplate text-[clamp(32px,min(11.5vw,11vh),54px)] leading-[0.9] text-ink" style={rise(0)}>
-            One page in. <span className="text-brand">Notes, cards, and a test</span> out.
+            One page in. <span className="text-brand">Notes, cards and a quiz</span> out.
           </h1>
           <p className="text-[16.5px] leading-relaxed text-ink-3" style={rise(120)}>
-            For the weeks before an exam, GATE or an interview. Upload what you’re studying and
-            revise it as cards and quizzes, with every answer traced to its page.
+            For the weeks before an exam, GATE or an interview. Add what you’re studying and
+            practice with cards and quizzes. Every answer shows its page.
           </p>
         </section>
 
@@ -119,7 +119,7 @@ export function PhoneLanding() {
 
         <section className="mt-7 flex flex-col gap-3 rounded-xl border border-line bg-surface/80 p-4" style={rise(300)}>
           <p className="text-[15.5px] leading-relaxed text-ink-2">
-            Revise anywhere on your phone. Add material and chat with the tutor on desktop.
+            Revise anywhere on your phone. Add files and chat with the tutor on a computer.
           </p>
           <button
             type="button"
@@ -168,7 +168,7 @@ export function PhoneLanding() {
             Get started
             <Icon name="arrowRight" size={16} />
           </Link>
-          <span className="text-[12.5px] text-faint [@media(max-height:500px)]:hidden">Free while in preview. No card needed.</span>
+          <span className="text-[12.5px] text-faint [@media(max-height:500px)]:hidden">Free while in preview. No credit card needed.</span>
         </div>
       </div>
     </div>

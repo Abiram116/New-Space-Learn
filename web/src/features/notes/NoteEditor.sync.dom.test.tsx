@@ -97,9 +97,9 @@ describe('a reply added from chat while the note is open', () => {
 describe('who wrote it', () => {
   it('names the author in the header for your own notes as well as AI ones', () => {
     renderEditor()
-    expect(screen.getByRole('img', { name: 'Created by you' })).toHaveTextContent('You')
+    expect(screen.getByRole('img', { name: 'Made by you' })).toHaveTextContent('You')
     cleanup()
     renderEditor({ origin: 'agent', touched_by_user: true, touched_by_agent: true })
-    expect(screen.getByRole('img', { name: 'Created by AI · Edited by you' })).toHaveTextContent('You + AI')
+    expect(screen.getByRole('img', { name: 'Made by AI · Edited by you' })).toHaveTextContent('You + AI')
   })
 })

@@ -20,7 +20,7 @@ import { useAuth } from '../../auth/AuthProvider'
 import { FirstPaintFallback } from '../../components/ui/FirstPaint'
 import { writeCache } from '../../lib/asyncCache'
 import { STUDENT_MODEL_KEY } from './skippedStyle'
-import { hasPreferences, hasSkippedLocally } from './state'
+import { hasPreferences, hasSkippedLocally, markOnboarded } from './state'
 
 type Verdict = 'checking' | 'needs-intake' | 'ready'
 
@@ -38,8 +38,15 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
     }
     // Someone who skipped has nothing stored to distinguish them from a new
     // account, so the local flag is checked first and short-circuits the read.
+    // It is also set once the server has confirmed an intake (below), so only
+    // the very first load on a device waits for this read — on a cold backend
+    // that wait was every app load. The read still runs, in the background,
+    // because Home uses the cached model (never fetching it itself).
     if (hasSkippedLocally(userId)) {
       setVerdict('ready')
+      getStudentModel()
+        .then((model) => writeCache(STUDENT_MODEL_KEY, model))
+        .catch(() => {})
       return
     }
     getStudentModel()
@@ -47,7 +54,9 @@ export function OnboardingGate({ children }: { children: React.ReactNode }) {
         // Kept for the screens behind the gate: Home reads it (never fetches
         // it) to decide whether to offer the questions a phone intake skipped.
         writeCache(STUDENT_MODEL_KEY, model)
-        if (live) setVerdict(hasPreferences(model) ? 'ready' : 'needs-intake')
+        const done = hasPreferences(model)
+        if (done) markOnboarded(userId)
+        if (live) setVerdict(done ? 'ready' : 'needs-intake')
       })
       .catch(() => {
         // See the note above: any failure means "let them in".

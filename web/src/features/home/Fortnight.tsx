@@ -98,7 +98,7 @@ export function Fortnight({
             </span>
           </span>
         ) : (
-          <span className="setcode">Hover a day</span>
+          <span className="setcode">Point at a day</span>
         )}
       </div>
 
@@ -126,7 +126,7 @@ export function Fortnight({
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
               aria-label={`${formatDay(cell.day)}: ${
-                cell.minutes > 0 ? `about ${cell.minutes} minutes` : 'nothing logged'
+                cell.minutes > 0 ? `about ${cell.minutes} minutes` : 'nothing yet'
               }`}
               className="group relative flex h-full flex-1 cursor-pointer items-end"
             >

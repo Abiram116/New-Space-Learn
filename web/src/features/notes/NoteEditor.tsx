@@ -50,6 +50,7 @@ import { useIsMobile } from '../../lib/useIsMobile'
 import { ActionSheet } from '../quizzes/phoneKit'
 import { useImmersive } from '../../components/layout/immersive'
 import { PhoneFormatBar } from './PhoneFormatBar'
+import { isSafeExternalHref } from '../../lib/safeRedirect'
 import './phone.css'
 import './notes.css'
 
@@ -249,13 +250,13 @@ export function NoteEditor({
         // an unbounded paste would push a single note past what the API will
         // accept and fail the save with no obvious cause.
         if (file.size > 4 * 1024 * 1024) {
-          showError(new Error(`${file.name} is over 4MB — resize it first.`))
+          showError(new Error(`${file.name} is too big (over 4MB). Try a smaller one.`))
           continue
         }
         const src = await new Promise<string>((resolve, reject) => {
           const fr = new FileReader()
           fr.onload = () => resolve(String(fr.result))
-          fr.onerror = () => reject(new Error('Could not read that file.'))
+          fr.onerror = () => reject(new Error('We couldn’t open that file.'))
           fr.readAsDataURL(file)
         }).catch((e) => {
           showError(e)
@@ -427,11 +428,13 @@ export function NoteEditor({
           const url = new URL(href, window.location.origin)
           if (url.origin === window.location.origin) {
             navigate(url.pathname + url.search + url.hash)
-          } else {
+          } else if (isSafeExternalHref(href)) {
+            // Web and mail only: a note's text can come from a model reading an
+            // uploaded file, and `window.open('javascript:…')` runs script.
             window.open(href, '_blank', 'noopener,noreferrer')
           }
         } catch {
-          window.open(href, '_blank', 'noopener,noreferrer')
+          // Unparseable: not something to open.
         }
         return true
       },
@@ -1073,12 +1076,12 @@ export function NoteEditor({
                   placeholder={
                     askAi.sel
                       ? 'e.g. explain this with a worked example'
-                      : 'e.g. an overview of value iteration, with the update rule'
+                      : 'e.g. a short summary of photosynthesis'
                   }
                   className="w-full rounded-[9px] border border-line bg-canvas px-2.5 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-brand"
                 />
                 <p className="mt-2 text-[11.5px] text-muted">
-                  Answers come from this topic’s material.{' '}
+                  Answers come from your files in this topic.{' '}
                   <span className="text-faint">Enter to write · Esc to cancel</span>
                 </p>
               </div>
@@ -1413,7 +1416,7 @@ function SelectionBar({
         {primaryAi && (
           <button
             type="button"
-            title={`${primaryAi.label} — with AI, in place`}
+            title={`${primaryAi.label} with AI`}
             onClick={() => runAction(primaryAi)}
             className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] font-semibold text-sky-deep transition-colors cursor-pointer hover:bg-sky-soft"
           >

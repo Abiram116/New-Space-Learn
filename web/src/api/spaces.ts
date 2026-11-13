@@ -1,7 +1,14 @@
+import { rememberSpaces } from '../lib/knownSpaces'
 import { apiFetch } from './client'
 import type { Space, Subspace, Tone } from './types'
 
-export const listSpaces = () => apiFetch<Space[]>('/spaces', { method: 'GET' })
+export const listSpaces = async () => {
+  const spaces = await apiFetch<Space[]>('/spaces', { method: 'GET' })
+  // So the next reload can start a topic's reads without waiting for this answer
+  // (see `lib/prefetch`).
+  rememberSpaces(spaces)
+  return spaces
+}
 
 export const createSpace = (input: { name: string; tone?: Tone }) =>
   apiFetch<Space>('/spaces', { method: 'POST', body: input })

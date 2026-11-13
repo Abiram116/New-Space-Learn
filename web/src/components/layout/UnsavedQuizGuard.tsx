@@ -44,7 +44,7 @@ export function UnsavedQuizGuard() {
     <ConfirmDialog
       open={pending !== null}
       title="Leave this quiz?"
-      description="Answers are only saved when you see your results, so this attempt won't count."
+      description="Your answers are saved only when you see your results, so this try won't count."
       confirmLabel="Leave quiz"
       destructive
       onCancel={() => setPending(null)}

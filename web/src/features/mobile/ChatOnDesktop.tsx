@@ -33,18 +33,18 @@ export function ChatOnDesktop({ feature = 'chat' }: { feature?: 'chat' | 'skills
       title: topicName ? `Space Learn — ${topicName}` : 'Space Learn',
       url,
     })
-    if (outcome === 'copied') show('Link copied. Paste it somewhere you’ll see on your laptop.', 'success')
+    if (outcome === 'copied') show('Link copied! Paste it where you can open it on your computer.', 'success')
     if (outcome === 'failed') {
       setFallbackUrl(url)
-      show("Couldn't copy the link — it's shown below to copy by hand.", 'error')
+      show("We couldn't copy the link. It's below, so you can copy it yourself.", 'error')
     }
   }
 
   const heading = feature === 'skills' ? 'Skills live with chat' : 'Chat is on the big screen'
   const body =
     feature === 'skills'
-      ? 'Skills change how the AI answers you in chat, so you set them up on your laptop. Your phone is for revising.'
-      : 'Asking questions about your documents needs room for the answer and the pages it cites, so it lives on your laptop. Your phone is for revising.'
+      ? 'Skills change how the AI answers you in chat, so you set them up on a computer. Your phone is for revising.'
+      : 'Asking questions about your files needs room to read the answer and its pages, so it works best on a computer. Your phone is for revising.'
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">

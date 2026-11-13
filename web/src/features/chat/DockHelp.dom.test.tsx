@@ -28,7 +28,7 @@ describe('Help in the dock', () => {
   it('points at the sidebar for notes, cards and quizzes, not at tabs that are not there', () => {
     show()
     expect(screen.queryByText(/tab at the top/)).not.toBeInTheDocument()
-    expect(screen.getByText(/Cards, Quizzes or Notes under Study in this sidebar/)).toBeInTheDocument()
+    expect(screen.getByText(/Saved in this topic/)).toBeInTheDocument()
   })
 
   it('sends "Tell us what went wrong" to the feedback section of Settings', async () => {

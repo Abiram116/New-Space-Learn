@@ -118,26 +118,26 @@ export function classifyError(err: unknown): ErrorKind {
 }
 
 const DEFAULTS: Record<ErrorCode, string> = {
-  unauthorized: 'Your session has expired. Sign in again.',
-  forbidden: "You don't have access to that.",
+  unauthorized: 'You were signed out. Please sign in again.',
+  forbidden: "You can't open that.",
   not_found: "We couldn't find that.",
-  validation_error: 'Some of the input needs a small fix.',
-  rate_limited: 'Slow down for a moment and try again.',
-  payload_too_large: "That's too large to send. Try a smaller file or less text.",
-  upstream_unavailable: 'A service we depend on is offline. Try again shortly.',
-  not_configured: 'This feature is not connected yet.',
+  validation_error: 'Something needs a quick fix. Please check and try again.',
+  rate_limited: 'That was a lot at once. Wait a moment, then try again.',
+  payload_too_large: "That's too big to send. Try a smaller file or less text.",
+  upstream_unavailable: "Something we rely on isn't working right now. Please try again soon.",
+  not_configured: "This isn't ready yet.",
   // Was "Upload a document first" — stale since generation started accepting
   // chat history as material too (api/app/errors.py's NothingIndexed carries
   // the current wording, and friendlyMessage() prefers the server's own
   // message whenever it sends one, so this default is a fallback of last
   // resort rather than what's normally shown — still worth being correct).
-  nothing_indexed: 'Nothing to build from yet. Upload a document or chat about this topic first.',
-  method_not_allowed: "That action isn't available here.",
-  http_error: 'That request failed. Try again.',
-  internal_error: 'Something went wrong on our side.',
-  network: "Can't reach the server. Check your connection and try again.",
-  config: 'The app is missing a required setting.',
-  unknown: 'Something went wrong.',
+  nothing_indexed: 'There is nothing to use yet. Add a file or chat about this topic first.',
+  method_not_allowed: "You can't do that here.",
+  http_error: "That didn't work. Please try again.",
+  internal_error: 'Something went wrong on our side. Please try again.',
+  network: "We can't reach the server. Check your internet and try again.",
+  config: "The app isn't set up right. Please let us know.",
+  unknown: 'Something went wrong. Please try again.',
 }
 
 const GENERIC = new Set<string>(['', 'error', 'internal server error'])

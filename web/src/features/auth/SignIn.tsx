@@ -17,6 +17,7 @@ import { PasswordField } from './PasswordField'
 import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { safeNext } from '../../lib/safeRedirect'
 
 export function SignIn() {
   const phone = useIsMobile()
@@ -32,9 +33,8 @@ export function SignIn() {
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendBusy, setResendBusy] = useState(false)
 
-  // Only ever an address inside the app — `//elsewhere.com` is not one.
-  const asked = params.get('next')
-  const next = asked && asked.startsWith('/') && !asked.startsWith('//') ? asked : '/home'
+  // Never trusted as-is: see safeNext.
+  const next = safeNext(params.get('next'))
   const [forgotBusy, setForgotBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
@@ -42,9 +42,9 @@ export function SignIn() {
     const nextErrors: typeof errors = {}
     const address = email.trim()
     if (!address) nextErrors.email = 'Enter your email.'
-    else if (!isEmail(address)) nextErrors.email = 'Enter a valid email, like you@studies.edu.'
+    else if (!isEmail(address)) nextErrors.email = 'Please enter a valid email.'
     if (!password) nextErrors.password = 'Enter your password.'
-    else if (password.length < 6) nextErrors.password = 'At least 6 characters.'
+    else if (password.length < 6) nextErrors.password = 'Use at least 6 characters.'
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) return
     setBusy(true)
@@ -71,13 +71,13 @@ export function SignIn() {
   const resend = async () => {
     const address = email.trim()
     if (!isEmail(address)) {
-      setErrors({ email: 'Enter your email above first.' })
+      setErrors({ email: 'Type your email above first.' })
       return
     }
     setResendBusy(true)
     try {
       await resendConfirmation(address)
-      show('Sent — check your inbox.', 'success')
+      show('Sent! Check your inbox.', 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
     } finally {
@@ -99,7 +99,7 @@ export function SignIn() {
   const forgot = async () => {
     const address = email.trim()
     if (!isEmail(address)) {
-      setErrors({ email: 'Enter your email above first, then press “Forgot password?” again.' })
+      setErrors({ email: 'Type your email above first, then press “Forgot password?” again.' })
       document.getElementById('email')?.focus()
       return
     }
@@ -109,7 +109,7 @@ export function SignIn() {
     setForgotBusy(true)
     try {
       await sendPasswordReset(address)
-      show(`Reset link sent to ${address}. Check your inbox (and spam).`, 'success')
+      show('Check your inbox (and spam) for a link to reset your password.', 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
     } finally {

@@ -8,9 +8,9 @@ export function ConfigMissing() {
       </span>
       <h1 className="font-display text-2xl font-semibold">Almost there</h1>
       <p className="text-sm text-muted">
-        Space Learn needs a Supabase URL and anon key to sign you in. Add these
+        Space Learn needs a Supabase URL and key so you can sign in. Add them
         to your <code className="rounded bg-line-soft px-1.5 py-0.5 text-xs">.env</code> at the repo
-        root and restart the dev server:
+        root, then restart the dev server:
       </p>
       <pre className="w-full overflow-x-auto rounded-xl border-[1.5px] border-line bg-surface p-4 text-left text-xs">
         {`VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co

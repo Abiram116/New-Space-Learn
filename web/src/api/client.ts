@@ -232,8 +232,49 @@ export async function apiFetchRaw(path: string, init?: Init): Promise<Response> 
   throw lastErr
 }
 
+/**
+ * Identical GETs in flight at the same moment share one request.
+ *
+ * A screen is built from components that each ask for what they need, and
+ * several of them need the same thing (the chat page and its side dock both list
+ * the topic's skills; two cards on Home both want the quiz list). Left alone each
+ * one is a request to a server with a fraction of a CPU, answered with the same
+ * bytes. Only a request with no body, no `AbortSignal` of its own and no custom
+ * headers joins another, so a cancellable load is never cancelled by someone else
+ * and nothing unusual is merged. Any write forgets what is in flight: a read
+ * started after it must not be handed an answer asked for before it.
+ */
+const inflightGets = new Map<string, Promise<unknown>>()
+
+/** Whether a sign-in token is available yet (`lib/prefetch` waits for it). */
+export function hasAuthToken(): boolean {
+  return tokenProvider() !== null
+}
+
 /** JSON convenience: parses `res.json()` for you and returns `T`. */
 export async function apiFetch<T = unknown>(path: string, init?: Init): Promise<T> {
+  const method = (init?.method ?? 'GET').toUpperCase()
+  if (method !== 'GET') inflightGets.clear()
+  const shareable =
+    method === 'GET' &&
+    !init?.signal &&
+    !init?.anonymous &&
+    init?.body === undefined &&
+    !init?.headers &&
+    init?.timeoutMs === undefined
+  if (!shareable) return read<T>(path, init)
+
+  const key = `${tokenProvider() ?? ''} ${path}`
+  const running = inflightGets.get(key)
+  if (running) return running as Promise<T>
+  const p = read<T>(path, init).finally(() => {
+    if (inflightGets.get(key) === p) inflightGets.delete(key)
+  })
+  inflightGets.set(key, p)
+  return p
+}
+
+async function read<T>(path: string, init?: Init): Promise<T> {
   const res = await apiFetchRaw(path, init)
   if (res.status === 204) return undefined as T
   const contentType = res.headers.get('content-type') ?? ''

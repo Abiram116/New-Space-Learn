@@ -42,8 +42,8 @@ export function deriveChecklist(
   const tutor = (stats?.composition?.chat_messages ?? 0) > 0
 
   const steps: ChecklistStep[] = [
-    { id: 'material', n: 1, title: 'Add material', done: material },
-    { id: 'practice', n: 2, title: 'Make your first cards or quiz', done: practice },
+    { id: 'material', n: 1, title: 'Add a file', done: material },
+    { id: 'practice', n: 2, title: 'Make cards or a quiz', done: practice },
     { id: 'tutor', n: 3, title: 'Ask the tutor', done: tutor },
   ]
   const next = steps.find((s) => !s.done) ?? null

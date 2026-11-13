@@ -98,7 +98,11 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
   // the composer. Mount one set or the other — never both — so a width fetches
   // only the data it shows.
   const hasSidebar = useMediaQuery(LG_QUERY)
-  const history = useAsync(() => listMessages(subspaceId), [subspaceId])
+  // Keyed, so coming back to a topic paints its conversation at once from the
+  // last copy and revalidates behind it. Sending needs no explicit invalidation:
+  // `history.setData` (the optimistic question, the finished answer) writes to
+  // this same entry, so the cache is never behind what the student just did.
+  const history = useAsync(() => listMessages(subspaceId), [subspaceId], `messages:${subspaceId}`)
   // Same cache key as the sidebar's file list, so this costs no extra trip once it has loaded.
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
   // Starter questions written from this topic's own files. Asked again only
@@ -653,7 +657,7 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
               action={
                 hasReadyFile || hasSidebar ? undefined : (
                   <Button onClick={() => onNavigate(`${base}/docs`)}>
-                    <Icon name="plus" size={14} /> Add a file
+                    <Icon name="plus" size={14} /> Add files
                   </Button>
                 )
               }

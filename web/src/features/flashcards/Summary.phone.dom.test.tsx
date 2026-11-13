@@ -41,7 +41,7 @@ describe('session summary on a phone', () => {
         />
       </MemoryRouter>,
     )
-    const ledger = screen.getByText('solid on Transformer basics').closest('.my-auto') as HTMLElement
+    const ledger = screen.getByText('you knew these in Transformer basics').closest('.my-auto') as HTMLElement
     expect(ledger).not.toBeNull()
     const scroller = ledger.parentElement as HTMLElement
     expect(scroller).toHaveClass('min-h-0', 'flex-1', 'overflow-y-auto')

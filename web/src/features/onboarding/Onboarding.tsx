@@ -435,7 +435,7 @@ function DesktopOnboarding() {
   const skipAll = useCallback(() => {
     // Say where it went: leaving without being told the questions still exist
     // makes it look like a one-time door you just closed.
-    show('You can answer these later in Settings → Learning.', 'info')
+    show('You can answer these later in Settings.', 'info')
     void leave()
   }, [leave, show])
 
@@ -768,7 +768,7 @@ function TextAnswer({ step, answers, onType, onSubmit }: StepViewProps & { step:
           {step.id === 'goal' ? 'Finish' : 'Continue'}
           <Icon name="arrowRight" size={14} />
         </button>
-        {empty && <span className={cn('text-faint', SMALL)}>{step.id === 'goal' ? 'or leave it blank' : 'or skip it'}</span>}
+        {empty && <span className={cn('text-faint', SMALL)}>{step.id === 'goal' ? 'or leave it empty' : 'or skip it'}</span>}
       </div>
     </form>
   )
@@ -921,14 +921,14 @@ function Ending({ answers, first, onBack, onFinish }: StepViewProps) {
   return (
     <div className="flex flex-col">
       <p data-beat className="setcode setcode-hot mb-[clamp(10px,1.4vh,18px)]">
-        Your learning fingerprint
+        How you learn
       </p>
       <h1 tabIndex={-1} className="nameplate break-words text-[clamp(32px,min(3.9vw,7vh),96px)] leading-[0.98] text-ink outline-none">
         <Words text="This is you," />{' '}
         {first ? <Letters text={`${first}.`} className="text-brand-300" /> : <Words text="so far." />}
       </h1>
       <p data-beat className={cn('mt-[clamp(12px,1.8vh,22px)] max-w-[34em] leading-relaxed text-ink-3', ASIDE)}>
-        Made only from what you just told us. The app learns the rest as you study, and you can change any of it in Settings.
+        This comes only from your answers. We'll learn more as you study, and you can change anything in Settings.
       </p>
 
       {rows.length > 0 && (

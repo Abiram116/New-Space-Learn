@@ -145,14 +145,14 @@ describe('the generate dialog', () => {
     generateQuiz.mockReturnValue(new Promise(() => {}))
     renderAt('/fsd/attention/quizzes')
 
-    await user.click(await screen.findByRole('button', { name: /Generate quiz/ }))
-    const count = await screen.findByLabelText('Questions')
+    await user.click(await screen.findByRole('button', { name: /Make a quiz/ }))
+    const count = await screen.findByLabelText('How many questions?')
     await user.clear(count)
     expect(count).toHaveValue(null)
     await user.type(count, '12')
     expect(count).toHaveValue(12)
 
-    await user.click(screen.getByRole('button', { name: 'Generate' }))
+    await user.click(screen.getByRole('button', { name: 'Make quiz' }))
     expect(generateQuiz).toHaveBeenCalledWith(SUB.id, { topic: undefined, count: 12, source: 'files' })
   })
 
@@ -162,8 +162,8 @@ describe('the generate dialog', () => {
     generateQuiz.mockReturnValue(new Promise(() => {}))
     renderAt('/fsd/attention/quizzes')
 
-    await user.click(await screen.findByRole('button', { name: /Generate quiz/ }))
-    const count = await screen.findByLabelText('Questions')
+    await user.click(await screen.findByRole('button', { name: /Make a quiz/ }))
+    const count = await screen.findByLabelText('How many questions?')
     await user.clear(count)
     await user.type(count, '99')
     await user.tab()

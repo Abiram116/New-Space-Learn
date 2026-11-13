@@ -25,10 +25,10 @@ describe('noteAuthorship', () => {
 describe('AuthorBadge', () => {
   it('draws a distinct mark for each, named for screen readers and on hover', () => {
     const cases = [
-      [flags('user', true, false), 'Created by you', ['you']],
-      [flags('agent', false, true), 'Created by AI', ['ai']],
-      [flags('agent', true, true), 'Created by AI · Edited by you', ['you', 'ai']],
-      [flags('doc', false, false), 'From a document', ['doc']],
+      [flags('user', true, false), 'Made by you', ['you']],
+      [flags('agent', false, true), 'Made by AI', ['ai']],
+      [flags('agent', true, true), 'Made by AI · Edited by you', ['you', 'ai']],
+      [flags('doc', false, false), 'From a file', ['doc']],
     ] as const
     for (const [note, label, discs] of cases) {
       render(<AuthorBadge note={note} />)

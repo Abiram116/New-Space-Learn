@@ -102,7 +102,7 @@ export function Summary({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {!isMobile && <SubspaceHeader title="Session complete" />}
+      {!isMobile && <SubspaceHeader title="All done!" />}
       <div
         className={cn(
           // Centred with `m-auto` on the ledger, not `items-center` here: a
@@ -121,7 +121,7 @@ export function Summary({
         <Ledger className="my-auto flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center max-sm:p-5 max-sm:pt-3">
           <div ref={pctRef}>
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
-            <p className={cn('mt-1', isMobile ? 'text-[13px] text-muted' : 'setcode')}>solid on {deckName}</p>
+            <p className={cn('mt-1', isMobile ? 'text-[13px] text-muted' : 'setcode')}>you knew these in {deckName}</p>
           </div>
 
           {/* Flip, closing the session — in a voice of their own. */}
@@ -152,8 +152,8 @@ export function Summary({
           ) : (
             <p className={cn('leading-relaxed text-muted', isMobile ? 'text-[15px]' : 'text-[13px]')}>
               {tally.again > 0
-                ? `${tally.again} card${tally.again === 1 ? '' : 's'} came back short — those return sooner.`
-                : 'Nothing missed. The whole deck moves further out.'}
+                ? `${tally.again} card${tally.again === 1 ? '' : 's'} need more practice. They'll come back sooner.`
+                : 'You knew them all. Great job!'}
             </p>
           )}
 

@@ -277,7 +277,7 @@ function Inner({
       : null
 
   // A readable link needs the list to say which quiz it means; an id doesn't.
-  if (quizParam.pending) return <PageSpinner label="Opening quiz…" />
+  if (quizParam.pending) return <PageSpinner label="Opening your quiz…" />
 
   if (activeId && isMobile) {
     // No page header: the quiz stage brings its own slim top row, and the
@@ -341,7 +341,7 @@ function Inner({
             onBack={back}
             backLabel={fromChat ? 'Back to chat' : undefined}
             onDone={() => {
-              show('Answers submitted.', 'success')
+              show('Nice work! Your answers are in.', 'success')
               void quizzes.refresh()
             }}
           />
@@ -408,7 +408,7 @@ function Inner({
         actions={
           <Button onClick={() => setGenOpen(true)} disabled={generating}>
             <Icon name="sparkle" size={14} />
-            {generating ? 'Generating…' : 'Generate quiz'}
+            {generating ? 'Making your quiz…' : 'Make a quiz'}
           </Button>
         }
       />
@@ -530,8 +530,8 @@ function QuizList({
           bot={{ agent: 'quiz', say: 'emptyQuizzes' }}
           description={
             onAddMaterial
-              ? `${topicName} has no material yet. Add a file and questions get drawn from it.`
-              : "Draw questions from what you've indexed in this topic, then find out what actually stuck."
+              ? `${topicName} has no material yet. Add a file and we'll make questions from it.`
+              : "Get questions from your files in this topic and see what you remember."
           }
           action={
             onAddMaterial ? (
@@ -818,7 +818,7 @@ function QuizSession({
       </div>
     )
   }
-  if (!quiz) return <PageSpinner label="Loading quiz…" />
+  if (!quiz) return <PageSpinner label="Opening your quiz…" />
   // No choice screen yet, but a rewording on its way (the remembered
   // preference, or "take it reworded" from the generate dialog).
   if (rewording && stage !== 'choose') return <PageSpinner label="Rewording the questions…" />
@@ -957,7 +957,7 @@ function GenerateQuizModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Generate a quiz" width="sm">
+    <Modal open={open} onClose={onClose} title="Make a quiz" width="sm">
       <div className="flex flex-col gap-4">
         <TopicSelect
           value={topicId}
@@ -971,7 +971,7 @@ function GenerateQuizModal({
             reader announced two unnamed fields. */}
         <Input
           name="quiz-focus"
-          label="Focus (optional)"
+          label="What to focus on (optional)"
           className="pointer-coarse:text-base"
           value={topic}
           onChange={(e) => {
@@ -980,12 +980,12 @@ function GenerateQuizModal({
           }}
           maxLength={LIMITS.quizTopic}
           placeholder="Attention basics"
-          hint="Leave blank to cover everything in the topic above."
+          hint="Leave this empty to cover the whole topic."
         />
         <SourcePicker topicId={topicId} value={source} onChange={setSource} />
         <Input
           name="quiz-count"
-          label="Questions"
+          label="How many questions?"
           className="pointer-coarse:text-base"
           type="number"
           min={1}
@@ -1029,7 +1029,7 @@ function GenerateQuizModal({
             Cancel
           </Button>
           <Button onClick={submit} disabled={busy || !sourceReady(source) || offer !== null}>
-            {busy ? 'Generating…' : 'Generate'}
+            {busy ? 'Making your quiz…' : 'Make quiz'}
           </Button>
         </div>
       </div>

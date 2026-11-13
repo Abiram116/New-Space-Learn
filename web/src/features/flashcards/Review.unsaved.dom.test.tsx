@@ -211,7 +211,7 @@ describe.each([
     const notice = await screen.findByRole('status')
     expect(notice).toHaveTextContent('2 grades are not saved yet, so those cards stay due.')
     // It does not claim the schedule moved.
-    expect(screen.queryByText(/The whole deck moves further out/)).toBeNull()
+    expect(screen.queryByText(/You knew them all/)).toBeNull()
 
     // Still offline: the count stays, and it says the try did not work.
     retryUnsavedGrades.mockResolvedValueOnce(2)
@@ -226,13 +226,13 @@ describe.each([
     })
     fireEvent.click(screen.getByRole('button', { name: 'Try saving again' }))
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull())
-    expect(screen.getByText(/The whole deck moves further out/)).toBeInTheDocument()
+    expect(screen.getByText(/You knew them all/)).toBeInTheDocument()
   })
 
   it('with everything saved the summary has no such notice', () => {
     render(<Harness n={1} />)
     flipAndGrade(/^Good/)
-    expect(screen.getByText(/The whole deck moves further out/)).toBeInTheDocument()
+    expect(screen.getByText(/You knew them all/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try saving again' })).toBeNull()
   })
 })

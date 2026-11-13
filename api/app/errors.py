@@ -181,7 +181,19 @@ def friendly_validation_message(errors: list[dict[str, Any]]) -> str:
 
 async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     errors = exc.errors()
-    return _envelope("validation_error", friendly_validation_message(errors), 422, extra=errors[:5])
+    return _envelope(
+        "validation_error", friendly_validation_message(errors), 422, extra=_safe_detail(errors[:5])
+    )
+
+
+def _safe_detail(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Where and what, without what was sent.
+
+    Pydantic's own error carries the rejected `input` — echoing a 10 MB string
+    back to whoever sent it, or a token pasted into the wrong field into a
+    response a proxy might log — and a `ctx` that can hold exception objects
+    the JSON encoder cannot serialise. Neither is needed to fix the request."""
+    return [{k: e[k] for k in ("loc", "type", "msg") if k in e} for e in errors]
 
 
 async def handle_unexpected(_: Request, exc: Exception) -> JSONResponse:

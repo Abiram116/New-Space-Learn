@@ -14,7 +14,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { Icon } from '../../components/ui/Icon'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
-import { scoreTone } from './Summary'
+import { scoreTone } from './format'
 
 const shown = (value: StoredAnswer['value']) => (Array.isArray(value) ? value.join(', ') : String(value))
 /** The answer with what they added after it, for search and the spreadsheet. */

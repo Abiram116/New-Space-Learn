@@ -1,11 +1,12 @@
 /**
- * "How the AI answers" — the Skills switched on for this topic, in the dock.
+ * "How I answer" — the skills that are on for this topic, one clear row each
+ * (or "Normal"), and a Change button that opens your skills with a switch each.
  *
- * This is the ONLY place a skill is turned on or off: the topic is already
- * obvious here, so nothing needs a picker or a page of its own. The account-wide
- * `/skills` page is just the collection — add skills from the library or write
- * your own — and the picker below offers exactly those, so one small request
- * (your skills) is all it ever costs, and only when it is opened.
+ * Skills change how the tutor talks; they are not actions (see `agents.ts`).
+ * The chip says which voice is on at a glance; everything else waits behind
+ * Change. The Skills page is where skills are found and written — the link at
+ * the foot of the list goes there with this topic picked, so a skill added
+ * there can be switched on in the same visit.
  */
 
 import { useMemo, useState } from 'react'
@@ -19,17 +20,20 @@ import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
 import { resolveSkillIcon } from '../skills/skillIcon'
-import { DockSectionHead } from './dockParts'
+import { DockHeadButton, DockSectionHead } from './dockParts'
 
-/** How many not-yet-on skills the picker lists before pointing at the full page. */
-const PICKER_LIMIT = 5
+/** How many skills the list shows before pointing at the Skills page. */
+const PICKER_LIMIT = 6
+
+/** The Skills page, opened for this topic. */
+export const skillsPageFor = (subspaceId: string) => `/skills?topic=${encodeURIComponent(subspaceId)}`
 
 export function DockSkills({ subspaceId }: { subspaceId: string }) {
   const { showError } = useToast()
   // Deliberately NOT cached under a shared key. The API client clears every
   // `skills:` cache entry after any successful skill write, which would empty
   // this list the instant a toggle was confirmed. Plain component state is
-  // unaffected, and only one of this and the phone strip is ever on screen.
+  // unaffected, and only one of this and the tablet strip is ever on screen.
   const skills = useAsync(() => listActiveSkills(subspaceId), [subspaceId])
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
@@ -46,7 +50,7 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
       return next
     })
 
-  /** Optimistic: the list changes at once and is put back if the server refuses. */
+  /** Optimistic: the chip changes at once and is put back if the server refuses. */
   const toggle = async (skill: Skill, on: boolean) => {
     if (pending.has(skill.id)) return
     setBusy(skill.id, true)
@@ -68,77 +72,78 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
     }
   }
 
+  const changeButton = (
+    <DockHeadButton onClick={() => setOpen((v) => !v)} aria-expanded={open} pressed={open}>
+      {open ? 'Done' : 'Change'}
+    </DockHeadButton>
+  )
+
   return (
-    <section className="flex flex-col gap-2" aria-labelledby="dock-skills-label">
-      <DockSectionHead
-        id="dock-skills-label"
-        aside={
-          !skills.loading && (
-            <button
-              type="button"
-              onClick={() => setOpen((v) => !v)}
-              aria-expanded={open}
-              className="setcode cursor-pointer transition-colors hover:text-ink"
-            >
-              {open ? 'Close' : active.length > 0 ? 'Change' : 'Pick one'}
-            </button>
-          )
-        }
-      >
-        Answer style
+    <section className="flex flex-col gap-2.5" aria-labelledby="dock-skills-label">
+      <DockSectionHead id="dock-skills-label" aside={skills.loading ? undefined : changeButton}>
+        How I answer
       </DockSectionHead>
 
       {skills.loading ? (
-        <Skeleton className="h-14 rounded-[10px]" />
+        <Skeleton className="h-16 rounded-[14px]" />
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {active.length === 0 && (
-            <p className="text-[12px] leading-snug text-muted">None yet. Answers are plain and direct.</p>
-          )}
-          {active.map((skill) => (
-            <div
-              key={skill.id}
-              title={skill.description ?? undefined}
-              className="cardstock flex min-h-11 items-center gap-2.5 rounded-[10px] px-2.5 py-1.5"
-            >
-              <span
-                className={cn(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-md',
-                  toneSoft[skill.tone],
-                  toneText[skill.tone],
-                )}
-              >
-                <Icon name={resolveSkillIcon(skill.icon)} size={14} />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-ink">{skill.name}</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked="true"
-                onClick={() => void toggle(skill, false)}
-                disabled={pending.has(skill.id)}
-                aria-label={`Turn off ${skill.name}`}
-                title="On. Click to turn off."
-                className="group/switch flex shrink-0 cursor-pointer items-center rounded-full py-1 pl-1 pr-0.5 disabled:cursor-progress disabled:opacity-50"
-              >
-                <span className="relative h-[18px] w-[30px] rounded-full bg-ink-2 transition-colors group-hover/switch:bg-ink">
-                  <span className="absolute right-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-canvas" />
+        <div className="flex flex-col gap-2">
+          <ul className="cardstock flex flex-col overflow-hidden rounded-[14px]" aria-label="On in this topic">
+            {active.length === 0 ? (
+              <li className="flex min-h-[3.75rem] items-center gap-3 px-3 py-2.5">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[10px] bg-line-soft text-ink-3">
+                  <Icon name="chat" size={18} />
                 </span>
-              </button>
-            </div>
-          ))}
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[15px] font-bold leading-snug text-ink">Normal</span>
+                  <span className="mt-0.5 block text-[13px] leading-snug text-muted">
+                    Plain, direct answers. Tap Change to try a style, like exam mode.
+                  </span>
+                </span>
+              </li>
+            ) : (
+              active.map((skill) => (
+                <li
+                  key={skill.id}
+                  title={skill.description ?? undefined}
+                  className="flex min-h-[3.75rem] items-center gap-3 border-b border-line-soft px-3 py-2.5 last:border-b-0"
+                >
+                  <span
+                    className={cn(
+                      'grid h-10 w-10 shrink-0 place-items-center rounded-[10px]',
+                      toneSoft[skill.tone],
+                      toneText[skill.tone],
+                    )}
+                  >
+                    <Icon name={resolveSkillIcon(skill.icon)} size={18} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold leading-snug text-ink">{skill.name}</span>
+                    {skill.description && (
+                      <span className="mt-0.5 block truncate text-[13px] leading-snug text-muted">{skill.description}</span>
+                    )}
+                  </span>
+                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-mint-soft px-2.5 py-1 text-[12px] font-bold text-mint-deep">
+                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-mint" />
+                    On
+                  </span>
+                </li>
+              ))
+            )}
+          </ul>
 
           {active.length > 2 && (
-            <p className="text-[11.5px] leading-snug text-muted">
-              Several styles at once can pull in different directions. Turn some off if answers feel mixed.
+            <p className="text-[13px] leading-snug text-muted">
+              Lots of styles at once can clash. Turn some off if answers feel mixed.
             </p>
           )}
           {open && (
             <SkillPicker
+              active={active}
               activeIds={activeIds}
               pending={pending}
-              onTurnOn={(skill) => void toggle(skill, true)}
-              skillsPage="/skills"
+              onToggle={(skill, on) => void toggle(skill, on)}
+              skillsPage={skillsPageFor(subspaceId)}
             />
           )}
         </div>
@@ -148,35 +153,42 @@ export function DockSkills({ subspaceId }: { subspaceId: string }) {
 }
 
 function SkillPicker({
+  active,
   activeIds,
   pending,
-  onTurnOn,
+  onToggle,
   skillsPage,
 }: {
+  /** What is on now (it may include a skill the list hasn't caught up with). */
+  active: Skill[]
   activeIds: ReadonlySet<string>
   pending: ReadonlySet<string>
-  onTurnOn: (skill: Skill) => void
+  onToggle: (skill: Skill, on: boolean) => void
   skillsPage: string
 }) {
   // Plain component state, not a shared cache key: the API client clears every
   // `skills:` entry after a skill is turned on, which would empty this list (and
-  // read as "you have no skills") the moment you tapped Turn on.
+  // read as "you have no skills") the moment a switch was flipped.
   const own = useAsync(() => listSkills(), [])
 
-  const offered = useMemo(
-    () => (own.data ?? []).filter((s) => !activeIds.has(s.id)),
-    [own.data, activeIds],
-  )
+  // Every skill you have, each with its own switch, so turning one off is as
+  // easy as turning one on. The order is the list's own and never shuffles
+  // under the pointer; only a skill that is on but missing from it (it was
+  // just added elsewhere) goes first.
+  const offered = useMemo(() => {
+    const list = own.data ?? []
+    const known = new Set(list.map((s) => s.id))
+    return [...active.filter((s) => !known.has(s.id)), ...list]
+  }, [own.data, active])
 
-  if (own.loading) return <Skeleton className="h-24 rounded-[10px]" />
-  if (own.error) return <p className="text-[11.5px] text-muted">{own.error}</p>
+  if (own.loading) return <Skeleton className="h-32 rounded-[14px]" />
+  if (own.error) return <p className="text-[13px] text-muted">{own.error}</p>
   if (offered.length === 0) {
-    const none = (own.data ?? []).length === 0
     return (
-      <p className="rounded-[10px] border border-line bg-raised px-2.5 py-3 text-center text-[11.5px] leading-snug text-muted">
-        {none ? 'You haven’t added any skills yet. ' : 'All your skills are on. '}
-        <Link to={skillsPage} className="font-bold text-brand-deep">
-          {none ? 'Browse the library →' : 'Add more →'}
+      <p className="rounded-[14px] border border-line bg-raised px-3.5 py-3.5 text-[13.5px] leading-snug text-muted">
+        You don’t have any skills yet.{' '}
+        <Link to={skillsPage} className="font-bold text-brand-deep hover:underline">
+          Pick a ready-made one →
         </Link>
       </p>
     )
@@ -184,37 +196,56 @@ function SkillPicker({
 
   const shown = offered.slice(0, PICKER_LIMIT)
   return (
-    <div className="flex flex-col gap-1 rounded-[10px] border border-line bg-raised p-1.5">
-      {shown.map((skill) => (
-        <div key={skill.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1.5">
-          <span
+    <div className="flex flex-col gap-0.5 rounded-[14px] border border-line bg-raised p-1.5">
+      <p className="px-2 pb-1 pt-1.5 text-[13px] font-semibold text-muted">Switch styles on or off for this topic</p>
+      {shown.map((skill) => {
+        const on = activeIds.has(skill.id)
+        return (
+          <button
+            key={skill.id}
+            type="button"
+            role="switch"
+            aria-checked={on}
+            aria-label={skill.name}
+            onClick={() => onToggle(skill, !on)}
+            disabled={pending.has(skill.id)}
             className={cn(
-              'grid h-6 w-6 shrink-0 place-items-center rounded-md',
-              toneSoft[skill.tone],
-              toneText[skill.tone],
+              'group/switch flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-[10px] px-2 py-2 text-left transition-colors hover:bg-line-soft disabled:cursor-progress disabled:opacity-60',
+              on && 'bg-brand-tint',
             )}
           >
-            <Icon name={resolveSkillIcon(skill.icon)} size={12} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[12px] font-bold text-ink">{skill.name}</span>
-            <span className="block truncate text-[10.5px] text-muted">{skill.description ?? ''}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => onTurnOn(skill)}
-            disabled={pending.has(skill.id)}
-            className="shrink-0 cursor-pointer rounded-md px-2 py-1 text-[11.5px] font-bold text-brand-deep transition-colors hover:bg-brand-soft disabled:cursor-progress disabled:opacity-50"
-          >
-            Turn on
+            <span
+              className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-[10px]', toneSoft[skill.tone], toneText[skill.tone])}
+            >
+              <Icon name={resolveSkillIcon(skill.icon)} size={16} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14.5px] font-bold text-ink">{skill.name}</span>
+              {skill.description && <span className="block truncate text-[12.5px] text-muted">{skill.description}</span>}
+            </span>
+            <span
+              aria-hidden
+              className={cn(
+                'relative h-6 w-10 shrink-0 rounded-full transition-colors',
+                on ? 'bg-brand' : 'bg-line-dash group-hover/switch:bg-ink-3/50',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-[3px] left-[3px] h-[18px] w-[18px] rounded-full bg-canvas transition-transform',
+                  on && 'translate-x-4',
+                )}
+              />
+            </span>
           </button>
-        </div>
-      ))}
+        )
+      })}
       <Link
         to={skillsPage}
-        className="px-1.5 pb-0.5 pt-1 text-[11.5px] font-bold text-muted transition-colors hover:text-ink"
+        className="mt-0.5 flex min-h-11 items-center gap-2 rounded-[10px] px-2 text-[13.5px] font-bold text-muted transition-colors hover:bg-line-soft hover:text-ink"
       >
-        {offered.length > shown.length ? `See all ${offered.length} of your skills →` : 'Find more skills →'}
+        <Icon name="plus" size={16} />
+        {offered.length > shown.length ? `See all ${offered.length}, or find more` : 'Find more skills'}
       </Link>
     </div>
   )

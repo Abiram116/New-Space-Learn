@@ -449,7 +449,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       <ConfirmDialog
         open={Boolean(confirmDeleteSpace)}
         title="Delete this subject?"
-        description="Everything inside it — topics, chats, notes, cards, quizzes — will be permanently deleted."
+        description="Everything inside will be deleted for good: topics, chats, notes, cards and quizzes."
         confirmLabel="Delete"
         onCancel={() => setConfirmDeleteSpace(null)}
         onConfirm={() => confirmDeleteSpace && removeSpace(confirmDeleteSpace)}
@@ -459,7 +459,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
       <ConfirmDialog
         open={Boolean(confirmDeleteSubspace)}
         title="Delete this topic?"
-        description="All chats, notes, cards, and quizzes for this topic will be removed."
+        description="All the chats, notes, cards and quizzes in this topic will be deleted."
         confirmLabel="Delete"
         onCancel={() => setConfirmDeleteSubspace(null)}
         onConfirm={() => confirmDeleteSubspace && removeSubspace(confirmDeleteSubspace)}

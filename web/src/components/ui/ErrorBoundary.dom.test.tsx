@@ -33,7 +33,7 @@ describe('ErrorBoundary', () => {
         <Page name="Notes" />
       </ErrorBoundary>,
     )
-    expect(screen.getByRole('heading', { name: 'Something went sideways' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument()
     broken = null
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(screen.getByText('Notes page')).toBeInTheDocument()
@@ -46,7 +46,7 @@ describe('ErrorBoundary', () => {
         <Page name="Notes" />
       </ErrorBoundary>,
     )
-    expect(screen.getByRole('heading', { name: 'Something went sideways' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument()
     broken = null
     rerender(
       <ErrorBoundary resetKey="/quizzes">
