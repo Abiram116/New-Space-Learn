@@ -535,6 +535,18 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
   // Files were added and none can be answered from yet.
   const stillReading =
     !hasReadyFile && (docs.data ?? []).some((d) => d.status === 'processing' || d.status === 'uploading')
+  const emptyStarters: string[] | undefined = hasReadyFile
+    ? withModeStarter(
+        studyMode,
+        starters.data?.questions.length
+          ? starters.data.questions
+          : starters.loading
+            ? undefined
+            : topicStarters(subspaceName, spaceName),
+      )
+    : stillReading
+      ? undefined
+      : withModeStarter(studyMode, topicStarters(subspaceName, spaceName))
   // The sidebar re-reads the list while a file is being read (same cache
   // entry). Without it, nothing did, and the line below never went away.
   const refreshDocs = docs.refresh
@@ -769,34 +781,22 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
           onCancel={cancel}
           onRunAgent={runAgent}
           streaming={streaming}
-          // An empty chat offers three to pick from instead of the one in the box.
+          // An empty chat offers questions to pick from, and the first one also sits in
+          // the box with its → key, as in a chat with history. They are offered even
+          // in "My files only" with nothing to read yet: asking one is how a student
+          // finds out what that setting does.
           suggestion={
-            // Any chat with something in it, files or not: a topic made of notes
-            // and conversation deserves the → as much as one made of PDFs.
-            suggestOn && !isEmpty
-              ? (followUp ??
-                nextSuggestion(
-                  hasReadyFile ? (starters.data?.questions ?? []) : topicStarters(subspaceName, spaceName),
-                  userMessagesInOrder,
-                ))
+            suggestOn
+              ? isEmpty
+                ? (emptyStarters?.[0] ?? undefined)
+                : (followUp ??
+                  nextSuggestion(
+                    hasReadyFile ? (starters.data?.questions ?? []) : topicStarters(subspaceName, spaceName),
+                    userMessagesInOrder,
+                  ))
               : undefined
           }
-          // An empty chat opens with questions about this topic's own files;
-          // the generic ideas only while those are still being written.
-          examples={
-            suggestOn && isEmpty && !hasReadyFile && !stillReading && scope === 'subject'
-              ? withModeStarter(studyMode, topicStarters(subspaceName, spaceName))
-              : suggestOn && isEmpty && hasReadyFile
-              ? withModeStarter(
-                  studyMode,
-                  starters.data?.questions.length
-                    ? starters.data.questions
-                    : starters.loading
-                      ? undefined
-                      : topicStarters(subspaceName, spaceName),
-                )
-              : undefined
-          }
+          examples={suggestOn && isEmpty ? emptyStarters : undefined}
           notice={stillReading ? 'Your file is still being read. Answers will use it once it’s ready.' : undefined}
           draftKey={subspaceId}
           scope={scope}

@@ -58,7 +58,7 @@ const mount = async () => {
       </ToastProvider>
     </MemoryRouter>,
   )
-  return await screen.findByPlaceholderText('Ask about Cells…')
+  return await screen.findByRole('textbox')
 }
 
 const bubbles = () => [...document.querySelectorAll('[id^="msg-"]')].map((el) => el.textContent)
