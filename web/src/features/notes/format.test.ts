@@ -210,3 +210,9 @@ describe('noteMatches', () => {
     expect(noteMatches(live, 'second')).toBe(true)
   })
 })
+
+describe('notePreview with a formula', () => {
+  it('drops the \\( \\) markup around it', () => {
+    expect(notePreview('encoder: \\(z = f(x)\\) and \\[y\\]')).toBe('encoder: z = f(x) and y')
+  })
+})

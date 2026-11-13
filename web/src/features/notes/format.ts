@@ -22,7 +22,8 @@ export type Filter = 'all' | 'ai' | 'mine'
  * pretending to guard against it twice.
  */
 export function notePreview(bodyMd: string, limit = 110): string {
-  const text = stripMarkdown(bodyMd)
+  // A preview is one line of words: the \( \) around a formula is markup too.
+  const text = stripMarkdown(bodyMd).replace(/\\[()[\]]/g, '')
   if (text.length <= limit) return text
   return `${text.slice(0, limit - 1).trimEnd()}…`
 }
