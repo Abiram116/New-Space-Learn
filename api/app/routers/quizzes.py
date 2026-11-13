@@ -251,7 +251,9 @@ async def generate_quiz(
             "questions": [q.model_dump() for q in questions],
         },
     )
-    return _to_quiz(inserted[0])
+    out = _to_quiz(inserted[0])
+    out.made_from = material.kind if settings.llm_configured else "placeholder"
+    return out
 
 
 #: The most questions one quiz can grow to with "Add more questions". Past

@@ -150,6 +150,8 @@ export type Quiz = {
   best_score?: number | null
   /** How many times the user has taken it. */
   attempts?: number
+  /** Only on a just-generated quiz: 'note', 'files', 'chat', 'placeholder'… */
+  made_from?: string | null
 }
 
 export type QuizResult = {

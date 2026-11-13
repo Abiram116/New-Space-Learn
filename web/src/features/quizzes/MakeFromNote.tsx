@@ -47,6 +47,7 @@ export function MakeFromNote({
   const { show, showError } = useToast()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<'quiz' | 'cards' | null>(null)
+  const [count, setCount] = useState(5)
   const inFlight = useRef(false)
   const ready = noteHasMaterial(note.body_md)
 
@@ -94,8 +95,21 @@ export function MakeFromNote({
           <p className="text-[13px] leading-relaxed text-muted">
             Written only from “{note.title || 'Untitled note'}”, as last saved.
           </p>
+          <label className="flex items-center justify-between gap-3 text-[13px] text-ink-2">
+            Questions
+            <select
+              value={count}
+              onChange={(e) => setCount(Number(e.target.value))}
+              disabled={busy !== null}
+              className="rounded-[8px] border border-line bg-surface px-2 py-1"
+            >
+              {[3, 5, 8, 10].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
           <Button onClick={() => void make('quiz')} disabled={busy !== null}>
-            <Icon name="quiz" size={14} /> {busy === 'quiz' ? 'Writing the quiz…' : 'Quiz me on it (5 questions)'}
+            <Icon name="quiz" size={14} /> {busy === 'quiz' ? 'Writing the quiz…' : `Quiz me on it (${count} questions)`}
           </Button>
           <Button variant="secondary" onClick={() => void make('cards')} disabled={busy !== null}>
             <Icon name="deck" size={14} /> {busy === 'cards' ? 'Writing cards…' : 'Make cards (8)'}

@@ -443,6 +443,9 @@ class QuizOut(BaseModel):
     #: have been. `None` / 0 until the first attempt.
     best_score: int | None = None
     attempts: int = 0
+    #: What the quiz was just written from ("note", "files", "chat"…). Only on
+    #: the generate response, so a caller can check it got the source it asked for.
+    made_from: str | None = None
 
 
 class QuizGenerate(BaseModel):
