@@ -11,6 +11,7 @@
  * cost of the optimism is briefly stale interval math.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { gradeCard, gradeWillRetry } from '../../api/flashcards'
 import type { Grade } from '../../api/types'
@@ -475,7 +476,7 @@ export function Review({
                       key={`${c.id}-${i}`}
                       className="stage-label truncate rounded-lg border border-line bg-well/80 px-3 py-2 text-muted"
                     >
-                      {stripMarkdown(c.front)}
+                      <MathText content={stripMarkdown(c.front)} />
                     </div>
                   ))}
                   {mode.cards.length - mode.index - 1 > 5 && (
@@ -536,7 +537,7 @@ export function CardFace({
               isBack ? 'text-[13px] leading-relaxed text-ink-2' : 'nameplate text-[17px] leading-tight text-ink',
             )}
           >
-            {plain}
+            <MathText content={plain} />
           </p>
         </div>
       ) : (
@@ -551,7 +552,7 @@ export function CardFace({
                 : cn('nameplate max-w-[30ch] leading-[1.05] text-ink', long ? 'stage-face-long' : 'stage-face'),
             )}
           >
-            {plain}
+            <MathText content={plain} />
           </p>
         </div>
       )}

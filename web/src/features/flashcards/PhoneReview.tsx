@@ -11,6 +11,7 @@
  * never the only way to grade; the buttons are always there.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { Flashcard, Grade } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
@@ -384,7 +385,7 @@ export function PhoneFace({
               : cn('nameplate text-center text-ink [text-wrap:balance]', size),
           )}
         >
-          {plain}
+          <MathText content={plain} />
         </p>
       </div>
       {source && (

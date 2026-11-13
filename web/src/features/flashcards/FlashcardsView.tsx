@@ -10,6 +10,7 @@
  * stale interval math.
  */
 
+import { MathText } from '../chat/MarkdownMessage'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { cameFromChat, returnToChat } from '../../lib/fromChat'
@@ -939,10 +940,10 @@ function DeckDetail({
                   moreLabel="Card actions"
                 >
                   <span className="line-clamp-2 text-[16px] font-semibold leading-snug text-ink">
-                    {stripMarkdown(card.front)}
+                    <MathText content={stripMarkdown(card.front)} />
                   </span>
                   <span className="line-clamp-2 text-[14px] leading-snug text-muted">
-                    {stripMarkdown(card.back)}
+                    <MathText content={stripMarkdown(card.back)} />
                   </span>
                 </ListRow>
               ))}
@@ -1062,10 +1063,10 @@ function DeckDetail({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[13.5px] font-semibold text-ink">
-                        {stripMarkdown(card.front)}
+                        <MathText content={stripMarkdown(card.front)} />
                       </p>
                       <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
-                        {stripMarkdown(card.back)}
+                        <MathText content={stripMarkdown(card.back)} />
                       </p>
                     </div>
                     {(() => {
