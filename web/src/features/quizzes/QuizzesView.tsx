@@ -86,6 +86,17 @@ const ADD_MAX = 10
 /** A quiz is named by its topic line ("Policy Iteration Basics"); `?q=` shows that, not the id. */
 const quizName = (q: { topic: string | null }) => q.topic
 
+/** The questions a student missed, with the right answer and why, as text. */
+export function missedMaterial(quiz: Quiz, answers: number[]): string | undefined {
+  const text = quiz.questions
+    .map((q, i) => ({ q, i }))
+    .filter(({ q, i }) => answers[i] !== q.answer_index)
+    .map(({ q }) => `Q: ${q.q}\nAnswer: ${q.choices[q.answer_index]}${q.explanation ? `\nWhy: ${q.explanation}` : ''}`)
+    .join('\n\n')
+    .slice(0, 7900)
+  return text || undefined
+}
+
 export function QuizzesView() {
   const { space, subspace, base, isGlobal } = useTopicScope()
   if (!space || !subspace) return <TopicScopeFallback isGlobal={isGlobal} section="quizzes" />
@@ -855,6 +866,11 @@ function QuizSession({
                     const cards = await generateCards(cardsTopicId, {
                       topic: focus,
                       count,
+                      // The cards are about what THIS quiz got wrong, so the
+                      // missed questions are the material. Left to search the
+                      // topic's files instead, a quiz made from a note came
+                      // back as cards about something else entirely.
+                      source_text: missedMaterial(shown, finished.answers),
                       deck_name: `Missed: ${quiz.topic || 'quiz'}`.slice(0, LIMITS.deckName),
                     })
                     if (!cards[0]) return false
