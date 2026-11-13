@@ -12,20 +12,58 @@
  * feels like one physical system rather than a set of effects.
  *
  * CSS and GSAP have to agree, or the language breaks at exactly the moments
- * both are running: `EASE_CSS` is the literal curve, and `EASE` is a
- * CustomEase built from the SAME four numbers so a GSAP tween and a CSS
- * transition on adjacent elements move identically.
+ * both are running: `EASE_CSS` is the literal curve, and `EASE` is the SAME
+ * four numbers solved as a plain function, which GSAP takes as an ease, so a
+ * GSAP tween and a CSS transition on adjacent elements move identically.
+ *
+ * (This used to be a GSAP CustomEase. CustomEase brings an SVG-path parser
+ * with it — about a sixth of the landing page's script — to draw one curve
+ * that twenty lines of arithmetic describe exactly.)
  */
-
-import { gsap } from 'gsap'
-import { CustomEase } from 'gsap/CustomEase'
-
-gsap.registerPlugin(CustomEase)
 
 /** The one curve. Four numbers, used by both engines. */
 export const EASE_POINTS = '0.22, 1, 0.36, 1'
 export const EASE_CSS = `cubic-bezier(${EASE_POINTS})`
-export const EASE = CustomEase.create('sl', EASE_POINTS)
+export const EASE = cubicBezier(0.22, 1, 0.36, 1)
+
+/**
+ * A CSS `cubic-bezier()` as a function of progress: solve the curve's x for t
+ * (Newton's method, then bisection if that stalls), return its y.
+ */
+export function cubicBezier(x1: number, y1: number, x2: number, y2: number): (p: number) => number {
+  const cx = 3 * x1
+  const bx = 3 * (x2 - x1) - cx
+  const ax = 1 - cx - bx
+  const cy = 3 * y1
+  const by = 3 * (y2 - y1) - cy
+  const ay = 1 - cy - by
+  const x = (t: number) => ((ax * t + bx) * t + cx) * t
+  const y = (t: number) => ((ay * t + by) * t + cy) * t
+  const dx = (t: number) => (3 * ax * t + 2 * bx) * t + cx
+  return (p: number) => {
+    if (p <= 0) return 0
+    if (p >= 1) return 1
+    let t = p
+    for (let i = 0; i < 8; i++) {
+      const err = x(t) - p
+      if (Math.abs(err) < 1e-6) return y(t)
+      const d = dx(t)
+      if (Math.abs(d) < 1e-6) break
+      t -= err / d
+    }
+    let lo = 0
+    let hi = 1
+    t = p
+    for (let i = 0; i < 40; i++) {
+      const v = x(t)
+      if (Math.abs(v - p) < 1e-6) break
+      if (v < p) lo = t
+      else hi = t
+      t = (lo + hi) / 2
+    }
+    return y(t)
+  }
+}
 
 /**
  * The one duration, in seconds. Anything that needs to feel heavier is a

@@ -16,11 +16,16 @@ import { createPortal } from 'react-dom'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
 import { setPageScrollLocked } from '../../lib/scrollLock'
+import { TrustArticle } from './TrustArticle'
 import { TRUST_DOCS } from './TrustContent'
 import { TrustCornerLinks } from './TrustCornerLinks'
 import { TRUST_PAGES, type TrustSlug } from './pages'
 
 export type CardMotion = 'enter' | 'leave'
+
+// Same rule as `components/ui/Modal`: `tabindex="-1"` opts a control out.
+const FOCUSABLE =
+  'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 const GRAIN =
   "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>\")"
@@ -36,6 +41,8 @@ export function TrustCard({
   onClose: () => void
 }) {
   const cardRef = useRef<HTMLElement>(null)
+  const linksRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const latestClose = useRef(onClose)
   useEffect(() => {
     latestClose.current = onClose
@@ -57,6 +64,42 @@ export function TrustCard({
       if (e.key === 'Escape') {
         e.preventDefault()
         latestClose.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      // Tab stays with the card and the corner links that are its tabs, in the
+      // order they sit in the page; past either end it comes round again
+      // rather than wandering into the dimmed page underneath. The links are
+      // not drawn on a phone, hence the visibility check (`checkVisibility`
+      // is missing from older browsers, which then simply try them).
+      const stops = [linksRef.current, cardRef.current]
+        .flatMap((root) => (root ? Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)) : []))
+        .filter((el) => el.checkVisibility?.() ?? true)
+      if (stops.length === 0) {
+        e.preventDefault()
+        return
+      }
+      const active = document.activeElement
+      const card = cardRef.current
+      const first = stops[0]
+      const last = stops[stops.length - 1]
+      if (active === card) {
+        // Focus rests on the card itself when it arrives. Forward, the browser
+        // already goes to the card's first control; backward it would leave
+        // for the page underneath whenever the links are not drawn.
+        if (!e.shiftKey) return
+        e.preventDefault()
+        const above = stops.filter((el) => !card?.contains(el))
+        ;(above[above.length - 1] ?? last).focus()
+      } else if (!stops.some((el) => el === active)) {
+        e.preventDefault()
+        ;(e.shiftKey ? last : first).focus()
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -73,8 +116,12 @@ export function TrustCard({
     cardRef.current?.focus({ preventScroll: true })
     const before = document.title
     document.title = `${TRUST_PAGES[slug].title} · Space Learn`
+    const mine = document.title
     return () => {
-      document.title = before
+      // Only if the tab still says what this card set: leaving for another
+      // page (which has named the tab already) must not be undone from here
+      // when the card finishes sliding away.
+      if (document.title === mine) document.title = before
     }
   }, [slug])
 
@@ -97,13 +144,16 @@ export function TrustCard({
       />
 
       {/* The corner links again, above the dimming, so they stay the card's tabs. */}
-      <TrustCornerLinks className="fixed right-0 top-16 z-[55] hidden px-5 sm:px-8 md:block" />
+      <div ref={linksRef} className="contents">
+        <TrustCornerLinks className="fixed right-0 top-16 z-[55] hidden px-5 sm:px-8 md:block" />
+      </div>
 
       <section
         key={slug}
         ref={cardRef}
         tabIndex={-1}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="trust-title"
         className={cn(
           // Phones have no corner links, so the card takes the screen; on
@@ -155,41 +205,16 @@ export function TrustCard({
 
         {/* `data-lenis-prevent`: the landing page's smooth scroller leaves this
             scroll alone, so the card scrolls and the page behind does not. */}
-        <div data-lenis-prevent className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {/* The width is the page's: the intro runs wide, and the sections sit
-              in a grid of soft tiles, equal height along each row. Content
-              rises in a beat after the card lands. */}
-          <div className="px-6 pb-12 motion-safe:animate-[cardContentIn_760ms_220ms_var(--ease-sl)_both] sm:px-12">
-            <div className={cn(doc.aside && 'lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] lg:gap-12')}>
-              <div className="min-w-0">
-                <div className="max-w-[78ch] [&_p]:text-[18px] [&_p]:leading-[1.7]">{doc.intro}</div>
-                <div className={cn('mt-10 grid gap-4 md:grid-cols-2', !doc.aside && 'xl:grid-cols-3')}>
-                  {doc.sections.map((s) => (
-                    <section
-                      key={s.id}
-                      className={cn(
-                        'rounded-2xl border border-white/[0.06] bg-white/[0.03] p-6 transition-colors hover:border-white/[0.1]',
-                        s.wide && (doc.aside ? 'md:col-span-2' : 'md:col-span-2 xl:col-span-3'),
-                      )}
-                    >
-                      <h3 className="flex items-center gap-2.5 text-[18px] font-semibold leading-snug text-ink">
-                        <span aria-hidden className="h-4 w-[3px] shrink-0 rounded-full bg-brand" />
-                        {s.title}
-                      </h3>
-                      <div className="mt-3 [&_li]:text-[15.5px] [&_p]:text-[15.5px]">{s.body}</div>
-                    </section>
-                  ))}
-                </div>
-              </div>
-              {/* The right-hand column on wide screens (About: the two of us),
-                  holding still while the page beside it scrolls. */}
-              {doc.aside && (
-                <aside className="mt-10 lg:sticky lg:top-0 lg:mt-0 lg:self-start" aria-label={doc.aside.title}>
-                  <p className="setcode mb-4 text-faint">{doc.aside.title}</p>
-                  {doc.aside.body}
-                </aside>
-              )}
-            </div>
+        <div
+          ref={scrollRef}
+          data-lenis-prevent
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {/* The short version, the key facts, then the full text one section
+              at a time at a reading measure (TrustArticle). Content rises in a
+              beat after the card lands. */}
+          <div className="px-6 pb-14 pt-1 motion-safe:animate-[cardContentIn_760ms_220ms_var(--ease-sl)_both] sm:px-12">
+            <TrustArticle slug={slug} variant="card" scrollRef={scrollRef} />
           </div>
         </div>
       </section>

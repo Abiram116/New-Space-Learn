@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
+import { TrustArticle } from './TrustArticle'
 import { TRUST_DOCS } from './TrustContent'
 import { PANEL_SLUGS, TRUST_PAGES, type PanelSlug, type TrustSlug } from './pages'
 import { useTrustDialog } from './useTrustDialog'
@@ -82,19 +83,9 @@ export function TrustPanel({
               {TRUST_PAGES[slug].title}
             </h2>
             {doc.meta && <p className="setcode mt-2 text-faint">{doc.meta}</p>}
-            <div className="mt-4">{doc.intro}</div>
-            {doc.sections.map((s) => (
-              <section key={s.id} className="mt-6">
-                <h3 className="mb-1 text-[15px] font-semibold text-ink">{s.title}</h3>
-                {s.body}
-              </section>
-            ))}
-            {doc.aside && (
-              <section className="mt-6">
-                <h3 className="mb-3 text-[15px] font-semibold text-ink">{doc.aside.title}</h3>
-                {doc.aside.body}
-              </section>
-            )}
+            <div className="mt-5">
+              <TrustArticle slug={slug} variant="panel" scrollRef={scrollRef} />
+            </div>
           </div>
         </div>
       </div>

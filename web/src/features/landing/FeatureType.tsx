@@ -89,15 +89,15 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
-import { Flip } from 'gsap/Flip'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { Icon, type IconName } from '../../components/ui/Icon'
+import { Icon3D } from '../../components/ui/Icon3D'
 import { useReducedMotion } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
 import { lenisRef } from './SmoothScroll'
 import { isApplePlatform } from '../../lib/swipeGovernor'
 
-gsap.registerPlugin(Flip, ScrollTrigger)
+gsap.registerPlugin(ScrollTrigger)
 
 type Tone = 'sky' | 'sun' | 'mint' | 'coral'
 
@@ -112,7 +112,7 @@ type Feature = {
 const FEATURES: Feature[] = [
   {
     tone: 'sky',
-    icon: 'doc',
+    icon: 'citePage',
     label: 'Retrieval',
     heading: 'Every answer names its page.',
     support:
@@ -120,7 +120,7 @@ const FEATURES: Feature[] = [
   },
   {
     tone: 'sun',
-    icon: 'deck',
+    icon: 'fanOut',
     label: 'The hand-off',
     heading: 'One chat. Notes, deck, test.',
     support:
@@ -128,7 +128,7 @@ const FEATURES: Feature[] = [
   },
   {
     tone: 'mint',
-    icon: 'skill',
+    icon: 'mortarboard',
     label: 'Skills',
     heading: 'You pick how it teaches.',
     support:
@@ -262,39 +262,58 @@ export function FeatureType({
   }, [open, inView])
 
   // THE OPEN/CLOSE FLIP. `columnRefs` collects the four `<Column>` buttons;
-  // `handleOpen` captures their geometry (`Flip.getState`) the instant
-  // before `setOpen` changes which one is wide, and the effect below plays
-  // from that captured start back to the real (already-updated) layout. See
-  // `Column`'s own comment for why this replaced a `flex-grow` transition.
+  // `handleOpen` records where each one is on screen (`getBoundingClientRect`,
+  // which includes any transform still running) the instant before `setOpen`
+  // changes which one is wide. The layout effect below then measures the real
+  // (already-updated) layout and plays each column from where it was back to
+  // where it is, as a translate + scale — a transform on four elements, never
+  // a tween of `width`/`flex-grow` (the layout thrash this replaced).
+  //
+  // Hand-rolled rather than GSAP's Flip plugin: Flip and the matrix maths it
+  // carries were a sixth of this page's script, for four rectangles.
   const columnRefs = useRef<(HTMLButtonElement | null)[]>([])
-  const flipState = useRef<Flip.FlipState | null>(null)
+  const firstRects = useRef<DOMRect[] | null>(null)
 
   const handleOpen = (i: number) => {
     if (i === open) return
     const targets = columnRefs.current.filter((el): el is HTMLButtonElement => el !== null)
-    if (targets.length) flipState.current = Flip.getState(targets)
+    if (targets.length) firstRects.current = targets.map((el) => el.getBoundingClientRect())
     setOpen(i)
   }
 
   useLayoutEffect(() => {
-    const state = flipState.current
-    if (!state) return
-    flipState.current = null
+    const first = firstRects.current
+    if (!first) return
+    firstRects.current = null
     const targets = columnRefs.current.filter((el): el is HTMLButtonElement => el !== null)
-    if (!targets.length) return
-    // `will-change` only for the ~700ms this actually runs, not left standing
-    // on four buttons for the rest of the page's life.
-    gsap.set(targets, { willChange: 'transform' })
-    Flip.from(state, {
-      targets,
-      duration: 0.7,
-      ease: 'expo.out',
-      // The one option that matters: without it, Flip tweens `width`/`height`
-      // directly — the exact layout-thrash this replaced. With it, Flip
-      // fakes the resize with `scaleX`/`scaleY` + translate, so the whole
-      // gesture is a transform on four elements, nothing else.
-      scale: true,
-      onComplete: () => gsap.set(targets, { clearProps: 'willChange' }),
+    if (targets.length !== first.length) return
+    gsap.killTweensOf(targets)
+    gsap.set(targets, { clearProps: 'transform' })
+    targets.forEach((el, k) => {
+      const a = first[k]
+      const b = el.getBoundingClientRect()
+      if (!b.width || !b.height) return
+      gsap.fromTo(
+        el,
+        {
+          x: a.left - b.left,
+          y: a.top - b.top,
+          scaleX: a.width / b.width,
+          scaleY: a.height / b.height,
+          transformOrigin: '0 0',
+          // `will-change` only for the ~700ms this actually runs.
+          willChange: 'transform',
+        },
+        {
+          x: 0,
+          y: 0,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 0.7,
+          ease: 'expo.out',
+          clearProps: 'transform,willChange',
+        },
+      )
     })
   }, [open])
 
@@ -438,12 +457,12 @@ function Column({
         !isLast && 'border-b-2 lg:border-b-0 lg:border-r-2',
         // Only `border-color` transitions on CSS now — paint, not layout.
         // The actual resize (`flexGrow` below) changes INSTANTLY; the
-        // `Flip.from` call in `FeatureType` (see its own comment) is what
+        // FLIP in `FeatureType` (see its own comment) is what
         // makes that instant change still look like a 700ms animation, via
         // a transform instead of a live `width`/`flex-grow` tween. That used
         // to be in this same `transition-[...]` list, animating layout on
         // FOUR flex siblings at once every frame it ran — the single
-        // heaviest thing on this page before Flip replaced it.
+        // heaviest thing on this page before the FLIP replaced it.
         'transition-colors duration-700 ease-[var(--ease-out-expo)]',
       )}
       style={{
@@ -478,12 +497,7 @@ function Column({
         className="absolute inset-0 flex items-center gap-4 px-6 transition-opacity duration-300 lg:flex-col lg:justify-center lg:px-0 lg:py-12"
         style={{ opacity: isOpen ? 0 : 1, pointerEvents: isOpen ? 'none' : undefined }}
       >
-        <span
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full border transition-colors"
-          style={{ borderColor: `${TONE_HEX[f.tone]}66`, color: TONE_HEX[f.tone] }}
-        >
-          <Icon name={f.icon} size={18} />
-        </span>
+        <FeatureMark feature={f} />
         <span className="nameplate whitespace-nowrap text-[18px] text-ink-3 transition-colors group-hover:text-ink lg:rotate-180 lg:[writing-mode:vertical-rl]">
           {f.label}
         </span>
@@ -496,15 +510,41 @@ function Column({
       >
         <Body feature={f} index={index} open={isOpen} reduced={false} />
       </div>
-
-      <style>{`
-        @keyframes featureBeat {
-          0%   { opacity: 0; transform: scale(0.84); }
-          30%  { opacity: 1; transform: scale(1.03); }
-          100% { opacity: 0; transform: scale(1.28); }
-        }
-      `}</style>
     </button>
+  )
+}
+
+/**
+ * A feature's mark: an enamelled tile stamped with the glyph — the tile's own
+ * edge stepped down-right like the glyph's extrusion, lit from the upper left
+ * like everything else on the page. Hovering or focusing the column lifts
+ * the tile and tilts the glyph toward you (the glyph's tilt is `Icon3D`'s);
+ * reduced motion keeps the depth and drops the movement.
+ */
+function FeatureMark({ feature: f, size = 52 }: { feature: Feature; size?: number }) {
+  const hex = TONE_HEX[f.tone]
+  const r = Math.round(size * 0.29)
+  return (
+    <span aria-hidden className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }}>
+      {/* The tile's edge — its thickness, in the tone's shadow. */}
+      <span
+        className="absolute inset-0 translate-x-[3px] translate-y-[3px]"
+        style={{ borderRadius: r, background: `${hex}2e`, boxShadow: '0 12px 26px -10px rgba(0,0,0,0.85)' }}
+      />
+      {/* The face: a little tone at the lit corner, falling into shadow. */}
+      <span
+        className="absolute inset-0 border transition-transform duration-500 group-hover:-translate-x-px group-hover:-translate-y-px group-focus-visible:-translate-x-px group-focus-visible:-translate-y-px motion-reduce:transition-none"
+        style={{
+          borderRadius: r,
+          borderColor: `${hex}70`,
+          background: `linear-gradient(145deg, ${hex}38 0%, ${hex}12 52%, rgba(0,0,0,0.28) 100%), #1b1512`,
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -3px 8px rgba(0,0,0,0.4)',
+        }}
+      />
+      <span className="relative" style={{ color: hex }}>
+        <Icon3D name={f.icon} size={Math.round(size * 0.46)} />
+      </span>
+    </span>
   )
 }
 
@@ -553,7 +593,8 @@ function Body({
       className="grid h-full grid-cols-1 items-center gap-8 px-7 py-10 sm:px-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-12 lg:px-14"
     >
       <div className="max-w-[34ch]">
-        <span data-label className="setcode block text-[13px]" style={{ color: TONE_HEX[f.tone] }}>
+        <span data-label className="setcode flex items-center gap-3 text-[13px]" style={{ color: TONE_HEX[f.tone] }}>
+          <FeatureMark feature={f} size={40} />
           {f.label}
         </span>
         <h2

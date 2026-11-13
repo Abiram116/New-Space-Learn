@@ -7,7 +7,7 @@ import { TrustCard } from './TrustCard'
 
 afterEach(cleanup)
 
-const open = (slug: 'about' | 'contact' | 'privacy') =>
+const open = (slug: 'about' | 'contact' | 'privacy' | 'terms') =>
   render(
     <MemoryRouter>
       <TrustCard slug={slug} motion="enter" onClose={() => {}} />
@@ -40,5 +40,36 @@ describe('trust page content', () => {
     open('privacy')
     const links = screen.getAllByRole('link', { name: 'either of us' })
     expect(links[0]).toHaveAttribute('href', `mailto:${TEAM_EMAILS}`)
+  })
+
+  it('every page leads with the short version', () => {
+    for (const slug of ['about', 'privacy', 'terms', 'contact'] as const) {
+      open(slug)
+      expect(screen.getByText('The short version')).toBeInTheDocument()
+      cleanup()
+    }
+  })
+
+  it('Privacy: the key facts up top — what is stored, who sees it, how to delete it, who to ask', () => {
+    open('privacy')
+    const glance = screen.getByRole('region', { name: 'At a glance' })
+    for (const label of ['What we store', 'Who can see it', 'How to delete it', 'Questions or a copy']) {
+      expect(within(glance).getByText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('long pages list their sections, in order, and a jump moves focus to the section', () => {
+    open('privacy')
+    const navs = screen.getAllByRole('navigation', { name: 'On this page' })
+    const links = within(navs[0]).getAllByRole('link')
+    const headings = screen.getAllByRole('heading', { level: 3 }).filter((h) => h.id.endsWith('-h'))
+    expect(links.map((a) => a.textContent?.replace(/^\d\d/, ''))).toEqual(headings.map((h) => h.textContent?.replace(/^\d\d/, '')))
+    fireEvent.click(links[3])
+    expect(document.activeElement).toBe(headings[3])
+  })
+
+  it('short pages have no jump list', () => {
+    open('contact')
+    expect(screen.queryByRole('navigation', { name: 'On this page' })).toBeNull()
   })
 })

@@ -458,7 +458,8 @@ export function SourceDrift() {
   const still = useReducedMotion()
   if (still) return null
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+    // `sl-drift`: paused while the page is covered (`.sl-still`, index.css).
+    <div aria-hidden className="sl-drift pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {FRAGMENTS.map((f) => (
         <span
           key={f.t}

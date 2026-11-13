@@ -151,7 +151,11 @@ describe('trust card (from the landing page)', () => {
   it('has no tabs of its own — the corner links are its navigation', async () => {
     renderAt(['/privacy'])
     const card = await panel()
-    expect(within(card).queryByRole('navigation')).toBeNull()
+    // The only navigation inside is the jump list within this page.
+    for (const nav of within(card).queryAllByRole('navigation')) {
+      expect(nav).toHaveAccessibleName('On this page')
+      for (const a of within(nav).getAllByRole('link')) expect(a.getAttribute('href')).toMatch(/^#trust-privacy-/)
+    }
     expect(within(card).getAllByRole('button')).toHaveLength(1) // Close
   })
 
