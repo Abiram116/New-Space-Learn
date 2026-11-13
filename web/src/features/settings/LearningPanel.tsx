@@ -16,6 +16,7 @@ import type { StudentModel } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
 import { LIMITS } from '../../lib/limits'
+import { modeInfo, STUDY_MODES } from '../../lib/studyMode'
 import {
   composeStyles,
   DEPTH,
@@ -26,7 +27,7 @@ import {
   STYLE,
   TEACHING_PREFERENCE_MAX,
 } from './learning'
-import { OptionCard, Pill, SaveTell, Segmented, SessionDial, SettingsCard, Stepper } from './parts'
+import { OptionCard, Pill, SaveTell, Segmented, SessionDial, SettingsCard, SpringSwitch, Stepper } from './parts'
 
 type Props = {
   student: StudentModel
@@ -60,8 +61,89 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
   const inferred = learned.filter((p) => p.source !== 'explicit')
   const tell = (key: string) => <SaveTell saving={savingKey === key} saved={savedKey === key} />
 
+  const personalized = student.personalize !== false
   return (
     <>
+      {/* The master switch. It sits first because it governs everything below:
+          the choices here only matter while it is on, and a student should be
+          able to see, in one click, what the app is like without them. */}
+      <Rise className="col-span-full">
+        <SettingsCard
+          icon="user"
+          title="Make answers mine"
+          hint={
+            personalized
+              ? 'On: the tutor shapes answers to your style, your weak spots and your exam. Each answer says how.'
+              : 'Off: answers still stay inside your topic and files, but ignore your history and style.'
+          }
+          tell={tell('personalize')}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-[13.5px] text-ink-2">
+              {personalized ? 'Personalised answers' : 'Generic answers'}
+            </span>
+            <SpringSwitch
+              label="Make answers mine"
+              checked={personalized}
+              onChange={(next) => save('personalize', { personalize: next })}
+            />
+          </div>
+        </SettingsCard>
+      </Rise>
+
+      {/* What they are studying for. Changes how the tutor answers from the
+          next message, how quizzes and cards are written, and what Home plans. */}
+      <Rise className="col-span-full">
+        <SettingsCard
+          icon="target"
+          title="What are you working towards?"
+          hint="Pick what you are preparing for, say what it is, and add the date. Change any of it whenever your situation does: the tutor, quizzes and Home follow from the next message."
+          tell={
+            <>
+              {tell('study_mode')}
+              {tell('exam_context')}
+              {tell('exam_date')}
+            </>
+          }
+        >
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3" role="radiogroup" aria-label="What are you working towards?">
+            {STUDY_MODES.map((m) => (
+              <OptionCard
+                key={m.value}
+                on={student.study_mode === m.value}
+                role="radio"
+                icon={m.icon}
+                label={m.label}
+                hint={m.hint}
+                onClick={() => save('study_mode', { study_mode: student.study_mode === m.value ? null : m.value })}
+              />
+            ))}
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <label className="flex flex-col gap-1.5 text-[13px] font-medium text-ink-2">
+              In your words
+              <input
+                type="text"
+                value={student.exam_context ?? ''}
+                maxLength={LIMITS.examContext}
+                placeholder={modeInfo(student.study_mode)?.goal ?? 'e.g. GATE 2027'}
+                onChange={(e) => saveText('exam_context', { exam_context: e.target.value || null })}
+                className={field}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-medium text-ink-2">
+              {modeInfo(student.study_mode)?.event === 'interview' ? 'Interview date' : 'Date'}
+              <input
+                type="date"
+                value={student.exam_date ?? ''}
+                onChange={(e) => save('exam_date', { exam_date: e.target.value || null })}
+                className={cn(field, 'w-auto [color-scheme:dark]')}
+              />
+            </label>
+          </div>
+        </SettingsCard>
+      </Rise>
+
       <Rise className="col-span-full"><SettingsCard tone="hero" icon="sparkle" title={STYLE.ask} hint={STYLE.aside} tell={tell('learning_style')}>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
           {STYLE.options.map((o, i) => {
@@ -169,20 +251,6 @@ export function LearningPanel({ student, savingKey, savedKey, save, saveText, le
               </div>
             </div>
           </div>
-        </SettingsCard>
-      </Rise>
-
-      <Rise delay={150} className="h-full">
-        <SettingsCard icon="target" title="Working towards" hint="An exam, a course or a job. Answers lean towards it." tell={tell('exam_context')}>
-          <input
-            type="text"
-            value={student.exam_context ?? ''}
-            maxLength={LIMITS.examContext}
-            aria-label="Working towards"
-            placeholder="e.g. GATE 2027"
-            onChange={(e) => saveText('exam_context', { exam_context: e.target.value || null })}
-            className={field}
-          />
         </SettingsCard>
       </Rise>
 

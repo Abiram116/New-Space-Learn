@@ -13,6 +13,9 @@ import {
   planReview,
   reviewHref,
   topicsByRecency,
+  filesNotReady,
+  subjectsForHome,
+  topicsOf,
 } from './today'
 
 const TODAY = new Date(2026, 8, 30, 10, 0) // 30 Sep 2026, local
@@ -207,5 +210,37 @@ describe('second-tier picks', () => {
     const note = (id: string, updated_at: string) => ({ id, title: id, updated_at }) as Note
     expect(pickRecentNote([note('old', '2026-01-01T00:00:00Z'), note('new', '2026-09-01T00:00:00Z')])?.id).toBe('new')
     expect(pickRecentNote([])).toBeNull()
+  })
+})
+
+describe('Home structure helpers', () => {
+  const sub = (id: string, at: string | null, docs = 0) => ({
+    id,
+    subject_id: 's',
+    name: id,
+    last_activity_at: at,
+    counts: { docs },
+  })
+  const sp = (id: string, pinned: boolean, subs: ReturnType<typeof sub>[]) =>
+    ({ id, name: id, tone: 'brand', pinned, subspaces: subs }) as Space
+
+  it('counts files that are not ready yet, and only when stats are in', () => {
+    const topics = topicsByRecency([sp('a', false, [sub('x', null, 3), sub('y', null, 1)])])
+    expect(filesNotReady(topics, { docs_indexed: 2 })).toBe(2)
+    expect(filesNotReady(topics, { docs_indexed: 9 })).toBe(0)
+    expect(filesNotReady(topics, null)).toBeNull()
+  })
+
+  it('lists pinned subjects first, then the most recently worked in', () => {
+    const old = sp('old', false, [sub('o', '2026-01-01T00:00:00Z')])
+    const fresh = sp('fresh', false, [sub('f', '2026-06-01T00:00:00Z')])
+    const pinned = sp('pinned', true, [])
+    const empty = sp('empty', false, [])
+    expect(subjectsForHome([old, empty, fresh, pinned]).map((s) => s.id)).toEqual(['pinned', 'fresh', 'old', 'empty'])
+  })
+
+  it('orders a subject’s topics by recency', () => {
+    const s = sp('s', false, [sub('a', null), sub('b', '2026-06-01T00:00:00Z'), sub('c', '2026-01-01T00:00:00Z')])
+    expect(topicsOf(s).map((t) => t.id)).toEqual(['b', 'c', 'a'])
   })
 })

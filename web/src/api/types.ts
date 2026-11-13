@@ -40,7 +40,13 @@ export type ChatMessage = {
   created_at: string
   /** The follow-up question that came with this answer, if it had a good one. */
   suggestion?: string | null
+  /** Short phrases for what made this answer this student's: the subject it was read in, their weak spot, their style. */
+  personal?: string[] | null
+  /** How much of the answer its own citations back, checked against the student's files. */
+  grounding?: Grounding | null
 }
+
+export type Grounding = { checked: number; backed: number; shaky: string[] }
 
 export type DocStatus = 'uploading' | 'processing' | 'ready' | 'failed'
 
@@ -158,6 +164,31 @@ export type QuizResult = {
   attempts?: number
 }
 
+/** What a quiz or deck is written from — `MaterialSource` on the server.
+ *  `general` is the model's own knowledge: only ever used when picked, and
+ *  every question it writes says so in its `source`. */
+export type MaterialSource = 'files' | 'notes' | 'chat' | 'general'
+
+/** A question of a reworded retake. Never stored: the attempt is scored
+ *  against the stored quiz, so each answer is mapped back — this question is
+ *  `original_index` there, and the choice at position i here is
+ *  `choice_order[i]` there. */
+export type QuizVariantQuestion = QuizQuestion & {
+  original_index: number
+  choice_order: number[]
+  /** False when it kept its stored wording and was only reshuffled. */
+  reworded?: boolean
+}
+
+export type QuizReword = {
+  quiz_id: string
+  questions: QuizVariantQuestion[]
+  /** How many questions have new wording. */
+  reworded: number
+  /** Said to the student when the rewording fell short; null otherwise. */
+  note?: string | null
+}
+
 export type MemoryScope = 'session' | 'topic' | 'all'
 
 export type Skill = {
@@ -256,7 +287,14 @@ export type StudentModel = {
   learning_style: string | null
   session_length_minutes: number | null
   exam_context: string | null
+  /** The day of that exam, "YYYY-MM-DD". Drives Home's countdown and plan. */
+  exam_date?: string | null
   teaching_preference: string | null
+  /** False when the student has turned personalisation off: answers stay in
+   *  their topic and files but are no longer shaped to them. Absent = on. */
+  personalize?: boolean
+  /** What they are studying for; the tutor, quizzes and Home adapt to it. */
+  study_mode?: 'college' | 'competitive' | 'interview' | 'curious' | null
   /** Computed from real quiz averages — never sent on PATCH. */
   weak_areas: TopicSignal[]
   strong_areas: TopicSignal[]
@@ -293,6 +331,9 @@ export type StudentModelPatch = Partial<
     | 'learning_style'
     | 'session_length_minutes'
     | 'exam_context'
+    | 'exam_date'
+    | 'personalize'
+    | 'study_mode'
     | 'teaching_preference'
     | 'intake_skipped_style'
   >

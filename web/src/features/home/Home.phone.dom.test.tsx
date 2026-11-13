@@ -13,7 +13,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Space, Stats } from '../../api/types'
 import { ToastProvider } from '../../components/ui/Toast'
-import { clearCache, writeCache } from '../../lib/asyncCache'
+import { clearCache, readCache, writeCache } from '../../lib/asyncCache'
 import { MOBILE_QUERY } from '../../lib/useIsMobile'
 
 const refreshSpaces = vi.fn()
@@ -39,7 +39,13 @@ vi.mock('../../auth/AuthProvider', () => {
 vi.mock('../../api/quizzes', () => ({ listAllQuizzes: vi.fn().mockResolvedValue([]) }))
 vi.mock('../../api/notes', () => ({ listAllNotes: vi.fn().mockResolvedValue([]) }))
 const updateStudentModel = vi.fn()
-vi.mock('../../api/me', () => ({ updateStudentModel: (...a: unknown[]) => updateStudentModel(...a) }))
+vi.mock('../../api/me', () => ({
+  updateStudentModel: (...a: unknown[]) => updateStudentModel(...a),
+  // Home reads the model under the shared 'student-model' key; answer with
+  // whatever the test put there, so the fetch never overwrites it.
+  getStudentModel: () => Promise.resolve(readCache('student-model')?.data ?? null),
+}))
+vi.mock('../../api/flashcards', () => ({ listAllDecks: vi.fn().mockResolvedValue([]) }))
 
 import { Home } from './Home'
 
@@ -119,6 +125,18 @@ afterEach(() => {
 
 describe('Today, on a phone', () => {
   beforeEach(() => setDevice(true))
+
+  it('has a Help entry that opens the phone\'s own Help (no keyboard section)', async () => {
+    spacesState = { spaces: [space()], loading: false, error: null }
+    getCachedStats.mockResolvedValue(stats())
+    renderHome()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Help' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Help' })
+    expect(within(dialog).getByText('Start here')).toBeInTheDocument()
+    expect(within(dialog).getByText('The topic button')).toBeInTheDocument()
+    expect(within(dialog).queryByText('Keyboard shortcuts')).not.toBeInTheDocument()
+  })
 
   it('greets by first name and leads with one review action, timed', async () => {
     spacesState = { spaces: [space()], loading: false, error: null }

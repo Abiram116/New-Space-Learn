@@ -6,51 +6,83 @@
  * written from their own material, and puts the one thing worth doing next
  * directly under it.
  *
+ * Read top to bottom in one pass (desktop):
+ *
+ *   1. Where you stand — Nova and the brief, Help in the corner.
+ *   2. Up next — what to do now: the decision engine's pick, cards due, the
+ *      quiz most worth retaking, files not ready yet, the topic you were last
+ *      in. A new account sees its setup checklist here instead.
+ *   3. This week — streak, quiz average and study time over the fortnight,
+ *      then what is coming due and what is fading. (What you did this week is on Profile.)
+ *   4. Your subjects — grouped by subject, each with its icon and topics.
+ *      A reference shelf, so it sits last, in an even grid.
+ *
  * Everything shown is real: the brief comes from `/me/brief` (with honest
- * deterministic copy behind it), counts come from `/me/stats`, and the topics
- * come from the spaces list. Nothing here is invented for decoration.
+ * deterministic copy behind it), counts come from `/me/stats`, the topics
+ * from the spaces list, and the recap from the quiz/deck lists and student
+ * model other screens already share. Nothing here is invented for decoration.
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import type {
   Brief,
+  BriefSuggestion,
   ForecastDay,
   Space,
   Stats,
-  StudyComposition,
+  StudentModel,
   Subspace,
   Tone,
 } from '../../api/types'
+import { friendlyMessage } from '../../api/errors'
 import { Button } from '../../components/ui/Button'
 import { Card, DashedCard } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
+import { Input } from '../../components/ui/Input'
 import { FirstRun } from './FirstRun'
 import { Tip } from '../../components/ui/Tip'
 import { Icon, type IconName } from '../../components/ui/Icon'
-import { CountUp, Rise, Stagger } from '../../components/ui/motion'
+import { CountUp, Rise } from '../../components/ui/motion'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { Ledger } from '../../components/ui/Surface'
 import { cn } from '../../lib/cn'
 import { getCachedBrief, getCachedStats } from '../../lib/briefCache'
 import { HOME_BRIEF_KEY, HOME_STATS_KEY } from '../../lib/homeKeys'
+import { LIMITS } from '../../lib/limits'
+import { nameHint } from '../../lib/nameHint'
 import { subspacePath } from '../../lib/nav'
 import { useAsync, type AsyncResult } from '../../lib/useAsync'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { SlowCaption, StaleNotice } from '../../lib/AsyncState'
 import { useSlowState, type SlowPhase } from '../../lib/useSlowState'
-import { toneDot, toneText } from '../../lib/tone'
+import { toneSoft, toneText } from '../../lib/tone'
 import { useOptionalAuth } from '../../auth/AuthProvider'
 import { NewSpaceModal } from '../spaces/NewSpaceModal'
+import { SubjectIcon } from '../spaces/SubjectIcon'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { StyleIntakeCard, useCachedStudentModel } from '../onboarding/StyleIntakeCard'
 import { deriveChecklist, hideChecklist, isChecklistHidden } from './checklist'
 import { FirstSteps, type StepTarget } from './FirstSteps'
+import { examPlan, readiness, type ExamPlan, type Readiness } from './exam'
+import { FocusDialog } from './FocusDialog'
+import { ModeCard } from './ModeCard'
+import { modeInfo } from '../../lib/studyMode'
 import { Fortnight } from './Fortnight'
+import { HelpButton, useHomeHelp } from './HomeHelp'
 import { NovaBeside, NovaHello, briefIsGreeting } from './Greeting'
 import { Today, WaitingNova } from './Today'
-import { firstNameOf } from './today'
-import { topicsByRecency } from './today'
+import {
+  estimateReviewMinutes,
+  filesNotReady,
+  firstNameOf,
+  subjectsForHome,
+  topicsByRecency,
+  topicsOf,
+  type TopicEntry,
+} from './today'
+import { useHomeData, type HomeData } from './useHomeData'
+import { busiestDeck, comingDue, fadingTopics, type Fading } from './week'
 
 /**
  * Home, by device. Both shapes read the same brief and stats caches, so moving
@@ -80,6 +112,15 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
   const briefPhase = useSlowState(brief.loading)
   const statsPhase = useSlowState(stats.loading)
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
+  const navigate = useNavigate()
+  // A subject made from here opens on its first topic: it was made to be used.
+  const newSpaceModal = (
+    <NewSpaceModal
+      open={newSpaceOpen}
+      onClose={() => setNewSpaceOpen(false)}
+      onTopicCreated={({ space, subspace }) => navigate(subspacePath(space, subspace))}
+    />
+  )
   const user = useOptionalAuth()?.user
   const name = firstNameOf(
     (user?.user_metadata?.display_name as string | undefined) || user?.email?.split('@')[0],
@@ -88,27 +129,14 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
   const briefGreets = !brief.loading && briefIsGreeting(brief.data?.headline, name)
 
   const anySpaces = spaces.length > 0
-  const entries = activeSubspaces(spaces)
-  const anySubspaces = entries.length > 0
-  const first = entries[0]
-  // /flashcards and /quizzes are account-wide libraries regardless of which
-  // topic's URL gets you there (see FlashcardsView/QuizzesView), but the
-  // topic in the link still becomes the app's active context — and `first`
-  // is picked by recency alone, so it can easily be a topic with nothing due.
-  // This is the one signal Home actually has on hand (a topic's own card/quiz
-  // count, not per-topic due counts), so prefer a topic that holds something
-  // over one that's merely recent; fall back to `first` when nothing does.
-  const cardsEntry = entries.find((e) => (e.subspace.counts?.cards ?? 0) > 0) ?? first
-  const quizzesEntry = entries.find((e) => (e.subspace.counts?.quizzes ?? 0) > 0) ?? first
-  // Subjects that exist but hold nothing yet — shown as empty binder slots.
-  const emptySubjects = spaces.filter((sp) => sp.subspaces.length === 0).slice(0, 3)
-
-  const due = stats.data?.cards_due ?? 0
+  const topics = useMemo(() => topicsByRecency(spaces), [spaces])
+  const anySubspaces = topics.length > 0
+  const help = useHomeHelp({ hasTopics: anySubspaces, keyboard: true })
+  const extra = useHomeData(spaces)
 
   // The first-run checklist, from counts already on hand. Step 1's target
   // depends on what exists: no subject yet opens the new-subject dialog; a
-  // subject with no topic can only be pointed at the rail.
-  const topics = useMemo(() => topicsByRecency(spaces), [spaces])
+  // subject with no topic is pointed at the field under "Your subjects".
   const checklist = deriveChecklist(topics, stats.loading ? null : stats.data)
   const materialTopic = topics.find((t) => (t.subspace.counts?.docs ?? 0) > 0) ?? topics[0]
   const stepTargets: Record<'material' | 'practice' | 'tutor', StepTarget> = {
@@ -116,7 +144,7 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
       ? { kind: 'button', label: 'Create a subject', onClick: () => setNewSpaceOpen(true) }
       : materialTopic
         ? { kind: 'link', to: `${materialTopic.link}/docs`, label: 'Add material' }
-        : { kind: 'hint', text: 'Add a topic to your subject from the rail, then drop a PDF into it.' },
+        : { kind: 'hint', text: 'Name your first topic below, then drop a PDF into it.' },
     practice: materialTopic
       ? {
           kind: 'link',
@@ -130,23 +158,19 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
       : { kind: 'hint', text: 'Add material first.' },
   }
   const showChecklist = !checklist.complete && !checklistHidden && !stats.loading
+  const hideTheChecklist = () => {
+    hideChecklist(accountKey)
+    setHiddenFor(accountKey)
+  }
 
   /**
    * Decide nothing until the subjects are in.
    *
    * Home has two entirely different shapes — the introduction for an empty
    * account, the dashboard for a working one — and which applies is not known
-   * until `/spaces` answers. The old order rendered the *dashboard* while that
-   * was still in flight and corrected itself afterwards, so a new account got a
-   * flash of standing figures under a brief headline before being replaced by
-   * "Bring what you're studying".
-   *
-   * It looked intermittent because the brief is cached for half an hour: on the
-   * first reload the cache still held a headline written when the account had
-   * subjects, which is what made the flash legible. Later reloads found a cache
-   * matching the empty state and the swap became invisible — same bug, quieter.
-   *
-   * Guessing was never worth it. `/spaces` is one round trip now, and a brief
+   * until `/spaces` answers. Rendering the dashboard while that was in flight
+   * flashed standing figures at a brand-new account before replacing them
+   * with the introduction (worse with a half-hour-old cached brief). A brief
    * skeleton beats showing someone a dashboard that is about to be taken away.
    *
    * A failed load is handled here too, rather than falling through to
@@ -176,269 +200,708 @@ function DesktopHome({ stats, brief }: { stats: AsyncResult<Stats>; brief: Async
 
   /* A brand-new account gets the introduction *instead of* the dashboard, not
      threaded through it. Until there is a subject there is nothing to brief,
-     nothing to measure and nothing to resume, and every one of those bands is
-     an argument that the product is empty. Home returns the moment there is
-     anything real to put on it. */
+     nothing to measure and nothing to resume. Home returns the moment there
+     is anything real to put on it. */
   if (!anySpaces) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
+          <HelpButton onOpen={help.open} hint className="-mt-3 mb-1 self-end" />
           <FirstRun
             name={name}
             onCreate={() => setNewSpaceOpen(true)}
             steps={<FirstSteps checklist={checklist} targets={stepTargets} />}
           />
         </div>
-        <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
+        {newSpaceModal}
+        {help.dialog}
       </div>
     )
   }
 
+  // Until any file has been added, the checklist IS what to do now; after
+  // that (even while the file is still being read) it trails the real "up
+  // next" items until it is done or put away.
+  const anyFiles = topics.some((t) => (t.subspace.counts?.docs ?? 0) > 0)
+  const leadWithChecklist = showChecklist && !anyFiles && !brief.data?.suggestion
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-7 sm:px-7 sm:py-9">
-        {/* ── The brief ── */}
-        {/* Each band rises in just behind the one above it, so Home assembles
-            top-down the way you read it. Delays stay inside the ~250ms budget
-            in ui/motion — past that a stagger stops reading as motion and
-            starts reading as lag. Reduced-motion users get all of it at once,
-            handled inside Rise. */}
-        <header className="flex flex-col gap-5 pb-8 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
-          {/* Nova says hello above the brief — or, when the headline already
-              greets, just waves beside it. Never two hellos. The hello keeps
-              its place while the brief loads, so it doesn't re-wave (or
-              change its line) when the brief lands. */}
-          <div className="flex min-w-0 flex-col gap-2">
-            {!briefGreets && (
-              <NovaHello name={name} phase={brief.loading ? briefPhase : undefined} size={44} className="mb-1" />
-            )}
-            {brief.loading ? (
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-11 w-2/3 rounded-lg" />
-                <Skeleton className="h-4 w-1/2 rounded" />
-                <SlowCaption phase={briefPhase} onRetry={brief.refresh} />
-              </div>
-            ) : (
-              <>
-                {briefGreets ? (
-                  <NovaBeside size={64}>
-                    <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
-                      {brief.data?.headline}
-                    </h1>
-                  </NovaBeside>
-                ) : (
-                  <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
-                    {brief.data?.headline ?? 'Ready when you are'}
-                  </h1>
-                )}
-                <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
-                  {brief.data?.body ??
-                    'Add a topic to your space and start asking questions about your own material.'}
-                </p>
-                {/* A failed background refresh keeps whatever headline is
-                    already showing (the effect never clears `local` on
-                    error) — this is the footnote that says so instead of
-                    leaving the stale copy looking current. */}
-                {brief.error && <StaleNotice onRetry={brief.refresh} className="mt-0.5" />}
-              </>
-            )}
-          </div>
-
-          {anySubspaces && first && (
-            <div className="flex shrink-0 flex-wrap items-center gap-2.5">
-              {brief.data?.suggestion ? (
-                /* This is the one action the product is actually
-                   recommending, computed from real weak-signal data — it
-                   shouldn't look identical to a generic "open something"
-                   button. The foil ring marks it as the considered pick,
-                   and `reason` (the decision engine's own words — see
-                   `next_action` in `me/brief.py`) is what makes it legible
-                   as a recommendation rather than an arbitrary highlight. */
-                <div className="flex flex-col items-start gap-1.5">
-                  <Link to={brief.data.suggestion.route}>
-                    <Button
-                      size="lg"
-                      className="ring-2 ring-brand/30 ring-offset-2 ring-offset-canvas transition-shadow hover:ring-brand/60"
-                    >
-                      {brief.data.suggestion.label}
-                      <Icon name="arrowRight" size={15} />
-                    </Button>
-                  </Link>
-                  {brief.data.suggestion.reason && (
-                    <p className="max-w-xs text-[12.5px] leading-snug text-muted">
-                      {brief.data.suggestion.reason}
-                    </p>
-                  )}
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-7 sm:px-7 sm:py-9">
+        {/* ── 1. Where you stand ──
+            Nova and the brief, with Help in the corner. The brief's own
+            suggestion is no longer a button up here: it leads "Up next",
+            beside the other things worth doing, so there is one place to look
+            for what to do. Each band rises in just behind the one above it;
+            reduced-motion users get all of it at once (inside Rise). */}
+        <header className="flex flex-col gap-2">
+          <div className="flex items-start gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              {/* Nova says hello above the brief — or, when the headline
+                  already greets, just waves beside it. Never two hellos. */}
+              {!briefGreets && (
+                <NovaHello name={name} phase={brief.loading ? briefPhase : undefined} size={44} className="mb-1" />
+              )}
+              {brief.loading ? (
+                <div className="flex flex-col gap-3">
+                  <Skeleton className="h-11 w-2/3 rounded-lg" />
+                  <Skeleton className="h-4 w-1/2 rounded" />
+                  <SlowCaption phase={briefPhase} onRetry={brief.refresh} />
                 </div>
               ) : (
-                <Link to={due > 0 ? `${cardsEntry?.link ?? first.link}/flashcards` : first.link}>
-                  <Button size="lg">
-                    {due > 0 ? `Review ${due} card${due === 1 ? '' : 's'}` : 'Pick up where you left off'}
-                    <Icon name="arrowRight" size={15} />
-                  </Button>
-                </Link>
+                <>
+                  {briefGreets ? (
+                    <NovaBeside size={64}>
+                      <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">{brief.data?.headline}</h1>
+                    </NovaBeside>
+                  ) : (
+                    <h1 className="nameplate max-w-3xl text-[clamp(30px,5.5vw,52px)] text-ink">
+                      {brief.data?.headline ?? 'Ready when you are'}
+                    </h1>
+                  )}
+                  <p className="max-w-xl text-[14.5px] leading-relaxed text-ink-3">
+                    {brief.data?.body ?? 'Add a topic to your subject and start asking questions about your own material.'}
+                  </p>
+                  {/* A failed background refresh keeps the headline already
+                      showing — this footnote says so instead of leaving stale
+                      copy looking current. */}
+                  {brief.error && <StaleNotice onRetry={brief.refresh} className="mt-0.5" />}
+                </>
               )}
             </div>
-          )}
+            <HelpButton onOpen={help.open} hint className="-mt-1 shrink-0" />
+          </div>
         </header>
 
+        {/* An exam date turns Home into a plan: days left, what today is for. */}
+        <ExamStrip
+          plan={examPlan({
+            examDate: (studentModel ?? extra.model)?.exam_date,
+            goal: (studentModel ?? extra.model)?.exam_context,
+            event: modeInfo((studentModel ?? extra.model)?.study_mode)?.event,
+            due: stats.data?.cards_due ?? 0,
+            fading: fadingTopics(extra.model, extra.index, { exclude: extra.retake?.quiz.subspace_id ?? null }),
+          })}
+          model={studentModel ?? extra.model}
+          ready={readiness(extra.index)}
+          hasGoalNoDate={
+            Boolean((studentModel ?? extra.model)?.exam_context || (studentModel ?? extra.model)?.study_mode) &&
+            !(studentModel ?? extra.model)?.exam_date &&
+            (studentModel ?? extra.model)?.study_mode !== 'curious'
+          }
+        />
+
+        {/* The one answer that changes the most: what they are studying for. */}
+        <ModeCard model={studentModel ?? extra.model} />
+
         {/* Signed up on a phone: the two questions it skipped, offered once. */}
-        <StyleIntakeCard model={studentModel} className="mb-7" />
+        <StyleIntakeCard model={studentModel} className="-mt-4" />
 
-        {showChecklist && (
-          <FirstSteps
-            checklist={checklist}
-            targets={stepTargets}
-            className="mb-7"
-            onHide={() => {
-              hideChecklist(accountKey)
-              setHiddenFor(accountKey)
-            }}
-          />
-        )}
-
-        {/* ── Standing: four figures on one rule, the fortnight as evidence ──
-
-            This was four separately-bordered cards in a 1.6fr/1tfr split, which
-            is what made Home read as a pile rather than a page. None of these
-            are objects you own, so none of them is cardstock: they are figures
-            you are measured against, and figures belong on a rule. The chart
-            sits directly beneath the rule they share, as the evidence for the
-            two of them that are time-based. */}
-        {anySpaces && (
-          <Rise delay={60}>
-          <section className="flex flex-col gap-5 border-t border-line pt-7">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
-              <Figure
-                icon="flame"
-                label="Current streak"
-                value={stats.loading ? null : `${stats.data?.streak_days ?? 0}`}
-                unit={stats.data?.streak_days === 1 ? 'day' : 'days'}
-                tone="brand"
-                lit={(stats.data?.streak_days ?? 0) > 0}
-                detail={
-                  (stats.data?.streak_days ?? 0) > 0
-                    ? 'Consecutive days with something logged.'
-                    : 'Log anything today to start one.'
-                }
-                countUp
-              />
-              <Figure
-                icon="deck"
-                label="Cards due"
-                value={stats.loading ? null : `${due}`}
-                unit={due === 1 ? 'card' : 'cards'}
-                tone="sun"
-                lit={due > 0}
-                detail={due > 0 ? 'Ready to review now.' : 'Nothing waiting. Nice.'}
-                to={cardsEntry && due > 0 ? `${cardsEntry.link}/flashcards` : undefined}
-              />
-              <Figure
-                icon="target"
-                label="Quiz average"
-                value={
-                  stats.loading
-                    ? null
-                    : stats.data?.quiz_average != null
-                      ? `${stats.data.quiz_average}`
-                      : '—'
-                }
-                unit={stats.data?.quiz_average != null ? '%' : ''}
-                tone="sky"
-                lit={(stats.data?.quiz_average ?? 0) >= 80}
-                detail={
-                  stats.data?.quiz_average != null
-                    ? 'Across your last five.'
-                    : 'Take one to find out.'
-                }
-                to={quizzesEntry ? `${quizzesEntry.link}/quizzes` : undefined}
-              />
-              <Figure
-                icon="clock"
-                label="This week"
-                value={stats.loading ? null : `~${stats.data?.study_minutes_this_week ?? 0}`}
-                unit="min"
-                tone="mint"
-                lit={(stats.data?.study_minutes_this_week ?? 0) > 0}
-                detail="Estimated from what you completed."
-              />
-            </div>
-            {stats.loading ? (
-              <SlowCaption phase={statsPhase} onRetry={stats.refresh} />
-            ) : (
-              stats.error && <StaleNotice onRetry={stats.refresh} />
-            )}
-            <Fortnight stats={stats.data} loading={stats.loading} />
-          </section>
-          </Rise>
-        )}
-
-        {/* ── What's coming, and what you actually did ──
-            Both read from the same `/me/stats` payload Home already waits on,
-            so neither costs a request. Both are ledgers: a schedule and a
-            proportion are measurements, and the rule under each closes the
-            band before the topic cards below. */}
-        {anySpaces && !stats.loading && stats.data && (
-          <Rise delay={120}>
-          <section className="grid gap-x-10 gap-y-7 border-t border-line pt-7 lg:grid-cols-2">
-            <DueForecast days={stats.data.due_forecast} />
-            <Composition
-              data={stats.data.composition}
-              dailyGoal={stats.data.daily_goal}
-            />
-          </section>
-          </Rise>
-        )}
-
-        {/* ── Topics as face-up cards ── ── the only cardstock on this page.
-            Everything above is a figure; a topic is a thing you own, so it is
-            the one object here that gets to sit on the table. */}
-        {anySubspaces && (
-          <section className="flex flex-col gap-3 pt-8">
+        {/* ── 2. Up next: what to do now ── */}
+        <Rise delay={40}>
+          <section aria-labelledby="up-next-title" className="flex flex-col gap-4">
             <div className="flex items-baseline gap-3">
-              <h2 className="nameplate text-[22px] text-ink">Your topics</h2>
-              <span className="setcode">{entries.length} in play</span>
+              <h2 id="up-next-title" className="nameplate text-[22px] text-ink">
+                Up next
+              </h2>
+              {!stats.loading && stats.data && anySubspaces && (
+                <span className="setcode">
+                  {(stats.data.cards_due ?? 0) > 0
+                    ? `${stats.data.cards_due} card${stats.data.cards_due === 1 ? '' : 's'} due`
+                    : 'no cards due'}
+                </span>
+              )}
             </div>
-            {/* Topic cards deal themselves in left-to-right, in keeping with
-                the card-table world. Capped stagger — see ui/motion. */}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Stagger>
-                {entries.slice(0, 6).map((entry) => (
-                  <TopicCard key={entry.subspace.id} entry={entry} />
-                ))}
-              </Stagger>
-              {emptySubjects.map((space) => (
-                <DashedCard
-                  key={space.id}
-                  className="flex min-h-[132px] flex-col justify-between gap-2 p-4"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
-                    <span className="setcode truncate">{space.name}</span>
-                  </div>
-                  <div>
-                    <p className="text-[14px] leading-snug text-muted">
-                      No topics yet. Add one from the rail to start collecting.
-                    </p>
-                  </div>
-                </DashedCard>
-              ))}
-            </div>
+            {leadWithChecklist ? (
+              <FirstSteps checklist={checklist} targets={stepTargets} onHide={hideTheChecklist} />
+            ) : (
+              <>
+                <UpNext
+                  topics={topics}
+                  stats={stats}
+                  statsPhase={statsPhase}
+                  suggestion={brief.data?.suggestion ?? null}
+                  extra={extra}
+                />
+                {showChecklist && (
+                  <FirstSteps checklist={checklist} targets={stepTargets} onHide={hideTheChecklist} className="mt-2" />
+                )}
+              </>
+            )}
           </section>
+        </Rise>
+
+        {/* ── 3. Your subjects ──
+            Grouped by subject, each with its own icon and its topics, so
+            "where is my RL stuff" is answered by its subject rather than by a
+            flat list of the six most recent topics. A subject with no topic
+            yet is an empty slot with the field that fills it. */}
+
+        {/* ── 4. This week: how it is going ──
+            Figures and evidence last: they are what you check, not what you
+            act on. Nothing here can have happened before there is a topic. */}
+        {anySubspaces && (
+          <Rise delay={90}>
+            <WeekSection stats={stats} statsPhase={statsPhase} topics={topics} extra={extra} />
+          </Rise>
         )}
 
-        {anySpaces && !anySubspaces && (
-          <EmptyState
-            className="my-6"
-            icon="target"
-            title="Your subject has no topics yet"
-            description="Open it in the rail and add a topic — that's where documents, chat, and cards live."
+        <Rise delay={140}>
+          <SubjectsSection spaces={spaces} anySubspaces={anySubspaces} onNewSubject={() => setNewSpaceOpen(true)} />
+        </Rise>
+      </div>
+
+      {newSpaceModal}
+      {help.dialog}
+    </div>
+  )
+}
+
+// ── Exam countdown ─────────────────────────────────────────────────────
+
+/**
+ * The days left and what today is for, from the date the student gave. Nothing
+ * renders without a date, and a goal with no date gets one quiet line asking
+ * for it, so the feature is findable without nagging anyone who has no exam.
+ */
+function ExamStrip({
+  plan,
+  hasGoalNoDate,
+  model,
+  ready,
+}: {
+  plan: ExamPlan | null
+  hasGoalNoDate: boolean
+  model?: StudentModel | null
+  ready?: Readiness | null
+}) {
+  const [editing, setEditing] = useState(false)
+  if (!plan) {
+    return hasGoalNoDate ? (
+      <p className="-mt-3 text-[13px] text-muted">
+        Working towards something?{' '}
+        <Link to="/settings" className="font-semibold text-brand-deep hover:underline">
+          Add the date
+        </Link>{' '}
+        and Home will plan each day up to it.
+      </p>
+    ) : null
+  }
+  return (
+    <Rise>
+      <section
+        aria-label="Exam countdown"
+        className={cn(
+          'relative flex flex-col gap-3 rounded-xl border p-5 sm:flex-row sm:items-center sm:gap-8',
+          plan.urgent ? 'border-brand/45 bg-brand-tint' : 'cardstock border-line',
+        )}
+      >
+        {model && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="setcode absolute right-4 top-3.5 cursor-pointer font-bold text-brand-deep hover:underline"
+          >
+            Change
+          </button>
+        )}
+        <div className="min-w-0 shrink-0 sm:w-56">
+          <div className="setcode truncate" title={plan.title}>
+            {plan.title}
+          </div>
+          <div className="nameplate mt-1 text-[40px] leading-none text-ink">{plan.when}</div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5 sm:pr-16">
+          <p className="text-[15px] leading-snug text-ink-2">{plan.line}</p>
+          {ready && <ReadyBar ready={ready} />}
+        </div>
+      </section>
+      {editing && model && <FocusDialog key={`${model.study_mode}|${model.exam_context}|${model.exam_date}`} model={model} open onClose={() => setEditing(false)} />}
+    </Rise>
+  )
+}
+
+/**
+ * The honest answer to "am I ready?": one number from the student's own quiz
+ * scores and card reviews, the weakest topic as a way in, and how much of their
+ * material that number is based on. Hover for how it is worked out.
+ */
+function ReadyBar({ ready }: { ready: Readiness }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline gap-2" title="The average of your lowest quiz score and the share of cards you know, per topic. Topics with neither are left out.">
+        <span className="setcode">Readiness</span>
+        <span className="nameplate text-[20px] leading-none text-ink">{ready.pct}%</span>
+        <span className="text-[12px] text-muted">
+          from {ready.known} of {ready.total} topic{ready.total === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-line" role="img" aria-label={`Readiness ${ready.pct} percent`}>
+        <div className="h-full rounded-full bg-brand transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${ready.pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+// ── Up next ────────────────────────────────────────────────────────────
+
+/**
+ * What to do now, as a short row of tiles: the decision engine's pick (when
+ * it made one), cards due, the quiz most worth retaking, files that are not
+ * ready yet, and the topic you were last in. Each is real and each is shown
+ * only when it applies; two tiles never point at the same thing.
+ */
+const MAX_NEXT_TILES = 3
+
+function UpNext({
+  topics,
+  stats,
+  statsPhase,
+  suggestion,
+  extra,
+}: {
+  topics: TopicEntry[]
+  stats: AsyncResult<Stats>
+  statsPhase: SlowPhase
+  suggestion: BriefSuggestion | null
+  extra: HomeData
+}) {
+  const first = topics[0]
+  if (!first) return null
+  const s = stats.data
+  const due = s?.cards_due ?? 0
+  // /flashcards is an account-wide library whichever topic's URL gets you
+  // there, but the topic in the link still becomes the active context — so
+  // prefer a topic that holds cards over one that is merely recent.
+  const cardsEntry = topics.find((e) => (e.subspace.counts?.cards ?? 0) > 0) ?? first
+  const notReady = filesNotReady(topics, stats.loading ? null : s)
+  const docsEntry = topics.find((e) => (e.subspace.counts?.docs ?? 0) > 0) ?? first
+  const sameRoute = (href: string) => Boolean(suggestion && suggestion.route.split('?')[0] === href.split('?')[0])
+
+  const tiles: ReactNode[] = []
+  if (suggestion) {
+    tiles.push(
+      <NextTile
+        key="suggestion"
+        featured
+        to={suggestion.route}
+        icon="target"
+        eyebrow="Suggested for you"
+        title={suggestion.label}
+        meta={suggestion.reason ?? null}
+      />,
+    )
+  }
+  if (stats.loading && !s) {
+    tiles.push(<TileSkeleton key="due-loading" />)
+  } else if (due > 0 && suggestion?.action !== 'due_cards') {
+    tiles.push(
+      <NextTile
+        key="due"
+        to={`${cardsEntry.link}/flashcards?review=due`}
+        icon="deck"
+        tone="sun"
+        eyebrow="Cards due"
+        title={`Review ${due} card${due === 1 ? '' : 's'}`}
+        meta={`~${estimateReviewMinutes(due)} min`}
+      />,
+    )
+  }
+  if (extra.retakeLoading) {
+    tiles.push(<TileSkeleton key="retake-loading" />)
+  } else if (extra.retake && !sameRoute(extra.retake.href)) {
+    const q = extra.retake.quiz
+    tiles.push(
+      <NextTile
+        key="retake"
+        to={extra.retake.href}
+        icon="quiz"
+        tone="coral"
+        eyebrow="Worth a retake"
+        title={q.topic || q.subspace_name || 'Quiz'}
+        meta={`Best ${q.best_score}%${q.attempts && q.attempts > 1 ? ` · ${q.attempts} tries` : ''}`}
+      />,
+    )
+  }
+  if (notReady && notReady > 0) {
+    tiles.push(
+      <NextTile
+        key="files"
+        to={`${docsEntry.link}/docs`}
+        icon="doc"
+        tone="sky"
+        eyebrow="Files"
+        title={`${notReady} file${notReady === 1 ? ' isn’t' : 's aren’t'} ready yet`}
+        meta="Still being read, or need another try"
+      />,
+    )
+  }
+  // "Pick up where you left off" only fills a short row; it is a convenience,
+  // not a third and fourth thing competing with the real next step.
+  if (tiles.length < 2 && suggestion?.action !== 'continue' && !sameRoute(first.link)) {
+    tiles.push(
+      <NextTile
+        key="continue"
+        to={first.link}
+        space={first.space}
+        eyebrow={first.subspace.last_activity_at ? 'Pick up where you left off' : 'Start here'}
+        title={first.subspace.name}
+        meta={`${first.space.name} · ${relativeShort(first.subspace.last_activity_at)}`}
+      />,
+    )
+  }
+
+  // Three at most: the pick, the cards, and one more. More than that is a menu,
+  // and a menu is what this row exists to save you from.
+  tiles.splice(MAX_NEXT_TILES)
+  const cols = tiles.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'
+  return (
+    <div className="flex flex-col gap-2">
+      <div className={cn('grid gap-3 sm:grid-cols-2', cols)}>{tiles}</div>
+      {stats.loading ? (
+        <SlowCaption phase={statsPhase} onRetry={stats.refresh} />
+      ) : (
+        stats.error && <StaleNotice onRetry={stats.refresh} />
+      )}
+    </div>
+  )
+}
+
+function NextTile({
+  to,
+  icon,
+  space,
+  tone = 'brand',
+  eyebrow,
+  title,
+  meta,
+  featured = false,
+}: {
+  to: string
+  icon?: IconName
+  space?: Space
+  tone?: Tone
+  eyebrow: string
+  title: string
+  meta: string | null
+  featured?: boolean
+}) {
+  return (
+    <Link
+      to={to}
+      className={cn(
+        'group flex min-h-[124px] min-w-0 flex-col gap-3 rounded-xl border p-4 transition-[transform,border-color] duration-200 hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+        featured ? 'border-brand/45 bg-brand-tint hover:border-brand/70' : 'cardstock border-line hover:border-brand/30',
+      )}
+    >
+      <span className="flex items-center gap-2">
+        {space ? (
+          <SubjectIcon space={space} size="sm" />
+        ) : (
+          <span className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-[7px]', toneSoft[tone], toneText[tone])} aria-hidden>
+            <Icon name={icon ?? 'arrowRight'} size={14} />
+          </span>
+        )}
+        <span className={cn('setcode truncate', featured && 'text-brand-deep')}>{eyebrow}</span>
+      </span>
+      <span className="nameplate break-words text-[19px] leading-tight text-ink">{title}</span>
+      <span className="mt-auto flex items-end justify-between gap-2">
+        {meta ? <span className="min-w-0 text-[12.5px] leading-snug text-muted">{meta}</span> : <span />}
+        <Icon
+          name="arrowRight"
+          size={15}
+          className="shrink-0 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-brand motion-reduce:transition-none"
+        />
+      </span>
+    </Link>
+  )
+}
+
+function TileSkeleton() {
+  return (
+    <div className="flex min-h-[124px] flex-col gap-3 rounded-xl border border-line p-4" aria-hidden>
+      <Skeleton className="h-4 w-24 rounded" />
+      <Skeleton className="h-6 w-3/4 rounded" />
+      <Skeleton className="mt-auto h-3 w-1/3 rounded" />
+    </div>
+  )
+}
+
+// ── Your subjects ──────────────────────────────────────────────────────
+
+/** Subjects shown before "Show all" — a page, not an index. */
+const SUBJECTS_SHOWN = 6
+/** Topics listed per subject card before "+N more". */
+const TOPICS_SHOWN = 2
+
+function SubjectsSection({
+  spaces,
+  anySubspaces,
+  onNewSubject,
+}: {
+  spaces: Space[]
+  anySubspaces: boolean
+  onNewSubject: () => void
+}) {
+  const ordered = useMemo(() => subjectsForHome(spaces), [spaces])
+  const [all, setAll] = useState(false)
+  const shown = all ? ordered : ordered.slice(0, SUBJECTS_SHOWN)
+  const topicCount = spaces.reduce((n, s) => n + s.subspaces.length, 0)
+  return (
+    <section aria-labelledby="subjects-title" className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="subjects-title" className="nameplate text-[22px] text-ink">
+          {anySubspaces ? 'Your subjects' : 'Name your first topic'}
+        </h2>
+        {anySubspaces && (
+          <span className="setcode">
+            {spaces.length} subject{spaces.length === 1 ? '' : 's'} · {topicCount} topic{topicCount === 1 ? '' : 's'}
+          </span>
+        )}
+        <Button variant="ghost" size="sm" className="ml-auto self-center" onClick={onNewSubject}>
+          <Icon name="plus" size={14} /> New subject
+        </Button>
+      </div>
+      {!anySubspaces && (
+        <p className="-mt-2 text-[14px] leading-snug text-muted">
+          A topic is one part of a subject. It is where your documents, chat and cards live.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {shown.map((space) =>
+          space.subspaces.length === 0 ? (
+            <DashedCard key={space.id} className="flex h-full min-h-[172px] min-w-0 flex-col justify-between gap-3 p-4">
+              <SubjectHead space={space} />
+              <FirstTopicField space={space} />
+            </DashedCard>
+          ) : (
+            <SubjectCard key={space.id} space={space} />
+          ),
+        )}
+      </div>
+      {ordered.length > SUBJECTS_SHOWN && (
+        <button
+          type="button"
+          onClick={() => setAll((v) => !v)}
+          aria-expanded={all}
+          className="min-h-10 cursor-pointer self-start rounded-[9px] px-2.5 text-[13.5px] font-semibold text-ink-3 transition-colors hover:bg-line-soft hover:text-ink"
+        >
+          {all ? 'Show fewer' : `Show all ${ordered.length} subjects`}
+        </button>
+      )}
+    </section>
+  )
+}
+
+function SubjectHead({ space, count }: { space: Space; count?: number }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2.5">
+      <SubjectIcon space={space} size="md" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[16px] font-bold text-ink">{space.name}</div>
+        {count != null && (
+          <div className="setcode">
+            {count} topic{count === 1 ? '' : 's'}
+          </div>
+        )}
+      </div>
+      {space.pinned && <Icon name="pin" size={13} filled className="shrink-0 text-faint" aria-label="Pinned" />}
+    </div>
+  )
+}
+
+/** One subject and its topics, most recent first. */
+function SubjectCard({ space }: { space: Space }) {
+  const [open, setOpen] = useState(false)
+  const topics = topicsOf(space)
+  // Topics with something in them lead; empty ones ("Nothing added yet") fold
+  // into "+N more" instead of padding the card. All-empty: show the first two.
+  const filled = topics.filter((t) => countsLine(t) !== EMPTY_TOPIC)
+  const collapsed = filled.length > 0 ? filled.slice(0, TOPICS_SHOWN) : topics.slice(0, 2)
+  const shown = open ? topics : collapsed
+  const hidden = topics.length - shown.length
+  return (
+    <Card className="flex h-full min-h-[172px] min-w-0 flex-col gap-3 p-4">
+      <SubjectHead space={space} count={topics.length} />
+      <ul className="-mx-1.5 flex flex-col">
+        {shown.map((sub) => (
+          <li key={sub.id}>
+            <Link
+              to={subspacePath(space, sub)}
+              className="group flex min-h-11 min-w-0 items-center gap-2 rounded-[9px] px-1.5 py-1.5 transition-colors hover:bg-line-soft"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-[14.5px] font-semibold leading-snug text-ink">{sub.name}</span>
+                <span className="block truncate text-[12px] text-muted">{countsLine(sub)}</span>
+              </span>
+              <span className="setcode shrink-0">{relativeShort(sub.last_activity_at)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {(hidden > 0 || open) && topics.length > collapsed.length && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="mt-auto min-h-9 cursor-pointer self-start rounded-[8px] px-1.5 text-[13px] font-semibold text-ink-3 transition-colors hover:bg-line-soft hover:text-ink"
+        >
+          {open ? 'Show fewer' : `+${hidden} more`}
+        </button>
+      )}
+    </Card>
+  )
+}
+
+const EMPTY_TOPIC = 'Nothing added yet'
+
+function countsLine(sub: Subspace): string {
+  const c = sub.counts ?? {}
+  const bits: string[] = []
+  if (c.docs) bits.push(`${c.docs} file${c.docs === 1 ? '' : 's'}`)
+  if (c.cards) bits.push(`${c.cards} card${c.cards === 1 ? '' : 's'}`)
+  if (c.quizzes) bits.push(`${c.quizzes} quiz${c.quizzes === 1 ? '' : 'zes'}`)
+  if (c.notes) bits.push(`${c.notes} note${c.notes === 1 ? '' : 's'}`)
+  return bits.length ? bits.join(' · ') : EMPTY_TOPIC
+}
+
+// ── This week ──────────────────────────────────────────────────────────
+
+/**
+ * The recap: three standing figures with the fortnight under them as
+ * evidence, then what is coming due and what is fading — each
+ * part shown only when it has something real in it, each with one link to
+ * the exact deck, quiz or page. "Cards due now" lives in Up next, so it is
+ * not repeated here; a fading topic that is already Up next's retake is
+ * left out.
+ */
+function WeekSection({
+  stats,
+  statsPhase,
+  topics,
+  extra,
+}: {
+  stats: AsyncResult<Stats>
+  statsPhase: SlowPhase
+  topics: TopicEntry[]
+  extra: HomeData
+}) {
+  const s = stats.loading ? null : stats.data
+  const coming = comingDue(s)
+  const fading = fadingTopics(extra.model, extra.index, { exclude: extra.retake?.quiz.subspace_id ?? null })
+  const deck = busiestDeck(extra.index)
+  const quizzesEntry = topics.find((e) => (e.subspace.counts?.quizzes ?? 0) > 0)
+  const cardsEntry = topics.find((e) => (e.subspace.counts?.cards ?? 0) > 0) ?? topics[0]
+  const parts = [coming, fading.length || extra.modelLoading ? 1 : null].filter(Boolean).length
+
+  return (
+    <section aria-labelledby="week-title" className="flex flex-col gap-6">
+      <div className="flex items-baseline gap-3">
+        <h2 id="week-title" className="nameplate text-[22px] text-ink">
+          This week
+        </h2>
+        <Link to="/profile" className="setcode ml-auto transition-colors hover:text-ink">
+          Your full record →
+        </Link>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-3">
+          <Figure
+            icon="flame"
+            label="Current streak"
+            value={stats.loading ? null : `${stats.data?.streak_days ?? 0}`}
+            unit={stats.data?.streak_days === 1 ? 'day' : 'days'}
+            tone="brand"
+            lit={(stats.data?.streak_days ?? 0) > 0}
+            detail={
+              (stats.data?.streak_days ?? 0) > 0
+                ? 'Consecutive days with something logged.'
+                : 'Log anything today to start one.'
+            }
+            countUp
           />
+          <Figure
+            icon="target"
+            label="Quiz average"
+            value={stats.loading ? null : stats.data?.quiz_average != null ? `${stats.data.quiz_average}` : '—'}
+            unit={stats.data?.quiz_average != null ? '%' : ''}
+            tone="sky"
+            lit={(stats.data?.quiz_average ?? 0) >= 80}
+            detail={stats.data?.quiz_average != null ? 'Across your last five.' : 'Take one to find out.'}
+            to={quizzesEntry ? `${quizzesEntry.link}/quizzes` : undefined}
+          />
+          <Figure
+            icon="clock"
+            label="Study time"
+            value={stats.loading ? null : `~${stats.data?.study_minutes_this_week ?? 0}`}
+            unit="min"
+            tone="mint"
+            lit={(stats.data?.study_minutes_this_week ?? 0) > 0}
+            detail="This week, estimated from what you completed."
+          />
+        </div>
+        {stats.loading && <SlowCaption phase={statsPhase} onRetry={stats.refresh} />}
+        {/* An all-stub chart says nothing. Appear once there is a day to show. */}
+        {(stats.loading || (stats.data?.heatmap ?? []).slice(-14).some((c) => c.minutes > 0 || c.intensity > 0)) && (
+          <Fortnight stats={stats.data} loading={stats.loading} />
         )}
       </div>
 
-      <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
-    </div>
+      {s && parts > 0 && (
+        <div className={cn('grid gap-x-10 gap-y-7', parts >= 3 ? 'lg:grid-cols-3' : parts === 2 ? 'lg:grid-cols-2' : '')}>
+          {coming && (
+            <DueForecast
+              days={s.due_forecast}
+              action={
+                deck
+                  ? { label: `Open ${deck.name} (${deck.due} due)`, to: deck.href }
+                  : { label: 'Open your cards', to: `${cardsEntry.link}/flashcards` }
+              }
+            />
+          )}
+          {(fading.length > 0 || extra.modelLoading) && <FadingList items={fading} loading={extra.modelLoading} />}
+        </div>
+      )}
+    </section>
+  )
+}
+
+/** Topics slipping, low or gone quiet — from the student model, each with its one fix. */
+function FadingList({ items, loading }: { items: Fading[]; loading: boolean }) {
+  return (
+    <Ledger className="flex flex-col gap-3 pb-5">
+      <div className="flex items-baseline justify-between">
+        <span className="setcode-strong">Fading</span>
+        <span className="setcode">from your quizzes</span>
+      </div>
+      {loading && items.length === 0 ? (
+        <div className="flex flex-col gap-2" aria-hidden>
+          <Skeleton className="h-10 rounded" />
+          <Skeleton className="h-10 rounded" />
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {items.map((f) => (
+            <li key={f.subspaceId} className="flex min-w-0 items-center gap-3 py-1">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[14px] font-semibold text-ink">{f.topic}</span>
+                <span className="block truncate text-[12px] text-muted">
+                  {f.subject} · {f.why}
+                </span>
+              </span>
+              <Link
+                to={f.action.to}
+                className="flex min-h-10 shrink-0 items-center gap-1 rounded-[9px] border border-line px-2.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand/40 hover:text-ink"
+              >
+                {f.action.label}
+                <Icon name="chevronRight" size={12} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Ledger>
   )
 }
 
@@ -526,57 +989,53 @@ function Figure({
   return to ? <Link to={to} className="contents">{body}</Link> : body
 }
 
-function TopicCard({ entry }: { entry: ActiveEntry }) {
-  const { space, subspace } = entry
-  const counts = subspace.counts ?? {}
-  const bits: string[] = []
-  if (counts.docs) bits.push(`${counts.docs} doc${counts.docs === 1 ? '' : 's'}`)
-  if (counts.cards) bits.push(`${counts.cards} card${counts.cards === 1 ? '' : 's'}`)
-  if (counts.notes) bits.push(`${counts.notes} note${counts.notes === 1 ? '' : 's'}`)
+/** Names the first topic of a subject that has none, then opens it. */
+function FirstTopicField({ space }: { space: Space }) {
+  const { addSubspace } = useSpaces()
+  const navigate = useNavigate()
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const topic = name.trim()
+    if (!topic) return setErr('Give the topic a short name.')
+    setErr(null)
+    setBusy(true)
+    try {
+      const sub = await addSubspace(space.id, topic)
+      navigate(subspacePath(space, sub))
+    } catch (e2) {
+      setErr(friendlyMessage(e2))
+      setBusy(false)
+    }
+  }
 
   return (
-    <Link to={entry.link}>
-      <Card
-        className={cn(
-          'flex h-full flex-col gap-3 p-4 transition-transform duration-200 hover:-translate-y-0.5',
-          'ring-1 ring-transparent hover:ring-brand/25',
-        )}
-      >
-        <div className="flex items-center gap-2">
-          <span className={cn('h-3.5 w-1 shrink-0 rounded-full', toneDot[space.tone])} />
-          <span className="setcode truncate">{space.name}</span>
-        </div>
-
-        <div className="nameplate text-[21px] leading-tight text-ink">{subspace.name}</div>
-
-        <div className="mt-auto flex flex-col gap-1.5">
-          <span className="setcode">{bits.length ? bits.join(' · ') : 'Nothing added yet'}</span>
-          <span className="setcode">{relativeShort(subspace.last_activity_at)}</span>
-        </div>
-      </Card>
-    </Link>
+    <form onSubmit={submit} className="flex items-start gap-2" noValidate>
+      <Input
+        id={`first-topic-${space.id}`}
+        aria-label={`First topic in ${space.name}`}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Name your first topic"
+        maxLength={LIMITS.subspaceName}
+        autoComplete="off"
+        error={err}
+        hint={nameHint(name) ?? undefined}
+        containerClassName="min-w-0 flex-1"
+        className="py-2"
+      />
+      {/* Same label while busy so the button does not change width. */}
+      <Button type="submit" variant="secondary" disabled={busy} aria-busy={busy} className="shrink-0">
+        Add
+      </Button>
+    </form>
   )
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
-
-type ActiveEntry = { space: Space; subspace: Subspace; link: string; sortKey: number }
-
-function activeSubspaces(spaces: Space[]): ActiveEntry[] {
-  const out: ActiveEntry[] = []
-  for (const s of spaces) {
-    for (const sub of s.subspaces) {
-      out.push({
-        space: s,
-        subspace: sub,
-        link: subspacePath(s, sub),
-        sortKey: sub.last_activity_at ? Date.parse(sub.last_activity_at) : 0,
-      })
-    }
-  }
-  return out.sort((a, b) => b.sortKey - a.sortKey)
-}
-
 
 function relativeShort(iso: string | null): string {
   if (!iso) return 'Not opened yet'
@@ -598,7 +1057,7 @@ function relativeShort(iso: string | null): string {
  * work in front of you. The data has always existed on every card as `due_at`
  * — it was simply never asked for beyond "how many are due right now".
  */
-function DueForecast({ days }: { days?: ForecastDay[] }) {
+function DueForecast({ days, action }: { days?: ForecastDay[]; action?: { label: string; to: string } }) {
   // Defensive by design, not by superstition. This renders from a cached API
   // payload, and a cache written by an older deploy will not have this field —
   // that exact case took the whole of Home down behind the error boundary.
@@ -642,7 +1101,7 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
               </span>
               <span
                 className={cn(
-                  'w-full rounded-[3px] transition-[height] duration-300 ease-out',
+                  'w-full rounded-[3px] transition-[height] duration-300 ease-out motion-reduce:transition-none',
                   i === 0 ? 'bg-brand' : 'bg-line-dash',
                 )}
                 style={{
@@ -663,106 +1122,12 @@ function DueForecast({ days }: { days?: ForecastDay[] }) {
       {/* The mechanic behind the chart, once. Dismissible by id, and placed
           under the bars rather than above them so it explains something the
           reader has already seen. */}
+      {action && total > 0 && <LedgerAction {...action} />}
       <Tip id="home-forecast-v1" icon="clock">
         Cards return on a schedule, not all at once. Today's column is what's
         actually waiting — the rest is what's coming, so you can see a heavy
         day before it lands.
       </Tip>
-    </Ledger>
-  )
-}
-
-/**
- * Where the last seven days actually went.
- *
- * Study *time* was already shown; study *shape* never was, even though the
- * three counters behind this have been written on every chat message, card
- * grade and quiz submission since the app shipped. One stacked bar rather than
- * three numbers, because the useful question is proportion — "am I only ever
- * chatting and never testing myself" — not absolute counts.
- */
-function Composition({
-  data,
-  dailyGoal,
-}: {
-  data?: StudyComposition
-  dailyGoal?: number
-}) {
-  // Same reasoning as DueForecast: a stale cached payload has no `composition`,
-  // and reading `.chat_messages` off undefined would throw during render.
-  const parts = [
-    { key: 'Asked', n: data?.chat_messages ?? 0, cls: 'bg-sky', text: 'text-sky-deep' },
-    { key: 'Reviewed', n: data?.cards_reviewed ?? 0, cls: 'bg-sun', text: 'text-sun-deep' },
-    { key: 'Tested', n: data?.quizzes_taken ?? 0, cls: 'bg-coral', text: 'text-coral-deep' },
-  ]
-  const total = parts.reduce((n, p) => n + p.n, 0)
-
-  /* The proportions fill in from zero, so the shape of the week is something
-     you watch resolve rather than something already decided when you look. */
-  const [drawn, setDrawn] = useState(false)
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setDrawn(true))
-    return () => cancelAnimationFrame(id)
-  }, [])
-
-  return (
-    <Ledger className="flex flex-col gap-4 pb-5">
-      <div className="flex items-baseline justify-between">
-        <span className="setcode-strong">This week</span>
-        <span className="setcode">what you did</span>
-      </div>
-
-      {total === 0 ? (
-        <p className="text-[13.5px] text-muted">
-          Nothing logged in the last seven days. Ask something, grade a card, or
-          take a quiz and it shows up here.
-        </p>
-      ) : (
-        <>
-          <div className="flex h-2.5 overflow-hidden rounded-full bg-line-soft">
-            {parts.map(
-              (p) =>
-                p.n > 0 && (
-                  <span
-                    key={p.key}
-                    className={cn(p.cls, 'transition-[width] duration-500 ease-out')}
-                    style={{ width: drawn ? `${(p.n / total) * 100}%` : '0%' }}
-                  />
-                ),
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {parts.map((p) => (
-              <div key={p.key} className="flex items-baseline justify-between">
-                <span className={cn('setcode', p.n > 0 && p.text)}>{p.key}</span>
-                <span className="text-[13px] font-bold tabular-nums text-ink-3">
-                  {p.n}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* The goal, measured in the SAME unit it is set in. `daily_goal` is
-              cards per day (see Settings), so the honest comparison is against
-              cards reviewed over seven days — not against study minutes, which
-              is a different axis entirely. */}
-          {dailyGoal ? (
-            <div className="ruled-datum flex items-baseline justify-between pt-2.5">
-              <span className="setcode">Goal · {dailyGoal} cards/day</span>
-              <span
-                className={cn(
-                  'text-[12.5px] font-bold tabular-nums',
-                  data && data.cards_reviewed >= dailyGoal * 7
-                    ? 'text-mint-deep'
-                    : 'text-faint',
-                )}
-              >
-                {data?.cards_reviewed ?? 0} / {dailyGoal * 7}
-              </span>
-            </div>
-          ) : null}
-        </>
-      )}
     </Ledger>
   )
 }
@@ -773,6 +1138,19 @@ function dayLabel(iso: string) {
   return Number.isNaN(d.getTime())
     ? ''
     : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+}
+
+/** The one link at the foot of a recap ledger. */
+function LedgerAction({ label, to }: { label: string; to: string }) {
+  return (
+    <Link
+      to={to}
+      className="flex min-h-10 items-center gap-1 self-start rounded-[9px] border border-line px-2.5 text-[12.5px] font-semibold text-ink-2 transition-colors hover:border-brand/40 hover:text-ink"
+    >
+      <span className="truncate">{label}</span>
+      <Icon name="chevronRight" size={12} className="shrink-0" />
+    </Link>
+  )
 }
 
 // `Stats` is referenced by the async hook's generic inference above.
@@ -800,13 +1178,13 @@ function HomeSkeleton({ phase, onRetry }: { phase: SlowPhase; onRetry: () => voi
           <Skeleton className="h-4 w-1/2 max-w-sm rounded" />
           <WaitingNova phase={phase} onRetry={onRetry} className="mt-1" />
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-line pt-7 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col gap-2">
-              <Skeleton className="h-3 w-20 rounded" />
-              <Skeleton className="h-8 w-16 rounded" />
-            </div>
-          ))}
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-6 w-32 rounded" />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-[124px] rounded-xl" />
+            ))}
+          </div>
         </div>
       </div>
     </div>

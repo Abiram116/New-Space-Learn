@@ -22,6 +22,9 @@ vi.mock('../../lib/briefCache', () => ({
   getCachedStats: (...a: unknown[]) => getCachedStats(...a),
 }))
 vi.mock('../spaces/NewSpaceModal', () => ({ NewSpaceModal: () => null }))
+vi.mock('../../api/quizzes', () => ({ listAllQuizzes: () => Promise.resolve([]) }))
+vi.mock('../../api/flashcards', () => ({ listAllDecks: () => Promise.resolve([]) }))
+vi.mock('../../api/me', () => ({ getStudentModel: () => Promise.resolve(null), updateStudentModel: vi.fn() }))
 
 import { Home } from './Home'
 
@@ -76,7 +79,8 @@ describe('Nova on desktop Home', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'RL is slipping' })).toBeInTheDocument()
     expect(document.querySelector('svg.bot')).toBeNull()
     expect(document.querySelector('.nova-hello .bot-bubble')?.textContent).not.toBe('')
-    expect(screen.getByRole('button', { name: /pick up where you left off/i })).toBeInTheDocument()
+    // The resume action is the "Up next" tile now, not a button in the header.
+    expect(screen.getByRole('link', { name: /pick up where you left off/i })).toBeInTheDocument()
   })
 
   it('introduces itself once on a brand-new account', async () => {

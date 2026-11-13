@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictInt,
+    StrictStr,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 Tone = Literal["brand", "sky", "mint", "sun", "coral", "azure", "jade"]
 
@@ -69,6 +78,10 @@ class ChatMessageOut(BaseModel):
     created_at: datetime
     #: The follow-up question that came with this answer, if it had a good one.
     suggestion: str | None = None
+    #: Short phrases for what made this answer this student's (`services/why.py`).
+    personal: list[str] | None = None
+    #: How much of the answer its citations back: {checked, backed, shaky[]}.
+    grounding: dict | None = None
 
 
 class ChatSend(BaseModel):
@@ -93,6 +106,12 @@ class ChatSend(BaseModel):
     #: regenerated or not — nothing about a student's history disappears,
     #: only the redundant restatement of the question is skipped.
     regenerate: bool = False
+    #: How strictly this topic's tutor keeps to the student's files, chosen per
+    #: topic in the chat (stored on the device). "files": only this topic's and
+    #: its linked topics' files. "subject": files first, plus general knowledge
+    #: clearly within the subject, marked as such. Absent: the account-wide
+    #: `answer_only_from_docs` setting decides. Neither means general assistant.
+    scope: Literal["files", "subject"] | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -234,6 +253,12 @@ class DeckCreate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+class DeckUpdate(BaseModel):
+    """Rename a deck. Trimmed first, so a name of spaces is refused."""
+
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
+
+
 class FlashcardOut(BaseModel):
     id: str
     deck_id: str
@@ -270,6 +295,15 @@ class FlashcardUpdate(BaseModel):
     source: str | None = None
 
 
+#: Where a quiz or deck is written from, picked by the student:
+#:   files    the topic's indexed documents (the default)
+#:   notes    one of their notes (`note_id`), or every note in the topic
+#:   chat     the topic's recent conversation
+#:   general  the model's own knowledge — never a silent fallback: only when
+#:            asked for, and every question says it is not from their material
+MaterialSource = Literal["files", "notes", "chat", "general"]
+
+
 class CardsGenerate(BaseModel):
     """Ask the model for a whole deck, not the single card the old flow made."""
 
@@ -278,6 +312,19 @@ class CardsGenerate(BaseModel):
     deck_name: str | None = Field(default=None, max_length=80)
     # Optional seed text (e.g. the assistant reply the user just read).
     source_text: str | None = Field(default=None, max_length=8000)
+    #: What to write from — see `MaterialSource`. Left out, a deck is written
+    #: the way it always was (the topic's files, with the recent chat).
+    source: MaterialSource | None = None
+    #: With `source="notes"`: this one note. Left out, every note in the topic.
+    note_id: str | None = Field(default=None, max_length=64)
+
+
+class CardsExtend(BaseModel):
+    """More cards for a deck that already exists, from the deck's own topic."""
+
+    count: int = Field(default=5, ge=1, le=15)
+    source: MaterialSource | None = None
+    note_id: str | None = Field(default=None, max_length=64)
 
 
 _VALID_DIFFICULTY = {"easy", "medium", "hard"}
@@ -392,6 +439,50 @@ class QuizOut(BaseModel):
 class QuizGenerate(BaseModel):
     topic: str | None = Field(default=None, max_length=140)
     count: int = Field(default=5, ge=1, le=20)
+    #: See `MaterialSource`. Left out: the topic's files, with the recent chat.
+    source: MaterialSource | None = None
+    note_id: str | None = Field(default=None, max_length=64)
+
+
+class QuizExtend(BaseModel):
+    """More questions for a quiz that already exists, appended at the end so
+    every earlier attempt's answers still line up with their questions."""
+
+    count: int = Field(default=5, ge=1, le=10)
+    source: MaterialSource | None = None
+    note_id: str | None = Field(default=None, max_length=64)
+
+
+class QuizVariantQuestion(QuizQuestion):
+    """One question of a reworded retake: new wording, new order, same answer.
+
+    Never stored. The attempt is scored against the stored quiz, so the
+    client maps each answer back: the question is `original_index` in the
+    stored quiz, and the choice at position `i` here is `choice_order[i]`
+    there.
+    """
+
+    original_index: int
+    choice_order: list[int]
+    #: False when this question kept its stored wording (the rewording did
+    #: not pass its checks, or there was none) and was only reshuffled.
+    reworded: bool = False
+
+
+class QuizRewordOut(BaseModel):
+    quiz_id: str
+    questions: list[QuizVariantQuestion]
+    #: How many questions have new wording; the rest are only reshuffled.
+    reworded: int = 0
+    #: Said to the student when the rewording fell short ("couldn't reword
+    #: just now — reshuffled instead"); None when it went as asked.
+    note: str | None = None
+
+
+class QuizUpdate(BaseModel):
+    """Rename a quiz. `topic` is the column the lists show as its name."""
+
+    topic: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=140)]
 
 
 class QuizSubmit(BaseModel):
@@ -536,6 +627,23 @@ class StudentModelIn(BaseModel):
     #: questions once, and clears it when they are answered or dismissed.
     #: Stored in the same `student_model` JSON as the fields above — no column.
     intake_skipped_style: bool | None = None
+    #: The day of the exam they are working towards, "YYYY-MM-DD". Drives the
+    #: Home countdown and its daily plan. A string, not a `date`, because it is
+    #: stored as-is in the `student_model` JSON.
+    exam_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    #: False turns the tutor's use of everything it has learned about this
+    #: student (style, weak spots, mix-ups) OFF: answers stay inside the topic
+    #: and its files but are no longer shaped to them. The student's control.
+    personalize: bool | None = None
+    #: What they are studying for; see `services/study_mode.py`. A closed set.
+    study_mode: Literal["college", "competitive", "interview", "curious"] | None = None
+
+    @field_validator("exam_date")
+    @classmethod
+    def _real_date(cls, v: str | None) -> str | None:
+        if v is not None:
+            date.fromisoformat(v)  # ValueError -> 422 for "2026-13-45"
+        return v
 
 
 # ── Response feedback ──────────────────────────────────────────────────
@@ -661,6 +769,10 @@ class StudentModelOut(BaseModel):
     #: learning-style/depth questions; see `StudentModelIn`. Read back from
     #: the stored JSON by the `/me/student-model` endpoints.
     intake_skipped_style: bool = False
+    exam_date: str | None = None
+    #: See `StudentModelIn.personalize`. True unless the student turned it off.
+    personalize: bool = True
+    study_mode: Literal["college", "competitive", "interview", "curious"] | None = None
 
 
 class BriefSuggestion(BaseModel):
@@ -729,6 +841,11 @@ class SettingsUpdate(BaseModel):
 # ── Utility ────────────────────────────────────────────────────────────
 class OkOut(BaseModel):
     ok: bool = True
+
+
+class StartersOut(BaseModel):
+    #: Questions written from this topic's own files; empty when it has none ready.
+    questions: list[str] = []
 
 
 # ── Product feedback (the feedback form) ───────────────────────────────

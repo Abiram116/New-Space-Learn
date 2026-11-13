@@ -24,7 +24,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { listAllNotes } from '../../api/notes'
 import { listAllQuizzes } from '../../api/quizzes'
-import type { Brief, Space, Stats } from '../../api/types'
+import type { Brief, Space, Stats, StudentModel } from '../../api/types'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -41,10 +41,16 @@ import { Bot } from '../../components/mascot/Bot'
 import { useCachedStudentModel } from '../onboarding/StyleIntakeCard'
 import { useSpaces } from '../spaces/SpacesProvider'
 import { NovaBeside, NovaHello, briefIsGreeting } from './Greeting'
+import { HomeHelp } from './HomeHelp'
+import { examPlan, readiness } from './exam'
+import { useHomeData, type HomeData } from './useHomeData'
+import { busiestDeck, comingDue, didSummary, fadingTopics, weekDid } from './week'
+import { SubjectIcon } from '../spaces/SubjectIcon'
 import { appUrl, sendLink, shareMessage } from './share'
 import {
   chooseTodayAction,
   daysSinceActive,
+  filesNotReady,
   firstNameOf,
   greeting,
   hasNoMaterial,
@@ -54,6 +60,7 @@ import {
   pickRecentNote,
   pickRetake,
   planReview,
+  topicLinkFor,
   topicsByRecency,
   type TodayAction,
   type TopicEntry,
@@ -73,6 +80,7 @@ export function Today({
   const briefPhase = useSlowState(brief.loading)
 
   const topics = useMemo(() => topicsByRecency(spaces), [spaces])
+  const extra = useHomeData(spaces)
   const s = stats.data
   const daysAway = daysSinceActive(s?.heatmap)
   const [comeback] = useState(() => isComebackToday())
@@ -120,6 +128,7 @@ export function Today({
         </NovaBeside>
         <FirstTopic spaces={spaces} />
         <DesktopNote />
+        <HomeHelp className="self-center" />
       </Page>
     )
   }
@@ -166,6 +175,8 @@ export function Today({
         {brief.error && <StaleNotice onRetry={brief.refresh} />}
       </header>
 
+      {!empty && <PhoneExam model={model ?? extra.model} stats={s ?? null} extra={extra} />}
+
       {empty ? (
         <>
           <PrimaryAction
@@ -201,10 +212,24 @@ export function Today({
         </div>
       ) : null}
 
-      {!empty && <Rhythm stats={s ?? null} loading={stats.loading} />}
-      {stats.error && !stats.loading && <StaleNotice onRetry={stats.refresh} />}
-
+      {/* Now → your topics → your week, the same order as desktop Home. */}
       {!empty && <MoreRows topics={topics} spaces={spaces} />}
+      {!empty && <NotReadyRow topics={topics} stats={stats.loading ? null : (s ?? null)} />}
+
+      <PhoneTopics topics={topics} />
+
+      {!empty && (
+        <section aria-labelledby="phone-week-title" className="flex flex-col gap-3">
+          <h2 id="phone-week-title" className="setcode-strong px-1">
+            This week
+          </h2>
+          <Rhythm stats={s ?? null} loading={stats.loading} />
+          {stats.error && !stats.loading && <StaleNotice onRetry={stats.refresh} />}
+          <PhoneWeek stats={stats.loading ? null : (s ?? null)} extra={extra} />
+        </section>
+      )}
+      {/* Last on the page: there when you look for it, never above the one action. */}
+      <HomeHelp className="self-center" />
     </Page>
   )
 }
@@ -367,14 +392,7 @@ function MoreRows({ topics, spaces }: { topics: TopicEntry[]; spaces: Space[] })
   )
 }
 
-function baseFor(spaces: Space[], subspaceId: string | null | undefined): string | null {
-  if (!subspaceId) return null
-  for (const s of spaces) {
-    const sub = s.subspaces.find((x) => x.id === subspaceId)
-    if (sub) return subspacePath(s, sub)
-  }
-  return null
-}
+const baseFor = topicLinkFor
 
 function RetakeRow({ spaces }: { spaces: Space[] }) {
   const quizzes = useAsync(() => listAllQuizzes(), [], 'quizzes:all')
@@ -602,5 +620,145 @@ export function WaitingNova({ phase, onRetry, className }: { phase: SlowPhase; o
       <Bot agent="tutor" mood={phase === 'stalled' ? 'sleepy' : 'thinking'} size={40} />
       <SlowCaption phase={phase} onRetry={onRetry} />
     </div>
+  )
+}
+
+/** Files added but not ready to ask about yet — only once stats can say so. */
+function NotReadyRow({ topics, stats }: { topics: TopicEntry[]; stats: Stats | null }) {
+  const n = filesNotReady(topics, stats)
+  if (!n) return null
+  const entry = topics.find((t) => (t.subspace.counts?.docs ?? 0) > 0) ?? topics[0]
+  if (!entry) return null
+  return (
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      <Row
+        to={`${entry.link}/docs`}
+        icon="doc"
+        tone="text-sky"
+        title={`${n} file${n === 1 ? ' isn’t' : 's aren’t'} ready yet`}
+        meta="Still being read, or need another try"
+      />
+    </div>
+  )
+}
+
+/** Topics most recently worked in, each with its subject's icon. */
+const PHONE_TOPICS = 4
+
+function PhoneTopics({ topics }: { topics: TopicEntry[] }) {
+  if (topics.length === 0) return null
+  const shown = topics.slice(0, PHONE_TOPICS)
+  const more = topics.length - shown.length
+  return (
+    <section aria-labelledby="phone-topics-title" className="flex flex-col gap-2">
+      <h2 id="phone-topics-title" className="setcode-strong px-1">
+        Your topics
+      </h2>
+      <ul className="overflow-hidden rounded-xl border border-line bg-surface">
+        {shown.map((t) => (
+          <li key={t.subspace.id} className="border-b border-line last:border-b-0">
+            <Link to={t.link} className="flex min-h-16 items-center gap-3 px-4 py-3 active:bg-line-soft">
+              <SubjectIcon space={t.space} size="md" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[16px] font-semibold text-ink">{t.subspace.name}</span>
+                <span className="block truncate text-[13.5px] text-muted">{t.space.name}</span>
+              </span>
+              <Icon name="chevronRight" size={16} className="shrink-0 text-faint" />
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {more > 0 && (
+        <p className="px-1 text-[13.5px] text-muted">
+          {more} more — switch topics with the button at the top of the screen.
+        </p>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The week, lightly: what you did, what is coming due after today, and what
+ * is fading — each a line only when it has something in it, each with one
+ * link to the exact deck or quiz. Cards due now are the primary action above,
+ * so they are not repeated here.
+ */
+function PhoneWeek({ stats, extra }: { stats: Stats | null; extra: HomeData }) {
+  const did = weekDid(stats)
+  const coming = comingDue(stats)
+  const deck = busiestDeck(extra.index)
+  const fading = fadingTopics(extra.model, extra.index, { exclude: extra.retake?.quiz.subspace_id ?? null, limit: 2 })
+  const summary = did ? didSummary(did) : ''
+  const rows: React.ReactNode[] = []
+  if (coming && coming.later > 0) {
+    rows.push(
+      <Row
+        key="coming"
+        to={deck?.href ?? '/flashcards'}
+        icon="clock"
+        tone="text-sun"
+        title={`${coming.later} more card${coming.later === 1 ? '' : 's'} due this week`}
+        meta={deck ? `Most in ${deck.name}` : 'Over the next six days'}
+      />,
+    )
+  }
+  for (const f of fading) {
+    rows.push(
+      <Row key={f.subspaceId} to={f.action.to} icon="target" tone="text-coral" title={`${f.action.label}: ${f.topic}`} meta={f.why} />,
+    )
+  }
+  if (!summary && rows.length === 0) return null
+  return (
+    <>
+      {summary && (
+        <p className="px-1 text-[14px] leading-snug text-muted">
+          {summary}
+          {did && did.minutes > 0 ? ` · ~${did.minutes} min` : ''}
+        </p>
+      )}
+      {rows.length > 0 && <div className="overflow-hidden rounded-xl border border-line bg-surface">{rows}</div>}
+    </>
+  )
+}
+
+
+/**
+ * The exam countdown, on a phone: days left and what today is for. The action is the big
+ * button right below it. Nothing renders without a date the student gave.
+ */
+function PhoneExam({
+  model,
+  stats,
+  extra,
+}: {
+  model: StudentModel | null | undefined
+  stats: Stats | null
+  extra: HomeData
+}) {
+  const plan = examPlan({
+    examDate: model?.exam_date,
+    goal: model?.exam_context,
+    event: model?.study_mode === 'interview' ? 'interview' : model?.study_mode === 'curious' ? 'goal' : 'exam',
+    due: stats?.cards_due ?? 0,
+    fading: fadingTopics(extra.model, extra.index, { exclude: extra.retake?.quiz.subspace_id ?? null }),
+  })
+  if (!plan) return null
+  const ready = readiness(extra.index)
+  return (
+    <section
+      aria-label="Exam countdown"
+      className={`flex flex-col gap-2 rounded-[18px] border p-4 ${plan.urgent ? 'border-brand/45 bg-brand-tint' : 'cardstock border-line'}`}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="setcode truncate">{plan.title}</span>
+        <span className="nameplate text-[24px] leading-none text-ink">{plan.when}</span>
+      </div>
+      <p className="text-[15px] leading-snug text-ink-2">{plan.line}</p>
+      {ready && (
+        <p className="text-[14px] text-ink-3">
+          Readiness <span className="font-bold text-ink">{ready.pct}%</span>, from {ready.known} of {ready.total} topics
+        </p>
+      )}
+    </section>
   )
 }

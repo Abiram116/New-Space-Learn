@@ -23,11 +23,25 @@ from __future__ import annotations
 
 from typing import Literal
 
-from . import preferences, student_model, style_bandit
+from . import clock, preferences, student_model, study_mode, style_bandit
 from .preferences import Preference
 from .student_model import Snapshot
 
 Task = Literal["chat", "quiz", "cards", "notes", "brief"]
+
+
+def _mode(snap: Snapshot) -> str | None:
+    return dict(snap.settings.get("student_model") or {}).get("study_mode")
+
+
+def enabled(snap: Snapshot) -> bool:
+    """Whether the student lets the tutor shape answers to them.
+
+    Their switch (Settings › Learning). Off means no style, weak spots or
+    mix-ups reach the model: what is left is the topic, its files and the
+    scope rules, which are about safety and accuracy, not about the student.
+    """
+    return dict(snap.settings.get("student_model") or {}).get("personalize") is not False
 
 
 async def build(user_id: str, task: Task, *, subspace_id: str | None = None) -> str:
@@ -41,8 +55,15 @@ async def build(user_id: str, task: Task, *, subspace_id: str | None = None) -> 
 def render(snap: Snapshot, task: Task, *, subspace_id: str | None = None) -> str:
     """The pure half of `build`, so callers that already hold a snapshot (the
     brief does) don't pay for a second read pass."""
+    if not enabled(snap):
+        return ""
     prefs = preferences.resolve(snap)
     lines = _DISPATCH[task](snap, prefs, subspace_id)
+    # Chat gets the mode from its topic context (`chat_context.describe`); the
+    # other tasks — quizzes, cards, notes — hear it here, so a student in
+    # interview mode gets interview-style questions, not just interview chat.
+    if task != "chat" and (mode := study_mode.instruction(_mode(snap))):
+        lines = [mode, *lines]
     if not lines:
         return ""
     return "What you know about this student:\n" + "\n".join(f"- {ln}" for ln in lines)
@@ -72,6 +93,10 @@ async def render_chat(
       ledger `style_bandit` reads back on a later call to score whether
       that value earned its keep.
     """
+    if not enabled(snap):
+        # Nothing learned is used, and no experiment runs on a student who
+        # asked not to be shaped.
+        return "", [], {}
     prefs = dict(preferences.resolve(snap))
     # `teaching.strategy`'s context is the SUBJECT, not the subspace — see
     # `style_bandit`'s module docstring. `snap.topics` already carries
@@ -134,7 +159,51 @@ def _chat(snap: Snapshot, prefs: dict[str, Preference], subspace_id: str | None)
     # spot and revert on its own.
     for m in _local_misconceptions(snap, subspace_id)[:1]:
         lines.append(f"Keeps mixing this up: {m.text}. Address it directly if it comes up.")
+    lines.extend(_results(snap, subspace_id))
     return lines
+
+
+def _results(snap: Snapshot, subspace_id: str | None) -> list[str]:
+    """This topic's quiz scores and cards due, so "how did I do on my last
+    quiz?" and "what should I revise?" get the real answer.
+
+    One line, and only what is on the record: a topic with no quiz taken and
+    no cards says nothing, because a model handed an empty record fills it in.
+    It ends by saying the record may be quoted — chat is otherwise told to
+    answer from the Sources alone, and a score is in no document.
+
+    The quiz is not named: the snapshot does not read quiz titles.
+    """
+    if not subspace_id:
+        return []
+    facts: list[str] = []
+    attempts = [a for a in snap.quiz_attempts if a.subspace_id == subspace_id]  # newest first
+    if attempts:
+        latest = attempts[0]
+        at = student_model._parse_dt(latest.at)  # noqa: SLF001 — shared parser
+        fact = f"last quiz {latest.score}%{_ago(at.date()) if at else ''}"
+        same_quiz = [a.score for a in attempts if a.quiz_id == latest.quiz_id]
+        if len(same_quiz) > 1:
+            fact += f", best on that quiz {max(same_quiz)}% in {len(same_quiz)} tries"
+        if len(attempts) > len(same_quiz):
+            average = round(sum(a.score for a in attempts) / len(attempts))
+            fact += f"; {len(attempts)} attempts here, average {average}%"
+        facts.append(fact)
+    topic = next((t for t in snap.topics if t.subspace_id == subspace_id), None)
+    if topic and topic.cards_total:
+        facts.append(f"{topic.cards_due} of {topic.cards_total} flashcards due now")
+    if not facts:
+        return []
+    return [
+        "Their results here (a record, not a Source to cite): " + "; ".join(facts) + ". "
+        "Use it to say how they did or what to revise, even if the Sources are silent; "
+        "invent no score or date."
+    ]
+
+
+def _ago(day) -> str:
+    days = max(0, (clock.today() - day).days)
+    return " today" if days == 0 else " yesterday" if days == 1 else f" {days} days ago"
 
 
 def _quiz(snap: Snapshot, prefs: dict[str, Preference], subspace_id: str | None) -> list[str]:
@@ -270,7 +339,7 @@ def for_skill(skill: dict, snap: Snapshot, *, subspace_id: str | None = None) ->
     if output_format := (skill.get("output_format") or "").strip():
         parts.append(f"Output format: {output_format}")
 
-    targets = [c.label for c in _local_weak(snap, subspace_id)[:2]]
+    targets = [c.label for c in _local_weak(snap, subspace_id)[:2]] if enabled(snap) else []
     if targets:
         parts.append(
             "Apply the above specifically to what this student is weakest on: "
@@ -351,6 +420,15 @@ def _style(prefs: dict[str, Preference]) -> list[str]:
         }[mode.value]
         lines.append(f"Observed: {phrasing} ({mode.because}).")
     return lines
+
+
+def chat_focus(snap: Snapshot, subspace_id: str | None) -> list[tuple[str, int]]:
+    """`(concept, accuracy %)` for the weak concepts `_chat` tells the model to
+    be concrete about — so what the student is shown (`why.explain`) is exactly
+    what the prompt used, not a second opinion."""
+    if not enabled(snap):
+        return []
+    return [(c.label, int(c.accuracy)) for c in _local_weak(snap, subspace_id)[:2]]
 
 
 def _local_weak(snap: Snapshot, subspace_id: str | None):

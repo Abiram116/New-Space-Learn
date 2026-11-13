@@ -44,7 +44,7 @@ from ..schemas import (
     StyleSummaryOut,
     TopicSignal,
 )
-from . import clock, style_bandit, supabase
+from . import clock, study_mode, style_bandit, supabase
 from .streaks import compute_streak
 
 log = logging.getLogger("space_learn.student_model")
@@ -725,6 +725,9 @@ class Snapshot:
             session_length_minutes=explicit.get("session_length_minutes"),
             exam_context=explicit.get("exam_context"),
             teaching_preference=explicit.get("teaching_preference"),
+            exam_date=explicit.get("exam_date") or None,
+            personalize=explicit.get("personalize") is not False,
+            study_mode=explicit.get("study_mode") if explicit.get("study_mode") in study_mode.MODES else None,
             weak_areas=[_signal(t) for t in self.weak_areas],
             strong_areas=[_signal(t) for t in self.strong_areas],
             streak_days=self.streak_days,

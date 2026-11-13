@@ -311,3 +311,63 @@ export function pickRecentNote(notes: Note[] | null | undefined): Note | null {
   return [...list].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
 }
 
+
+// ── Home's structure ───────────────────────────────────────────────────
+
+/**
+ * Files added but not yet ready to ask about — still being read, or stuck.
+ *
+ * The topic counts include every document; `docs_indexed` counts only the
+ * ready ones. The difference is the honest number to show, and it is only
+ * shown when both are known: `null` while stats are loading (or failed), so
+ * Home never guesses.
+ */
+export function filesNotReady(
+  topics: TopicEntry[],
+  stats: Pick<Stats, 'docs_indexed'> | null | undefined,
+): number | null {
+  if (!stats || typeof stats.docs_indexed !== 'number') return null
+  const total = topics.reduce((n, t) => n + (t.subspace.counts?.docs ?? 0), 0)
+  return Math.max(0, total - stats.docs_indexed)
+}
+
+/** When a subject was last touched: its most recent topic, else never. */
+function lastTouched(space: Space): number {
+  let best = 0
+  for (const sub of space.subspaces) {
+    const t = sub.last_activity_at ? Date.parse(sub.last_activity_at) : 0
+    if (Number.isFinite(t) && t > best) best = t
+  }
+  return best
+}
+
+/**
+ * Subjects in the order Home lists them: pinned first (as in the rail), then
+ * the one worked in most recently. A subject with no topics yet sorts last
+ * among its group — it has nothing to resume.
+ */
+export function subjectsForHome(spaces: Space[]): Space[] {
+  return [...spaces].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
+    return lastTouched(b) - lastTouched(a)
+  })
+}
+
+/** A subject's topics, most recently touched first. */
+export function topicsOf(space: Space): Subspace[] {
+  return [...space.subspaces].sort(
+    (a, b) =>
+      (b.last_activity_at ? Date.parse(b.last_activity_at) : 0) -
+      (a.last_activity_at ? Date.parse(a.last_activity_at) : 0),
+  )
+}
+
+/** The link to a topic by id, from the subject list — null when it is gone. */
+export function topicLinkFor(spaces: Space[], subspaceId: string | null | undefined): string | null {
+  if (!subspaceId) return null
+  for (const s of spaces) {
+    const sub = s.subspaces.find((x) => x.id === subspaceId)
+    if (sub) return subspacePath(s, sub)
+  }
+  return null
+}
