@@ -659,7 +659,14 @@ def loads_lenient(text: str) -> Any:
     that happens to contain braces or quotes.
     """
 
-    return json.JSONDecoder(strict=False).decode(text)
+    decoder = json.JSONDecoder(strict=False)
+    try:
+        return decoder.decode(text)
+    except json.JSONDecodeError:
+        # LaTeX in a JSON string: a model that writes `\\(x\\)` with ONE backslash
+        # makes an invalid escape (`\\(`, `\\[`, `\\,`). Double those and retry;
+        # the valid escapes (\\n, \\", \\\\ …) are left alone.
+        return decoder.decode(re.sub(r'\\(?![\\/"bfnrtu])', r"\\\\", text))
 
 
 def extract_title_line(raw: str, *, before: str = "[") -> str | None:

@@ -123,7 +123,7 @@ def write_prompt(
         else "Write every question from ONE of the numbered sources below and from nothing else: "
         "the fact its correct answer depends on must be stated in that source. "
         "Spread the questions across the sources rather than writing several from one. "
-        "Keep any math in the notation the source uses.\n\n"
+        "Keep any math to what the source says, written as LaTeX.\n\n"
         f"Sources:\n{_sources_block(items)}\n\n"
     )
     source_field = '"source": 0, ' if general else '"source": int, '

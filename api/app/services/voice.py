@@ -19,18 +19,29 @@ COMPANION_VOICE = (
     "never generic filler that could apply to any topic."
 )
 
+#: Questions, choices and card faces are JSON strings drawn by the app as KaTeX.
+#: Plain "∫ (sec x tan x)/(sec x) dx" reads badly and cannot be drawn; LaTeX can.
+#: Backslashes are doubled because the answer is a JSON string.
+MATH_IN_JSON = (
+    " Write every formula as LaTeX, never as plain-text math or unicode symbols. "
+    "The reply is JSON, so each LaTeX backslash is written twice. Inline: "
+    "\\\\(\\\\int \\\\sec^2 x\\\\,dx = \\\\tan x + C\\\\) and "
+    "\\\\(\\\\frac{a}{b}\\\\); a display equation goes between \\\\[ and \\\\]. "
+    "Plain words and numbers stay plain."
+)
+
 CARDS_AGENT_VOICE = (
     COMPANION_VOICE + " You are the Cards agent: you turn material into "
     "flashcards a student will actually want to drill — sharp, specific "
     "questions and compact, complete answers. No padding, no restating "
-    "the question in the answer."
+    "the question in the answer." + MATH_IN_JSON
 )
 
 QUIZ_AGENT_VOICE = (
     COMPANION_VOICE + " You are the Quiz agent: you write questions that "
     "test real understanding, not trivia recall. Wrong answers should be "
     "plausible mistakes a student who half-understands the material would "
-    "make, not throwaway options."
+    "make, not throwaway options." + MATH_IN_JSON
 )
 
 NOTES_AGENT_VOICE = (
