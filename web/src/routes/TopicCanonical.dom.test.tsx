@@ -107,4 +107,22 @@ describe('TopicCanonical', () => {
     )
     expect(screen.getByTestId('where')).toHaveTextContent('/reinforcement-learning/mdps/notes')
   })
+
+  it('names the browser tab after the topic, and the section inside it', () => {
+    SPACES = withSlugs(base)
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/reinforcement-learning/markov-decision-processes']}>{tree()}</MemoryRouter>,
+    )
+    expect(document.title).toBe('Markov Decision Processes · Space Learn')
+    unmount()
+
+    render(<MemoryRouter initialEntries={['/s/sp1/tp1/notes']}>{tree()}</MemoryRouter>)
+    expect(document.title).toBe('Notes · Markov Decision Processes · Space Learn')
+  })
+
+  it('says so in the tab when the address names no topic', () => {
+    SPACES = withSlugs(base)
+    render(<MemoryRouter initialEntries={['/reinforcement-learning/nope']}>{tree()}</MemoryRouter>)
+    expect(document.title).toBe('Topic not found · Space Learn')
+  })
 })

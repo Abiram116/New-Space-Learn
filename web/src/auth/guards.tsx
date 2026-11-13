@@ -12,7 +12,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (!supabaseConfigured) return <ConfigMissing />
   if (loading) return <FirstPaintFallback label="Checking your session…" />
   if (!session) {
-    const returnTo = `${location.pathname}${location.search}`
+    const returnTo = `${location.pathname}${location.search}${location.hash}`
     return <Navigate to={`/signin?next=${encodeURIComponent(returnTo)}`} replace />
   }
   return <>{children}</>
@@ -27,8 +27,12 @@ export function RedirectIfAuthed({ children }: { children: ReactNode }) {
   // intake. Whichever won was down to render order. While a handoff is
   // playing it owns navigation; see `useHandoffPlaying`.
   const handingOff = useHandoffPlaying()
+  // Already signed in and sent here with somewhere to go (`/signin?next=/notes`):
+  // go there. Only in-app paths, so a crafted link can't send anyone off-site.
+  const asked = new URLSearchParams(useLocation().search).get('next')
+  const next = asked && asked.startsWith('/') && !asked.startsWith('//') ? asked : '/home'
   if (!supabaseConfigured) return <>{children}</>
   if (loading) return <FirstPaintFallback />
-  if (session && !handingOff) return <Navigate to="/home" replace />
+  if (session && !handingOff) return <Navigate to={next} replace />
   return <>{children}</>
 }

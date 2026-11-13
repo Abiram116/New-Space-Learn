@@ -3,6 +3,7 @@ import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { SHELL_TITLES } from '../../features/mobile/phoneNav'
+import { SubjectIcon } from '../../features/spaces/SubjectIcon'
 
 /**
  * Header rendered inside every subspace route: the space > subspace breadcrumb,
@@ -65,8 +66,9 @@ function DesktopSubspaceHeader({ title, actions, breadcrumb = true, sections }: 
     <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b-[1.5px] border-line bg-surface px-4 py-3 sm:px-6">
       <div className="min-w-0 flex-1 basis-40">
         {breadcrumb && space && subspace && (
-          <div className="truncate text-[12.5px] text-faint">
-            {title ? `${space.name} › ${subspace.name}` : space.name}
+          <div className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-faint">
+            <SubjectIcon space={space} size="xs" />
+            <span className="truncate">{title ? `${space.name} › ${subspace.name}` : space.name}</span>
           </div>
         )}
         <h1 className="truncate font-display text-[19px] font-semibold leading-snug">{displayTitle}</h1>

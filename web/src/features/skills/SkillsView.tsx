@@ -39,6 +39,7 @@ import {
   resolveSkillIcon,
 } from './skillIcon'
 import { Skeleton } from '../../components/ui/Skeleton'
+import { LIMITS } from '../../lib/limits'
 import { useMediaQuery } from '../../lib/useMediaQuery'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
@@ -50,6 +51,9 @@ const MEMORY_SCOPE_OPTIONS: { value: MemoryScope; label: string; hint: string }[
   { value: 'topic', label: 'This topic', hint: 'A longer window of this topic’s history.' },
   { value: 'all', label: 'Everything', hint: 'The widest history window this topic has.' },
 ]
+
+/** The card shows two lines of it; the server sets no limit of its own. */
+const DESCRIPTION_MAX = 140
 
 const emptyForm = (): SkillInput => ({
   name: '',
@@ -118,6 +122,47 @@ export function SkillsView() {
     setForm(emptyForm())
     setCustomIconOpen(false)
   }, [])
+
+  /**
+   * Typed words are not thrown away without asking.
+   *
+   * Cancel, Escape, a click on the backdrop, "New skill", another skill's
+   * card and Back all used to replace the form at once — up to 4,000
+   * characters of instructions gone with one stray key. Each of them now goes
+   * through `leaveEditor`, which asks first when the name, description,
+   * instructions or output format differ from what was loaded. Icon and
+   * colour are one click to redo, so they do not count.
+   *
+   * Leaving by the sidebar is not covered: asking there needs the router's
+   * `useBlocker`, which this app's `<BrowserRouter>` does not support. A
+   * reload or a closed tab is, by the browser's own warning below.
+   */
+  const [discard, setDiscard] = useState<{ run: () => void } | null>(null)
+  const loaded = own?.find((s) => s.id === selectedId) ?? null
+  const dirty =
+    editorOpen &&
+    (form.name !== (loaded?.name ?? '') ||
+      (form.description ?? '') !== (loaded?.description ?? '') ||
+      form.instructions !== (loaded?.instructions ?? '') ||
+      (form.output_format ?? '') !== (loaded?.output_format ?? ''))
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      // Chrome only shows its warning when this is set.
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const leaveEditor = (run: () => void) => {
+    // A confirmation is already up. Escape reaches every open dialog, and the
+    // one on top is the one it was meant for.
+    if (confirmDelete || discard) return
+    if (dirty) setDiscard({ run })
+    else run()
+  }
 
   // Two reads, once: your skills and the library. Nothing here depends on a topic.
   const loadLists = useCallback(async () => {
@@ -244,8 +289,16 @@ export function SkillsView() {
    *  thing that read as broken on screen. */
   const ownNames = useMemo(() => new Set((own ?? []).map((s) => s.name)), [own])
 
+  // "Added" only appears once the request returns, so a quick second click on
+  // "Add" got in before it and made the same skill twice. Names on their way
+  // are held here, and their button is disabled until they land.
+  const cloningRef = useRef<Set<string>>(new Set())
+  const [cloning, setCloning] = useState<ReadonlySet<string>>(new Set())
+
   const cloneLibrary = async (lib: Skill) => {
-    if (ownNames.has(lib.name)) return
+    if (ownNames.has(lib.name) || cloningRef.current.has(lib.name)) return
+    cloningRef.current.add(lib.name)
+    setCloning(new Set(cloningRef.current))
     try {
       const created = await createSkill({
         name: lib.name,
@@ -258,9 +311,13 @@ export function SkillsView() {
         output_format: lib.output_format,
       })
       setOwn((prev) => (prev ? [created, ...prev] : [created]))
-      show(`Added "${lib.name}" — activate it below to apply to this space.`, 'success')
+      // There is nothing to switch on here: that happens per topic, in chat.
+      show(`Added "${lib.name}". Turn it on for a topic from that topic’s chat sidebar.`, 'success')
     } catch (err) {
       showError(err)
+    } finally {
+      cloningRef.current.delete(lib.name)
+      setCloning(new Set(cloningRef.current))
     }
   }
 
@@ -273,6 +330,17 @@ export function SkillsView() {
         value={form.name}
         onChange={(e) => setForm({ ...form, name: e.target.value })}
         placeholder="Socratic Tutor"
+        maxLength={LIMITS.skillName}
+      />
+
+      <Input
+        label="Short description (optional)"
+        name="skill-description"
+        value={form.description ?? ''}
+        onChange={(e) => setForm({ ...form, description: e.target.value })}
+        placeholder="Asks questions instead of giving answers"
+        maxLength={DESCRIPTION_MAX}
+        hint="Shown on the skill’s card, so you can tell your skills apart."
       />
 
       <div className="flex flex-col gap-1.5 text-[12.5px]">
@@ -366,6 +434,7 @@ export function SkillsView() {
         value={form.instructions}
         onChange={(e) => setForm({ ...form, instructions: e.target.value })}
         placeholder="Ask one guiding question at a time. Never reveal the full answer until I've attempted it twice…"
+        maxLength={LIMITS.skillInstructions}
         hint="Written in second person. Kept as a system prompt when this skill is active."
       />
 
@@ -380,7 +449,7 @@ export function SkillsView() {
             don't stop to check — it isn't; it's still this topic only. */}
         <p className="text-[12.5px] leading-snug text-faint">
           How much of this topic's chat history it can see when answering —
-          not where it's active. It stays scoped to this space either way.
+          not where it's active. It only ever sees the topic you are chatting in.
         </p>
         <div className="flex flex-wrap gap-1.5">
           {MEMORY_SCOPE_OPTIONS.map((opt) => (
@@ -409,6 +478,7 @@ export function SkillsView() {
         value={form.output_format ?? ''}
         onChange={(e) => setForm({ ...form, output_format: e.target.value })}
         placeholder="e.g. bullet points only, or one short paragraph"
+        maxLength={LIMITS.skillOutputFormat}
         hint="Optional — a formatting rule added on top of the instructions above."
         className="resize-none overflow-hidden"
       />
@@ -432,7 +502,7 @@ export function SkillsView() {
         ) : undefined
       }
     >
-      <Button variant="secondary" onClick={closeEditor} disabled={busy}>
+      <Button variant="secondary" onClick={() => leaveEditor(closeEditor)} disabled={busy}>
         Cancel
       </Button>
       <Button onClick={save} disabled={busy} aria-busy={busy} className="min-w-36">
@@ -448,10 +518,10 @@ export function SkillsView() {
         breadcrumb={false}
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={goBack}>
+            <Button variant="ghost" size="sm" onClick={() => leaveEditor(goBack)}>
               <Icon name="arrowLeft" size={14} /> Back
             </Button>
-            <Button onClick={() => openEditor(null)}>
+            <Button onClick={() => leaveEditor(() => openEditor(null))}>
               <Icon name="plus" size={15} /> New skill
             </Button>
           </>
@@ -477,8 +547,21 @@ export function SkillsView() {
           )}
 
           {error && !loading && (
-            <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+            <div
+              role="alert"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep"
+            >
               {error}
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setError(null)
+                  void loadLists()
+                }}
+              >
+                <Icon name="refresh" size={13} /> Retry
+              </Button>
             </div>
           )}
 
@@ -510,7 +593,11 @@ export function SkillsView() {
                           <Icon name={resolveSkillIcon(skill.icon)} size={16} />
                         </span>
                         <button
-                          onClick={() => openEditor(skill.id)}
+                          onClick={() => {
+                            // Already open on this one: nothing to switch to.
+                            if (editorOpen && selectedId === skill.id) return
+                            leaveEditor(() => openEditor(skill.id))
+                          }}
                           className={cn(
                             'min-h-10 min-w-0 flex-1 truncate text-left text-[15px] font-bold cursor-pointer',
                             selectedId === skill.id && 'text-brand',
@@ -550,7 +637,11 @@ export function SkillsView() {
           )}
 
           <SectionLabel className="mt-1">FROM THE LIBRARY</SectionLabel>
-          {library === null ? (
+          {library === null && error ? (
+            // Both lists come from one load. Without this the library sat on
+            // its skeleton forever under the error above.
+            <p className="text-[12.5px] text-muted">The library will show once your skills load.</p>
+          ) : library === null ? (
             <div className="flex gap-2.5">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-20 flex-1" />
@@ -601,7 +692,9 @@ export function SkillsView() {
                         ) : (
                           <button
                             onClick={() => cloneLibrary(lib)}
-                            className="mt-2 -mb-1.5 min-h-10 rounded-md pr-3 text-[13.5px] font-semibold text-brand cursor-pointer hover:text-brand-300"
+                            disabled={cloning.has(lib.name)}
+                            aria-busy={cloning.has(lib.name)}
+                            className="mt-2 -mb-1.5 min-h-10 rounded-md pr-3 text-[13.5px] font-semibold text-brand cursor-pointer hover:text-brand-300 disabled:cursor-default disabled:opacity-60"
                           >
                             Add →
                           </button>
@@ -632,7 +725,7 @@ export function SkillsView() {
         ) : (
           <Modal
             open={editorOpen}
-            onClose={closeEditor}
+            onClose={() => leaveEditor(closeEditor)}
             title={editingExisting ? 'Edit skill' : 'New skill'}
             width="lg"
             footer={editorFooter}
@@ -645,12 +738,25 @@ export function SkillsView() {
       <ConfirmDialog
         open={Boolean(confirmDelete)}
         title="Delete this skill?"
-        description="It'll also stop being applied in any space where it's active."
+        description="It'll also stop being applied in any topic where it's switched on."
         confirmLabel="Delete"
         onCancel={() => setConfirmDelete(null)}
         onConfirm={del}
         destructive
         loading={deleting}
+      />
+      <ConfirmDialog
+        open={Boolean(discard)}
+        title="Discard what you wrote?"
+        description="This skill has changes that are not saved yet."
+        confirmLabel="Discard"
+        onCancel={() => setDiscard(null)}
+        onConfirm={() => {
+          const run = discard?.run
+          setDiscard(null)
+          run?.()
+        }}
+        destructive
       />
     </div>
   )

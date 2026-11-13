@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { resendConfirmation, signInWithGoogle, signUpWithPassword } from '../../api/auth'
 import { friendlyMessage } from '../../api/errors'
@@ -7,9 +7,13 @@ import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { PasswordField } from './PasswordField'
 import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
+
+/** Seconds between confirmation emails; the auth service allows one a minute. */
+const RESEND_WAIT_S = 60
 
 export function SignUp() {
   const phone = useIsMobile()
@@ -32,21 +36,33 @@ export function SignUp() {
   // the user must see, so it gets its own screen instead.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null)
   const [resendBusy, setResendBusy] = useState(false)
+  // The auth service refuses a second email inside a minute, so the button
+  // counts down instead of offering a press that can only fail. It starts
+  // when the first email goes out, and again after each resend.
+  const [resendWait, setResendWait] = useState(0)
+  useEffect(() => {
+    if (resendWait <= 0) return
+    const id = setTimeout(() => setResendWait((s) => s - 1), 1000)
+    return () => clearTimeout(id)
+  }, [resendWait])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const next: typeof errors = {}
     if (name.trim().length < 2) next.name = 'Add your name so agents can greet you.'
-    if (!isEmail(email)) next.email = 'Enter a valid email.'
+    const address = email.trim()
+    if (!address) next.email = 'Enter your email.'
+    else if (!isEmail(address)) next.email = 'Enter a valid email, like you@studies.edu.'
     if (password.length < 8)
       next.password = 'Use at least 8 characters — this protects your notes.'
     setErrors(next)
     if (Object.keys(next).length) return
     setBusy(true)
     try {
-      const result = await signUpWithPassword(email, password, name)
+      const result = await signUpWithPassword(address, password, name.trim())
       if (result.requiresConfirmation) {
-        setPendingEmail(email)
+        setPendingEmail(address)
+        setResendWait(RESEND_WAIT_S)
       } else {
         /**
          * Straight to the intake, not through `/home`.
@@ -78,6 +94,7 @@ export function SignUp() {
     try {
       await resendConfirmation(pendingEmail)
       show('Sent — check your inbox again.', 'success')
+      setResendWait(RESEND_WAIT_S)
     } catch (err) {
       show(friendlyMessage(err), 'error')
     } finally {
@@ -125,8 +142,14 @@ export function SignUp() {
             you straight back here, signed in. It can take a minute, and it
             sometimes lands in spam or promotions.
           </div>
-          <Button type="button" variant="outline3d" size="lg" disabled={resendBusy} onClick={resend}>
-            {resendBusy ? 'Sending…' : "Didn't get it? Resend"}
+          <Button
+            type="button"
+            variant="outline3d"
+            size="lg"
+            disabled={resendBusy || resendWait > 0}
+            onClick={resend}
+          >
+            {resendBusy ? 'Sending…' : resendWait > 0 ? `Resend in ${resendWait}s` : "Didn't get it? Resend"}
           </Button>
           <Link
             to="/signin"
@@ -199,18 +222,18 @@ export function SignUp() {
           placeholder="you@studies.edu"
           autoComplete="email"
         />
-        <Input
+        <PasswordField
           name="password"
-          type="password"
           label="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           error={errors.password}
           placeholder="At least 8 characters"
+          hint="At least 8 characters."
           autoComplete="new-password"
         />
         {errors.form && (
-          <div className="rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
+          <div role="alert" className="rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
             {errors.form}
           </div>
         )}

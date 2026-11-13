@@ -39,7 +39,7 @@ import { useState } from 'react'
 import { sendFeedback, type FeedbackKind } from '../../api/feedback'
 import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
-import { CHIP_LABEL, REASON_PROMPT, type AskReason } from './feedbackPolicy'
+import { CHIP_LABEL, REASON_PROMPT, candidateKinds, type AskReason } from './feedbackPolicy'
 
 export function FeedbackChips({
   chips,
@@ -118,7 +118,12 @@ export function FeedbackChips({
   // to a *silent* retry and the wrong one when the student is right there and
   // about to tell you why. So it opens the chips, and the chip carries the
   // signal.
-  const showChips = chips.length > 0 && (invited || reason !== null)
+  /* Thumbs-down is the student asking to say what was off, so there is always
+     something to pick. `chips` is empty whenever the policy has no reason to
+     ask (most answers), and the thumb then showed "What was off?" over
+     nothing: no options, and nothing recorded. */
+  const offered = chips.length > 0 ? chips : invited ? candidateKinds(content.length) : []
+  const showChips = offered.length > 0 && (invited || reason !== null)
 
   return (
     <div className="flex flex-col gap-1.5 pl-4">
@@ -161,7 +166,7 @@ export function FeedbackChips({
 
       {showChips && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {chips
+          {offered
             // `useful` is the thumbs-up; offering it twice in one row is noise.
             .filter((kind) => kind !== 'useful')
             .map((kind) => (

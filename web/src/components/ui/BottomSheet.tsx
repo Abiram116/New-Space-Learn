@@ -25,6 +25,7 @@
  */
 
 import { moveAcrossActions } from './dialogKeys'
+import { pushOverlay } from './overlayStack'
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
@@ -107,9 +108,14 @@ export function BottomSheet({
     const panel = panelRef.current
     const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
     ;(first ?? panel)?.focus({ preventScroll: true })
+    const layer = pushOverlay()
 
     const onKey = (e: KeyboardEvent) => {
+      // A dialog opened over this one owns the keyboard until it closes.
+      if (!layer.isTop()) return
       if (e.key === 'Escape') {
+        // Already spent by something inside (an open dropdown closing itself).
+        if (e.defaultPrevented) return
         closeRef.current()
         return
       }
@@ -134,6 +140,7 @@ export function BottomSheet({
     return () => {
       document.body.style.overflow = prevOverflow
       window.removeEventListener('keydown', onKey)
+      layer.release()
       previouslyFocused?.focus?.({ preventScroll: true })
     }
   }, [open, mounted])

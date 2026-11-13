@@ -37,7 +37,9 @@ const FIXES: { problem: string; fix: string }[] = [
   },
   {
     problem: 'Where did my notes, cards and quizzes go?',
-    fix: 'Each has a tab at the top of the page.',
+    // This panel only exists beside the chat, where the page has no tabs
+    // (they are hidden whenever the sidebar is on screen).
+    fix: 'Press Back, then Cards, Quizzes or Notes under Study in this sidebar.',
   },
 ]
 
@@ -106,7 +108,7 @@ export function DockHelp() {
       </section>
       </div>
 
-      <DockAction icon="send" onClick={() => navigate('/settings')}>
+      <DockAction icon="send" onClick={() => navigate('/settings?section=feedback')}>
         Tell us what went wrong
       </DockAction>
     </div>

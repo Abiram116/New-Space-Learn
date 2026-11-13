@@ -147,4 +147,42 @@ describe('Select', () => {
     await user.click(screen.getByRole('button', { name: 'Filter by subject' }))
     expect(screen.getByRole('option', { name: longLabel })).toHaveTextContent(longLabel)
   })
+
+  it('hands focus back to the button when it closes from the keyboard or by picking', async () => {
+    const user = userEvent.setup()
+    render(<Select value="all" onChange={vi.fn()} options={OPTIONS} ariaLabel="Filter by subject" />)
+    const trigger = screen.getByRole('button', { name: 'Filter by subject' })
+
+    await user.click(trigger)
+    await user.keyboard('{Escape}')
+    expect(trigger).toHaveFocus()
+
+    await user.click(trigger)
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(trigger).toHaveFocus()
+
+    await user.click(trigger)
+    await user.click(screen.getByRole('option', { name: 'FSD' }))
+    expect(trigger).toHaveFocus()
+  })
+
+  it('stays closed after Space commits, though focus is back on the button for the key-up', async () => {
+    const user = userEvent.setup()
+    render(<Select value="all" onChange={vi.fn()} options={OPTIONS} ariaLabel="Filter by subject" />)
+    await user.click(screen.getByRole('button', { name: 'Filter by subject' }))
+    await user.keyboard('{ArrowDown}')
+    await user.keyboard(' ')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    // And Space on the button still opens it afterwards.
+    await user.keyboard(' ')
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+  })
+
+  it('opens from the button with the arrow keys', async () => {
+    const user = userEvent.setup()
+    render(<Select value="all" onChange={vi.fn()} options={OPTIONS} ariaLabel="Filter by subject" />)
+    screen.getByRole('button', { name: 'Filter by subject' }).focus()
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('listbox')).toHaveFocus()
+  })
 })

@@ -74,7 +74,8 @@ export function AgentRunCard({
     </>
   ) : run.status === 'done' ? (
     <>
-      {run.doneText} <span className="text-faint">· opening…</span>
+      {run.doneText}
+      {run.auto !== false && <span className="text-faint"> · opening…</span>}
     </>
   ) : (
     <span className="text-coral-deep">{run.error}</span>

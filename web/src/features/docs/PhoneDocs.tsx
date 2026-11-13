@@ -119,10 +119,10 @@ export function PhoneDocs({
         <PhoneTitle
           title="Material"
           hideTitle
-          sub={docs && docs.length + uploads.length > 0 ? `${docs.length + uploads.length} source${docs.length + uploads.length === 1 ? '' : 's'}` : undefined}
+          sub={docs && docs.length + uploads.length > 0 ? `${docs.length + uploads.length} file${docs.length + uploads.length === 1 ? '' : 's'}` : undefined}
         />
 
-        {loading && <PageSpinner label="Loading documents…" />}
+        {loading && <PageSpinner label="Loading files…" />}
 
         {error && !loading && (
           <div className="mx-4 rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-[15px] text-coral-deep">
@@ -221,9 +221,9 @@ export function PhoneDocs({
           sheet.target
             ? [
                 ...(sheet.target.status === 'processing' || sheet.target.status === 'failed'
-                  ? [{ label: 'Reprocess', icon: 'refresh' as const, onSelect: () => onReprocess(sheet.target!.id) }]
+                  ? [{ label: 'Try again', icon: 'refresh' as const, onSelect: () => onReprocess(sheet.target!.id) }]
                   : []),
-                { label: 'Delete', icon: 'trash', danger: true, onSelect: () => onDelete(sheet.target!.id) },
+                { label: 'Remove', icon: 'trash', danger: true, onSelect: () => onDelete(sheet.target!.id) },
               ]
             : []
         }

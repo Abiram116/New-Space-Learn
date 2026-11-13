@@ -9,9 +9,9 @@ export const statusMeta: Record<
   { note: string; icon: IconName; tone: Tone; barClass: string }
 > = {
   uploading: { note: 'Uploading', icon: 'upload', tone: 'sky', barClass: 'bg-sky' },
-  processing: { note: 'Embedding chunks', icon: 'clock', tone: 'sun', barClass: 'bg-sun' },
-  ready: { note: 'Indexed for citations', icon: 'check', tone: 'mint', barClass: 'bg-mint' },
-  failed: { note: 'Failed', icon: 'alert', tone: 'coral', barClass: 'bg-coral' },
+  processing: { note: 'Reading…', icon: 'clock', tone: 'sun', barClass: 'bg-sun' },
+  ready: { note: 'Ready', icon: 'check', tone: 'mint', barClass: 'bg-mint' },
+  failed: { note: 'Couldn’t read this', icon: 'alert', tone: 'coral', barClass: 'bg-coral' },
 }
 
 export function SourceItem({
@@ -45,7 +45,7 @@ export function SourceItem({
         : live !== null
           ? Math.max(4, Math.round(live * 100))
           : 40
-  const note = live !== null ? `${meta.note} · ${Math.round(live * 100)}%` : meta.note
+  const note = live !== null ? `${meta.note} ${Math.round(live * 100)}%` : meta.note
 
   return (
     <div
@@ -103,14 +103,15 @@ export function SourceItem({
               onClick={onReprocess}
               className="flex min-h-10 items-center gap-1.5 rounded-[10px] bg-brand-soft px-3 text-[13px] font-bold text-brand-deep cursor-pointer"
             >
-              <Icon name="refresh" size={13} /> Reprocess
+              <Icon name="refresh" size={13} /> Try again
             </button>
           )}
           {onDelete && (
             <button
               type="button"
               onClick={onDelete}
-              aria-label={`Delete ${doc.name}`}
+              aria-label={`Remove ${doc.name}`}
+              title="Remove this file"
               className="ml-auto grid h-10 w-10 place-items-center rounded-[10px] text-muted transition-colors hover:bg-coral-soft hover:text-coral-deep cursor-pointer"
             >
               <Icon name="trash" size={16} />

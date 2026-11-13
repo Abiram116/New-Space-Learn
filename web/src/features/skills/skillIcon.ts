@@ -30,6 +30,10 @@ const KNOWN: ReadonlySet<string> = new Set<IconName>([
   'agent', 'deck', 'quiz', 'flame', 'seal', 'clock', 'user',
   'check', 'thumbDown', 'quote', 'alert', 'thumbUp', 'pencil',
   'lock', 'pin', 'send', 'refresh', 'home',
+  // Used by library rows ("Worked Example First", "Step-by-Step Derivation").
+  // Not in the picker below, but a row that names it must not fall back to
+  // the default glyph.
+  'listOrdered',
 ])
 
 export function resolveSkillIcon(raw: string | null | undefined): IconName {
@@ -78,7 +82,7 @@ export const SKILL_ICON_LIBRARY: IconName[] = [
 /**
  * Which shelf a *library* skill sits on — a lightweight, purely client-side
  * grouping for the "FROM THE LIBRARY" grid, matched by name. There is no
- * `category` column and this deliberately doesn't add one: the ten library
+ * `category` column and this deliberately doesn't add one: the library
  * rows are fixed, known content, not something a schema migration is worth
  * for a display grouping. A custom skill (cloned or hand-written) simply
  * isn't in this map and renders without a shelf, same as today.
@@ -89,8 +93,14 @@ export const LIBRARY_CATEGORY: Record<string, string> = {
   'Feynman Tutor': 'Learning',
   'Mistake Analyst': 'Learning',
   'Compare & Contrast': 'Learning',
+  'Worked Example First': 'Learning',
+  'Analogy Builder': 'Learning',
+  'Step-by-Step Derivation': 'Learning',
+  'Memory Hooks': 'Learning',
+  'Plain English': 'Learning',
   'Exam Cram': 'Exam',
   'Exam Examiner': 'Exam',
+  'Exam Answer Coach': 'Exam',
   'Debugging Mentor': 'Technical',
   'Code Review Mentor': 'Technical',
   'Paper Explainer': 'Research',

@@ -104,7 +104,7 @@ describe('on a phone', () => {
     // Due cards come from this topic's decks only, and open the one deck with any.
     const review = await screen.findByTestId('review-due')
     expect(review).toHaveTextContent('Review 3 due cards')
-    expect(review).toHaveAttribute('href', '/sp/sub/flashcards?deck=d1')
+    expect(review).toHaveAttribute('href', '/sp/sub/flashcards?deck=d1&review=deck')
 
     for (const [label, href, count] of [
       ['Cards', '/sp/sub/flashcards', '12'],

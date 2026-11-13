@@ -45,6 +45,14 @@ describe('resolveSkillIcon', () => {
     expect(resolveSkillIcon('thumbDown')).toBe('thumbDown')
     expect(resolveSkillIcon('check')).toBe('check')
   })
+
+  it('draws every icon the six later library skills are seeded with', () => {
+    // 'listOrdered' (Worked Example First, Step-by-Step Derivation) was a real
+    // icon missing from KNOWN, so both showed the default glyph.
+    for (const icon of ['pencil', 'listOrdered', 'sparkle', 'pin', 'chat']) {
+      expect(resolveSkillIcon(icon), icon).toBe(icon)
+    }
+  })
 })
 
 describe('the skill icon picker', () => {
@@ -76,6 +84,10 @@ describe('the library shelf map', () => {
       'Socratic Tutor', 'Concept Simplifier', 'Feynman Tutor', 'Exam Examiner',
       'Exam Cram', 'Mistake Analyst', 'Compare & Contrast', 'Debugging Mentor',
       'Code Review Mentor', 'Paper Explainer',
+      // 20261007090000_six_more_library_skills.sql. Without a shelf these six
+      // sat in an unlabelled row under "Research".
+      'Exam Answer Coach', 'Worked Example First', 'Analogy Builder',
+      'Step-by-Step Derivation', 'Memory Hooks', 'Plain English',
     ]
     for (const name of seeded) {
       expect(LIBRARY_CATEGORY[name], `${name} has no shelf`).toBeDefined()

@@ -1,11 +1,13 @@
-import { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
 import { cn } from '../../lib/cn'
-import { useFallbackSubspace } from '../../lib/nav'
+import { resolveTopicSegments, subspacePath, useFallbackSubspace } from '../../lib/nav'
+import type { Space } from '../../api/types'
 import { NewSpaceModal } from '../../features/spaces/NewSpaceModal'
 import { SpaceTree } from '../../features/spaces/SpaceTree'
 import { useSpaces } from '../../features/spaces/SpacesProvider'
+import { SubjectIcon } from '../../features/spaces/SubjectIcon'
 import { Icon, type IconName } from '../ui/Icon'
 import { Icon3D } from '../ui/Icon3D'
 import { LogoMark } from '../ui/Logo'
@@ -30,9 +32,26 @@ export function Sidebar({
   onToggleCollapse?: () => void
 }) {
   const { user } = useAuth()
-  const { loading } = useSpaces()
+  const { loading, spaces } = useSpaces()
   const { hasAny } = useFallbackSubspace()
+  const navigate = useNavigate()
   const [newSpaceOpen, setNewSpaceOpen] = useState(false)
+  // A subject made together with its first topic used to land in the rail
+  // closed (a subject with topics starts collapsed), so creating it appeared
+  // to do nothing. Go to that topic instead: the subject you are inside is
+  // open in the tree. The dialog only reports the subject's id, and the list
+  // that holds its topic arrives a render later, hence the wait here.
+  const [justCreated, setJustCreated] = useState<string | null>(null)
+  useEffect(() => {
+    if (!justCreated) return
+    const space = spaces.find((s) => s.id === justCreated)
+    if (!space) return
+    setJustCreated(null)
+    const first = space.subspaces[0]
+    if (!first) return
+    navigate(subspacePath(space, first))
+    onNavigate?.()
+  }, [justCreated, spaces, navigate, onNavigate])
 
   const displayName =
     (user?.user_metadata?.display_name as string | undefined) ||
@@ -175,6 +194,33 @@ export function Sidebar({
           ))}
         </nav>
 
+        {/* Search: opens the global search palette (owned elsewhere; it
+            listens for this event and for Ctrl K itself). */}
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new Event('sl:open-search'))
+            onNavigate?.()
+          }}
+          aria-label="Search"
+          aria-keyshortcuts="Control+K"
+          title={collapsed ? 'Search (Ctrl K)' : undefined}
+          className={cn(
+            'flex min-h-10 shrink-0 cursor-pointer items-center gap-2.5 rounded-[10px] border border-line bg-well/60 text-[14px] text-muted transition-colors hover:border-brand/40 hover:text-ink pointer-coarse:min-h-11',
+            collapsed ? 'h-10 w-10 justify-center px-0' : 'w-full px-2.5',
+          )}
+        >
+          <Icon name="search" size={16} className="shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1 truncate text-left">Search</span>
+              <kbd className="shrink-0 rounded-[5px] border border-line bg-raised px-1.5 py-px font-mono text-[11px] text-faint">
+                Ctrl K
+              </kbd>
+            </>
+          )}
+        </button>
+
         {!collapsed && (
           <div className="flex items-center gap-2 border-t border-line px-1 pt-4">
             <SectionLabel>Subjects</SectionLabel>
@@ -191,15 +237,29 @@ export function Sidebar({
         )}
 
         {collapsed ? (
-          <button
-            type="button"
-            onClick={() => setNewSpaceOpen(true)}
-            aria-label="New subject"
-            title="New subject"
-            className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-[10px] text-muted transition-colors hover:bg-line-soft hover:text-brand"
-          >
-            <Icon name="plus" size={18} />
-          </button>
+          /* Collapsed, the subjects used to be a lone "+" — you could make a
+             subject from here but not see or reach one. Now each subject is
+             its own icon (in its tone), opening its most recent topic, with
+             "+" after them as the add action it always was. */
+          <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto overflow-x-hidden border-t border-line pt-3">
+            {loading ? (
+              <>
+                <Skeleton className="h-10 w-10 rounded-[10px]" />
+                <Skeleton className="h-10 w-10 rounded-[10px]" />
+              </>
+            ) : (
+              <CollapsedSubjects onNavigate={onNavigate} onExpand={onToggleCollapse} />
+            )}
+            <button
+              type="button"
+              onClick={() => setNewSpaceOpen(true)}
+              aria-label="New subject"
+              title="New subject"
+              className="grid h-10 w-10 shrink-0 cursor-pointer place-items-center rounded-[10px] text-muted transition-colors hover:bg-line-soft hover:text-brand"
+            >
+              <Icon name="plus" size={18} />
+            </button>
+          </div>
         ) : (
           // -mx/px keeps a flush row's focus ring inside the clip box.
           <div className="-mx-1 min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-1 py-0.5">
@@ -214,8 +274,6 @@ export function Sidebar({
             )}
           </div>
         )}
-
-        {collapsed && <div className="flex-1" />}
 
         {/* The account area: Skills, then who you are. One rule above the pair
             separates it from the topics, and Skills is deliberately NOT a
@@ -302,7 +360,67 @@ export function Sidebar({
         </div>
       </aside>
 
-      <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} />
+      <NewSpaceModal open={newSpaceOpen} onClose={() => setNewSpaceOpen(false)} onCreated={setJustCreated} />
     </>
+  )
+}
+
+/** The topic a subject's icon opens: the one touched last, else the first. */
+function latestTopic(space: Space) {
+  let best = space.subspaces[0]
+  for (const sub of space.subspaces) {
+    if ((sub.last_activity_at ?? '') > (best?.last_activity_at ?? '')) best = sub
+  }
+  return best
+}
+
+/**
+ * The collapsed rail's subjects: one icon each, named by its tooltip and
+ * label. A subject with a topic opens its latest one; a subject with none
+ * expands the rail, where "Add topic" lives.
+ */
+function CollapsedSubjects({ onNavigate, onExpand }: { onNavigate?: () => void; onExpand?: () => void }) {
+  const { spaces } = useSpaces()
+  const params = useParams()
+  const activeId = resolveTopicSegments(spaces, params.spaceId, params.subspaceId).space?.id
+  const tile = (active: boolean) =>
+    cn(
+      'grid h-10 w-10 shrink-0 place-items-center rounded-[10px] transition-colors',
+      active ? 'bg-brand-tint ring-1 ring-brand/40' : 'hover:bg-line-soft',
+    )
+  return (
+    <ul aria-label="Subjects" className="flex flex-col items-center gap-1">
+      {spaces.map((space) => {
+        const topic = latestTopic(space)
+        const active = space.id === activeId
+        return (
+          <li key={space.id}>
+            {topic ? (
+              <Link
+                to={subspacePath(space, topic)}
+                onClick={onNavigate}
+                aria-label={space.name}
+                aria-current={active ? 'true' : undefined}
+                title={space.name}
+                className={tile(active)}
+              >
+                <SubjectIcon space={space} size="md" />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={onExpand}
+                disabled={!onExpand}
+                aria-label={`${space.name} (no topics yet)`}
+                title={`${space.name} — no topics yet`}
+                className={cn(tile(false), 'cursor-pointer disabled:cursor-default')}
+              >
+                <SubjectIcon space={space} size="md" className="opacity-70" />
+              </button>
+            )}
+          </li>
+        )
+      })}
+    </ul>
   )
 }

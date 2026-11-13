@@ -219,7 +219,7 @@ export const LINES: Record<string, Pool> = {
     quiz: ['No quizzes yet. Tap Generate and I’ll quiz you on your material.'],
   },
   emptyDocs: {
-    any: ['No documents yet. Add a PDF and I’ll read it with you.', 'This topic is empty. Upload something and let’s get started.'],
+    any: ['No files yet. Add a PDF and I’ll read it with you.', 'This topic is empty. Add a file and let’s get started.'],
   },
   sessionEnd: {
     any: ['Nice session, {name}. See you next time!', '{count:card:cards} reviewed. That’s real progress.', 'Good work today. Rest counts too.', 'That’s a wrap! Come back whenever you’re ready.'],

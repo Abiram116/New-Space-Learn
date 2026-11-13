@@ -14,7 +14,7 @@
  * all — this test would fail on the `ring-2 ring-brand` assertion.
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '../../components/ui/Toast'
@@ -109,5 +109,63 @@ describe('DocsView citation deep link', () => {
     for (const d of DOCS) {
       expect(document.getElementById(d.id)?.className ?? '').not.toMatch(/ring-2 ring-brand/)
     }
+    // And it says so: the link came from a citation, and opening the page as
+    // if it had meant nothing left the student looking for a file that is gone.
+    expect(await screen.findByText(/That file isn’t in this topic’s list/)).toBeInTheDocument()
+  })
+})
+
+describe('DocsView uploads', () => {
+  afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+  })
+
+  const mount = async () => {
+    const view = render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/spaces/space-1/subspace-1/docs']}>
+          <Routes>
+            <Route path="/spaces/:spaceId/:subspaceId/docs" element={<DocsView />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>,
+    )
+    await waitFor(() => expect(screen.getByText('attention.pdf')).toBeInTheDocument())
+    return view.container.querySelector<HTMLInputElement>('input[type="file"]')!
+  }
+
+  it('clears the picker after a choice, so the same file can be chosen again', async () => {
+    const { uploadDocument } = await import('../../api/documents')
+    vi.mocked(uploadDocument).mockRejectedValue(new Error('Upload failed, try again.'))
+    const input = await mount()
+    const file = new File(['x'], 'notes.pdf', { type: 'application/pdf' })
+    let value = 'C:\\fakepath\\notes.pdf'
+    Object.defineProperty(input, 'value', { get: () => value, set: (v: string) => (value = v), configurable: true })
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    fireEvent.change(input)
+    await waitFor(() => expect(uploadDocument).toHaveBeenCalledTimes(1))
+    expect(value).toBe('')
+  })
+
+  it('does not upload a file the server would refuse, and says why', async () => {
+    const { uploadDocument } = await import('../../api/documents')
+    const input = await mount()
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'song.mp3', { type: 'audio/mpeg' })], configurable: true })
+    fireEvent.change(input)
+    expect(await screen.findByText(/“song.mp3” can’t be read/)).toBeInTheDocument()
+    expect(uploadDocument).not.toHaveBeenCalled()
+  })
+})
+
+describe('uploadProblem', () => {
+  it('mirrors the server: by extension, or by type when the name has none it knows', async () => {
+    const { uploadProblem, UPLOAD_MAX_BYTES } = await import('./uploadCheck')
+    expect(uploadProblem({ name: 'a.PDF', type: '', size: 10 })).toBeNull()
+    expect(uploadProblem({ name: 'notes.md', type: 'application/octet-stream', size: 10 })).toBeNull()
+    expect(uploadProblem({ name: 'scan', type: 'image/png', size: 10 })).toBeNull()
+    expect(uploadProblem({ name: 'a.docx', type: 'application/vnd.openxmlformats', size: 10 })).toMatch(/can’t be read/)
+    expect(uploadProblem({ name: 'a.pdf', type: 'application/pdf', size: UPLOAD_MAX_BYTES })).toBeNull()
+    expect(uploadProblem({ name: 'a.pdf', type: 'application/pdf', size: UPLOAD_MAX_BYTES + 1 })).toMatch(/20 MB/)
   })
 })

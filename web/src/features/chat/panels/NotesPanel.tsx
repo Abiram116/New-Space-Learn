@@ -18,7 +18,7 @@
 import { lazy, Suspense, useCallback, useState } from 'react'
 import { deleteNote, listNotes } from '../../../api/notes'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
-import { Icon } from '../../../components/ui/Icon'
+import { AuthorBadge } from '../../notes/AuthorBadge'
 import { Skeleton } from '../../../components/ui/Skeleton'
 import { useToast } from '../../../components/ui/Toast'
 import { Stagger } from '../../../components/ui/motion'
@@ -152,18 +152,8 @@ export function NotesPanel({
                   {n.title || 'Untitled note'}
                 </div>
                 <div className="setcode mt-0.5 flex items-center gap-1.5">
-                  {n.origin !== 'user' && (
-                    <span className="relative inline-flex shrink-0">
-                      <Icon name="note" size={9} className="text-sky-deep" />
-                      <Icon
-                        name="sparkle"
-                        size={5}
-                        filled
-                        className="absolute -right-0.5 -top-0.5 text-sky-deep"
-                      />
-                    </span>
-                  )}
-                  {n.origin === 'user' ? 'Written by me' : 'Written by AI'}
+                  {/* The same you / AI / both mark the Notes page uses. */}
+                  <AuthorBadge note={n} size={14} showLabel />
                 </div>
               </button>
             ))}

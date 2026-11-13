@@ -5,6 +5,7 @@ import { prefetchRouteChunks } from '../../routes/lazyRoutes'
 import { useCurrentTopic } from '../../features/mobile/currentTopic'
 import { TopicSwitcher } from '../../features/mobile/TopicSwitcher'
 import { useDueCount } from '../../features/mobile/useDueCount'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { PageTransition } from '../ui/motion'
 import { useKeyboard } from '../ui/useKeyboard'
 import { BottomTabBar } from './BottomTabBar'
@@ -77,7 +78,11 @@ export function PhoneShell() {
         style={GROUND}
       >
         <PageTransition routeKey={pathname}>
-          <Outlet />
+          {/* A page that throws while drawing shows its error here, inside
+              the shell, and going to another page clears it. */}
+          <ErrorBoundary resetKey={pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </PageTransition>
       </main>
 

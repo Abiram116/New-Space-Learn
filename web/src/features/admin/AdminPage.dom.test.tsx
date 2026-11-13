@@ -79,6 +79,44 @@ describe('the feedback desk', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
+  it('a summary that cannot be read says so in read words, offers a retry, and then shows', async () => {
+    sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
+    apiFetch.mockRejectedValueOnce(
+      new ApiError('upstream_unavailable', "We couldn't load the feedback just now. Please try again.", 503),
+    )
+    apiFetch.mockResolvedValue(SUMMARY)
+    mount()
+    expect((await screen.findByRole('alert')).textContent).toContain("couldn't load the feedback")
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText(/up from 1 in the 30 days before/)).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('leaves out the scores nobody gave', async () => {
+    sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
+    apiFetch.mockResolvedValue(SUMMARY)
+    mount()
+    await screen.findByText('Overall?')
+    expect(screen.getByText('2 · 50%')).toBeTruthy()
+    expect(screen.queryByText('0 · 0%')).toBeNull()
+  })
+
+  it('shows who sent each response: the account email, or Visitor', async () => {
+    sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
+    const base = { created_at: '2026-10-02T09:00:00Z', page: null, answers: [{ question_id: 'a', prompt: 'Overall?', kind: 'rating' as const, value: 4 }] }
+    const rows: FeedbackResponse[] = [
+      { ...base, id: '1', source: 'settings', signed_in: true, sender_email: 'student@x.test', contact_email: null },
+      { ...base, id: '2', source: 'landing', signed_in: false, sender_email: null, contact_email: null },
+    ]
+    apiFetch.mockImplementation(async (path: string) => (path.includes('/responses') ? rows : SUMMARY))
+    mount()
+    await userEvent.click(screen.getByRole('button', { name: 'Responses' }))
+    const link = await screen.findByRole('link', { name: /student@x\.test/ })
+    expect(link.getAttribute('href')).toBe('mailto:student@x.test')
+    expect(screen.getByText('· Visitor')).toBeTruthy()
+    expect(screen.queryByText(/Settings|Landing page/)).toBeNull()
+  })
+
   it('filters written answers to the unhappy ones', async () => {
     sessionStorage.setItem('sl:desk', JSON.stringify({ token: 'tok', expires_at: Date.now() / 1000 + 3600 }))
     apiFetch.mockResolvedValue(SUMMARY)
@@ -103,6 +141,7 @@ describe('helpers', () => {
     const [head, line] = toCsv(rows).split('\n')
     expect(head).toBe('"When","From","Who","Reply to","Overall?","Next?","Liked?"')
     expect(line).toBe('"2026-10-02T09:00:00Z","landing","visitor","a@b.test","4","\'=HYPERLINK(""x""), please","Speed, Design"')
+    expect(toCsv([{ ...rows[0], signed_in: true, sender_email: 's@x.test' }]).split('\n')[1]).toContain('"landing","s@x.test"')
   })
 
   it('percent and scoreTone', () => {

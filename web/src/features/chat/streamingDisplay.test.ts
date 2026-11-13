@@ -70,6 +70,13 @@ describe('prepareStreamingDisplay', () => {
     expect(prep('Energy is \\(E = mc^2\\) here')).toBe('Energy is \\(E = mc^2\\) here')
   })
 
+  it('hides an unclosed $$ block or environment, and leaves a single $ alone', () => {
+    expect(prep('So:\n\n$$\nE = m')).toBe('So:\n\n')
+    expect(prep('So $$E = mc^2$$ here')).toBe('So $$E = mc^2$$ here')
+    expect(prep('So:\n\n\\begin{align}\na &= b')).toBe('So:\n\n')
+    expect(prep('It costs $5')).toBe('It costs $5')
+  })
+
   it('never changes text that has nothing pending', () => {
     expect(prep('')).toBe('')
     expect(prep('plain words')).toBe('plain words')

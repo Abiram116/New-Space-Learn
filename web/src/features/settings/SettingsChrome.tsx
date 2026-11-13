@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Icon, type IconName } from '../../components/ui/Icon'
 import { Rise, useReducedMotion } from '../../components/ui/motion'
 import { cn } from '../../lib/cn'
@@ -193,11 +194,16 @@ export function SettingsHeader({
       <Rise>
         <h1 className="font-display text-[36px] font-semibold leading-none tracking-tight text-ink sm:text-[44px]">Settings</h1>
         <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted">
-          Make Space Learn yours. Everything here saves the moment you change it.
+          Make Space Learn yours. Changes save as you make them, except your name and password, which have their own buttons.
         </p>
       </Rise>
       <Rise delay={80}>
-        <div className="flex items-center gap-4 rounded-2xl border border-line bg-surface py-3 pl-3 pr-5">
+        {/* The identity card is the way to the profile page: name, streak and goal live there in full. */}
+        <Link
+          to="/profile"
+          aria-label="Open your profile"
+          className="flex items-center gap-4 rounded-2xl border border-line bg-surface py-3 pl-3 pr-5 transition-colors hover:border-ink-3/60"
+        >
           <span
             aria-hidden
             className="grid h-14 w-14 shrink-0 place-items-center rounded-[16px] bg-brand-soft font-display text-[20px] font-semibold text-brand-deep ring-1 ring-brand/30"
@@ -222,7 +228,7 @@ export function SettingsHeader({
               )}
             </div>
           </div>
-        </div>
+        </Link>
       </Rise>
     </header>
   )

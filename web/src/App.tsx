@@ -26,6 +26,7 @@ import { TrustLayer, type TrustState } from './features/trust/TrustLayer'
 import { TRUST_SLUGS } from './features/trust/pages'
 import { TopicCanonical } from './routes/TopicCanonical'
 import { RootRoute } from './routes/RootRoute'
+import { RouteTitle } from './routes/RouteTitle'
 import { ChatAliasRoute, SkillsRoute, TopicIndexRoute, TopicSkillsRedirect } from './routes/TopicRoutes'
 
 /** The screens inside a topic. Shared by the current address and the old `/s/` one. */
@@ -89,6 +90,9 @@ function AppRoutes() {
   const background = (location.state as TrustState | null)?.background
   return (
     <RealLocationContext.Provider value={location}>
+    {/* The tab's title follows the page being drawn, so a trust card over the
+        landing page keeps the landing page's (the card adds its own). */}
+    <RouteTitle pathname={(background ?? location).pathname} />
     <Routes location={background ?? location}>
       {/* `/` decides: signed in → the app, signed out → the pitch. */}
       <Route path="/" element={<RootRoute />} />

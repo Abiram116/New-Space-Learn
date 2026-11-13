@@ -9,6 +9,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { ToastProvider } from '../../components/ui/Toast'
 import type { Note } from '../../api/types'
 
@@ -40,14 +41,17 @@ function note(overrides: Partial<Note> = {}): Note {
 
 function renderButton(content = 'The answer, in full.') {
   return render(
-    <ToastProvider>
-      <AddToNoteButton subspaceId="subspace-1" content={content} />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <AddToNoteButton subspaceId="subspace-1" content={content} />
+      </ToastProvider>
+    </MemoryRouter>,
   )
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
+  window.localStorage.clear()
   listNotes.mockResolvedValue([])
   createNote.mockResolvedValue(note())
   updateNote.mockResolvedValue(note())
@@ -122,7 +126,7 @@ describe('adding to an existing note', () => {
 
     await waitFor(() =>
       expect(updateNote).toHaveBeenCalledWith('n2', {
-        body_md: 'Other stuff.\n\nNew fact from chat.',
+        body_md: 'Other stuff.\n\n---\n\nNew fact from chat.',
         ai_touched: true,
       }),
     )
@@ -197,10 +201,163 @@ describe('adding to an existing note', () => {
 
     await waitFor(() =>
       expect(updateNote).toHaveBeenCalledWith('n1', {
-        body_md: 'Other stuff.\n\nNew fact from chat.',
+        body_md: 'Other stuff.\n\n---\n\nNew fact from chat.',
         ai_touched: true,
       }),
     )
     expect(await screen.findByText(/Couldn't find "nothing like this exists"/)).toBeInTheDocument()
   })
 })
+
+describe('the sidebar count after saving', () => {
+  it('hands the fresh notes list to everything showing it', async () => {
+    const { readCache, clearCache } = await import('../../lib/asyncCache')
+    clearCache()
+    const user = userEvent.setup()
+    renderButton()
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    listNotes.mockResolvedValue([note({ id: 'fresh' })])
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() =>
+      expect(readCache<Note[]>('notes:subspace-1')?.data.map((n) => n.id)).toEqual(['fresh']),
+    )
+  })
+})
+
+describe('keeping the reply’s formatting', () => {
+  const cites = [
+    { marker: 1, document_id: 'd1', document_name: 'Attention.pdf', locator: 'p. 4 · Dot products', snippet: '' },
+  ]
+
+  it('turns [[n]] markers into page references with a Sources line', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <ToastProvider>
+          <AddToNoteButton subspaceId="subspace-1" content="Softmax gives weights [[1]]." citations={cites} />
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(createNote).toHaveBeenCalledWith('subspace-1', {
+        title: 'Untitled note',
+        body_md: 'Softmax gives weights (p. 4).\n\n*Sources: Attention.pdf (p. 4)*',
+        origin: 'agent',
+      }),
+    )
+  })
+
+  it('drops markers it has no sources for, rather than leaving [[1]] in the note', async () => {
+    const user = userEvent.setup()
+    renderButton('Weights [[1]].')
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(createNote).toHaveBeenCalledWith('subspace-1', expect.objectContaining({ body_md: 'Weights.' })),
+    )
+  })
+
+  it('names a new note after the reply’s opening heading, and lets you change it', async () => {
+    const user = userEvent.setup()
+    renderButton('## Scaled attention\n\nBody.')
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    const title = await screen.findByLabelText('Title')
+    expect(title).toHaveValue('Scaled attention')
+    await user.clear(title)
+    await user.type(title, 'Week 3')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(createNote).toHaveBeenCalledWith('subspace-1', expect.objectContaining({ title: 'Week 3' })),
+    )
+  })
+
+  it('keeps the formulas of a reply appended to a saved note', async () => {
+    listNotes.mockResolvedValue([note({ id: 'n1', body_md: 'Mine.' })])
+    const user = userEvent.setup()
+    renderButton('Energy: \\(E = mc^2\\)')
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    const existingRadio = await screen.findByRole('radio', { name: 'Existing note' })
+    await waitFor(() => expect(existingRadio).not.toBeDisabled())
+    await user.click(existingRadio)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    // Protected for the parser: it reads back as exactly `\(E = mc^2\)`.
+    await waitFor(() =>
+      expect(updateNote).toHaveBeenCalledWith('n1', {
+        body_md: 'Mine.\n\n---\n\nEnergy: \\\\\\(E \\= mc\\^2\\\\\\)',
+        ai_touched: true,
+      }),
+    )
+  })
+})
+
+describe('the flow', () => {
+  it('adds once, however fast the button is clicked', async () => {
+    let resolve: (n: Note) => void = () => undefined
+    createNote.mockImplementation(() => new Promise<Note>((r) => (resolve = r)))
+    const user = userEvent.setup()
+    renderButton()
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    const add = screen.getByRole('button', { name: 'Add' })
+    await user.dblClick(add)
+    resolve(note({ id: 'created' }))
+    await screen.findByRole('button', { name: 'Open note' })
+    expect(createNote).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers to open the note it just added to', async () => {
+    createNote.mockResolvedValue(note({ id: 'new-1', title: 'Untitled note' }))
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/chat']}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/chat" element={<AddToNoteButton subspaceId="subspace-1" content="x" />} />
+            <Route path="/notes" element={<Where />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.click(await screen.findByRole('button', { name: 'Open note' }))
+    expect(await screen.findByTestId('where')).toHaveTextContent('/notes?n=new-1')
+  })
+
+  it('remembers the note you added to last time', async () => {
+    listNotes.mockResolvedValue([note({ id: 'n1', title: 'One' }), note({ id: 'n2', title: 'Two' })])
+    window.localStorage.setItem('addToNote:last:subspace-1', 'n2')
+    const user = userEvent.setup()
+    renderButton()
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    expect(await screen.findByLabelText('Choose a note')).toHaveValue('n2')
+  })
+
+  it('tells an open copy of the note about the addition', async () => {
+    const { onNoteChange } = await import('../notes/noteSync')
+    const heard = vi.fn()
+    const off = onNoteChange(heard)
+    listNotes.mockResolvedValue([note({ id: 'n1', body_md: 'Mine.' })])
+    updateNote.mockImplementation((_id: string, patch: Partial<Note>) => Promise.resolve(note({ id: 'n1', ...patch })))
+    const user = userEvent.setup()
+    renderButton('Added.')
+    await user.click(screen.getByRole('button', { name: 'Add to note' }))
+    const existingRadio = await screen.findByRole('radio', { name: 'Existing note' })
+    await waitFor(() => expect(existingRadio).not.toBeDisabled())
+    await user.click(existingRadio)
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await waitFor(() =>
+      expect(heard).toHaveBeenCalledWith(
+        expect.objectContaining({ noteId: 'n1', body_md: 'Mine.\n\n---\n\nAdded.', addition: '---\n\nAdded.' }),
+      ),
+    )
+    off()
+  })
+})
+
+function Where() {
+  const loc = useLocation()
+  return <div data-testid="where">{loc.pathname + loc.search}</div>
+}

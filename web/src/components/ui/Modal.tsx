@@ -7,6 +7,7 @@
  */
 
 import { moveAcrossActions } from './dialogKeys'
+import { pushOverlay } from './overlayStack'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../lib/cn'
@@ -62,6 +63,11 @@ function CenteredModal({
   width = 'md',
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
+  // Whether the press began on the backdrop. Selecting the text in a field and
+  // letting go a little outside the panel is a "click" on the backdrop as far
+  // as the browser is concerned, and it used to close the dialog and throw
+  // away what had been typed.
+  const pressedBackdrop = useRef(false)
   // The latest `onClose` without making it a dependency of the effect below.
   // Callers pass a fresh arrow function on every render, and a page with a
   // clock (the quiz) renders every second: with `onClose` as a dependency the
@@ -83,9 +89,14 @@ function CenteredModal({
     const panel = panelRef.current
     const first = panel?.querySelector<HTMLElement>(FOCUSABLE)
     ;(first ?? panel)?.focus()
+    const layer = pushOverlay()
 
     const onKey = (e: KeyboardEvent) => {
+      // A dialog opened over this one owns the keyboard until it closes.
+      if (!layer.isTop()) return
       if (e.key === 'Escape') {
+        // Already spent by something inside (an open dropdown closing itself).
+        if (e.defaultPrevented) return
         closeRef.current()
         return
       }
@@ -107,6 +118,7 @@ function CenteredModal({
     return () => {
       document.body.style.overflow = prev
       window.removeEventListener('keydown', onKey)
+      layer.release()
       previouslyFocused?.focus()
     }
   }, [open])
@@ -120,7 +132,13 @@ function CenteredModal({
       // "something now covers the screen", reusing the existing keyframe
       // instead of inventing a modal-specific one.
       className="fixed inset-0 z-40 flex items-center justify-center bg-well/80 p-4 backdrop-blur-[2px] motion-safe:animate-[dockSwap_180ms_var(--ease-sl)_both]"
-      onClick={onClose}
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget
+      }}
+      onClick={(e) => {
+        if (pressedBackdrop.current && e.target === e.currentTarget) onClose()
+        pressedBackdrop.current = false
+      }}
       role="dialog"
       aria-modal="true"
       aria-label={title}

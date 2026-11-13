@@ -5,6 +5,7 @@
  */
 
 const GROUPS: { title: string; keys: [string[], string][] }[] = [
+  { title: 'Anywhere', keys: [[['Ctrl', 'K'], 'Search everything (⌘K on a Mac)']] },
   {
     title: 'Reviewing cards',
     keys: [

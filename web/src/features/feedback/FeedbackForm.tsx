@@ -44,6 +44,13 @@ export function missingRequired(questions: FeedbackQuestion[], answers: Answers)
   return questions.filter((q) => q.required && isBlank(answers[q.id])).map((q) => q.id)
 }
 
+/** How many answers a question takes, said under it. Nothing for a typed answer. */
+export function pickHint(kind: FeedbackQuestion['kind']): string | null {
+  if (kind === 'multi') return 'Select all that apply'
+  if (kind === 'rating' || kind === 'scale' || kind === 'choice') return 'Select one'
+  return null
+}
+
 const chip = (on: boolean) =>
   cn(
     'cursor-pointer rounded-full border px-3.5 py-2 text-[13.5px] transition-colors',
@@ -176,6 +183,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
       {questions.map((q, i) => {
         const value = answers[q.id]
         const skipped = missing.includes(q.id)
+        const hint = pickHint(q.kind)
         return (
           <fieldset key={q.id} data-question={q.id} className="min-w-0">
             <legend className="mb-3 flex gap-2.5 text-[15.5px] font-semibold leading-snug text-ink">
@@ -183,6 +191,7 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
               <span>
                 {q.prompt}
                 {!q.required && <span className="ml-2 text-[12.5px] font-normal text-faint">optional</span>}
+                {hint && <span className="mt-0.5 block text-[12.5px] font-normal text-faint">{hint}</span>}
               </span>
             </legend>
             <Answer question={q} value={value} onChange={(v) => set(q.id, v)} />
@@ -233,6 +242,10 @@ export function FeedbackForm({ source }: { source: 'landing' | 'settings' }) {
         </label>
       </div>
 
+      {signedIn && (
+        <p className="text-[13px] text-faint">Sent from your account, so we can see who it's from.</p>
+      )}
+
       {sendError && (
         <p role="alert" className="rounded-xl bg-coral-soft px-4 py-3 text-[14px] text-coral-deep">
           {sendError}
@@ -269,7 +282,8 @@ function Answer({
     const numbers = kind === 'rating' ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     const ends = kind === 'rating' ? ['Not good', 'Excellent'] : ['Not likely', 'Very likely']
     return (
-      <div>
+      // `w-fit`: the two end labels sit under the first and last button, not across the page.
+      <div className="w-fit max-w-full">
         <div role="radiogroup" aria-label={prompt} className="flex flex-wrap gap-1.5">
           {numbers.map((n) => (
             <button
@@ -290,7 +304,7 @@ function Answer({
             </button>
           ))}
         </div>
-        <div className="mt-1.5 flex max-w-[30rem] justify-between text-[12px] text-faint">
+        <div className="mt-1.5 flex justify-between text-[12px] text-faint">
           <span>{ends[0]}</span>
           <span>{ends[1]}</span>
         </div>

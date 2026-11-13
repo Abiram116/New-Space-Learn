@@ -64,6 +64,15 @@ describe('FeedbackForm', () => {
     expect(screen.getByText('optional')).toBeInTheDocument()
   })
 
+  it('says under each question whether one or several answers can be picked', async () => {
+    render(<FeedbackForm source="settings" />)
+    await screen.findByText('Overall?')
+    const hint = (id: string) => document.querySelector(`[data-question="${id}"] legend`)!.textContent
+    for (const id of ['rate', 'use', 'nps']) expect(hint(id)).toContain('Select one')
+    expect(hint('liked')).toContain('Select all that apply')
+    for (const id of ['next', 'more']) expect(hint(id)).not.toMatch(/Pick/)
+  })
+
   it('will not send until every required question is answered, and says which', async () => {
     render(<FeedbackForm source="settings" />)
     await screen.findByText('Overall?')
@@ -126,6 +135,8 @@ describe('FeedbackForm', () => {
     render(<FeedbackForm source="settings" />)
     await screen.findByText('Overall?')
     expect(screen.queryByPlaceholderText('you@example.com')).toBeNull()
+    // The team can see who a signed-in sender is, and the form says so.
+    expect(screen.getByText("Sent from your account, so we can see who it's from.")).toBeInTheDocument()
   })
 
   it('keeps every answer when sending fails', async () => {

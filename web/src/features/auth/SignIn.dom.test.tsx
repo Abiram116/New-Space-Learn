@@ -84,7 +84,7 @@ describe('validation', () => {
     const user = userEvent.setup()
     renderSignIn()
     await user.type(screen.getByLabelText(/email/i), 'not-an-email')
-    await user.type(screen.getByLabelText(/password/i), 'longenough')
+    await user.type(screen.getByLabelText('Password'), 'longenough')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByText(/enter a valid email/i)).toBeInTheDocument()
@@ -95,7 +95,7 @@ describe('validation', () => {
     const user = userEvent.setup()
     renderSignIn()
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'short')
+    await user.type(screen.getByLabelText('Password'), 'short')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByText(/at least 6 characters/i)).toBeInTheDocument()
@@ -109,7 +109,7 @@ describe('signing in', () => {
     const user = userEvent.setup()
     renderSignIn()
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'correcthorse')
+    await user.type(screen.getByLabelText('Password'), 'correcthorse')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     await waitFor(() =>
@@ -123,10 +123,44 @@ describe('signing in', () => {
     const user = userEvent.setup()
     renderSignIn(['/signin?next=%2Fspaces%2Fs1'])
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'correcthorse')
+    await user.type(screen.getByLabelText('Password'), 'correcthorse')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/spaces/s1', { replace: true }))
+  })
+
+  it('never follows a ?next= that points outside the app', async () => {
+    signInWithPassword.mockResolvedValue({ user: { id: 'u1' } })
+    const user = userEvent.setup()
+    renderSignIn(['/signin?next=%2F%2Fevil.example'])
+    await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
+    await user.type(screen.getByLabelText('Password'), 'correcthorse')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/home', { replace: true }))
+  })
+
+  it('ignores a stray space around the email (autofill and phone keyboards add one)', async () => {
+    signInWithPassword.mockResolvedValue({ user: { id: 'u1' } })
+    const user = userEvent.setup()
+    renderSignIn()
+    await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu ')
+    await user.type(screen.getByLabelText('Password'), 'correcthorse')
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    await waitFor(() =>
+      expect(signInWithPassword).toHaveBeenCalledWith('maya@studies.edu', 'correcthorse'),
+    )
+  })
+
+  it('says what is missing on an empty submit', async () => {
+    const user = userEvent.setup()
+    renderSignIn()
+    await user.click(screen.getByRole('button', { name: /sign in/i }))
+
+    expect(await screen.findByText('Enter your email.')).toBeInTheDocument()
+    expect(screen.getByText('Enter your password.')).toBeInTheDocument()
+    expect(signInWithPassword).not.toHaveBeenCalled()
   })
 
   it('shows a wrong-password error and never navigates', async () => {
@@ -136,7 +170,7 @@ describe('signing in', () => {
     const user = userEvent.setup()
     renderSignIn()
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'wrongpassword')
+    await user.type(screen.getByLabelText('Password'), 'wrongpassword')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     expect(await screen.findByText(/email or password is incorrect/i)).toBeInTheDocument()
@@ -151,7 +185,7 @@ describe('signing in', () => {
     const user = userEvent.setup()
     renderSignIn()
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'correcthorse')
+    await user.type(screen.getByLabelText('Password'), 'correcthorse')
     await user.click(screen.getByRole('button', { name: /sign in/i }))
 
     const resend = await screen.findByRole('button', { name: /resend confirmation email/i })
@@ -190,5 +224,26 @@ describe('Google sign-in', () => {
     await user.click(screen.getByRole('button', { name: /continue with google/i }))
 
     await waitFor(() => expect(signInWithGoogle).toHaveBeenCalled())
+  })
+})
+
+describe('the password box', () => {
+  it('does not look pre-filled, and can be shown and hidden', async () => {
+    const user = userEvent.setup()
+    renderSignIn()
+    const box = screen.getByLabelText('Password')
+    expect(box).toHaveAttribute('placeholder', 'Your password')
+    expect(box).toHaveAttribute('type', 'password')
+
+    const toggle = screen.getByRole('button', { name: 'Show password' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    await user.type(box, 'correcthorse')
+    await user.click(toggle)
+    expect(box).toHaveAttribute('type', 'text')
+    expect(box).toHaveValue('correcthorse')
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(toggle)
+    expect(box).toHaveAttribute('type', 'password')
   })
 })

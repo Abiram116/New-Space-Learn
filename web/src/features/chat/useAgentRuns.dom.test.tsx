@@ -8,9 +8,9 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../api/flashcards', () => ({ generateCards: vi.fn() }))
-vi.mock('../../api/quizzes', () => ({ generateQuiz: vi.fn() }))
-vi.mock('../../api/notes', () => ({ generateNote: vi.fn() }))
+vi.mock('../../api/flashcards', () => ({ generateCards: vi.fn(), listDecks: vi.fn() }))
+vi.mock('../../api/quizzes', () => ({ generateQuiz: vi.fn(), listQuizzes: vi.fn() }))
+vi.mock('../../api/notes', () => ({ generateNote: vi.fn(), listNotes: vi.fn() }))
 
 import { generateCards } from '../../api/flashcards'
 import { generateNote } from '../../api/notes'
@@ -229,5 +229,39 @@ describe('useAgentRuns', () => {
     unmount()
     vi.advanceTimersByTime(REDIRECT_DELAY_MS * 2)
     expect(navigate).not.toHaveBeenCalled()
+  })
+})
+
+describe('a run that lands while the student is busy here', () => {
+  it('waits on its card instead of leaving the page, and refreshes the list the sidebar counts', async () => {
+    const { listQuizzes } = await import('../../api/quizzes')
+    const { readCache, clearCache } = await import('../../lib/asyncCache')
+    clearCache()
+    vi.mocked(listQuizzes).mockResolvedValue([{ id: 'q7' }] as never)
+    quizMock.mockResolvedValue({ id: 'q7' } as never)
+    const navigate = vi.fn()
+    let busy = true
+    const { result } = renderHook(() =>
+      useAgentRuns({ subspaceId: 's1', base: '/s/a/b', navigate, getSourceText: () => undefined, stay: () => busy }),
+    )
+
+    await act(async () => result.current.start('quiz'))
+    expect(result.current.runs[0]).toMatchObject({ status: 'done', auto: false, href: '/s/a/b/quizzes?q=q7&from=chat' })
+    await act(async () => {
+      vi.advanceTimersByTime(REDIRECT_DELAY_MS * 3)
+    })
+    expect(navigate).not.toHaveBeenCalled()
+    expect(readCache('quizzes:s1')?.data).toEqual([{ id: 'q7' }])
+
+    // Opening it by hand still works, and the next run redirects as usual.
+    act(() => result.current.open(result.current.runs[0].id, result.current.runs[0].href!))
+    expect(navigate).toHaveBeenCalledWith('/s/a/b/quizzes?q=q7&from=chat')
+    busy = false
+    navigate.mockClear()
+    await act(async () => result.current.start('quiz'))
+    await act(async () => {
+      vi.advanceTimersByTime(REDIRECT_DELAY_MS)
+    })
+    expect(navigate).toHaveBeenCalledTimes(1)
   })
 })

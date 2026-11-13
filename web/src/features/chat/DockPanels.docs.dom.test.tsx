@@ -4,7 +4,7 @@
  * a way to retry one that failed, and a clear first step when there are none.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -99,6 +99,51 @@ describe('Files panel in the dock', () => {
     await userEvent.setup().click(screen.getByRole('button', { name: 'Remove' }))
     expect(api.deleteDocument).toHaveBeenCalledWith('d3')
     await vi.waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+})
+
+describe('adding files in the dock', () => {
+  const file = (name: string, type: string, size = 1000) => {
+    const f = new File(['x'], name, { type })
+    Object.defineProperty(f, 'size', { value: size })
+    return f
+  }
+  const drop = (files: File[]) =>
+    fireEvent.drop(screen.getByRole('region', { name: 'Files' }), { dataTransfer: { files } })
+
+  it('adds every file dropped together, not only the first', async () => {
+    api.uploadDocument.mockResolvedValue(doc(9))
+    const onChanged = vi.fn()
+    renderDocs([doc(1)], false, onChanged)
+    drop([file('a.pdf', 'application/pdf'), file('b.md', '')])
+    await vi.waitFor(() => expect(api.uploadDocument).toHaveBeenCalledTimes(2))
+    expect(api.uploadDocument.mock.calls.map((c) => (c[1] as File).name)).toEqual(['a.pdf', 'b.md'])
+    await vi.waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2))
+  })
+
+  it('says why a file cannot be added instead of uploading it to be refused', async () => {
+    renderDocs([doc(1)])
+    drop([file('lecture.mp4', 'video/mp4'), file('huge.pdf', 'application/pdf', 21 * 1024 * 1024)])
+    expect(await screen.findByText(/“lecture.mp4” can’t be read/)).toBeInTheDocument()
+    expect(await screen.findByText(/“huge.pdf” is larger than the 20 MB limit/)).toBeInTheDocument()
+    expect(api.uploadDocument).not.toHaveBeenCalled()
+  })
+
+  it('says a file is being added while the list already has files', async () => {
+    let finish!: (d: Document) => void
+    let progress!: (percent: number) => void
+    api.uploadDocument.mockImplementation((_id: string, _file: File, onProgress: (p: number) => void) => {
+      progress = onProgress
+      return new Promise<Document>((r) => (finish = r))
+    })
+    renderDocs([doc(1)])
+    drop([file('a.pdf', 'application/pdf')])
+    expect(await screen.findByText('Adding your file… 0%')).toBeInTheDocument()
+    // The real figure from the upload, not a spinner that says nothing.
+    act(() => progress(42))
+    expect(screen.getByText('Adding your file… 42%')).toBeInTheDocument()
+    finish(doc(9))
+    await vi.waitFor(() => expect(screen.queryByText(/Adding your file…/)).not.toBeInTheDocument())
   })
 })
 

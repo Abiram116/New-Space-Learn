@@ -45,6 +45,11 @@ export function BottomTabBar({
             <li key={tab.key} className="min-w-0">
               <Link
                 to={tab.to}
+                // The student picked this tab. Cards keeps a deck, a review and
+                // its summary in component state at this same address, so
+                // without this a tap on the tab you are already on changed
+                // nothing; with it the page returns to its list (useNavReset).
+                state={{ nav: true }}
                 aria-current={isActive ? 'page' : undefined}
                 aria-label={tab.badge ? `${tab.label}, ${tab.badge} due` : tab.label}
                 data-tab={tab.key}

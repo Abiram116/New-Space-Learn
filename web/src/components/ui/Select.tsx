@@ -43,6 +43,20 @@ export function Select({
   const [activeIndex, setActiveIndex] = useState(0)
   const ref = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
+  // Closing from the keyboard or by picking hands focus back to the button.
+  // The panel that held it is about to be removed, and focus left on a removed
+  // element falls to <body>: the next Tab then started from the top of the
+  // page (or, inside a dialog, from outside its focus trap).
+  const close = () => {
+    triggerRef.current?.focus()
+    setOpen(false)
+  }
+  // Space commits on key-down, which moves focus to the button — and a button
+  // is pressed by Space on key-UP, so the same keystroke would open the list
+  // again. The button skips that one release.
+  const spaceCommitted = useRef(false)
 
   const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value))
 
@@ -65,16 +79,23 @@ export function Select({
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
+  // A long list scrolls; keep the highlighted option in view as it moves.
+  useEffect(() => {
+    if (!open) return
+    listRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[activeIndex]?.scrollIntoView?.({ block: 'nearest' })
+  }, [open, activeIndex])
+
   const onListKeyDown = (e: React.KeyboardEvent) => {
     switch (e.key) {
       case 'Escape':
         e.preventDefault()
-        setOpen(false)
+        close()
         break
       case 'Tab':
         // Closes rather than tabbing option-by-option — a listbox commits
-        // with Enter, it doesn't chain through Tab.
-        setOpen(false)
+        // with Enter, it doesn't chain through Tab. Focus goes to the button
+        // first, so the Tab itself then moves on from there.
+        close()
         break
       case 'ArrowDown':
         e.preventDefault()
@@ -96,8 +117,9 @@ export function Select({
       case ' ':
         e.preventDefault()
         if (options[activeIndex]) {
+          spaceCommitted.current = e.key === ' '
           onChange(options[activeIndex].value)
-          setOpen(false)
+          close()
         }
         break
     }
@@ -108,8 +130,19 @@ export function Select({
   return (
     <div ref={ref} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
+        // Arrow keys open it too, as they do a native select.
+        onKeyDown={(e) => {
+          if (open || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return
+          e.preventDefault()
+          setOpen(true)
+        }}
+        onKeyUp={(e) => {
+          if (e.key === ' ' && spaceCommitted.current) e.preventDefault()
+          spaceCommitted.current = false
+        }}
         disabled={disabled}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -146,7 +179,7 @@ export function Select({
               onMouseEnter={() => setActiveIndex(i)}
               onClick={() => {
                 onChange(o.value)
-                setOpen(false)
+                close()
               }}
               className={cn(
                 'flex w-full items-center break-words rounded-[8px] min-h-9 px-3 py-1.5 text-left text-[13.5px] transition-colors cursor-pointer',

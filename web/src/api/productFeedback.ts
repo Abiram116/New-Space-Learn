@@ -68,6 +68,8 @@ export type FeedbackResponse = {
   created_at: string
   source: 'landing' | 'settings'
   signed_in: boolean
+  /** The account's email, for a signed-in sender; null when it could not be looked up. */
+  sender_email?: string | null
   contact_email: string | null
   page: string | null
   answers: StoredAnswer[]

@@ -15,6 +15,7 @@
 import { useEffect, useRef } from 'react'
 import { Navigate, Outlet, useLocation, useParams } from 'react-router-dom'
 import { subspacePath, resolveTopicSegments } from '../lib/nav'
+import { topicSectionTitle, useDocumentTitle } from '../lib/useDocumentTitle'
 import { useSpaces } from '../features/spaces/SpacesProvider'
 
 /** What the URL named, and which topic that turned out to be. */
@@ -22,7 +23,7 @@ type Seen = { spaceSegment: string; subspaceSegment: string; spaceId: string; su
 
 export function TopicCanonical() {
   const { spaceId: spaceSegment, subspaceId: subspaceSegment } = useParams()
-  const { spaces } = useSpaces()
+  const { spaces, loading } = useSpaces()
   const { pathname, search, hash } = useLocation()
   const seen = useRef<Seen | null>(null)
 
@@ -50,6 +51,17 @@ export function TopicCanonical() {
       seen.current = { spaceSegment, subspaceSegment, spaceId: spaceIdNow, subspaceId: subspaceIdNow }
     }
   }, [spaceIdNow, subspaceIdNow, spaceSegment, subspaceSegment])
+
+  // The tab is named after the topic ("Notes · Cells · Space Learn"). While the
+  // subject list is still loading nothing is known yet, so it keeps the plain
+  // site title rather than announcing a topic as missing.
+  useDocumentTitle(
+    subspace
+      ? [topicSectionTitle(pathname), subspace.name].filter(Boolean).join(' · ')
+      : loading
+        ? null
+        : 'Topic not found',
+  )
 
   if (space && subspace) {
     const canonical = subspacePath(space, subspace)

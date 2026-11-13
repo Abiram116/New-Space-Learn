@@ -31,7 +31,7 @@ export function toCsv(rows: FeedbackResponse[]): string {
   // A leading = + - @ would run as a formula in a spreadsheet; an apostrophe makes it text.
   const cell = (v: string) => `"${(/^[=+\-@\t\r]/.test(v) ? `'${v}` : v).replace(/"/g, '""')}"`
   const lines = rows.map((r) =>
-    [r.created_at, r.source, r.signed_in ? 'signed in' : 'visitor', r.contact_email ?? '', ...prompts.map((p) => {
+    [r.created_at, r.source, r.signed_in ? (r.sender_email ?? 'signed in') : 'visitor', r.contact_email ?? '', ...prompts.map((p) => {
       const a = r.answers.find((x) => x.prompt === p)
       return a ? full(a) : ''
     })].map(cell).join(','),
@@ -88,7 +88,10 @@ export function Responses() {
     const q = query.trim().toLowerCase()
     if (!rows || !q) return rows ?? []
     return rows.filter(
-      (r) => r.contact_email?.toLowerCase().includes(q) || r.answers.some((a) => full(a).toLowerCase().includes(q)),
+      (r) =>
+        r.sender_email?.toLowerCase().includes(q) ||
+        r.contact_email?.toLowerCase().includes(q) ||
+        r.answers.some((a) => full(a).toLowerCase().includes(q)),
     )
   }, [rows, query])
 
@@ -112,7 +115,7 @@ export function Responses() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search what people wrote"
+          placeholder="Search answers or emails"
           aria-label="Search responses"
           className="min-w-0 flex-1 rounded-lg border border-line bg-well px-3 py-2 text-[14px] text-ink outline-none placeholder:text-faint focus:border-brand/70 sm:max-w-sm"
         />
@@ -134,8 +137,13 @@ export function Responses() {
                   {score === null ? 'no rating' : `${score}/5`}
                 </span>
                 <span>{new Date(r.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                <span>· {r.source === 'landing' ? 'Landing page' : 'Settings'}</span>
-                <span>· {r.signed_in ? 'Signed-in user' : 'Visitor'}</span>
+                {r.sender_email ? (
+                  <a href={`mailto:${r.sender_email}`} className="text-brand-deep hover:underline">
+                    · {r.sender_email}
+                  </a>
+                ) : (
+                  <span>· {r.signed_in ? 'Signed-in user' : 'Visitor'}</span>
+                )}
                 {r.contact_email && (
                   <a href={`mailto:${r.contact_email}`} className="text-brand-deep hover:underline">
                     · Reply to {r.contact_email}

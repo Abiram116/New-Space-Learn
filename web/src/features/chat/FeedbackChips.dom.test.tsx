@@ -76,3 +76,32 @@ describe('copying an answer', () => {
     expect(screen.getByText('Glad it helped.')).toBeInTheDocument()
   })
 })
+
+describe('thumbs-down on an ordinary answer', () => {
+  // The policy hands over no chips unless it has a reason to ask, which is
+  // most answers. The thumb then said "What was off?" over an empty row.
+  it('offers something to pick, and records the pick', async () => {
+    const onRecorded = vi.fn()
+    render(
+      <FeedbackChips
+        chips={[]}
+        reason={null}
+        messageId="m1"
+        subspaceId="s1"
+        content="A short answer."
+        onRecorded={onRecorded}
+        onRegenerate={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'More detail' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Something was off' }))
+    expect(screen.getByText('What was off?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'More detail' }))
+
+    const { sendFeedback } = await import('../../api/feedback')
+    expect(sendFeedback).toHaveBeenCalledWith(expect.objectContaining({ target_id: 'm1', kind: 'want_detail' }))
+    expect(onRecorded).toHaveBeenCalled()
+    expect(screen.getByText(/Noted/)).toBeInTheDocument()
+  })
+})

@@ -16,6 +16,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../auth/AuthProvider'
 import { PageSpinner } from '../../components/ui/PageSpinner'
+import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 
 export function AuthCallback() {
@@ -23,6 +24,7 @@ export function AuthCallback() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const { play } = useHandoff()
+  const { show } = useToast()
   // This effect re-runs whenever a dependency's identity changes, and asking
   // for a second handoff mid-transition would restart the choreography on top
   // of itself. `play` guards internally as well; this stops it being asked.
@@ -32,17 +34,28 @@ export function AuthCallback() {
     if (loading || went.current) return
     went.current = true
     if (!session) {
+      // An emailed link that expired or was already opened ends here. Say so —
+      // landing on a bare sign-in page explains nothing.
+      show(
+        params.get('reset') === '1'
+          ? 'That reset link has expired or was already used. Enter your email and press “Forgot password?” for a new one.'
+          : 'That link has expired or was already used. Sign in, or ask for a new one.',
+        'error',
+      )
       navigate('/signin', { replace: true })
       return
     }
     // Password-reset emails point here with `?reset=1` — Supabase has just
     // turned the recovery link into a session, and the only sane next stop
     // is the screen that lets them actually set a new password.
-    const dest = params.get('reset') === '1' ? '/auth/reset-password' : params.get('next') || '/home'
+    // `next` is only ever an address inside the app — `//elsewhere.com` is not one.
+    const asked = params.get('next')
+    const next = asked && asked.startsWith('/') && !asked.startsWith('//') ? asked : '/home'
+    const dest = params.get('reset') === '1' ? '/auth/reset-password' : next
     void play('threshold', () => {
       navigate(dest, { replace: true })
     })
-  }, [loading, session, navigate, params, play])
+  }, [loading, session, navigate, params, play, show])
 
   // Only visible while Supabase is still parsing the URL, before the curtain
   // goes up. Once the handoff starts, it covers this.

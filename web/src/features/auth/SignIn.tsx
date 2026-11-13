@@ -13,6 +13,7 @@ import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { PasswordField } from './PasswordField'
 import { TrustAgreement } from '../trust/TrustAgreement'
 import { GoogleGlyph } from './GoogleGlyph'
 import { useIsMobile } from '../../lib/useIsMobile'
@@ -31,19 +32,25 @@ export function SignIn() {
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [resendBusy, setResendBusy] = useState(false)
 
-  const next = params.get('next') || '/home'
+  // Only ever an address inside the app — `//elsewhere.com` is not one.
+  const asked = params.get('next')
+  const next = asked && asked.startsWith('/') && !asked.startsWith('//') ? asked : '/home'
+  const [forgotBusy, setForgotBusy] = useState(false)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     const nextErrors: typeof errors = {}
-    if (!isEmail(email)) nextErrors.email = 'Enter a valid email.'
-    if (password.length < 6) nextErrors.password = 'At least 6 characters.'
+    const address = email.trim()
+    if (!address) nextErrors.email = 'Enter your email.'
+    else if (!isEmail(address)) nextErrors.email = 'Enter a valid email, like you@studies.edu.'
+    if (!password) nextErrors.password = 'Enter your password.'
+    else if (password.length < 6) nextErrors.password = 'At least 6 characters.'
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length) return
     setBusy(true)
     setUnconfirmed(false)
     try {
-      await signInWithPassword(email, password)
+      await signInWithPassword(address, password)
       // Same door, same transition. Signing back in is the most-repeated
       // journey in the product, so it is the last place a hard cut belongs.
       void play('threshold', () => {
@@ -62,13 +69,14 @@ export function SignIn() {
   }
 
   const resend = async () => {
-    if (!isEmail(email)) {
+    const address = email.trim()
+    if (!isEmail(address)) {
       setErrors({ email: 'Enter your email above first.' })
       return
     }
     setResendBusy(true)
     try {
-      await resendConfirmation(email)
+      await resendConfirmation(address)
       show('Sent — check your inbox.', 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
@@ -89,15 +97,23 @@ export function SignIn() {
   }
 
   const forgot = async () => {
-    if (!isEmail(email)) {
-      setErrors({ email: 'Enter your email above first.' })
+    const address = email.trim()
+    if (!isEmail(address)) {
+      setErrors({ email: 'Enter your email above first, then press “Forgot password?” again.' })
+      document.getElementById('email')?.focus()
       return
     }
+    // One email per press: a second click while the first is in flight used to
+    // send another, and the auth service rate-limits them.
+    if (forgotBusy) return
+    setForgotBusy(true)
     try {
-      await sendPasswordReset(email)
-      show('Check your inbox for a reset link.', 'success')
+      await sendPasswordReset(address)
+      show(`Reset link sent to ${address}. Check your inbox (and spam).`, 'success')
     } catch (err) {
       show(friendlyMessage(err), 'error')
+    } finally {
+      setForgotBusy(false)
     }
   }
 
@@ -152,31 +168,31 @@ export function SignIn() {
           error={errors.email}
           placeholder="you@studies.edu"
         />
-        <Input
+        <PasswordField
           name="password"
-          type="password"
           label="Password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           error={errors.password}
-          placeholder="••••••••"
+          placeholder="Your password"
         />
         <div className="-mt-2 text-right">
           <button
             type="button"
             onClick={forgot}
+            disabled={forgotBusy}
             className={
               phone
                 ? 'min-h-11 cursor-pointer px-1 text-[14px] font-semibold text-brand'
                 : 'text-xs font-semibold text-brand cursor-pointer'
             }
           >
-            Forgot password?
+            {forgotBusy ? 'Sending…' : 'Forgot password?'}
           </button>
         </div>
         {errors.form && (
-          <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
+          <div role="alert" className="flex flex-col gap-2 rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
             <span>{errors.form}</span>
             {unconfirmed && (
               <button

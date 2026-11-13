@@ -14,7 +14,7 @@
  *    mutated (it has no activate/toggle control of its own).
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -285,3 +285,155 @@ describe('Back', () => {
   })
 })
 
+
+describe('when the lists fail to load', () => {
+  it('offers a retry that loads them, and never leaves the library on a skeleton', async () => {
+    listSkills.mockRejectedValueOnce(new Error('offline'))
+    const user = userEvent.setup()
+    renderView()
+
+    const alert = await screen.findByRole('alert')
+    expect(screen.getByText('The library will show once your skills load.')).toBeInTheDocument()
+
+    await user.click(within(alert).getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByText('Socratic Tutor')).toBeInTheDocument()
+    expect(screen.getByText('Exam Cram')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('adding a library skill twice in a row', () => {
+  it('creates it once, however fast Add is clicked', async () => {
+    let finish: (s: Skill) => void = () => {}
+    createSkill.mockReturnValue(new Promise<Skill>((resolve) => (finish = resolve)))
+    renderView()
+    await screen.findByText('Exam Cram')
+    const add = screen.getByRole('button', { name: 'Add →' })
+
+    fireEvent.click(add)
+    fireEvent.click(add)
+
+    expect(createSkill).toHaveBeenCalledTimes(1)
+    expect(add).toBeDisabled()
+    finish(skill({ id: 'skill-2', name: 'Exam Cram' }))
+    await screen.findByText('Added')
+  })
+
+  it('says where to turn it on, not "below" — this page has no switches', async () => {
+    createSkill.mockResolvedValue(skill({ id: 'skill-2', name: 'Exam Cram' }))
+    renderView()
+    await screen.findByText('Exam Cram')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add →' }))
+
+    expect(await screen.findByText(/Turn it on for a topic from that topic’s chat sidebar/)).toBeInTheDocument()
+    expect(screen.queryByText(/activate it below/)).not.toBeInTheDocument()
+  })
+})
+
+describe('leaving the editor with words typed into it', () => {
+  async function typeInstructions() {
+    const user = userEvent.setup()
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
+    await user.type(screen.getByPlaceholderText(/Ask one guiding question/), 'Quiz me hard.')
+    return user
+  }
+
+  it('asks before Cancel throws them away, and keeps them on "Cancel"', async () => {
+    const user = await typeInstructions()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    const ask = await screen.findByRole('dialog', { name: 'Discard what you wrote?' })
+    await user.click(within(ask).getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog', { name: 'Discard what you wrote?' })).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Ask one guiding question/)).toHaveValue('Quiz me hard.')
+  })
+
+  it('asks before Escape or another skill replaces them, and discards on confirm', async () => {
+    const user = await typeInstructions()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    const ask = await screen.findByRole('dialog', { name: 'Discard what you wrote?' })
+    // Escape again answers the question on top; it does not also close the editor.
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Discard what you wrote?' })).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Ask one guiding question/)).toHaveValue('Quiz me hard.')
+    expect(ask).not.toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Discard what you wrote?' })).getByRole('button', { name: 'Discard' }),
+    )
+    expect(screen.queryByPlaceholderText(/Ask one guiding question/)).not.toBeInTheDocument()
+  })
+
+  it('does not ask when nothing was typed', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('stops each field at the length the server accepts', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
+
+    expect(screen.getByPlaceholderText('Socratic Tutor')).toHaveAttribute('maxlength', '80')
+    expect(screen.getByPlaceholderText(/Ask one guiding question/)).toHaveAttribute('maxlength', '4000')
+    expect(screen.getByPlaceholderText(/bullet points only/)).toHaveAttribute('maxlength', '300')
+  })
+})
+
+describe('a skill you write yourself', () => {
+  it('can carry a short description, which is what its card shows', async () => {
+    createSkill.mockResolvedValue(
+      skill({ id: 'skill-new', name: 'My Coach', description: 'Drills, no hints.' }),
+    )
+    const user = userEvent.setup()
+    renderView()
+
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
+    await user.type(screen.getByPlaceholderText('Socratic Tutor'), 'My Coach')
+    await user.type(screen.getByLabelText('Short description (optional)'), ' Drills, no hints. ')
+    await user.type(screen.getByPlaceholderText(/Ask one guiding question/), 'Push me through drills.')
+    await user.click(screen.getByRole('button', { name: 'Create skill' }))
+
+    await waitFor(() =>
+      expect(createSkill).toHaveBeenCalledWith(expect.objectContaining({ description: 'Drills, no hints.' })),
+    )
+    expect(await screen.findByText('Drills, no hints.')).toBeInTheDocument()
+  })
+})
+
+describe('reloading or closing the tab with words typed', () => {
+  const leave = () => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+
+  it('warns only while the editor holds something unsaved', async () => {
+    const user = userEvent.setup()
+    renderView()
+    await screen.findByText('Socratic Tutor')
+    await user.click(screen.getByRole('button', { name: 'New skill' }))
+    expect(leave()).toBe(false)
+
+    await user.type(screen.getByLabelText('Short description (optional)'), 'Drills')
+    expect(leave()).toBe(true)
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(await screen.findByRole('button', { name: 'Discard' }))
+    expect(leave()).toBe(false)
+  })
+})

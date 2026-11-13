@@ -69,6 +69,8 @@ it('bounces to /signin when there is no recovery session', async () => {
   renderScreen()
 
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/signin', { replace: true }))
+  // …and says the link was the problem, and what to do about it.
+  expect(await screen.findByText(/reset link has expired or was already used/i)).toBeInTheDocument()
   expect(updateUser).not.toHaveBeenCalled()
 })
 
@@ -76,8 +78,8 @@ describe('validation', () => {
   it('blocks submission on a too-short password', async () => {
     const user = userEvent.setup()
     renderScreen()
-    await user.type(screen.getByLabelText(/new password/i), 'short')
-    await user.type(screen.getByLabelText(/confirm password/i), 'short')
+    await user.type(screen.getByLabelText('New password'), 'short')
+    await user.type(screen.getByLabelText('Confirm password'), 'short')
     await user.click(screen.getByRole('button', { name: /update password/i }))
 
     expect(await screen.findByText(/at least 8 characters/i)).toBeInTheDocument()
@@ -87,8 +89,8 @@ describe('validation', () => {
   it('blocks submission when the two passwords do not match', async () => {
     const user = userEvent.setup()
     renderScreen()
-    await user.type(screen.getByLabelText(/new password/i), 'longenough1')
-    await user.type(screen.getByLabelText(/confirm password/i), 'longenough2')
+    await user.type(screen.getByLabelText('New password'), 'longenough1')
+    await user.type(screen.getByLabelText('Confirm password'), 'longenough2')
     await user.click(screen.getByRole('button', { name: /update password/i }))
 
     expect(await screen.findByText(/don't match/i)).toBeInTheDocument()
@@ -100,10 +102,20 @@ it('updates the password and lands on /home', async () => {
   updateUser.mockResolvedValue({ error: null })
   const user = userEvent.setup()
   renderScreen()
-  await user.type(screen.getByLabelText(/new password/i), 'correcthorse')
-  await user.type(screen.getByLabelText(/confirm password/i), 'correcthorse')
+  await user.type(screen.getByLabelText('New password'), 'correcthorse')
+  await user.type(screen.getByLabelText('Confirm password'), 'correcthorse')
   await user.click(screen.getByRole('button', { name: /update password/i }))
 
   await waitFor(() => expect(updateUser).toHaveBeenCalledWith({ password: 'correcthorse' }))
   await waitFor(() => expect(navigate).toHaveBeenCalledWith('/home', { replace: true }))
+})
+
+it('lets each password be shown, so a mismatch can be seen', async () => {
+  const user = userEvent.setup()
+  renderScreen()
+  expect(screen.getByLabelText('Confirm password')).toHaveAttribute('placeholder', 'Type it again')
+  await user.click(screen.getByRole('button', { name: 'Show new password' }))
+  expect(screen.getByLabelText('New password')).toHaveAttribute('type', 'text')
+  expect(screen.getByLabelText('Confirm password')).toHaveAttribute('type', 'password')
+  expect(screen.getByRole('button', { name: 'Show confirm password' })).toHaveAttribute('aria-pressed', 'false')
 })

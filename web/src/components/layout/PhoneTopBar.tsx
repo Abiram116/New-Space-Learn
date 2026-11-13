@@ -1,9 +1,9 @@
 import { Link, useLocation } from 'react-router-dom'
 import type { Space, Subspace } from '../../api/types'
 import { cn } from '../../lib/cn'
-import { toneDot } from '../../lib/tone'
 import { phoneBackFor, phoneTitle, showsTopicSwitcher } from '../../features/mobile/phoneNav'
 import { Icon } from '../ui/Icon'
+import { SubjectIcon } from '../../features/spaces/SubjectIcon'
 
 /**
  * The phone's slim top app bar: where you are, and which topic you're in.
@@ -55,6 +55,16 @@ export function PhoneTopBar({
         <h1 className="nameplate shrink-0 whitespace-nowrap pt-[3px] text-[21px] text-ink">{title}</h1>
         <span className="min-w-0 flex-1" aria-hidden />
 
+        {/* Search: the global palette listens for this event. */}
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event('sl:open-search'))}
+          aria-label="Search"
+          className="t-control grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink-2 active:bg-line-soft"
+        >
+          <Icon name="search" size={20} />
+        </button>
+
         {isProfile ? (
           <Link
             to="/settings"
@@ -77,7 +87,7 @@ export function PhoneTopBar({
           >
             {subspace && space ? (
               <>
-                <span className={cn('h-2 w-2 shrink-0 rounded-full', toneDot[space.tone])} aria-hidden />
+                <SubjectIcon space={space} size="xs" />
                 <span className="min-w-0 truncate text-[14px] font-semibold text-ink">{subspace.name}</span>
               </>
             ) : (

@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components, type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Citation } from '../../api/types'
 import { cn } from '../../lib/cn'
+import { splitMath, type MathPart } from '../notes/mathSyntax'
 import './chat.css'
 
 /**
@@ -64,25 +65,40 @@ export function MarkdownMessage({
  * markdown would eat those backslashes, so each span is swapped for a
  * placeholder link (`#math-<i>`) before parsing and drawn as KaTeX by the
  * `a` renderer. Fenced code and inline code are left alone.
+ *
+ * Models and students also write `$$ … $$`, `$ … $` and
+ * `\begin{equation} … \end{equation}`, so those are read too. A single `$`
+ * is only math under a strict rule (see `isInlineMath`), so "$5 and $10"
+ * stays a price. The tokenizer lives with the note editor's math, so a
+ * formula that renders here renders identically once added to a note — see
+ * `notes/mathSyntax.ts`.
  */
-type MathPart = { latex: string; display: boolean }
-
-const MATH_OR_CODE = /(```[\s\S]*?(?:```|$))|(`[^`\n]*`)|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)/g
+export { splitMath, type MathPart }
 
 export function extractMath(content: string): { text: string; math: MathPart[] } {
-  if (!content.includes('\\')) return { text: content, math: [] }
   const math: MathPart[] = []
-  const text = content.replace(
-    MATH_OR_CODE,
-    (whole, fence?: string, code?: string, block?: string, inline?: string) => {
-      if (fence || code) return whole
-      const latex = (block ?? inline ?? '').trim()
-      if (!latex) return whole
-      math.push({ latex, display: block !== undefined })
+  const text = splitMath(content)
+    .map((part) => {
+      if (typeof part === 'string') return part
+      math.push(part)
       return `[math](#math-${math.length - 1})`
-    },
-  )
+    })
+    .join('')
   return { text, math }
+}
+
+/**
+ * Plain text with its formulas drawn — for the student's own bubble, which is
+ * not markdown. Text stays text nodes; the only HTML is KaTeX's own output.
+ */
+export function MathText({ content }: { content: string }) {
+  const parts = useMemo(() => splitMath(content), [content])
+  if (parts.every((p) => typeof p === 'string')) return <>{content}</>
+  return (
+    <>
+      {parts.map((part, i) => (typeof part === 'string' ? part : <Formula key={i} span={part} />))}
+    </>
+  )
 }
 
 const MathContext = createContext<MathPart[]>([])
@@ -114,11 +130,14 @@ function useKatex(): typeof import('katex').default | null {
 }
 
 function MathView({ index }: { index: number }) {
-  const spans = useContext(MathContext)
-  const span = spans[index]
+  const span = useContext(MathContext)[index]
+  return span ? <Formula span={span} /> : null
+}
+
+function Formula({ span }: { span: MathPart }) {
   const katex = useKatex()
   const html = useMemo(() => {
-    if (!katex || !span) return null
+    if (!katex) return null
     try {
       return katex.renderToString(span.latex, {
         displayMode: span.display,
@@ -129,7 +148,6 @@ function MathView({ index }: { index: number }) {
       return null
     }
   }, [katex, span])
-  if (!span) return null
   if (html === null) return <code>{span.latex}</code>
   return (
     <span

@@ -9,17 +9,17 @@
  * ordinary password change.
  */
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { getSupabase } from '../../api/supabase'
 import { friendlyMessage } from '../../api/errors'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../../components/ui/Button'
-import { Input } from '../../components/ui/Input'
 import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useToast } from '../../components/ui/Toast'
 import { useHandoff } from '../transitions/Handoff'
 import { AuthShell } from './AuthShell'
+import { PasswordField } from './PasswordField'
 
 export function ResetPassword() {
   const { loading, session } = useAuth()
@@ -30,12 +30,18 @@ export function ResetPassword() {
   const [confirm, setConfirm] = useState('')
   const [errors, setErrors] = useState<{ password?: string; confirm?: string; form?: string }>({})
   const [busy, setBusy] = useState(false)
+  const bounced = useRef(false)
 
   // The reset link is the only way here; arriving without a session means the
   // link expired or was opened twice. Same bounce AuthCallback uses.
   useEffect(() => {
-    if (!loading && !session) navigate('/signin', { replace: true })
-  }, [loading, session, navigate])
+    if (loading || session || bounced.current) return
+    bounced.current = true
+    // Say why: otherwise the sign-in page just appears, with no hint that the
+    // link was the problem or what to do next.
+    show('That reset link has expired or was already used. Enter your email and press “Forgot password?” for a new one.', 'error')
+    navigate('/signin', { replace: true })
+  }, [loading, session, navigate, show])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -80,28 +86,27 @@ export function ResetPassword() {
       }
     >
       <form className="flex flex-col gap-3" onSubmit={submit} noValidate>
-        <Input
+        <PasswordField
           name="password"
-          type="password"
           label="New password"
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           error={errors.password}
           placeholder="At least 8 characters"
+          hint="At least 8 characters."
         />
-        <Input
+        <PasswordField
           name="confirm"
-          type="password"
           label="Confirm password"
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           error={errors.confirm}
-          placeholder="••••••••"
+          placeholder="Type it again"
         />
         {errors.form && (
-          <div className="rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
+          <div role="alert" className="rounded-xl border-[1.5px] border-coral-deep/40 bg-coral-soft px-3 py-2 text-sm text-coral-deep">
             {errors.form}
           </div>
         )}

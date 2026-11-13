@@ -120,7 +120,8 @@ export function DockInsights({
                   title={q.text}
                   className="group flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[12.5px] text-ink-2 transition-colors hover:bg-line-soft hover:text-ink"
                 >
-                  <span className="w-4 shrink-0 text-right font-mono text-[10.5px] text-faint">{outline.length - i}</span>
+                  {/* `min-w`, not `w`: a three-digit number ran out of the left edge. */}
+                  <span className="min-w-4 shrink-0 text-right font-mono text-[10.5px] text-faint">{outline.length - i}</span>
                   <span className="min-w-0 flex-1 truncate">{q.text}</span>
                   <Icon name="chevronRight" size={12} className="shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100" />
                 </button>

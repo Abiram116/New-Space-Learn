@@ -13,6 +13,7 @@ import {
   type SummaryItem,
   type SummaryPeriod,
 } from '../../api/productFeedback'
+import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
 
 const PERIOD_LABEL: Record<SummaryPeriod, string> = { 7: '7 days', 30: '30 days', 90: '90 days', 0: 'All time' }
@@ -35,6 +36,7 @@ export function Summary() {
   const [days, setDays] = useState<SummaryPeriod>(30)
   const [data, setData] = useState<FeedbackSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -45,7 +47,7 @@ export function Summary() {
     return () => {
       live = false
     }
-  }, [days])
+  }, [days, attempt])
 
   const stale = data !== null && data.days !== days
 
@@ -68,10 +70,16 @@ export function Summary() {
         ))}
       </div>
 
-      {error ? (
-        <p className="text-[14px] text-coral-deep">{error}</p>
-      ) : !data ? (
-        <p className="text-[14px] text-muted">Reading the feedback…</p>
+      {error && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 text-[14px] text-coral-deep">
+          <p>{error}</p>
+          <Button variant="secondary" size="sm" onClick={() => setAttempt((n) => n + 1)}>
+            Try again
+          </Button>
+        </div>
+      )}
+      {!data ? (
+        !error && <p className="text-[14px] text-muted">Reading the feedback…</p>
       ) : data.total === 0 ? (
         <p className={cn(card, 'text-[14px] text-muted')}>
           No feedback {data.days ? `in the last ${data.days} days` : 'yet'}.
@@ -250,8 +258,8 @@ function Bars({ rows, total, tone }: { rows: [string, number][]; total: number; 
 function Numbers({ item }: { item: SummaryItem }) {
   const top = item.kind === 'rating' ? 5 : 10
   const moved = item.previous_average === null || item.average === null ? 0 : item.average - item.previous_average
-  // Highest first, so the good end reads at the top.
-  const rows = Object.entries(item.distribution).reverse() as [string, number][]
+  // Highest first, so the good end reads at the top. Scores nobody gave are left out.
+  const rows = (Object.entries(item.distribution).reverse() as [string, number][]).filter(([, n]) => n > 0)
   const tone = (label: string) => {
     const n = Number(label)
     if (item.kind === 'rating') return n >= 4 ? 'bg-jade' : n === 3 ? 'bg-sun' : 'bg-coral'

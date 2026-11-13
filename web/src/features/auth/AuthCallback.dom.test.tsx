@@ -31,6 +31,11 @@ vi.mock('../transitions/Handoff', () => ({
   useHandoff: () => ({ play }),
 }))
 
+const show = vi.fn()
+vi.mock('../../components/ui/Toast', () => ({
+  useToast: () => ({ show }),
+}))
+
 function renderCallback(initialEntries = ['/auth/callback']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -42,6 +47,7 @@ function renderCallback(initialEntries = ['/auth/callback']) {
 beforeEach(() => {
   navigate.mockReset()
   play.mockClear()
+  show.mockClear()
 })
 
 afterEach(() => {
@@ -64,6 +70,15 @@ describe('once auth resolves', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/signin', { replace: true }))
     expect(play).not.toHaveBeenCalled()
+    // …and says why, instead of a sign-in page appearing from nowhere.
+    expect(show).toHaveBeenCalledWith(expect.stringMatching(/expired or was already used/i), 'error')
+  })
+
+  it('never follows a ?next= that points outside the app', async () => {
+    mockAuth = { loading: false, session: { user: { id: 'u1' } } }
+    renderCallback(['/auth/callback?next=%2F%2Fevil.example'])
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/home', { replace: true }))
   })
 
   it('plays the handoff and lands on /home when a session was found', async () => {

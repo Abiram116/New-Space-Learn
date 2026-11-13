@@ -9,7 +9,7 @@
  * form submission, and the two paths render completely different UI.
  */
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -61,7 +61,7 @@ function renderSignUp() {
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/name/i), 'Maya Raghavan')
   await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-  await user.type(screen.getByLabelText(/password/i), 'longenoughpassword')
+  await user.type(screen.getByLabelText('Password'), 'longenoughpassword')
 }
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ describe('validation', () => {
     renderSignUp()
     await user.type(screen.getByLabelText(/name/i), 'M')
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'longenoughpassword')
+    await user.type(screen.getByLabelText('Password'), 'longenoughpassword')
     await user.click(screen.getByRole('button', { name: /create account/i }))
 
     expect(await screen.findByText(/add your name/i)).toBeInTheDocument()
@@ -93,7 +93,7 @@ describe('validation', () => {
     renderSignUp()
     await user.type(screen.getByLabelText(/name/i), 'Maya Raghavan')
     await user.type(screen.getByLabelText(/email/i), 'maya@studies.edu')
-    await user.type(screen.getByLabelText(/password/i), 'short1')
+    await user.type(screen.getByLabelText('Password'), 'short1')
     await user.click(screen.getByRole('button', { name: /create account/i }))
 
     expect(await screen.findByText(/at least 8 characters/i)).toBeInTheDocument()
@@ -114,16 +114,31 @@ describe('confirmation required', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('resends to the pending email from that screen', async () => {
-    signUpWithPassword.mockResolvedValue({ session: null, requiresConfirmation: true })
-    resendConfirmation.mockResolvedValue(undefined)
-    const user = userEvent.setup()
-    renderSignUp()
-    await fillValidForm(user)
-    await user.click(screen.getByRole('button', { name: /create account/i }))
-    await user.click(await screen.findByRole('button', { name: /resend/i }))
+  it('counts down before a resend is offered, then resends to the pending email', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      signUpWithPassword.mockResolvedValue({ session: null, requiresConfirmation: true })
+      resendConfirmation.mockResolvedValue(undefined)
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderSignUp()
+      await fillValidForm(user)
+      await user.click(screen.getByRole('button', { name: /create account/i }))
 
-    await waitFor(() => expect(resendConfirmation).toHaveBeenCalledWith('maya@studies.edu'))
+      // An email has just gone out, and the auth service refuses another for a minute.
+      const resend = await screen.findByRole('button', { name: 'Resend in 60s' })
+      expect(resend).toBeDisabled()
+      act(() => void vi.advanceTimersByTime(1000))
+      expect(resend).toHaveTextContent('Resend in 59s')
+      for (let s = 0; s < 59; s += 1) act(() => void vi.advanceTimersByTime(1000))
+
+      expect(resend).toBeEnabled()
+      await user.click(screen.getByRole('button', { name: /didn't get it\? resend/i }))
+      await waitFor(() => expect(resendConfirmation).toHaveBeenCalledWith('maya@studies.edu'))
+      // And the wait starts again.
+      expect(await screen.findByRole('button', { name: 'Resend in 60s' })).toBeDisabled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('"Start over" returns to the form', async () => {

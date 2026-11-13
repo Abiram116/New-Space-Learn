@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** Profile as the phone's "You" tab: figures as stacked cards, Settings as a full-width row. */
+/** Profile as the phone's "You" tab: three compact figures, Settings as a full-width row. */
 
 import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
@@ -32,6 +32,7 @@ vi.mock('../../lib/briefCache', () => ({
   }),
 }))
 vi.mock('../../api/me', () => ({ getStudentModel: vi.fn().mockResolvedValue(null) }))
+vi.mock('../spaces/SpacesProvider', () => ({ useSpaces: () => ({ spaces: [] }) }))
 
 import { Profile } from './Profile'
 
@@ -65,10 +66,12 @@ describe('Profile on a phone', () => {
   it('shows each figure with its reference in words, and Settings as a row', async () => {
     setDevice(true)
     renderProfile()
-    // The reference is hidden in the squeezed desktop row below `sm`; the
-    // stacked card always says it.
-    expect(await screen.findByText('best 10')).toBeVisible()
-    expect(screen.getByText('goal 140')).toBeInTheDocument()
+    // Each tile prints its reference twice — beside the number on a wide tile,
+    // under the rail on a narrow one — and CSS shows whichever fits.
+    expect((await screen.findAllByText(/best 10/)).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/goal 140/).length).toBeGreaterThan(0)
+    // The short label for a tile a third of a phone wide.
+    expect(screen.getByText('Streak')).toBeInTheDocument()
     const settings = screen.getByRole('button', { name: 'Settings' })
     expect(settings.className).toContain('w-full')
   })
@@ -76,7 +79,7 @@ describe('Profile on a phone', () => {
   it('keeps the small Settings chip on desktop', async () => {
     setDevice(false)
     renderProfile()
-    await screen.findByText('best 10')
+    await screen.findAllByText(/best 10/)
     expect(screen.getByRole('button', { name: 'Settings' }).className).not.toContain('w-full')
   })
 })

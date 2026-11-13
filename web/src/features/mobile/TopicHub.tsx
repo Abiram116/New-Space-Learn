@@ -17,10 +17,9 @@ import type { Space, Subspace } from '../../api/types'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { Skeleton } from '../../components/ui/Skeleton'
-import { cn } from '../../lib/cn'
 import { useActiveSubspace } from '../../lib/nav'
-import { toneDot } from '../../lib/tone'
 import { useAsync } from '../../lib/useAsync'
+import { SubjectIcon } from '../spaces/SubjectIcon'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { plural, reviewPlan, type ReviewPlan } from './hubModel'
 import { MobileRow, RowGroup } from './MobileRow'
@@ -41,7 +40,7 @@ function Hub({ space, subspace, base }: { space: Space; subspace: Subspace; base
       <div className="mx-auto flex w-full max-w-xl flex-col px-4 pb-10 pt-6">
         <header className="px-1">
           <p className="flex min-w-0 items-center gap-2">
-            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', toneDot[space.tone])} aria-hidden />
+            <SubjectIcon space={space} size="sm" />
             <span className="setcode-strong truncate">{space.name}</span>
           </p>
           <h2 className="nameplate mt-3 text-[clamp(22px,7.4vw,32px)] leading-[0.95] text-ink [hyphens:none] [overflow-wrap:normal] [text-wrap:balance]">
@@ -146,7 +145,10 @@ function ReviewCard({
   }
 
   if (plan.due > 0) {
-    const to = `${base}/flashcards${plan.deckId ? `?deck=${encodeURIComponent(plan.deckId)}` : ''}`
+    // One deck: the button says "Start review", so it starts it (`review=deck`)
+    // rather than opening the deck's card list for a second tap. Several decks:
+    // the Cards screen, whose pinned button reviews what is due.
+    const to = `${base}/flashcards${plan.deckId ? `?deck=${encodeURIComponent(plan.deckId)}&review=deck` : ''}`
     return (
       <Link to={to} className="cardstock group block rounded-2xl p-4 active:translate-y-px" data-testid="review-due">
         <div className="flex items-center gap-3.5">

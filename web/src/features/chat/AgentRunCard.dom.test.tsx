@@ -74,3 +74,15 @@ describe('busy agent buttons', () => {
     expect(screen.queryByRole('button', { name: /^make cards$/i })).not.toBeInTheDocument()
   })
 })
+
+describe('a finished run', () => {
+  it('says it is opening only when it is going to open by itself', () => {
+    const done: AgentRun = { ...base, status: 'done', doneText: '8 cards ready', count: 8, href: '/x' }
+    const { rerender } = render(<AgentRunCard run={done} onOpen={noop} onRetry={noop} onDismiss={noop} />)
+    expect(screen.getByRole('status')).toHaveTextContent('8 cards ready · opening…')
+    rerender(<AgentRunCard run={{ ...done, auto: false }} onOpen={noop} onRetry={noop} onDismiss={noop} />)
+    expect(screen.getByRole('status')).toHaveTextContent('8 cards ready')
+    expect(screen.getByRole('status')).not.toHaveTextContent('opening')
+    expect(screen.getByRole('button', { name: /Open deck/ })).toBeInTheDocument()
+  })
+})

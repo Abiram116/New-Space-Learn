@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import { Icon } from '../../components/ui/Icon'
+import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { LIMITS } from '../../lib/limits'
 
@@ -34,9 +35,8 @@ export type Attachment = { id: string; url: string; name: string }
 /**
  * Turn a pasted or picked file into a capped `data:` URL.
  *
- * Returns null for anything that is not an image we accept, so callers can
- * ignore the paste rather than surface an error — someone pasting text that
- * happens to carry a file handle has not made a mistake worth interrupting.
+ * Returns null for anything that is not an image we accept; `useAttachments`
+ * says so in a toast, since a file that quietly never appears looks broken.
  *
  * GIFs are passed through untouched: drawing one to a canvas keeps the first
  * frame and silently destroys the animation, which for a screen recording is
@@ -197,10 +197,17 @@ export function useAttachments() {
   const [items, setItems] = useState<Attachment[]>([])
   const [viewing, setViewing] = useState<Attachment | null>(null)
 
+  const { show } = useToast()
+
   const add = async (files: File[], limit = LIMITS.chatImages) => {
-    const room = limit - items.length
-    if (room <= 0) return
-    const next = (await Promise.all(files.slice(0, room).map(fileToAttachment))).filter(
+    // Said, not dropped: a file that is not an image we take, and anything past
+    // the limit, used to vanish with no word about why.
+    const usable = files.filter((f) => ACCEPTED.includes(f.type))
+    if (usable.length < files.length) show('Only PNG, JPEG, WebP or GIF images can be attached here.', 'error')
+    const room = Math.max(0, limit - items.length)
+    if (usable.length > room) show(`You can attach up to ${limit} images to a question.`, 'error')
+    if (room === 0) return
+    const next = (await Promise.all(usable.slice(0, room).map(fileToAttachment))).filter(
       (a): a is Attachment => a !== null,
     )
     if (next.length) setItems((prev) => [...prev, ...next])
@@ -212,6 +219,8 @@ export function useAttachments() {
     add,
     remove: (id: string) => setItems((prev) => prev.filter((i) => i.id !== id)),
     clear: () => setItems([]),
+    /** Puts back what a failed send took, unless something new is attached already. */
+    restore: (back: Attachment[]) => setItems((prev) => (prev.length === 0 ? back : prev)),
     open: setViewing,
     closeViewer: () => setViewing(null),
   }

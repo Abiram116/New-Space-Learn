@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { cn } from '../../lib/cn'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { PageTransition } from '../ui/motion'
 import { prefetchRouteChunks } from '../../routes/lazyRoutes'
 import { SpacesProvider } from '../../features/spaces/SpacesProvider'
+import { SearchPalette } from '../../features/search/SearchPalette'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { Sidebar } from './Sidebar'
 import { MobileBar } from './MobileBar'
@@ -34,23 +36,36 @@ export function AppShell() {
     <SpacesProvider>
       {mobile ? <PhoneShell /> : <DesktopShell />}
       <UnsavedQuizGuard />
+      {/* One search box for both shells: Ctrl/⌘K, or the `sl:open-search` event. */}
+      <SearchPalette />
     </SpacesProvider>
   )
+}
+
+/** Storage can be switched off (private mode, blocked site data), and reading
+ *  it then throws — which here would take the whole app down with it. */
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
 }
 
 function DesktopShell() {
   const [navOpen, setNavOpen] = useState(false)
   // Persisted: a rail you collapsed should stay collapsed tomorrow.
-  const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem(COLLAPSE_KEY) === '1',
-  )
+  const [collapsed, setCollapsed] = useState(() => readCollapsed())
   const { pathname } = useLocation()
 
   const toggleCollapse = () => {
-    setCollapsed((prev) => {
-      localStorage.setItem(COLLAPSE_KEY, prev ? '0' : '1')
-      return !prev
-    })
+    const next = !collapsed
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0')
+    } catch {
+      // Not remembered, then; the rail still collapses.
+    }
   }
 
   // Route changes can also come from inside the page (a card link, a redirect),
@@ -132,7 +147,11 @@ function DesktopShell() {
             {/* Keyed on the path so each page cross-fades in rather than
                 snapping — see components/ui/motion. */}
             <PageTransition routeKey={pathname}>
-              <Outlet />
+              {/* A page that throws while drawing shows its error here, inside
+                  the shell, and going to another page clears it. */}
+              <ErrorBoundary resetKey={pathname}>
+                <Outlet />
+              </ErrorBoundary>
             </PageTransition>
           </main>
         </div>

@@ -1212,3 +1212,110 @@ html.no-scrollbars body::-webkit-scrollbar {
     gap: 0;
   }
 }
+
+/* ── Icon3D — an extruded, lit glyph (components/ui/Icon3D.tsx) ──────────
+   `--icon3d-hover` is registered so it can be transitioned: the extrusion
+   deepens and the face floats on one eased number, with no JS. Browsers
+   without @property simply switch instead of easing. */
+@property --icon3d-hover {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@layer components {
+.icon3d {
+  --icon3d-base: 0;
+  --icon3d-lift: calc(var(--icon3d-base) + var(--icon3d-hover) * 0.7);
+  position: relative;
+  display: inline-grid;
+  flex-shrink: 0;
+  place-items: center;
+  transform: perspective(calc(var(--icon3d-s, 16px) * 5)) rotateX(calc(var(--icon3d-hover) * 12deg))
+    rotateY(calc(var(--icon3d-hover) * -14deg));
+  transition:
+    --icon3d-hover 360ms var(--ease-sl),
+    transform 460ms var(--ease-sl);
+}
+.icon3d[data-lifted] {
+  --icon3d-base: 1;
+}
+:is(a, button, summary, label, [role='button'], [role='tab'], .icon3d-host):hover .icon3d,
+:is(a, button, summary, [role='button'], [role='tab'], .icon3d-host):focus-visible .icon3d {
+  --icon3d-hover: 1;
+}
+.icon3d > span {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.icon3d-wall {
+  color: var(--color-well);
+  color: color-mix(in oklab, currentColor 26%, #070504);
+  transform: translate(
+    calc(var(--k) * var(--icon3d-d) * (1 + var(--icon3d-lift) * 0.6)),
+    calc(var(--k) * var(--icon3d-d) * (1 + var(--icon3d-lift) * 0.6))
+  );
+}
+.icon3d-rim {
+  color: color-mix(in oklab, currentColor 52%, #120c09);
+}
+.icon3d-face,
+.icon3d-sheen {
+  transform: translate(
+    calc(var(--icon3d-lift) * var(--icon3d-d) * -0.35),
+    calc(var(--icon3d-lift) * var(--icon3d-d) * -0.35)
+  );
+}
+.icon3d > .icon3d-face {
+  position: relative;
+}
+.icon3d-sheen {
+  color: #fff;
+  opacity: 0.5;
+  -webkit-mask-image: linear-gradient(135deg, #000 0%, transparent 58%);
+  mask-image: linear-gradient(135deg, #000 0%, transparent 58%);
+}
+.icon3d > .icon3d-shadow {
+  inset: auto 6% -18% 14%;
+  height: 34%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), transparent);
+  opacity: calc(var(--icon3d-lift) * 0.55);
+  transform: translateX(calc(var(--icon3d-d) * 1.2)) scale(calc(0.8 + var(--icon3d-lift) * 0.2));
+}
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Lifts, never moves: the depth still changes on hover, without the tilt
+     or the easing. */
+  .icon3d {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ── Landing page: background layers at rest while covered ───────────────
+   DesktopLanding puts `.sl-still` on its wrapper while a trust card or the
+   risen close hides the background, so the drifting fragments stop costing
+   frames nobody sees. */
+.sl-still .sl-drift > span {
+  animation-play-state: paused;
+}
+
+/* A feature column's colour blooming and burning off as it opens
+   (landing/FeatureType.tsx). */
+@keyframes featureBeat {
+  0% {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}

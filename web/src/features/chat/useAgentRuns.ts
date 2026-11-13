@@ -16,9 +16,10 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { friendlyMessage } from '../../api/errors'
-import { generateCards } from '../../api/flashcards'
-import { generateNote } from '../../api/notes'
-import { generateQuiz } from '../../api/quizzes'
+import { generateCards, listDecks } from '../../api/flashcards'
+import { generateNote, listNotes } from '../../api/notes'
+import { generateQuiz, listQuizzes } from '../../api/quizzes'
+import { writeCache } from '../../lib/asyncCache'
 import { deckHref, quizHref } from '../../lib/fromChat'
 import { LIMITS } from '../../lib/limits'
 import type { AgentKey } from './agents'
@@ -43,6 +44,9 @@ export type AgentRun = {
    *  the only number the agent's success line may say. */
   count?: number
   href?: string
+  /** False when the result waits to be opened by hand (see `stay`), so the card
+   *  must not say "opening…". */
+  auto?: boolean
   error?: string
 }
 
@@ -50,7 +54,7 @@ export type AgentRunInput = { topic?: string; instructions?: string }
 
 type Action =
   | { type: 'start'; run: AgentRun }
-  | { type: 'done'; id: number; doneText: string; href: string; count?: number }
+  | { type: 'done'; id: number; doneText: string; href: string; count?: number; auto?: boolean }
   | { type: 'fail'; id: number; error: string }
   | { type: 'restart'; id: number; startedAt: number }
   | { type: 'dismiss'; id: number }
@@ -64,7 +68,7 @@ export function agentRunsReducer(state: AgentRun[], action: Action): AgentRun[] 
     case 'done':
       return state.map((r) =>
         r.id === action.id
-          ? { ...r, status: 'done', doneText: action.doneText, href: action.href, count: action.count, error: undefined }
+          ? { ...r, status: 'done', doneText: action.doneText, href: action.href, count: action.count, auto: action.auto, error: undefined }
           : r,
       )
     case 'fail':
@@ -128,12 +132,18 @@ export function useAgentRuns({
   base,
   navigate,
   getSourceText,
+  stay,
 }: {
   subspaceId: string
   base: string
   navigate: (to: string) => void
   /** The last assistant answer, used to seed a deck. Read lazily at click. */
   getSourceText: () => string | undefined
+  /** Asked when a run lands: true while the student is in the middle of
+   *  something on this page (an answer arriving, a question half typed). The
+   *  result then waits on its card with its Open button instead of the page
+   *  leaving by itself and taking the draft or the answer with it. */
+  stay?: () => boolean
 }) {
   const [runs, dispatch] = useReducer(agentRunsReducer, [])
   const nextId = useRef(1)
@@ -201,6 +211,21 @@ export function useAgentRuns({
         const outcome = await call(agent, input, source)
         // Dismissed while it was running: the student walked away from it.
         if (!live.current || !jobs.current.has(id)) return
+        if (stay?.()) {
+          dispatch({ type: 'done', id, ...outcome, auto: false })
+          // Staying means the sidebar's counts are still on screen, and making
+          // something only marks their list out of date: read it once for them.
+          const [key, list] =
+            agent === 'quiz'
+              ? ([`quizzes:${subspaceId}`, listQuizzes] as const)
+              : agent === 'notes'
+                ? ([`notes:${subspaceId}`, listNotes] as const)
+                : ([`decks:${subspaceId}`, listDecks] as const)
+          void list(subspaceId)
+            .then((rows) => writeCache(key, rows))
+            .catch(() => undefined)
+          return
+        }
         dispatch({ type: 'done', id, ...outcome })
         const timer = window.setTimeout(() => {
           redirects.current.delete(id)
@@ -213,7 +238,7 @@ export function useAgentRuns({
         inFlight.current.delete(agent)
       }
     },
-    [call, navigate],
+    [call, navigate, stay, subspaceId],
   )
 
   const start = useCallback(

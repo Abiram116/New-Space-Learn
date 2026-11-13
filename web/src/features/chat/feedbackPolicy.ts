@@ -187,7 +187,7 @@ export function chipsFor(input: AskInput): FeedbackKind[] {
 }
 
 /** What could plausibly be wrong with an answer of this length. */
-function candidateKinds(chars: number): FeedbackKind[] {
+export function candidateKinds(chars: number): FeedbackKind[] {
   return chars >= LONG_ANSWER_CHARS
     ? ['too_long', 'too_complex', 'need_example']
     : ['want_detail', 'need_example']

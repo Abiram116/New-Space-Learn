@@ -101,9 +101,15 @@ function holdBackOpenMath(text: string): string {
   for (const [open, close] of [
     ['\\(', '\\)'],
     ['\\[', '\\]'],
+    ['\\begin{', '\\end{'],
   ]) {
     const o = text.lastIndexOf(open)
     if (o !== -1 && text.indexOf(close, o + 2) === -1) return text.slice(0, o)
   }
+  // `$$` opens and closes with the same marker: an odd count means one is open.
+  // (A single `$` is left alone — it is far more often a price.)
+  const plain = text.replace(/`[^`\n]*`/g, (m) => ' '.repeat(m.length))
+  const marks = [...plain.matchAll(/\$\$/g)]
+  if (marks.length % 2 === 1) return text.slice(0, marks[marks.length - 1].index)
   return text
 }

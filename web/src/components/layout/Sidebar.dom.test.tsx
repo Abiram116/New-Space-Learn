@@ -108,3 +108,34 @@ describe('Sidebar › brand and collapse control', () => {
   })
 })
 
+
+describe('Sidebar › subjects', () => {
+  it('shows each subject with its own icon, not a bare colour bar', () => {
+    renderRail()
+    const row = screen.getByRole('button', { name: 'Biology' })
+    expect(row.querySelector('[data-subject-icon="leaf"]')).not.toBeNull()
+  })
+
+  it('collapsed, lists the subjects as icons that open their topic, with + still there to add one', () => {
+    renderRail(true)
+    const list = screen.getByRole('list', { name: 'Subjects' })
+    const biology = within(list).getByRole('link', { name: 'Biology' })
+    expect(biology).toHaveAttribute('href', '/sp/sub')
+    expect(biology).toHaveAttribute('title', 'Biology')
+    expect(biology.querySelector('[data-subject-icon="leaf"]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'New subject' })).toBeInTheDocument()
+  })
+})
+
+describe('Sidebar › Search', () => {
+  it.each([false, true])('asks the search palette to open (collapsed: %s)', (collapsed) => {
+    const heard = vi.fn()
+    window.addEventListener('sl:open-search', heard)
+    renderRail(collapsed)
+    const search = screen.getByRole('button', { name: 'Search' })
+    if (!collapsed) expect(search).toHaveTextContent('Ctrl K')
+    fireEvent.click(search)
+    expect(heard).toHaveBeenCalledTimes(1)
+    window.removeEventListener('sl:open-search', heard)
+  })
+})

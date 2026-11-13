@@ -21,6 +21,7 @@ import { cn } from '../../lib/cn'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { RelatedTopics } from '../spaces/RelatedTopics'
 import { SourceItem } from './SourceItem'
+import { uploadProblem } from './uploadCheck'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneDocs, type LocalUpload } from './PhoneDocs'
 
@@ -81,8 +82,20 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
 
   useEffect(() => {
     if (!docs || !highlightId) return
-    document.getElementById(highlightId)?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [docs, highlightId])
+    const target = document.getElementById(highlightId)
+    if (target) {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      return
+    }
+    /* A citation's "Open the file" lands here. If the file has since been
+       removed, or the answer drew on a linked topic's file, there is nothing
+       to highlight, and the page used to open as if the link had meant
+       nothing. Say so once. */
+    if (!docs.some((d) => d.id === highlightId)) {
+      setHighlightId(null)
+      show('That file isn’t in this topic’s list. It may have been removed, or it belongs to a linked topic.', 'info')
+    }
+  }, [docs, highlightId, show])
 
   const refresh = useCallback(async () => {
     try {
@@ -126,6 +139,13 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
     async (files: FileList | File[]) => {
       const list = Array.from(files)
       for (const file of list) {
+        // Said before the upload, not after it: a dragged file skips the
+        // picker's filter, and one over the limit was sent in full first.
+        const problem = uploadProblem(file)
+        if (problem) {
+          show(problem, 'error')
+          continue
+        }
         const key = `${file.name}-${file.size}-${Date.now()}`
         setUploads((prev) => [...prev, { key, name: file.name, progress: 0 }])
         try {
@@ -142,7 +162,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
         }
       }
     },
-    [subspaceId, showError],
+    [subspaceId, show, showError],
   )
 
   const onPick = () => fileRef.current?.click()
@@ -163,11 +183,11 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       await deleteDocument(deleteId)
       setDocs((prev) => (prev ? prev.filter((d) => d.id !== deleteId) : prev))
       setDeleteId(null)
-      show('Document deleted.', 'success')
+      show('File removed.', 'success')
     } catch (err) {
       // Unlike notes/decks/skills, `DELETE /documents/{id}` 404s if the row
       // is already gone rather than being a silent no-op — without the
-      // `loading` guard below, a fast double-click on "Delete" fired this
+      // `loading` guard below, a fast double-click on "Remove" fired this
       // twice and showed "Document not found" right after the toast
       // confirming a successful delete.
       showError(err)
@@ -181,7 +201,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       try {
         const updated = await reprocessDocument(id)
         setDocs((prev) => (prev ? prev.map((d) => (d.id === id ? updated : d)) : prev))
-        show('Reprocessing…', 'info')
+        show('Reading it again…', 'info')
       } catch (err) {
         showError(err)
       }
@@ -192,9 +212,9 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
   const deleteDialog = (
     <ConfirmDialog
       open={Boolean(deleteId)}
-      title="Delete this document?"
-      description="Its chunks are removed from the knowledge base. Notes and chats stay."
-      confirmLabel="Delete"
+      title="Remove this file?"
+      description="Its text is removed from what the AI answers from. Notes and chats stay."
+      confirmLabel="Remove"
       onCancel={() => setDeleteId(null)}
       onConfirm={del}
       destructive
@@ -236,7 +256,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       onDrop={onDrop}
     >
       <SubspaceHeader
-        title="Documents"
+        title="Files"
         actions={
           <>
             <input
@@ -245,10 +265,19 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
               accept=".pdf,.md,.txt,.csv,.png,.jpg,.jpeg,.webp"
               multiple
               className="hidden"
-              onChange={(e) => e.target.files && startUpload(e.target.files)}
+              onChange={(e) => {
+                // Copied out first: clearing the input empties its live FileList.
+                const picked = Array.from(e.target.files ?? [])
+                // Cleared so choosing the same file again (after it failed, or
+                // after deleting it) still fires `change`.
+                e.target.value = ''
+                if (picked.length > 0) void startUpload(picked)
+              }}
             />
-            <Button onClick={onPick}>
-              <Icon name="upload" size={14} /> Upload
+            {/* One orange button per screen: with no files yet, the one in the
+                middle of the page is it. */}
+            <Button variant={isEmpty ? 'secondary' : 'primary'} onClick={onPick}>
+              <Icon name="upload" size={14} /> Add a file
             </Button>
           </>
         }
@@ -257,7 +286,7 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
         <RelatedTopics subspaceId={subspaceId} />
 
-        {loading && <PageSpinner label="Loading documents…" />}
+        {loading && <PageSpinner label="Loading files…" />}
 
         {error && !loading && (
           <div className="rounded-xl border border-coral/30 bg-coral-soft px-4 py-3 text-sm text-coral-deep">
@@ -270,12 +299,12 @@ function DocsInner({ subspaceId }: { subspaceId: string }) {
             <EmptyState
               className="w-full max-w-lg"
               icon="doc"
-              title="No sources yet"
+              title="No files yet"
               bot={{ agent: 'tutor', say: 'emptyDocs' }}
-              description="Add a PDF, markdown, plain-text, CSV, or image file. It gets chunked and embedded so answers in this topic can cite pages."
+              description="Add a PDF, a text, Markdown or CSV file, or an image. Answers in this topic come from your files and say which page they used."
               action={
                 <Button size="lg" onClick={onPick}>
-                  <Icon name="upload" size={15} /> Upload a file
+                  <Icon name="upload" size={15} /> Add a file
                 </Button>
               }
             />

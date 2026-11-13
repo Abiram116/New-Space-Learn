@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from 'react'
+import { useId, type InputHTMLAttributes, type Ref, type TextareaHTMLAttributes } from 'react'
 import { cn } from '../../lib/cn'
 
 type Common = {
@@ -17,7 +17,10 @@ export function Input({
   id,
   ...rest
 }: InputHTMLAttributes<HTMLInputElement> & Common) {
-  const inputId = id ?? rest.name
+  // A field given neither an id nor a name still needs one, or its label is
+  // loose text beside an unnamed box and the error below is never announced.
+  const fallbackId = useId()
+  const inputId = id ?? rest.name ?? fallbackId
   return (
     <div className={cn('flex flex-col gap-1.5', containerClassName)}>
       {label && (
@@ -37,10 +40,10 @@ export function Input({
           className,
         )}
         aria-invalid={Boolean(error) || undefined}
-        aria-describedby={error && inputId ? `${inputId}-err` : undefined}
+        aria-describedby={error ? `${inputId}-err` : rest['aria-describedby']}
       />
       {error ? (
-        <p id={inputId ? `${inputId}-err` : undefined} className="text-[12.5px] font-semibold text-coral-deep">
+        <p id={`${inputId}-err`} className="text-[12.5px] font-semibold text-coral-deep">
           {error}
         </p>
       ) : hint ? (
@@ -60,7 +63,8 @@ export function Textarea({
   ref,
   ...rest
 }: TextareaHTMLAttributes<HTMLTextAreaElement> & Common & { ref?: Ref<HTMLTextAreaElement> }) {
-  const inputId = id ?? rest.name
+  const fallbackId = useId()
+  const inputId = id ?? rest.name ?? fallbackId
   return (
     <div className={cn('flex flex-col gap-1.5', containerClassName)}>
       {label && (
@@ -81,9 +85,12 @@ export function Textarea({
           className,
         )}
         aria-invalid={Boolean(error) || undefined}
+        aria-describedby={error ? `${inputId}-err` : rest['aria-describedby']}
       />
       {error ? (
-        <p className="text-[12.5px] font-semibold text-coral-deep">{error}</p>
+        <p id={`${inputId}-err`} className="text-[12.5px] font-semibold text-coral-deep">
+          {error}
+        </p>
       ) : hint ? (
         <p className="text-[12.5px] text-faint">{hint}</p>
       ) : null}

@@ -9,7 +9,7 @@
  * regressed.
  */
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -54,5 +54,56 @@ describe('ConfirmDialog', () => {
 
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
+
+  it('a double-click on Confirm acts once, even when the caller never sets loading', () => {
+    vi.useFakeTimers()
+    try {
+      const onConfirm = vi.fn()
+      render(<ConfirmDialog open title="Delete note" confirmLabel="Delete" onConfirm={onConfirm} onCancel={vi.fn()} />)
+      const btn = screen.getByRole('button', { name: 'Delete' })
+      fireEvent.click(btn)
+      fireEvent.click(btn)
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+
+      // A deliberate second try (the first failed and the dialog stayed) works.
+      vi.advanceTimersByTime(600)
+      fireEvent.click(btn)
+      expect(onConfirm).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('holds further presses until an async confirm has finished', async () => {
+    vi.useFakeTimers()
+    try {
+      let finish = () => {}
+      const onConfirm = vi.fn(() => new Promise<void>((resolve) => (finish = resolve)))
+      render(<ConfirmDialog open title="Delete note" confirmLabel="Delete" onConfirm={onConfirm} onCancel={vi.fn()} />)
+      const btn = screen.getByRole('button', { name: 'Delete' })
+      fireEvent.click(btn)
+      vi.advanceTimersByTime(5000)
+      fireEvent.click(btn)
+      expect(onConfirm).toHaveBeenCalledTimes(1)
+
+      finish()
+      await vi.advanceTimersByTimeAsync(0)
+      fireEvent.click(btn)
+      expect(onConfirm).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a request still running from the last time it was open does not swallow the next confirm', () => {
+    const onConfirm = vi.fn(() => new Promise<void>(() => {}))
+    const props = { title: 'Delete card', confirmLabel: 'Delete', onConfirm, onCancel: vi.fn() }
+    const { rerender } = render(<ConfirmDialog open {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    rerender(<ConfirmDialog open={false} {...props} />)
+    rerender(<ConfirmDialog open {...props} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    expect(onConfirm).toHaveBeenCalledTimes(2)
   })
 })

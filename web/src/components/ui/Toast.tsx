@@ -28,12 +28,20 @@ const Ctx = createContext<ToastCtx | null>(null)
 
 let counter = 0
 
+/** Most on screen at once. A failing screen can raise one per request; past
+ *  this the oldest gives way rather than the stack climbing over the page. */
+const MAX_TOASTS = 3
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const timers = useRef<Map<number, number>>(new Map())
+  // What is showing, readable synchronously: `show` has to decide against the
+  // current list, and two calls in one tick would both see a stale `toasts`.
+  const showing = useRef<Toast[]>([])
 
   const dismiss = useCallback((id: number) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
+    showing.current = showing.current.filter((t) => t.id !== id)
+    setToasts(showing.current)
     const timer = timers.current.get(id)
     if (timer) window.clearTimeout(timer)
     timers.current.delete(id)
@@ -41,8 +49,21 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback(
     (message: string, kind: ToastKind = 'info') => {
-      const id = ++counter
-      setToasts((prev) => [...prev, { id, kind, message }])
+      // The same thing said again while it is still up (five requests failing
+      // for one reason) keeps the one toast and restarts its clock.
+      const same = showing.current.find((t) => t.message === message && t.kind === kind)
+      const id = same ? same.id : ++counter
+      if (same) {
+        window.clearTimeout(timers.current.get(id))
+      } else {
+        const next = [...showing.current, { id, kind, message }]
+        for (const dropped of next.splice(0, Math.max(0, next.length - MAX_TOASTS))) {
+          window.clearTimeout(timers.current.get(dropped.id))
+          timers.current.delete(dropped.id)
+        }
+        showing.current = next
+        setToasts(next)
+      }
       const timer = window.setTimeout(() => dismiss(id), kind === 'error' ? 6000 : 3500)
       timers.current.set(id, timer)
     },
@@ -92,7 +113,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                a near-white token, so the info toast was white-on-white at
                1.16:1). These pairings measure 8.5–12.2:1. */
             className={cn(
-              'pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur t-move cursor-pointer',
+              // `anywhere`: a long unbroken string (a file name, an address) wraps
+              // inside the toast instead of pushing it off the side of a phone.
+              'pointer-events-auto max-w-md rounded-xl border px-4 py-2.5 text-sm shadow-lg backdrop-blur t-move cursor-pointer [overflow-wrap:anywhere]',
               t.kind === 'error' && 'border-coral/30 bg-coral-soft text-coral-deep',
               t.kind === 'success' && 'border-mint/30 bg-mint-soft text-mint-deep',
               t.kind === 'info' && 'border-line-dash bg-line text-ink',
