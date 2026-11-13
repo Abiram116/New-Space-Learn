@@ -50,3 +50,21 @@ export function toggleIn(
 ): CollapseMap {
   return { ...map, [id]: isOpenIn(map, id, spaces, activeSpaceId) }
 }
+
+/**
+ * Click a subject, accordion-style: opening one closes the others, so the rail
+ * shows one subject's topics at a time instead of growing past the screen.
+ * Closing just closes. Subjects with no topics stay as they are: their only
+ * content is the "Add topic" row.
+ */
+export function accordionIn(
+  map: CollapseMap,
+  id: string,
+  spaces: readonly TreeSpace[],
+  activeSpaceId: string | null | undefined,
+): CollapseMap {
+  if (isOpenIn(map, id, spaces, activeSpaceId)) return { ...map, [id]: true }
+  const next: CollapseMap = { ...map, [id]: false }
+  for (const s of spaces) if (s.id !== id && s.subspaces.length > 0) next[s.id] = true
+  return next
+}

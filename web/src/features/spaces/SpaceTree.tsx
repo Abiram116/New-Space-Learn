@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { LIMITS } from '../../lib/limits'
 import { nameHint } from '../../lib/nameHint'
-import { isOpenIn, toggleIn } from './treeState'
+import { accordionIn, isOpenIn } from './treeState'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { Icon, type IconName } from '../../components/ui/Icon'
@@ -64,6 +64,17 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
   const subspaceId = active.subspace?.id
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  // Going into another subject (a click, a search result, a link) leaves only
+  // that one open, same as opening it by hand.
+  useEffect(() => {
+    if (!spaceId) return
+    setCollapsed((prev) => {
+      const next = { ...prev, [spaceId]: false }
+      for (const sp of spaces) if (sp.id !== spaceId && sp.subspaces.length > 0) next[sp.id] = true
+      return next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on arriving in a subject
+  }, [spaceId])
   const [addingIn, setAddingIn] = useState<string | null>(null)
   const [newTopic, setNewTopic] = useState('')
   const [confirmDeleteSpace, setConfirmDeleteSpace] = useState<string | null>(null)
@@ -101,7 +112,7 @@ export function SpaceTree({ onNavigate }: { onNavigate?: () => void } = {}) {
      to open. See treeState.ts. */
   const isOpen = (id: string) => isOpenIn(collapsed, id, spaces, spaceId)
   const toggle = (id: string) =>
-    setCollapsed((prev) => toggleIn(prev, id, spaces, spaceId))
+    setCollapsed((prev) => accordionIn(prev, id, spaces, spaceId))
 
   const commitTopic = async (spaceId: string) => {
     if (!topicFieldLive.current) return
