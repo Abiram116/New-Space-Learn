@@ -65,7 +65,7 @@ export function Practice({
     },
     [setMode],
   )
-  /** The main button, and Space/Enter: show the answer, then move on. */
+  /** The main button: show the answer, then move on. (Keys: Space flips, Enter moves on.) */
   const advance = useCallback(() => {
     if (stateRef.current.mode.flipped) go(1)
     else flip()
