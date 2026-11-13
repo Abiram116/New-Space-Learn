@@ -649,16 +649,25 @@ function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, 
                   ? 'Your files are ready. Ask a question, or start with one of the ideas below.'
                   : scope === 'subject'
                     ? `No files yet. Start with a question below and it is answered from general knowledge in ${spaceName}, marked as not from your files. Add a PDF and answers cite your pages.`
-                    : 'Add a PDF or notes, then ask a question. Answers cite the pages they came from.'
+                    : 'You are on “My files only”, so answers come only from your files, and there are none yet. Add a PDF or notes, or let answers use general knowledge of the subject too.'
               }
               // With the dock on screen it already offers "Add a file" twice (the drop area
               // and "Next step"), so a third identical button here is only noise. Without
               // the dock (a narrow window) this is the one way to the next step.
               action={
-                hasReadyFile || hasSidebar ? undefined : (
-                  <Button onClick={() => onNavigate(`${base}/docs`)}>
-                    <Icon name="plus" size={14} /> Add files
-                  </Button>
+                hasReadyFile ? undefined : (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {!hasSidebar && (
+                      <Button onClick={() => onNavigate(`${base}/docs`)}>
+                        <Icon name="plus" size={14} /> Add files
+                      </Button>
+                    )}
+                    {scope === 'files' && (
+                      <Button variant="secondary" onClick={() => setTopicScope(subspaceId, 'subject')}>
+                        <Icon name="book" size={14} /> Also use subject knowledge
+                      </Button>
+                    )}
+                  </div>
                 )
               }
             />
