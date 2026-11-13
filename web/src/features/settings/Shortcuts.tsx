@@ -9,7 +9,8 @@ const GROUPS: { title: string; keys: [string[], string][] }[] = [
   {
     title: 'Reviewing cards',
     keys: [
-      [['Space', 'Enter'], 'Flip the card, then pick the highlighted grade'],
+      [['Space'], 'Flip the card, and flip it back'],
+      [['Enter'], 'Confirm the highlighted grade and go to the next card'],
       [['←', '→'], 'Move between grades'],
       [['1', '–', '4'], 'Grade straight away'],
       [['Esc'], 'End the session'],
