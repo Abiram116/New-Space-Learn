@@ -71,6 +71,14 @@ class Settings(BaseSettings):
     # starts going to the small model on purpose rather than failing mid-answer.
     groq_daily_token_limit: int = 200_000
     groq_switch_at: float = 0.9
+    # The per-minute allowance per model on the free tier (Groq's 429 text, 2026-10-04).
+    # Only the evaluation's capacity estimates read it; at run time the live
+    # `x-ratelimit-*` headers decide (services/usage.minute_wait_s).
+    groq_tokens_per_minute: int = 8_000
+    # Optional work with its own model-free fallback (starter questions, the home
+    # brief, chat memory summaries) stops calling a model once that model's day is
+    # this far spent, leaving the rest for answers. See ROUTES in services/llm.py.
+    groq_shed_at: float = 0.9
     # A re-asked question is answered from the stored answer when everything it was
     # built from is unchanged (services/answer_cache.py). A switch, in case it ever misbehaves.
     answer_cache_enabled: bool = True
@@ -81,6 +89,9 @@ class Settings(BaseSettings):
     # client — once a stream has started, retrying would duplicate text the
     # student has already read. See `services/llm.py`.
     groq_max_retries: int = 2
+    # Requests one call may make in total, across the requested model and its
+    # fallback, so retries never multiply load (it was retries × models = 6).
+    groq_max_attempts: int = 4
     # Past this, a 429's Retry-After is not worth waiting out: falling back to
     # the other text model answers sooner than sleeping on this one.
     groq_max_retry_after_s: float = 2.0

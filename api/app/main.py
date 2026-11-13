@@ -35,6 +35,7 @@ from .routers import (
     notes,
     product_feedback,
     quizzes,
+    search,
     skills,
     spaces,
     subspace_chat,
@@ -140,6 +141,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback.router, prefix=prefix, tags=["feedback"])
     app.include_router(product_feedback.router, prefix=prefix, tags=["product-feedback"])
     app.include_router(admin_usage.router, prefix=prefix, tags=["admin"])
+    app.include_router(search.router, prefix=prefix, tags=["search"])
 
     @app.get(f"{prefix}/health", tags=["health"])
     async def health() -> dict[str, object]:

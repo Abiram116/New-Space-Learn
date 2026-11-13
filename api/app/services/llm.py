@@ -11,16 +11,18 @@ import asyncio
 import json
 import logging
 import random
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import httpx
 
 from ..config import settings
 from ..errors import ApiError, NotConfigured, RateLimited, UpstreamUnavailable
 from . import usage
+from .context_budget import estimate_tokens
 
 log = logging.getLogger("space_learn.llm")
 
@@ -32,6 +34,137 @@ log = logging.getLogger("space_learn.llm")
 #: call site builds one shape or the other and none inspects it — a union here
 #: would buy a cast at each of them for no checking that matters.
 ChatMessage = dict[str, Any]
+
+
+# ── Routing: which model each task uses, and how far it may fall ────────
+#
+# The free tier gives each model about 8,000 tokens a minute and 200,000 a day,
+# shared by every student. So the question for each task is not "which model is
+# best" but "which is the cheapest that is good enough, and what happens when its
+# allowance runs out". The answers live here, in one table, so they can be read,
+# tested (tests/test_routing.py) and reported (eval/routing.py) in one place.
+#
+# The call sites still name their model (`model=settings.groq_model_fast`); the
+# table adds what a call site cannot know on its own: how long a reply may be,
+# whether a failure may move to the other model, and what to do when a model's
+# day is nearly spent. The task is read from `usage.task(...)`, which every call
+# site already sets, so no interface grows a parameter.
+
+Tier = Literal["large", "fast", "vision"]
+
+
+@dataclass(frozen=True, slots=True)
+class Route:
+    tier: Tier
+    #: `max_completion_tokens` for the call (thinking included), never above
+    #: `settings.groq_max_completion_tokens`.
+    max_tokens: int
+    #: A planning figure for a typical reply, in tokens: used to judge whether a
+    #: call still fits this minute's allowance, and by the capacity estimates in
+    #: `eval/routing.py`. Not a measurement; `services/usage.py` has the real ones.
+    reply_tokens: int
+    #: Whether a failure may be answered by the other text model.
+    fallback: bool = True
+    #: Chat: switch to the small model *before* trying, once the large model's day
+    #: is `groq_switch_at` spent, so the last of it is left for quizzes, decks and
+    #: notes, which the small model does worse.
+    degrade_early: bool = False
+    #: A nicety with its own model-free fallback (headings for starters, a plain
+    #: line for the brief, no summary this turn). Skipped without a call once its
+    #: model's day is `groq_shed_at` spent, and never moved up to the large model.
+    optional: bool = False
+    why: str = ""
+
+
+#: task name (as given to `usage.task`) → its route.
+ROUTES: dict[str, Route] = {
+    "chat": Route("large", 4096, 800, degrade_early=True,
+                  why="the answer students read; the small model makes about twice the unsupported claims (eval route_check C)"),
+    "chat.smalltalk": Route("fast", 1024, 150,
+                            why="one friendly sentence; nothing to ground"),
+    "chat.resolve": Route("fast", 512, 80,
+                          why="rewrites a follow-up into one standalone question (at most 240 characters)"),
+    "chat.starters": Route("fast", 768, 200, fallback=False, optional=True,
+                           why="four short questions; headings make them without a model"),
+    "chat.memory": Route("fast", 768, 250, fallback=False, optional=True,
+                         why="a 120-word summary, in the background; retried on the next turn"),
+    "brief": Route("fast", 768, 200, fallback=False, optional=True,
+                   why="a home-screen line; the page renders without it"),
+    "quiz.write": Route("large", 4096, 3000,
+                        why="up to 15 questions with distractors and explanations (~235 tokens each)"),
+    "quiz.repair": Route("large", 4096, 1200,
+                         why="the questions verification dropped, rewritten"),
+    "quiz.verify": Route("fast", 1536, 400,
+                         why="one JSON verdict per question; a wrong 'supported' only drops a question"),
+    "quiz.reword": Route("fast", 3072, 1500, fallback=False, optional=True,
+                         why="a retake's questions reworded as JSON; without it the retake is reshuffled instead"),
+    "cards.write": Route("large", 4096, 2500,
+                         why="up to 22 cards; backs may be long"),
+    "notes.write": Route("large", 4096, 2000,
+                         why="a whole study note from the sources"),
+    "notes.edit": Route("fast", 4096, 600,
+                        why="shorten, fix or continue a passage the student wrote"),
+    "ocr.page": Route("vision", 4096, 1500, fallback=False,
+                      why="a scanned page, transcribed; only the vision model can see it"),
+    "image.read": Route("vision", 4096, 800, fallback=False,
+                        why="an uploaded image, read; only the vision model can see it"),
+}
+
+#: Anything untagged (or a task added without a route): the old behaviour.
+DEFAULT_ROUTE = Route("large", 4096, 800, why="untagged call: settings' defaults")
+
+
+def route_for(task: str | None) -> Route:
+    return ROUTES.get(task or "", DEFAULT_ROUTE)
+
+
+def tier_model(tier: Tier) -> str:
+    return {
+        "large": settings.groq_model,
+        "fast": settings.groq_model_fast,
+        "vision": settings.groq_model_vision,
+    }[tier]
+
+
+def tier_of(model: str) -> Tier | None:
+    for tier in ("large", "fast", "vision"):
+        if tier_model(tier) == model:  # type: ignore[arg-type]
+            return tier  # type: ignore[return-value]
+    return None
+
+
+def day_nearly_spent(model: str, fraction: float | None = None) -> bool:
+    """Has `model` used `fraction` (default `groq_switch_at`) of today's tokens, by our count?"""
+    return usage.near_daily_limit(
+        model,
+        settings.groq_daily_token_limit,
+        settings.groq_switch_at if fraction is None else fraction,
+    )
+
+
+def model_for(task: str, *, images: bool = False) -> str:
+    """The model to ask for `task` now. The one decision the chat route needs:
+
+        model_for_turn = llm.model_for("chat.smalltalk" if small_talk else "chat", images=bool(images))
+
+    An image always goes to the vision model. A task whose route says
+    `degrade_early` goes to the small model once the large one's day is nearly
+    spent, and says so in the log: a quieter answer, on purpose, rather than a
+    refused one later.
+    """
+    if images:
+        return settings.groq_model_vision
+    r = route_for(task)
+    model = tier_model(r.tier)
+    if r.degrade_early and r.tier == "large" and day_nearly_spent(model):
+        small = settings.groq_model_fast
+        log.warning(
+            "routing task=%s to %s instead of %s: the large model has used %.0f%% of its day",
+            task, small, model, settings.groq_switch_at * 100,
+        )
+        usage.rerouted(task, model, small, "day-nearly-spent")
+        return small
+    return model
 
 
 class LLM(Protocol):
@@ -59,10 +192,18 @@ class _Retryable(Exception):
     """A transient failure. `error` is what the student sees if every attempt
     and every fallback fails the same way."""
 
-    def __init__(self, error: ApiError, retry_after: float | None = None) -> None:
+    def __init__(
+        self, error: ApiError, retry_after: float | None = None, *, same_model: bool = True, reason: str = "unavailable"
+    ) -> None:
         super().__init__(error.message)
         self.error = error
         self.retry_after = retry_after
+        #: Whether asking the same model again could help. Not after a timeout
+        #: (another full wait, likely the same), nor after a refusal with no
+        #: short Retry-After (the minute or the day is spent).
+        self.same_model = same_model
+        #: For the log, when another model ends up answering.
+        self.reason = reason
 
 
 class _ModelGone(Exception):
@@ -126,6 +267,19 @@ def _parse_retry_after(value: str | None) -> float | None:
         return None
 
 
+_WAIT = re.compile(r"try again in\s+(?:(\d+)h)?(?:(\d+)m(?!s))?(?:([\d.]+)s)?(?:([\d.]+)ms)?", re.IGNORECASE)
+
+
+def _wait_in_message(body: bytes) -> float | None:
+    """Groq's refusal text says how long to wait ("Please try again in 7m12.5s").
+    Used when the Retry-After header is missing."""
+    m = _WAIT.search(body[:600].decode("utf-8", "replace"))
+    if not m or not any(m.groups()):
+        return None
+    h, mins, secs, ms = m.groups()
+    return int(h or 0) * 3600 + int(mins or 0) * 60 + float(secs or 0) + float(ms or 0) / 1000
+
+
 def _error_code(body: bytes) -> str | None:
     try:
         return json.loads(body).get("error", {}).get("code")
@@ -146,11 +300,21 @@ class GroqLLM:
     Fallback order: the requested model, then the other text model. Vision
     requests never fall back — the text models can't see the image, and a
     confident answer that ignored the attachment is worse than an honest error.
+    The task's route (`ROUTES`) can narrow that further: no fallback for work
+    with a model-free answer, and no move up to the large model for cheap work
+    while the large model's day is nearly spent. A model known to be out (open
+    circuit, a refusal with a long wait, this minute's tokens gone) is skipped
+    before it is asked, except the last in line; every answer from a model other
+    than the one asked for is logged and counted (`_log_fallback`).
     """
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
         self._breakers: dict[str, _Breaker] = {}
+        #: model → monotonic time before which a refusal (429) said not to come
+        #: back. Every request in that window would be refused the same way, so
+        #: it goes straight to the fallback instead of each spending a round trip.
+        self._cooling: dict[str, float] = {}
 
     async def _get(self) -> httpx.AsyncClient:
         if self._client is None:
@@ -165,11 +329,23 @@ class GroqLLM:
         return self._client
 
     def _chain(self, model: str | None, messages: list[ChatMessage]) -> list[str]:
+        """The models to try, in order. Never the vision model's fallback (the text
+        models can't see the image); never a fallback for a route that says so;
+        and a cheap task never moves up to the large model once the large model's
+        day is nearly spent: its last tokens are for the work only it does well."""
         primary = model or settings.groq_model
         if _has_images(messages):
             return [primary]
+        route = route_for(usage.current_task())
+        if not route.fallback:
+            return [primary]
         text_models = [settings.groq_model, settings.groq_model_fast]
-        return [primary, *[m for m in text_models if m != primary]]
+        chain = [primary, *[m for m in text_models if m != primary]]
+        if primary != settings.groq_model and settings.groq_model in chain[1:] and (
+            route.optional or day_nearly_spent(settings.groq_model)
+        ):
+            chain.remove(settings.groq_model)
+        return chain
 
     def _breaker(self, model: str) -> _Breaker:
         return self._breakers.setdefault(model, _Breaker())
@@ -186,48 +362,86 @@ class GroqLLM:
         JSON object. Asked politely instead, the small model answered a
         verification request with `[]` on some material — measured — so
         anything a program reads back should ask this way."""
-        chain = self._chain(model, messages)
         # Read now: by the time the reply ends, the caller may be elsewhere.
         task_name = usage.current_task()
+        route = route_for(task_name)
+        primary = model or settings.groq_model
+        images = _has_images(messages)
+        if route.optional and not images and day_nearly_spent(primary, settings.groq_shed_at):
+            # Its caller has a model-free answer; the day's last tokens are for answers.
+            log.warning("skipping optional task=%s: %s has used most of its day", task_name, primary)
+            usage.rerouted(task_name, primary, None, "shed")
+            raise RateLimited("Skipped to save today's AI allowance for answers.")
+
+        chain = self._chain(model, messages)
         last_error: ApiError = UpstreamUnavailable("The AI service is unavailable.")
+        # One budget of requests for the whole call, across every model: a
+        # failing upstream gets a few tries in total, never retries × models.
+        attempts_left = max(1, settings.groq_max_attempts)
+        need = estimate_tokens(messages) + route.reply_tokens
+        why_moved = ""
 
         for position, candidate in enumerate(chain):
             breaker = self._breaker(candidate)
             is_last = position == len(chain) - 1
-            # The last model is always tried, open circuit or not: failing a
-            # request without making a single attempt helps nobody.
-            if not is_last and not breaker.allows(
-                time.monotonic(), settings.groq_breaker_cooldown_s
-            ):
-                log.info("groq circuit open for %s; skipping to fallback", candidate)
-                continue
+            later = len(chain) - position - 1
+            if attempts_left <= 0:
+                break
+            # The last model is always tried, whatever we believe about it:
+            # failing a request without making a single attempt helps nobody.
+            if not is_last:
+                now = time.monotonic()
+                skip = ""
+                if not breaker.allows(now, settings.groq_breaker_cooldown_s):
+                    skip = "circuit-open"
+                elif self._cooling.get(candidate, 0.0) > now:
+                    skip = "refused-recently"
+                elif usage.minute_wait_s(candidate, need) > settings.groq_max_retry_after_s:
+                    skip = "minute-spent"
+                if skip:
+                    log.info("groq %s skipped for task=%s (%s); trying the fallback", candidate, task_name, skip)
+                    why_moved = why_moved or skip
+                    continue
 
             for attempt in range(settings.groq_max_retries + 1):
                 started = False
+                attempts_left -= 1
                 try:
                     async for delta in self._stream_once(candidate, messages, temperature, json_object, task_name):
                         started = True
                         yield delta
                     breaker.succeed()
-                    if position:
-                        log.info("groq answered via fallback %s", candidate)
+                    self._cooling.pop(candidate, None)
+                    if candidate != primary:
+                        _log_fallback(task_name, primary, candidate, why_moved or "failed")
                     return
                 except _ModelGone:
                     breaker.trip(time.monotonic())
                     log.warning("groq model %s is gone; falling back", candidate)
+                    why_moved = why_moved or "model-gone"
                     break
                 except _Retryable as e:
                     if started:
                         raise UpstreamUnavailable(
                             "The AI stopped partway through. Try again."
                         ) from e
-                    breaker.fail(time.monotonic(), settings.groq_breaker_threshold)
+                    now = time.monotonic()
+                    breaker.fail(now, settings.groq_breaker_threshold)
                     last_error = e.error
+                    why_moved = why_moved or e.reason
                     waits_too_long = (
                         e.retry_after is not None
                         and e.retry_after > settings.groq_max_retry_after_s
                     )
-                    if attempt >= settings.groq_max_retries or waits_too_long:
+                    if waits_too_long:
+                        self._cooling[candidate] = now + float(e.retry_after or 0.0)
+                    if (
+                        not e.same_model
+                        or waits_too_long
+                        or attempt >= settings.groq_max_retries
+                        # Keep one request for each model still to try.
+                        or attempts_left <= later
+                    ):
                         break
                     delay = _backoff(attempt, e.retry_after)
                     log.info(
@@ -252,7 +466,7 @@ class GroqLLM:
             "messages": messages,
             "temperature": temperature,
             "stream": True,
-            **_reply_budget(model),
+            **_reply_budget(model, task_name),
         }
         if json_object:
             payload["response_format"] = {"type": "json_object"}
@@ -264,6 +478,7 @@ class GroqLLM:
                     body = await r.aread()
                     if r.status_code == 429:
                         usage.refused(model, body)
+                        usage.refused_task(task_name or usage.current_task(), model)
                     # Log the provider's text; never surface it — it can carry
                     # account and quota details the user shouldn't see.
                     log.warning("groq %s on %s: %s", r.status_code, model, body[:300])
@@ -290,21 +505,43 @@ class GroqLLM:
                     if delta:
                         yield delta
         except httpx.TimeoutException as e:
+            # Not retried on the same model: the student has already waited the
+            # whole timeout once, and an overloaded model is likely to do it again.
             raise _Retryable(
-                UpstreamUnavailable("The AI took too long to respond. Try again.")
+                UpstreamUnavailable("The AI took too long to respond. Try again."),
+                same_model=False,
+                reason="timeout",
             ) from e
         except httpx.HTTPError as e:
-            raise _Retryable(UpstreamUnavailable("The AI service didn't respond.")) from e
+            raise _Retryable(UpstreamUnavailable("The AI service didn't respond."), reason="network") from e
 
 
-def _reply_budget(model: str) -> dict[str, Any]:
+def _log_fallback(task: str, wanted: str, used: str, why: str) -> None:
+    """Every answer from a model other than the one asked for is logged and counted.
+    Moving down from the large model is a quality loss, so it is a warning."""
+    worse = tier_of(wanted) == "large" and tier_of(used) != "large"
+    log.log(
+        logging.WARNING if worse else logging.INFO,
+        "llm task=%s answered by %s instead of %s (%s)%s",
+        task, used, wanted, why, " - a smaller model than this task is routed to" if worse else "",
+    )
+    usage.rerouted(task, wanted, used, why)
+
+
+def _reply_budget(model: str, task: str | None = None) -> dict[str, Any]:
     """How long a reply may be and, for a reasoning model, how hard it thinks.
 
     Without this a GPT-OSS model thinks at medium effort inside Groq's default
     reply budget, and a long reply (a quiz, a deck) is cut off once the
     thinking has used most of it. Only GPT-OSS takes `reasoning_effort` and
-    `include_reasoning`; other models get the length cap alone."""
-    budget: dict[str, Any] = {"max_completion_tokens": settings.groq_max_completion_tokens}
+    `include_reasoning`; other models get the length cap alone.
+
+    The cap is the task's own (`ROUTES`), never above the setting: a rewrite of
+    one question does not need room for a quiz."""
+    cap = settings.groq_max_completion_tokens
+    if task in ROUTES:
+        cap = min(cap, ROUTES[task].max_tokens)
+    budget: dict[str, Any] = {"max_completion_tokens": cap}
     if "gpt-oss" in model:
         budget["reasoning_effort"] = settings.groq_reasoning_effort
         # The thinking is not shown to anyone; don't stream it.
@@ -323,10 +560,20 @@ def _classify(status: int, body: bytes, retry_after: str | None) -> Exception:
     if status == 404 or code in _MODEL_GONE_CODES:
         return _ModelGone()
     if status == 429:
+        wait = _parse_retry_after(retry_after)
+        if wait is None:
+            wait = _wait_in_message(body)
         return _Retryable(
             RateLimited("The AI is at capacity right now. Try again in a moment."),
-            _parse_retry_after(retry_after),
+            wait,
+            # Only a short, stated wait is worth spending on the same model.
+            same_model=wait is not None,
+            reason="rate-limited",
         )
+    if status == 413:
+        # One request bigger than a minute's allowance. The other model has the
+        # same limit, so falling back cannot help; say what can.
+        return UpstreamUnavailable("That was too much for the AI to read at once. Try a shorter message.")
     if status in _RETRYABLE_STATUS:
         return _Retryable(UpstreamUnavailable("The AI service is unavailable."))
     if status in (401, 403):

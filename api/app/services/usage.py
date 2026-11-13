@@ -105,6 +105,10 @@ class _Model:
 
 _tallies: dict[tuple[str, str], _Tally] = {}
 _models: dict[str, _Model] = {}
+#: (task, model asked for, model that answered or "" if none was asked, why) → count.
+_reroutes: dict[tuple[str, str, str, str], int] = {}
+#: (task, model) → 429s seen.
+_refusals: dict[tuple[str, str], int] = {}
 _started = time.time()
 
 
@@ -169,6 +173,48 @@ def near_daily_limit(model: str, limit: int, fraction: float) -> bool:
     return limit > 0 and _model(model).tokens_today >= limit * fraction
 
 
+def minute_wait_s(model: str, need_tokens: int) -> float:
+    """Roughly how long until `model` has `need_tokens` of this minute's allowance free.
+
+    From the last rate-limit headers Groq sent for it (`remaining-tokens`,
+    `limit-tokens`), refilled at the limit's own pace since then. 0 when there is
+    no recent reading, or when the request could never fit anyway (that is for the
+    provider to refuse, not us to guess). An estimate: other requests may be in
+    flight, and the reading is as of the last response, so it only ever decides
+    "skip to the fallback now rather than be refused first", never "fail".
+    """
+    m = _models.get(model)
+    if m is None or m.limits_at is None:
+        return 0.0
+    try:
+        remaining = int(m.limits.get("remaining-tokens", ""))
+        limit = int(m.limits.get("limit-tokens", ""))
+    except ValueError:
+        return 0.0
+    if limit <= 0 or need_tokens > limit:
+        return 0.0
+    rate = limit / 60.0
+    now_free = min(float(limit), remaining + max(0.0, time.time() - m.limits_at) * rate)
+    return 0.0 if need_tokens <= now_free else (need_tokens - now_free) / rate
+
+
+def day_used(model: str) -> int:
+    """Tokens `model` has used today (UTC), by our own count."""
+    return _model(model).tokens_today
+
+
+def rerouted(task: str, wanted: str, used: str | None, why: str) -> None:
+    """A call answered by a model other than the one its task asked for, or (`used`
+    None) not sent at all. Counted for the admin page; the caller logs it."""
+    key = (task, wanted, used or "", why)
+    _reroutes[key] = _reroutes.get(key, 0) + 1
+
+
+def refused_task(task: str, model: str) -> None:
+    """A 429 on `model` while serving `task`: which work runs into the limits."""
+    _refusals[(task, model)] = _refusals.get((task, model), 0) + 1
+
+
 def limits(model: str, headers: Mapping[str, str]) -> None:
     """The rate-limit headers from a response, kept as the latest word on them."""
     kept = {k: headers[f"x-ratelimit-{k}"] for k in _HEADERS if f"x-ratelimit-{k}" in headers}
@@ -200,7 +246,12 @@ def snapshot() -> dict[str, Any]:
     for name, m in sorted(_models.items()):
         _model(name)  # roll the day over if it has turned
         models.append({"model": name, **asdict(m)})
-    return {"since": _started, "tasks": tasks, "models": models}
+    reroutes = [
+        {"task": t, "wanted": w, "used": u or None, "why": why, "count": n}
+        for (t, w, u, why), n in sorted(_reroutes.items(), key=lambda kv: -kv[1])
+    ]
+    refusals = [{"task": t, "model": m, "count": n} for (t, m), n in sorted(_refusals.items(), key=lambda kv: -kv[1])]
+    return {"since": _started, "tasks": tasks, "models": models, "reroutes": reroutes, "refusals": refusals}
 
 
 def reset() -> None:
@@ -208,4 +259,6 @@ def reset() -> None:
     global _started
     _tallies.clear()
     _models.clear()
+    _reroutes.clear()
+    _refusals.clear()
     _started = time.time()

@@ -472,4 +472,7 @@ def _raise_if_bad(r: httpx.Response) -> None:
         raise Forbidden("You don't have access to that.")
     if r.status_code == 404:
         raise NotFound("We couldn't find that.")
+    # A read that failed must not claim something wasn't saved.
+    if r.request.method in {"GET", "HEAD"}:
+        raise UpstreamUnavailable("We couldn't load that just now. Please try again.")
     raise UpstreamUnavailable("We couldn't save that just now. Please try again.")
