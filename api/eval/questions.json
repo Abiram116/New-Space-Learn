@@ -1590,5 +1590,528 @@
   "category": "unanswerable",
   "split": "tune",
   "question": "How many ATP molecules does the Krebs cycle yield per glucose?"
+ },
+ {
+  "id": "nd01",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "What problem does FCFS scheduling have?",
+  "evidence": [
+   [
+    "convoy effect"
+   ]
+  ],
+  "answer": "The convoy effect: one long job at the front makes all the short ones wait."
+ },
+ {
+  "id": "nd02",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "How is turnaround time defined?",
+  "evidence": [
+   [
+    "turnaround time = completion - arrival"
+   ]
+  ],
+  "answer": "Completion time minus arrival time."
+ },
+ {
+  "id": "nd03",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "What does durability guarantee in ACID?",
+  "evidence": [
+   [
+    "once committed, stays committed even after a crash"
+   ]
+  ],
+  "answer": "Once a transaction commits it stays committed even after a crash (via write-ahead logging)."
+ },
+ {
+  "id": "nd04",
+  "topic": "notes",
+  "category": "direct",
+  "split": "test",
+  "question": "What is a phantom read?",
+  "evidence": [
+   [
+    "phantom read: re-running a range query returns new rows"
+   ]
+  ],
+  "answer": "Re-running a range query returns new rows."
+ },
+ {
+  "id": "nd05",
+  "topic": "notes",
+  "category": "direct",
+  "split": "test",
+  "question": "What can L1 regularization do that L2 rarely does?",
+  "evidence": [
+   [
+    "can make weights exactly 0 so it does feature selection"
+   ]
+  ],
+  "answer": "L1 can make weights exactly 0, so it does feature selection."
+ },
+ {
+  "id": "nd06",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "How many folds are usually used in k-fold cross validation?",
+  "evidence": [
+   [
+    "usually k = 5 or 10"
+   ]
+  ],
+  "answer": "Usually k = 5 or 10."
+ },
+ {
+  "id": "nd07",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "What are the four conditions that must all hold for a deadlock?",
+  "evidence": [
+   [
+    "mutual exclusion, hold and wait, no preemption, circular wait"
+   ]
+  ],
+  "answer": "Mutual exclusion, hold and wait, no preemption and circular wait."
+ },
+ {
+  "id": "nd08",
+  "topic": "notes",
+  "category": "direct",
+  "split": "tune",
+  "question": "What does BCNF require of every non-trivial functional dependency?",
+  "evidence": [
+   [
+    "X must be a superkey"
+   ]
+  ],
+  "answer": "The left side X must be a superkey."
+ },
+ {
+  "id": "nr01",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "test",
+  "question": "Which scheduler minimises the average waiting time, and why can't it be built exactly?",
+  "evidence": [
+   [
+    "gives the minimum avg waiting time (provably optimal) but we cant know the next burst length in advance"
+   ]
+  ],
+  "answer": "Shortest job first: it is optimal but the next burst length cannot be known in advance."
+ },
+ {
+  "id": "nr02",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "test",
+  "question": "Why shouldn't the round robin time slice be very small?",
+  "evidence": [
+   [
+    "if q too small -> too many context switches"
+   ]
+  ],
+  "answer": "Too many context switches."
+ },
+ {
+  "id": "nr03",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Which lock modes can be held on the same item at once?",
+  "evidence": [
+   [
+    "S is compatible w/ S only"
+   ]
+  ],
+  "answer": "Only shared locks are compatible with each other."
+ },
+ {
+  "id": "nr04",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "tune",
+  "question": "Which isolation level does PostgreSQL use by default?",
+  "evidence": [
+   [
+    "read committed - no dirty reads (default in postgres)"
+   ]
+  ],
+  "answer": "Read committed."
+ },
+ {
+  "id": "nr05",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "tune",
+  "question": "How do bias and variance change as a model becomes more complex?",
+  "evidence": [
+   [
+    "more complex model -> bias down, variance up"
+   ]
+  ],
+  "answer": "Bias goes down and variance goes up."
+ },
+ {
+  "id": "nr06",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "test",
+  "question": "Why is accuracy a poor metric when one class dominates the data?",
+  "evidence": [
+   [
+    "accuracy is misleading when classes are imbalanced"
+   ]
+  ],
+  "answer": "Accuracy is misleading when classes are imbalanced."
+ },
+ {
+  "id": "nr07",
+  "topic": "notes",
+  "category": "reworded",
+  "split": "test",
+  "question": "How can the dining philosophers avoid deadlock?",
+  "evidence": [
+   [
+    "allow at most 4 to sit, or pick up both forks atomically"
+   ]
+  ],
+  "answer": "Allow at most 4 to sit, or pick up both forks atomically."
+ },
+ {
+  "id": "ne01",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the average waiting time under FCFS for bursts 24, 3, 3?",
+  "evidence": [
+   [
+    "avg wait = 17 ms"
+   ]
+  ],
+  "answer": "17 ms."
+ },
+ {
+  "id": "ne02",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "With a quantum of 4 ms, what is the round robin average waiting time for bursts 24, 3, 3?",
+  "evidence": [
+   [
+    "avg wait = 5.67 ms"
+   ]
+  ],
+  "answer": "5.67 ms."
+ },
+ {
+  "id": "ne03",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "What are Adam's default beta1, beta2 and epsilon?",
+  "evidence": [
+   [
+    "beta1 = 0.9, beta2 = 0.999, eps = 1e-8"
+   ]
+  ],
+  "answer": "beta1 = 0.9, beta2 = 0.999, eps = 1e-8."
+ },
+ {
+  "id": "ne04",
+  "topic": "notes",
+  "category": "exact",
+  "split": "test",
+  "question": "What F1 score do TP = 40, FP = 10 and FN = 20 give?",
+  "evidence": [
+   [
+    "R = 0.667, F1 = 0.727"
+   ]
+  ],
+  "answer": "About 0.727."
+ },
+ {
+  "id": "ne05",
+  "topic": "notes",
+  "category": "exact",
+  "split": "test",
+  "question": "Which isolation level is the default in MySQL InnoDB?",
+  "evidence": [
+   [
+    "repeatable read - no dirty or non-repeatable reads (default in mysql innodb)"
+   ]
+  ],
+  "answer": "Repeatable read."
+ },
+ {
+  "id": "ne06",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "What AUC value means a classifier is just guessing?",
+  "evidence": [
+   [
+    "0.5 = random guessing"
+   ]
+  ],
+  "answer": "0.5."
+ },
+ {
+  "id": "ne07",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the effective access time with a 10 ns TLB, 100 ns memory and an 80% hit ratio?",
+  "evidence": [
+   [
+    "EAT = 0.8 * 110 + 0.2 * 210 = 130 ns"
+   ]
+  ],
+  "answer": "130 ns."
+ },
+ {
+  "id": "ne08",
+  "topic": "notes",
+  "category": "exact",
+  "split": "tune",
+  "question": "What is the entropy of a node with 9 yes and 5 no examples?",
+  "evidence": [
+   [
+    "entropy 0.940 bits"
+   ]
+  ],
+  "answer": "0.940 bits."
+ },
+ {
+  "id": "nf01",
+  "topic": "notes",
+  "category": "followup",
+  "split": "test",
+  "question": "And what happens if that quantum is too large?",
+  "evidence": [
+   [
+    "if q too large -> becomes FCFS"
+   ]
+  ],
+  "answer": "It becomes FCFS.",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is round robin?"
+   },
+   {
+    "role": "assistant",
+    "content": "It gives each process a time quantum and then moves it to the back of the ready queue."
+   }
+  ]
+ },
+ {
+  "id": "nf02",
+  "topic": "notes",
+  "category": "followup",
+  "split": "test",
+  "question": "Does it prevent deadlock?",
+  "evidence": [
+   [
+    "does NOT prevent deadlock"
+   ]
+  ],
+  "answer": "No, it does not prevent deadlock.",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is two phase locking?"
+   },
+   {
+    "role": "assistant",
+    "content": "A protocol with a growing phase where locks are only acquired and a shrinking phase where they are only released."
+   }
+  ]
+ },
+ {
+  "id": "nf03",
+  "topic": "notes",
+  "category": "followup",
+  "split": "tune",
+  "question": "What is the extreme case where k equals the number of samples?",
+  "evidence": [
+   [
+    "LOOCV = k = n"
+   ]
+  ],
+  "answer": "Leave-one-out cross validation, which is very expensive.",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is k-fold cross validation?"
+   },
+   {
+    "role": "assistant",
+    "content": "The data is split into k parts, and each part is used once as the test set."
+   }
+  ]
+ },
+ {
+  "id": "nf04",
+  "topic": "notes",
+  "category": "followup",
+  "split": "tune",
+  "question": "How do they guess the next burst then?",
+  "evidence": [
+   [
+    "exponential averaging"
+   ]
+  ],
+  "answer": "With exponential averaging of past bursts.",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is shortest job first?"
+   },
+   {
+    "role": "assistant",
+    "content": "It runs the process with the shortest next cpu burst first."
+   }
+  ]
+ },
+ {
+  "id": "nf05",
+  "topic": "notes",
+  "category": "followup",
+  "split": "tune",
+  "question": "How can the application avoid most of them?",
+  "evidence": [
+   [
+    "always lock rows in the same order in every txn"
+   ]
+  ],
+  "answer": "Always lock rows in the same order in every transaction.",
+  "history": [
+   {
+    "role": "user",
+    "content": "What is a deadlock in a database?"
+   },
+   {
+    "role": "assistant",
+    "content": "Two transactions each wait for a lock the other holds."
+   }
+  ]
+ },
+ {
+  "id": "nc01",
+  "topic": "notes",
+  "category": "cross",
+  "split": "test",
+  "question": "Which scheduling policies can starve a process, and what is the fix?",
+  "evidence": [
+   [
+    "starvation: long jobs may never run if short ones keep coming"
+   ],
+   [
+    "aging: slowly raise the priority of procs that keep waiting"
+   ]
+  ],
+  "answer": "SJF and priority scheduling can starve processes; aging fixes priority starvation."
+ },
+ {
+  "id": "nc02",
+  "topic": "notes",
+  "category": "cross",
+  "split": "test",
+  "question": "How do wait-die and wound-wait differ?",
+  "evidence": [
+   [
+    "wait-die: older txn waits"
+   ],
+   [
+    "wound-wait: older txn wounds"
+   ]
+  ],
+  "answer": "In wait-die the older waits and the younger dies; in wound-wait the older aborts the younger."
+ },
+ {
+  "id": "nc03",
+  "topic": "notes",
+  "category": "cross",
+  "split": "tune",
+  "question": "Which techniques are used against overfitting?",
+  "evidence": [
+   [
+    "dropout: randomly drop units while training"
+   ],
+   [
+    "early stopping: stop when val loss starts going up"
+   ]
+  ],
+  "answer": "Dropout and early stopping (and regularization)."
+ },
+ {
+  "id": "nc04",
+  "topic": "notes",
+  "category": "cross",
+  "split": "tune",
+  "question": "How do FIFO and LRU page replacement differ?",
+  "evidence": [
+   [
+    "FIFO: replace the oldest page"
+   ],
+   [
+    "LRU: replace the least recently used page"
+   ]
+  ],
+  "answer": "FIFO replaces the oldest page and has Belady's anomaly; LRU replaces the least recently used page."
+ },
+ {
+  "id": "nu01",
+  "topic": "notes",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How does the Linux CFS scheduler pick the next task to run?",
+  "evidence": [],
+  "answer": ""
+ },
+ {
+  "id": "nu02",
+  "topic": "notes",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "How does MVCC work in PostgreSQL?",
+  "evidence": [],
+  "answer": ""
+ },
+ {
+  "id": "nu03",
+  "topic": "notes",
+  "category": "unanswerable",
+  "split": "test",
+  "question": "How does the attention mechanism in a transformer work?",
+  "evidence": [],
+  "answer": ""
+ },
+ {
+  "id": "nu04",
+  "topic": "notes",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "What does the CAP theorem say about distributed databases?",
+  "evidence": [],
+  "answer": ""
+ },
+ {
+  "id": "nu05",
+  "topic": "notes",
+  "category": "unanswerable",
+  "split": "tune",
+  "question": "How does XGBoost differ from a random forest?",
+  "evidence": [],
+  "answer": ""
  }
 ]

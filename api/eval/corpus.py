@@ -27,10 +27,17 @@ TOPICS: dict[str, list[str]] = {
     "cs": ["binary_search.pdf", "gradient_descent.pdf", "bayes_theorem.pdf"],
     "systems": ["transmission_control_protocol.pdf", "database_normalization.pdf"],
     "bio": ["photosynthesis.pdf"],
+    # A student's own revision notes: shorthand, fragments, "prof said" asides. See student_notes.py.
+    "notes": ["os_cpu_scheduling_notes.pdf", "dbms_transactions_notes.pdf", "ml_revision_notes.pdf"],
 }
 
 #: The name a student would see on each topic (the follow-up resolver uses it).
-TOPIC_NAMES = {"cs": "Algorithms and machine learning", "systems": "Networks and databases", "bio": "Biology"}
+TOPIC_NAMES = {
+    "cs": "Algorithms and machine learning",
+    "systems": "Networks and databases",
+    "bio": "Biology",
+    "notes": "Exam revision notes",
+}
 
 CATEGORIES = (
     "direct",  # asks for a fact in the document's own words

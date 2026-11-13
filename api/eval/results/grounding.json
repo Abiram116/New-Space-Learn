@@ -1,0 +1,65 @@
+{
+  "cases": 26,
+  "accuracy": 0.769,
+  "precision_of_backed": 0.8,
+  "recall_of_backed": 0.667,
+  "by_group": {
+    "verbatim": {
+      "n": 4,
+      "correct": 4,
+      "wrong": []
+    },
+    "reworded": {
+      "n": 4,
+      "correct": 4,
+      "wrong": []
+    },
+    "paraphrase": {
+      "n": 4,
+      "correct": 0,
+      "wrong": [
+        {
+          "claim": "Turning off random neurons while learning stops the model memorising its training data.",
+          "expected_backed": true
+        },
+        {
+          "claim": "Skip links give the error signal a shortcut back through the layers.",
+          "expected_backed": true
+        },
+        {
+          "claim": "Scores between a query and every key are scaled down by the key size, then normalised into weights.",
+          "expected_backed": true
+        },
+        {
+          "claim": "Training the smaller models took half a day on a single eight-GPU server.",
+          "expected_backed": true
+        }
+      ]
+    },
+    "fabricated": {
+      "n": 6,
+      "correct": 6,
+      "wrong": []
+    },
+    "tampered": {
+      "n": 4,
+      "correct": 2,
+      "wrong": [
+        {
+          "claim": "The dot products are multiplied by the square root of the key dimension, and a softmax is applied.",
+          "expected_backed": false
+        },
+        {
+          "claim": "At inference time dropout stays on and the activations are not scaled.",
+          "expected_backed": false
+        }
+      ]
+    },
+    "off-topic": {
+      "n": 4,
+      "correct": 4,
+      "wrong": []
+    }
+  },
+  "backed_threshold": 0.5
+}

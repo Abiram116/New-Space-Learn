@@ -15,6 +15,7 @@ looks stale.
 | `agents` | flashcards (quizzes come from `quiz_check`) | `results/agents.json` |
 | `quiz_check` | quiz coverage and question soundness | `results/quizzes.json` |
 | `system` | prompt size, history budget, caches, tiers, capacity, latency, invariants | `results/system.json` |
+| `routing` | the routing table, call sites against it, prompt size and capacity per task | `results/routing.json` |
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from . import agents, system
+from . import agents, routing, system
 
 ROOT = Path(__file__).resolve().parent
 RESULTS = ROOT / "results"
@@ -75,6 +76,33 @@ def rag_section() -> list[str]:
                 v = a.get(key)
                 L.append(f"| {label} | {v if key == 'sampled' else pct(v)} |")
         L.append("")
+        if a:
+            L += [
+                "Why these numbers differ from the first run, and where they stop (details and caveats in the README):",
+                "",
+                "- The first sample (4 Oct, 12:19 UTC) predates the citation changes (12:39): a prompt that no longer asks for \"a second marker for safety\" (10 of the 12 old wrong markers were padding) and normalisation of `【1】` markers (6 answers were counted as uncited).",
+                "- Retrieval did not move (evidence-in-context changed for 1 of 114 questions). What is left wrong is mostly retrieval: the evidence passage never reached the model for 5 of 98 answerable questions, and the model then says the material does not say.",
+                f"- The judge model is noisy. A plain wording check disagrees with it on {a.get('judge_disagrees_with_phrase', '?')} of {a.get('scored', '?')} answers: declined an uncovered question {pct(a.get('declined_when_unanswerable_by_phrase'))} by wording against {pct(a.get('refused_when_unanswerable'))} by judge; declined a question the files answer {pct(a.get('declined_when_answerable_by_phrase'))} by wording against {pct(a.get('refused_when_answerable'))} by judge.",
+                "",
+            ]
+        notes = load("v2-5-judge-notes.json")
+        if notes:
+            n, nr = notes["retrieval"]["all"], notes.get("answers") or {}
+            L += [
+                f"#### Student notes ({len(notes['rows'])} questions, run {notes['ran_at'][:10]})",
+                "",
+                "Three short, original, deliberately messy revision notes (shorthand, asides, worked numbers; `eval/student_notes.py`), run on their own with `python -m eval.bench --topic notes`. Small, and written for this project: a second opinion, not a second benchmark.",
+                "",
+                "| Measure | Student notes | Wikipedia |",
+                "|---|---|---|",
+            ]
+            for key, label in (("hit@1", "Right passage ranked first"), ("hit@3", "…within the top three"), ("context_hit", "Evidence reached the model"), ("doubt_when_unanswerable", "Uncovered question flagged as doubtful"), ("doubt_when_answerable", "Covered question wrongly flagged")):
+                if key in n and key in r:
+                    L.append(f"| {label} | {pct(n[key])} | {pct(r[key])} |")
+            if nr and final.get("answers"):
+                for key, label in (("correct", "Answers judged correct"), ("refused_when_unanswerable", "Refused when not covered"), ("citation_precision", "Citations on the evidence")):
+                    L.append(f"| {label} ({nr.get('scored')} graded) | {pct(nr.get(key))} | {pct(final['answers'].get(key))} |")
+            L.append("")
     else:
         L += ["No retrieval run saved: `python -m eval.bench --variant v2-5-judge --answers 36`.", ""]
 
@@ -99,7 +127,7 @@ def appendix() -> list[str]:
         path = ROOT / name
         if path.exists():
             L += [f"### {title}", "", demote(path.read_text().strip(), 2), ""]
-    L += ["## How to re-run", "", "```", "uv run python -m eval.report --free   # prompt size, caches, tiers, capacity, test suite (seconds, no model)", "uv run python -m eval.system --live    # also time the real model (uses the Groq key)", "uv run python -m eval.bench --variant v2-5-judge --answers 36     # retrieval + graded answers", "uv run python -m eval.route_check --arm B   # --arm C in a second terminal; they use different models", "uv run python -m eval.agents --cards", "uv run python -m eval.quiz_check --questions", "```", "", "Everything that calls a model is paced for a free-tier key and spends from its daily allowance. Use a key that is not the one production runs on."]
+    L += ["## How to re-run", "", "```", "uv run python -m eval.report --free   # prompt size, caches, tiers, routing, capacity, test suite (seconds, no model)", "uv run python -m eval.routing --probe  # one tiny call: does the reply cap count against the minute?", "uv run python -m eval.system --live    # also time the real model (uses the Groq key)", "uv run python -m eval.bench --variant v2-5-judge --answers 36     # retrieval + graded answers", "uv run python -m eval.route_check --arm B   # --arm C in a second terminal; they use different models", "uv run python -m eval.agents --cards", "uv run python -m eval.quiz_check --questions", "```", "", "Everything that calls a model is paced for a free-tier key and spends from its daily allowance. Use a key that is not the one production runs on."]
     return L
 
 
@@ -109,11 +137,14 @@ def main() -> None:
     args = parser.parse_args()
     if args.free:
         subprocess.run([sys.executable, "-m", "eval.system"], cwd=ROOT.parent, check=False)
+        subprocess.run([sys.executable, "-m", "eval.routing"], cwd=ROOT.parent, check=False, stdout=subprocess.DEVNULL)
     sysdata = load("system.json")
-    parts = ["# Space Learn: evaluation report", "", f"Built {datetime.now(UTC).date()} from the saved results in `eval/results/`. Sections: **1** RAG, **2** agents, **3** system design (cost, caching, capacity, latency, guarantees).", ""]
+    routedata = load("routing.json")
+    parts = ["# Space Learn: evaluation report", "", f"Built {datetime.now(UTC).date()} from the saved results in `eval/results/`. Sections: **1** RAG, **2** agents, **3** system design (cost, caching, capacity, latency, guarantees), **4** routing: which model each task uses and what the free tier allows.", ""]
     parts += rag_section()
     parts += ["## 2. Agents", "", demote(agents.render(), 1), ""]
     parts += ["## 3. System design", "", demote(system.render(sysdata), 1) if sysdata else "_Not run: `python -m eval.system`._", ""]
+    parts += ["## 4. Routing and free-tier capacity", "", demote(routing.render(routedata), 1) if routedata else "_Not run: `python -m eval.routing`._", ""]
     parts += appendix()
     (ROOT / "REPORT.md").write_text("\n".join(parts) + "\n")
     print(f"wrote {ROOT / 'REPORT.md'}")

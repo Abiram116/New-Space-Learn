@@ -34,6 +34,9 @@ re-run only pays for questions whose sources changed.
 | `metrics.py` | Retrieval scores |
 | `answers.py` | Answer scores, on a sample |
 | `bench.py` | Runs a variant, saves `results/<variant>.json`, rebuilds `RESULTS.md` |
+| `student_notes.py`, `add_student_questions.py` | A second set of documents: three short, original, messy student revision notes (built into `corpus/*.pdf`) and 37 questions about them (`topic: notes`). Run on their own with `python -m eval.bench --topic notes` |
+| `replay.py` | Re-scores saved answers' citations through post-processing steps with no model calls: `python -m eval.replay [variant]` |
+| `grounding.py` | Hand-labelled check of the "checked against your files" score: copied, reworded, paraphrased, invented, tampered and off-topic claims. `uv run python -m eval.grounding`; no model, no database |
 
 ## How a question is scored
 
@@ -69,8 +72,9 @@ everything together** — read or send that. The scripts that feed it:
 | `agents` | Are flashcards well-formed, distinct and grounded? | `--cards` only | `results/agents.json` |
 | `quiz_check` | Do quizzes cover the material, and are their questions sound? | `--questions` only | `results/quizzes.json` |
 | `system` | Prompt size, history budget, caches, tiers, capacity, latency, invariants | `--live` only | `results/system.json` |
+| `routing` | Which model each task uses, do the call sites agree, what each task's prompt costs, how many calls the free tier allows | `--probe` only (one tiny call) | `results/routing.json` |
 | `report` | All of the above in one document | none | `REPORT.md` |
 
-`system` and `report` are worth running on every change. The model-backed ones are
+`system`, `routing` and `report` are worth running on every change. The model-backed ones are
 paced for a free-tier key and spend from its daily allowance, so use a key that is not
 production's. `route_check` arms B and C use different models and can run together.

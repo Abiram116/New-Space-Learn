@@ -116,7 +116,7 @@ def render() -> str:
     saved = json.loads(OUT.read_text()) if OUT.exists() else {}
     quizzes = ROOT / "results" / "quizzes.json"
     quiz = json.loads(quizzes.read_text()) if quizzes.exists() else {}
-    L = ["# Agent evaluation", "", f"Rebuilt by `python -m eval.agents --report` on {datetime.now(UTC).date()}.", ""]
+    L = ["# Agent evaluation", "", f"Rebuilt by `python -m eval.agents --report`; results last saved {datetime.fromtimestamp(OUT.stat().st_mtime, UTC).date() if OUT.exists() else 'never'}.", ""]
     L += ["## Flashcards", ""]
     rows = {k: v for k, v in saved.items() if k.startswith("cards / ")}
     if rows:

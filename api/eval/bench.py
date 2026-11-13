@@ -76,21 +76,25 @@ def check_questions() -> None:
         raise SystemExit("These quotes are not in the documents:\n  " + "\n  ".join(missing))
 
 
-def run(name: str, n_answers: int) -> dict:
+def run(name: str, n_answers: int, topic: str | None = None) -> dict:
+    """`topic` runs only that topic's questions and saves beside, not over, the full run
+    (`<variant>-<topic>.json`), so a new set of documents can be measured on its own."""
     check_questions()
     variant = VARIANTS[name]()
     embedder = Embedder()
     print(f"indexing for “{name}”…")
     variant.index(documents(), embedder)
-    qs = questions()
+    qs = [q for q in questions() if topic is None or q.topic == topic]
+    if not qs:
+        raise SystemExit(f"no questions for topic {topic!r}")
     results = [variant.search(q) for q in qs]
     embedder.save()
     embed_ms = embedder.time_one([q.question for q in qs[:12]])
 
     rows = [metrics.score(q, r) for q, r in zip(qs, results, strict=True)]
     out = {
-        "variant": name,
-        "description": variant.description,
+        "variant": name if topic is None else f"{name}-{topic}",
+        "description": variant.description + ("" if topic is None else f" (topic {topic} only)"),
         "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "chunks": sum(len(c) for c in getattr(variant, "chunks", {}).values()),
         # Embedding one question, uncached, on THIS machine. Production's tenth
@@ -99,7 +103,8 @@ def run(name: str, n_answers: int) -> dict:
         "retrieval": metrics.report(rows),
         "rows": rows,
     }
-    saved = RESULTS / f"{name}.json"
+    stem = name if topic is None else f"{name}-{topic}"
+    saved = RESULTS / f"{stem}.json"
     if not n_answers and saved.exists():
         # A retrieval-only re-run keeps the graded answers of the last full
         # run rather than throwing them away.
@@ -111,18 +116,22 @@ def run(name: str, n_answers: int) -> dict:
         by_id = {q.id: (q, r) for q, r in zip(qs, results, strict=True)}
         chosen = answers.sample(qs, n_answers)
         print(f"asking the model {len(chosen)} questions…")
-        saved = RESULTS / f"{name}.json"
         earlier = json.loads(saved.read_text()).get("answer_rows") if saved.exists() else None
         answer_rows = asyncio.run(answers.run([by_id[q.id] for q in chosen], earlier))
         out["answers"] = answers.summarise(answer_rows, {q.id: q for q in qs})
         out["answer_rows"] = answer_rows
     RESULTS.mkdir(exist_ok=True)
-    (RESULTS / f"{name}.json").write_text(json.dumps(out, indent=1, ensure_ascii=False))
+    saved.write_text(json.dumps(out, indent=1, ensure_ascii=False))
     return out
 
 
 def table() -> str:
-    runs = sorted((json.loads(p.read_text()) for p in RESULTS.glob("*.json")), key=lambda r: r["ran_at"])
+    # Only pipeline runs: `results/` also holds the other evaluations' files (agents,
+    # routing, grounding, ...), which have their own shapes and their own reports.
+    runs = sorted(
+        (r for r in (json.loads(p.read_text()) for p in RESULTS.glob("*.json")) if {"variant", "ran_at", "retrieval"} <= r.keys()),
+        key=lambda r: r["ran_at"],
+    )
     lines = [
         "# Retrieval benchmark results",
         "",
@@ -138,7 +147,7 @@ def table() -> str:
     ]
     for r in runs:
         test = r["retrieval"]["test"]
-        lines.append(f"| `{r['variant']}` | " + " | ".join(_cell(test[key], key) for key, _ in COLUMNS) + " |")
+        lines.append(f"| `{r['variant']}` | " + " | ".join(_cell(test.get(key), key) for key, _ in COLUMNS) + " |")
     lines += ["", "## Retrieval — by kind of question (all questions, answer found in the top 5)", ""]
     cats = list(runs[0]["retrieval"]["by_category"]) if runs else []
     lines += ["| Pipeline | " + " | ".join(cats) + " |", "|---|" + "---|" * len(cats)]
@@ -164,10 +173,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--variant", default="baseline", choices=sorted(VARIANTS))
     parser.add_argument("--answers", type=int, default=0, metavar="N", help="also grade N model answers (2N model calls)")
+    parser.add_argument("--topic", default=None, help="only this topic's questions (e.g. notes); saved as <variant>-<topic>.json")
     parser.add_argument("--table", action="store_true", help="only rebuild RESULTS.md from saved runs")
     args = parser.parse_args()
     if not args.table:
-        out = run(args.variant, args.answers)
+        out = run(args.variant, args.answers, args.topic)
         for split in ("test", "all"):
             print(f"\n{split}:")
             for key, label in COLUMNS:

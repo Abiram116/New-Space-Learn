@@ -58,6 +58,25 @@ ANSWER TO GRADE:
 {answer}"""
 
 
+#: A plain-language check for "this answer declines": the material does not cover, mention,
+#: list, say... Deliberately simple and readable, so anyone can see why a row was counted.
+#: It exists to cross-check the judge, a small model that applied its own rule inconsistently
+#: on 3 of the first 36 graded answers (it called a clear "the sources do not list this" a
+#: non-refusal, and flagged two refusals as unsupported although its prompt says they never are).
+_DECLINES = re.compile(
+    r"(does not|doesn['’]t|do not|don['’]t|not)\s+(cover|contain|mention|include|list|specify|say|provide|address|explain|assess|discuss)"
+    r"|(no|not any)\s+(information|mention|details?)"
+    r"|not (covered|in the (provided )?(material|sources|files|documents))"
+    r"|can(?:not|['’]t) (find|answer)",
+    re.IGNORECASE,
+)
+
+
+def declines(answer: str) -> bool:
+    """Does this answer say the material does not have what was asked?"""
+    return bool(_DECLINES.search(answer or ""))
+
+
 def sample(questions: list[Question], n: int, seed: int = 7) -> list[Question]:
     """`n` questions spread evenly over the categories, the same ones every run."""
     rng = random.Random(seed)
@@ -111,6 +130,7 @@ async def answer_one(question: Question, result: Result, model: str | None = Non
     answer, _ = rag.strip_invalid_citations(rag.normalize_citation_markers(raw, len(retrieved)), len(retrieved))
     # As production does, after the markers are in our format.
     answer, _ = rag.repoint_citations(answer, [c.text for c in result.context])
+    answer, _ = rag.tighten_citations(answer, [c.text for c in result.context])
     await asyncio.sleep(PAUSE_S)
 
     sources = "\n\n".join(f"[{i}] {c.text}" for i, c in enumerate(result.context, start=1)) or "(none were given)"
@@ -189,4 +209,8 @@ def summarise(rows: list[dict], questions: dict[str, Question]) -> dict:
         "unsupported": rate(scored, "unsupported"),
         "citation_precision": round(sum(r["cited_right"] for r in answerable) / cited, 4) if cited else None,
         "answers_with_citations": rate(answerable, "cited"),
+        # The cross-check: the same questions, scored by wording alone rather than by the judge.
+        "declined_when_unanswerable_by_phrase": round(sum(declines(r["answer"]) for r in unanswerable) / len(unanswerable), 4) if unanswerable else None,
+        "declined_when_answerable_by_phrase": round(sum(declines(r["answer"]) for r in answerable) / len(answerable), 4) if answerable else None,
+        "judge_disagrees_with_phrase": sum(bool(r["refused"]) != declines(r["answer"]) for r in scored),
     }

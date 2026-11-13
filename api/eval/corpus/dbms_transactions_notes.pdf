@@ -1,0 +1,119 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 3744 >>
+stream
+BT /F2 14.0 Tf 56 758.0 Td (Transactions and concurrency - lec 11) Tj ET
+BT /F2 14.0 Tf 56 730.0 Td (ACID) Tj ET
+BT /F1 10.5 Tf 56 715.5 Td (A atomicity: all or nothing. handled by the recovery manager \(undo log\).) Tj ET
+BT /F1 10.5 Tf 56 701.0 Td (C consistency: the db goes from one valid state to another valid state.) Tj ET
+BT /F1 10.5 Tf 56 686.5 Td (I isolation: concurrent txns should not see each others partial work.) Tj ET
+BT /F1 10.5 Tf 56 672.0 Td (D durability: once committed, stays committed even after a crash \(WAL = write ahead) Tj ET
+BT /F1 10.5 Tf 56 657.5 Td (log\).) Tj ET
+BT /F2 14.0 Tf 56 629.5 Td (Schedules) Tj ET
+BT /F1 10.5 Tf 56 615.0 Td (serial schedule = txns run one after another. serializable schedule = equivalent to) Tj ET
+BT /F1 10.5 Tf 56 600.5 Td (some serial one.) Tj ET
+BT /F1 10.5 Tf 56 586.0 Td (a conflict is two ops on the same item, from different txns, where at least one is a) Tj ET
+BT /F1 10.5 Tf 56 571.5 Td (write.) Tj ET
+BT /F1 10.5 Tf 56 557.0 Td (conflict serializable iff the precedence graph has no cycle \(draw an edge Ti -> Tj if) Tj ET
+BT /F1 10.5 Tf 56 542.5 Td (Ti's conflicting op comes first\).) Tj ET
+BT /F2 14.0 Tf 56 514.5 Td (What goes wrong without isolation) Tj ET
+BT /F1 10.5 Tf 56 500.0 Td (dirty read: reading data written by a txn that has not committed yet.) Tj ET
+BT /F1 10.5 Tf 56 485.5 Td (non-repeatable read: same row read twice, different values because another txn) Tj ET
+BT /F1 10.5 Tf 56 471.0 Td (committed in between.) Tj ET
+BT /F1 10.5 Tf 56 456.5 Td (phantom read: re-running a range query returns new rows.) Tj ET
+BT /F1 10.5 Tf 56 442.0 Td (lost update: two txns overwrite each others change.) Tj ET
+BT /F2 14.0 Tf 56 414.0 Td (Isolation levels \(SQL standard\)) Tj ET
+BT /F1 10.5 Tf 56 399.5 Td (read uncommitted - allows dirty reads.) Tj ET
+BT /F1 10.5 Tf 56 385.0 Td (read committed - no dirty reads \(default in postgres\).) Tj ET
+BT /F1 10.5 Tf 56 370.5 Td (repeatable read - no dirty or non-repeatable reads \(default in mysql innodb\).) Tj ET
+BT /F1 10.5 Tf 56 356.0 Td (serializable - no phantoms either. strictest and slowest.) Tj ET
+BT /F2 14.0 Tf 56 328.0 Td (Locking) Tj ET
+BT /F1 10.5 Tf 56 313.5 Td (shared lock \(S\) for reads, exclusive lock \(X\) for writes. S is compatible w/ S only.) Tj ET
+BT /F1 10.5 Tf 56 299.0 Td (2PL = two phase locking: growing phase \(only acquire locks\) then shrinking phase \(only) Tj ET
+BT /F1 10.5 Tf 56 284.5 Td (release\). guarantees conflict serializability but does NOT prevent deadlock.) Tj ET
+BT /F1 10.5 Tf 56 270.0 Td (strict 2PL: hold all X locks until commit, this avoids cascading aborts.) Tj ET
+BT /F1 10.5 Tf 56 255.5 Td (deadlock = a cycle in the wait-for graph. detect it and abort one victim, or prevent) Tj ET
+BT /F1 10.5 Tf 56 241.0 Td (it with timestamps.) Tj ET
+BT /F1 10.5 Tf 56 226.5 Td (wait-die: older txn waits, a younger one that asks for a lock held by an older one is) Tj ET
+BT /F1 10.5 Tf 56 212.0 Td (aborted \(dies\).) Tj ET
+BT /F1 10.5 Tf 56 197.5 Td (wound-wait: older txn wounds \(aborts\) the younger lock holder, a younger one waits for) Tj ET
+BT /F1 10.5 Tf 56 183.0 Td (the older.) Tj ET
+BT /F2 14.0 Tf 56 155.0 Td (Normalization \(lec 8\)) Tj ET
+BT /F1 10.5 Tf 56 140.5 Td (goal = remove redundancy and update/insert/delete anomalies.) Tj ET
+BT /F1 10.5 Tf 56 126.0 Td (1NF: every attribute atomic, no repeating groups.) Tj ET
+BT /F1 10.5 Tf 56 111.5 Td (2NF: 1NF and no partial dependency \(a non-key attribute depending on only part of a) Tj ET
+BT /F1 10.5 Tf 56 97.0 Td (composite key\).) Tj ET
+BT /F1 10.5 Tf 56 82.5 Td (3NF: 2NF and no transitive dependency \(non-key attribute depending on another non-key) Tj ET
+BT /F1 10.5 Tf 56 68.0 Td (attribute\).) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 2945 >>
+stream
+BT /F1 10.5 Tf 56 771.5 Td (BCNF: for every non-trivial FD X -> Y, X must be a superkey. stricter than 3NF.) Tj ET
+BT /F1 10.5 Tf 56 757.0 Td (decomposition should be lossless-join and ideally dependency preserving. BCNF cant) Tj ET
+BT /F1 10.5 Tf 56 742.5 Td (always preserve dependencies, 3NF always can.) Tj ET
+BT /F1 10.5 Tf 56 728.0 Td (candidate key = minimal set of attributes whose closure is the whole relation. closure) Tj ET
+BT /F1 10.5 Tf 56 713.5 Td (of X = all attributes reachable using the FDs.) Tj ET
+BT /F2 14.0 Tf 56 685.5 Td (Indexing and B+ trees) Tj ET
+BT /F1 10.5 Tf 56 671.0 Td (an index speeds up lookups at the cost of extra space and slower writes.) Tj ET
+BT /F1 10.5 Tf 56 656.5 Td (primary index is on the sorted key of the file, secondary index is on a non-ordering) Tj ET
+BT /F1 10.5 Tf 56 642.0 Td (field, clustered means the rows are stored in index order.) Tj ET
+BT /F1 10.5 Tf 56 627.5 Td (B+ tree: all data pointers are in the leaves, leaves are linked together so range) Tj ET
+BT /F1 10.5 Tf 56 613.0 Td (scans are fast. internal nodes only guide the search.) Tj ET
+BT /F1 10.5 Tf 56 598.5 Td (order of the tree = max children per node. height stays small \(log base order of n\) so) Tj ET
+BT /F1 10.5 Tf 56 584.0 Td (a lookup is just a few disk reads.) Tj ET
+BT /F1 10.5 Tf 56 569.5 Td (hash index is great for equality lookups but useless for ranges.) Tj ET
+BT /F2 14.0 Tf 56 541.5 Td (Recovery) Tj ET
+BT /F1 10.5 Tf 56 527.0 Td (log-based recovery: write ahead logging means the log record must reach disk BEFORE) Tj ET
+BT /F1 10.5 Tf 56 512.5 Td (the changed data page does.) Tj ET
+BT /F1 10.5 Tf 56 498.0 Td (undo for uncommitted txns, redo for committed ones. checkpoint = flush dirty pages and) Tj ET
+BT /F1 10.5 Tf 56 483.5 Td (write a checkpoint record, so recovery only scans the log from the last checkpoint.) Tj ET
+BT /F1 10.5 Tf 56 469.0 Td (ARIES has 3 phases: analysis, redo, undo. redo repeats history, then undo rolls back) Tj ET
+BT /F1 10.5 Tf 56 454.5 Td (the losers.) Tj ET
+BT /F1 10.5 Tf 56 440.0 Td (shadow paging is the no-log alternative: keep a copy of the page table, swap it in at) Tj ET
+BT /F1 10.5 Tf 56 425.5 Td (commit.) Tj ET
+BT /F2 14.0 Tf 56 397.5 Td (SQL joins and deadlock in practice) Tj ET
+BT /F1 10.5 Tf 56 383.0 Td (inner join keeps only matching rows. left outer join keeps all rows of the left table) Tj ET
+BT /F1 10.5 Tf 56 368.5 Td (and fills NULLs on the right when there is no match.) Tj ET
+BT /F1 10.5 Tf 56 354.0 Td (a deadlock in a database: txn A locks row 1 then wants row 2 while txn B locks row 2) Tj ET
+BT /F1 10.5 Tf 56 339.5 Td (then wants row 1. the dbms detects the cycle in the wait-for graph and aborts one txn,) Tj ET
+BT /F1 10.5 Tf 56 325.0 Td (which the app should retry.) Tj ET
+BT /F1 10.5 Tf 56 310.5 Td (tip from lab: always lock rows in the same order in every txn, that alone avoids most) Tj ET
+BT /F1 10.5 Tf 56 296.0 Td (deadlocks.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000004116 00000 n 
+0000004252 00000 n 
+0000007249 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+7385
+%%EOF

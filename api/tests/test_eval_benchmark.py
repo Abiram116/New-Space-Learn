@@ -54,3 +54,16 @@ def test_scoring_an_unanswerable_question_is_about_abstaining():
     assert passed["abstained"] is False and "rank" not in passed
     summary = metrics.summarise([passed])
     assert summary["abstain_when_unanswerable"] == 0.0 and summary["hit@5"] is None
+
+
+def test_the_refusal_cross_check_reads_plain_declines_and_not_answers():
+    from eval.answers import declines
+
+    for text in (
+        "The provided sources do not list any alternative names for binary search.",
+        "The provided material does not cover the insertion procedure for red-black trees.",
+        "Nothing here: I can't find that in your files.",
+    ):
+        assert declines(text), text
+    for text in ("Binary search is also called half-interval search.", "It halves the interval each step.", ""):
+        assert not declines(text), text

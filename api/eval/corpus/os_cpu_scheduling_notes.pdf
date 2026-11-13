@@ -1,0 +1,128 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 3595 >>
+stream
+BT /F2 14.0 Tf 56 758.0 Td (CPU scheduling - lec 7) Tj ET
+BT /F1 10.5 Tf 56 743.5 Td (prof said this is imp for the exam!! goal = keep the cpu busy and keep response time) Tj ET
+BT /F1 10.5 Tf 56 729.0 Td (low.) Tj ET
+BT /F1 10.5 Tf 56 714.5 Td (the scheduler picks the next process from the ready queue. the dispatcher does the) Tj ET
+BT /F1 10.5 Tf 56 700.0 Td (actual switch \(context switch\).) Tj ET
+BT /F1 10.5 Tf 56 685.5 Td (context switch time is pure overhead, no useful work gets done. maybe ~10 microsec but) Tj ET
+BT /F1 10.5 Tf 56 671.0 Td (it adds up if the quantum is tiny.) Tj ET
+BT /F2 14.0 Tf 56 643.0 Td (FCFS) Tj ET
+BT /F1 10.5 Tf 56 628.5 Td (first come first served. non-preemptive. just a simple queue.) Tj ET
+BT /F1 10.5 Tf 56 614.0 Td (problem = convoy effect: one long job at the front makes all the short ones wait) Tj ET
+BT /F1 10.5 Tf 56 599.5 Td (behind it.) Tj ET
+BT /F1 10.5 Tf 56 585.0 Td (eg bursts 24, 3, 3 \(all arrive at 0\) -> waiting times 0, 24, 27 so avg wait = 17 ms.) Tj ET
+BT /F2 14.0 Tf 56 557.0 Td (SJF) Tj ET
+BT /F1 10.5 Tf 56 542.5 Td (shortest job first. gives the minimum avg waiting time \(provably optimal\) but we cant) Tj ET
+BT /F1 10.5 Tf 56 528.0 Td (know the next burst length in advance.) Tj ET
+BT /F1 10.5 Tf 56 513.5 Td (so we predict it with exponential averaging: tau_next = alpha * t_n + \(1 - alpha\) *) Tj ET
+BT /F1 10.5 Tf 56 499.0 Td (tau_n, alpha is usually 0.5.) Tj ET
+BT /F1 10.5 Tf 56 484.5 Td (the preemptive version is called SRTF \(shortest remaining time first\).) Tj ET
+BT /F1 10.5 Tf 56 470.0 Td (starvation: long jobs may never run if short ones keep coming.) Tj ET
+BT /F2 14.0 Tf 56 442.0 Td (Round robin) Tj ET
+BT /F1 10.5 Tf 56 427.5 Td (each process gets a time quantum q, then goes to the back of the queue. preemptive.) Tj ET
+BT /F1 10.5 Tf 56 413.0 Td (good for time sharing.) Tj ET
+BT /F1 10.5 Tf 56 398.5 Td (if q too large -> becomes FCFS. if q too small -> too many context switches.) Tj ET
+BT /F1 10.5 Tf 56 384.0 Td (rule of thumb from lecture: about 80% of the cpu bursts should be shorter than q.) Tj ET
+BT /F1 10.5 Tf 56 369.5 Td (eg q = 4 ms with bursts 24, 3, 3: p2 finishes at 7, p3 at 10, p1 at 30. waiting = 6,) Tj ET
+BT /F1 10.5 Tf 56 355.0 Td (4, 7 so avg wait = 5.67 ms.) Tj ET
+BT /F2 14.0 Tf 56 327.0 Td (Priority scheduling) Tj ET
+BT /F1 10.5 Tf 56 312.5 Td (every process has a priority number, lower number = higher priority \(in our book\). can) Tj ET
+BT /F1 10.5 Tf 56 298.0 Td (be preemptive or not.) Tj ET
+BT /F1 10.5 Tf 56 283.5 Td (starvation of low priority procs. fix = aging: slowly raise the priority of procs that) Tj ET
+BT /F1 10.5 Tf 56 269.0 Td (keep waiting \(eg +1 every 15 min\).) Tj ET
+BT /F2 14.0 Tf 56 241.0 Td (Multilevel queues) Tj ET
+BT /F1 10.5 Tf 56 226.5 Td (multilevel queue: separate queues, eg foreground \(round robin\) and background \(FCFS\).) Tj ET
+BT /F1 10.5 Tf 56 212.0 Td (fixed priority between the queues.) Tj ET
+BT /F1 10.5 Tf 56 197.5 Td (multilevel feedback queue: a process can move between queues. one that uses too much) Tj ET
+BT /F1 10.5 Tf 56 183.0 Td (cpu gets moved down. most general but also most complex to set up.) Tj ET
+BT /F2 14.0 Tf 56 155.0 Td (Metrics \(exam q\)) Tj ET
+BT /F1 10.5 Tf 56 140.5 Td (cpu utilization, throughput.) Tj ET
+BT /F1 10.5 Tf 56 126.0 Td (turnaround time = completion - arrival.) Tj ET
+BT /F1 10.5 Tf 56 111.5 Td (waiting time = time spent sitting in the ready queue.) Tj ET
+BT /F1 10.5 Tf 56 97.0 Td (response time = first response - arrival.) Tj ET
+BT /F2 14.0 Tf 56 69.0 Td (Deadlocks \(OS lec 9\)) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 3943 >>
+stream
+BT /F1 10.5 Tf 56 771.5 Td (deadlock = a set of procs where each one waits for a resource held by another one in) Tj ET
+BT /F1 10.5 Tf 56 757.0 Td (the set, so nobody ever moves.) Tj ET
+BT /F1 10.5 Tf 56 742.5 Td (4 conditions must ALL hold: mutual exclusion, hold and wait, no preemption, circular) Tj ET
+BT /F1 10.5 Tf 56 728.0 Td (wait. break any one and deadlock cant happen.) Tj ET
+BT /F1 10.5 Tf 56 713.5 Td (resource allocation graph: cycle + single instance per resource = deadlock for sure.) Tj ET
+BT /F1 10.5 Tf 56 699.0 Td (with multiple instances a cycle only means maybe.) Tj ET
+BT /F1 10.5 Tf 56 684.5 Td (handling: prevention \(break a condition\), avoidance \(banker's algorithm, needs max) Tj ET
+BT /F1 10.5 Tf 56 670.0 Td (claims up front\), detection + recovery, or just ignore it \(ostrich, what unix does\).) Tj ET
+BT /F1 10.5 Tf 56 655.5 Td (banker's algorithm: grant a request only if the system stays in a safe state, i.e.) Tj ET
+BT /F1 10.5 Tf 56 641.0 Td (there is some order in which every proc can finish.) Tj ET
+BT /F1 10.5 Tf 56 626.5 Td (recovery = kill procs one by one or preempt resources \(roll back a victim\).) Tj ET
+BT /F2 14.0 Tf 56 598.5 Td (Semaphores and mutex) Tj ET
+BT /F1 10.5 Tf 56 584.0 Td (race condition = result depends on the order of interleaved execution. the critical) Tj ET
+BT /F1 10.5 Tf 56 569.5 Td (section is the code that touches the shared data.) Tj ET
+BT /F1 10.5 Tf 56 555.0 Td (need mutual exclusion, progress and bounded waiting for a correct solution.) Tj ET
+BT /F1 10.5 Tf 56 540.5 Td (semaphore S = integer with two atomic ops: wait\(S\) decrements and blocks if it would) Tj ET
+BT /F1 10.5 Tf 56 526.0 Td (go below 0, signal\(S\) increments and wakes one waiter.) Tj ET
+BT /F1 10.5 Tf 56 511.5 Td (binary semaphore \(0/1\) is like a mutex lock. counting semaphore counts available units) Tj ET
+BT /F1 10.5 Tf 56 497.0 Td (of a resource.) Tj ET
+BT /F1 10.5 Tf 56 482.5 Td (classic problems: producer-consumer \(bounded buffer\), readers-writers, dining) Tj ET
+BT /F1 10.5 Tf 56 468.0 Td (philosophers.) Tj ET
+BT /F1 10.5 Tf 56 453.5 Td (dining philosophers with 5 forks: if everyone grabs the left fork first -> deadlock.) Tj ET
+BT /F1 10.5 Tf 56 439.0 Td (fix = allow at most 4 to sit, or pick up both forks atomically.) Tj ET
+BT /F2 14.0 Tf 56 411.0 Td (Paging) Tj ET
+BT /F1 10.5 Tf 56 396.5 Td (logical address = page number + offset. page table maps page -> frame. page size is a) Tj ET
+BT /F1 10.5 Tf 56 382.0 Td (power of 2 \(eg 4 KB so offset = 12 bits\).) Tj ET
+BT /F1 10.5 Tf 56 367.5 Td (internal fragmentation = unused space inside the last page of a process. paging has no) Tj ET
+BT /F1 10.5 Tf 56 353.0 Td (external fragmentation.) Tj ET
+BT /F1 10.5 Tf 56 338.5 Td (TLB = small fast cache of page table entries. effective access time = hit ratio * \(tlb) Tj ET
+BT /F1 10.5 Tf 56 324.0 Td (+ mem\) + \(1 - hit ratio\) * \(tlb + 2 * mem\).) Tj ET
+BT /F1 10.5 Tf 56 309.5 Td (eg tlb = 10 ns, mem = 100 ns, hit ratio 80% -> EAT = 0.8 * 110 + 0.2 * 210 = 130 ns.) Tj ET
+BT /F2 14.0 Tf 56 281.5 Td (Page replacement) Tj ET
+BT /F1 10.5 Tf 56 267.0 Td (page fault = needed page is not in memory, OS has to bring it in from disk.) Tj ET
+BT /F1 10.5 Tf 56 252.5 Td (FIFO: replace the oldest page. suffers from Belady's anomaly \(more frames can give) Tj ET
+BT /F1 10.5 Tf 56 238.0 Td (MORE faults\).) Tj ET
+BT /F1 10.5 Tf 56 223.5 Td (OPT: replace the page not needed for the longest time. optimal but needs the future,) Tj ET
+BT /F1 10.5 Tf 56 209.0 Td (so only a yardstick.) Tj ET
+BT /F1 10.5 Tf 56 194.5 Td (LRU: replace the least recently used page. good in practice, no Belady's anomaly.) Tj ET
+BT /F1 10.5 Tf 56 180.0 Td (needs hardware support \(counter or stack\).) Tj ET
+BT /F1 10.5 Tf 56 165.5 Td (thrashing = proc spends more time paging than executing. fix = working set model or) Tj ET
+BT /F1 10.5 Tf 56 151.0 Td (reduce the degree of multiprogramming.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000003967 00000 n 
+0000004103 00000 n 
+0000008098 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+8234
+%%EOF

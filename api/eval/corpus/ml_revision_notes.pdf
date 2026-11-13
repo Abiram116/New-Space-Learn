@@ -1,0 +1,114 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 3615 >>
+stream
+BT /F2 14.0 Tf 56 758.0 Td (ML revision sheet \(before end sem\)) Tj ET
+BT /F2 14.0 Tf 56 730.0 Td (Bias and variance) Tj ET
+BT /F1 10.5 Tf 56 715.5 Td (error = bias^2 + variance + irreducible noise.) Tj ET
+BT /F1 10.5 Tf 56 701.0 Td (high bias = underfitting \(model too simple\). high variance = overfitting \(model too) Tj ET
+BT /F1 10.5 Tf 56 686.5 Td (flexible, memorises the noise\).) Tj ET
+BT /F1 10.5 Tf 56 672.0 Td (more complex model -> bias down, variance up. we want the sweet spot in the middle.) Tj ET
+BT /F2 14.0 Tf 56 644.0 Td (Regularization) Tj ET
+BT /F1 10.5 Tf 56 629.5 Td (L2 \(ridge\): adds lambda * sum of w^2 to the loss. shrinks weights towards 0 but rarely) Tj ET
+BT /F1 10.5 Tf 56 615.0 Td (makes them exactly 0.) Tj ET
+BT /F1 10.5 Tf 56 600.5 Td (L1 \(lasso\): adds lambda * sum of |w|. can make weights exactly 0 so it does feature) Tj ET
+BT /F1 10.5 Tf 56 586.0 Td (selection.) Tj ET
+BT /F1 10.5 Tf 56 571.5 Td (lambda very big -> underfit. lambda = 0 -> no regularization at all.) Tj ET
+BT /F1 10.5 Tf 56 557.0 Td (dropout: randomly drop units while training \(eg p = 0.5\). early stopping: stop when) Tj ET
+BT /F1 10.5 Tf 56 542.5 Td (val loss starts going up.) Tj ET
+BT /F2 14.0 Tf 56 514.5 Td (Cross validation) Tj ET
+BT /F1 10.5 Tf 56 500.0 Td (k-fold: split the data into k parts, train on k-1, test on 1, repeat k times and) Tj ET
+BT /F1 10.5 Tf 56 485.5 Td (average. usually k = 5 or 10.) Tj ET
+BT /F1 10.5 Tf 56 471.0 Td (LOOCV = k = n, so very expensive.) Tj ET
+BT /F1 10.5 Tf 56 456.5 Td (dont tune hyperparams on the test set!! the test set is only used once at the very) Tj ET
+BT /F1 10.5 Tf 56 442.0 Td (end.) Tj ET
+BT /F2 14.0 Tf 56 414.0 Td (Classification metrics) Tj ET
+BT /F1 10.5 Tf 56 399.5 Td (precision = TP / \(TP + FP\). recall = TP / \(TP + FN\). F1 = harmonic mean of the two =) Tj ET
+BT /F1 10.5 Tf 56 385.0 Td (2PR / \(P + R\).) Tj ET
+BT /F1 10.5 Tf 56 370.5 Td (accuracy is misleading when classes are imbalanced \(eg 99% negatives\).) Tj ET
+BT /F1 10.5 Tf 56 356.0 Td (eg TP = 40, FP = 10, FN = 20 -> P = 0.8, R = 0.667, F1 = 0.727.) Tj ET
+BT /F1 10.5 Tf 56 341.5 Td (ROC curve = TPR vs FPR at different thresholds. AUC = area under it. 0.5 = random) Tj ET
+BT /F1 10.5 Tf 56 327.0 Td (guessing.) Tj ET
+BT /F2 14.0 Tf 56 299.0 Td (Gradient descent bits) Tj ET
+BT /F1 10.5 Tf 56 284.5 Td (learning rate too big -> overshoots or diverges. too small -> very slow.) Tj ET
+BT /F1 10.5 Tf 56 270.0 Td (SGD uses 1 sample per update, mini-batch uses 32 to 256 samples \(typical\), batch uses) Tj ET
+BT /F1 10.5 Tf 56 255.5 Td (all of them.) Tj ET
+BT /F1 10.5 Tf 56 241.0 Td (momentum keeps a running average of past gradients \(beta = 0.9 usually\).) Tj ET
+BT /F1 10.5 Tf 56 226.5 Td (Adam = momentum + RMSprop style scaling. defaults: beta1 = 0.9, beta2 = 0.999, eps =) Tj ET
+BT /F1 10.5 Tf 56 212.0 Td (1e-8.) Tj ET
+BT /F2 14.0 Tf 56 184.0 Td (Decision trees) Tj ET
+BT /F1 10.5 Tf 56 169.5 Td (split on the feature that gives the biggest drop in impurity. entropy = - sum of p) Tj ET
+BT /F1 10.5 Tf 56 155.0 Td (log2 p. gini = 1 - sum of p^2.) Tj ET
+BT /F1 10.5 Tf 56 140.5 Td (information gain = entropy before the split minus the weighted entropy after it.) Tj ET
+BT /F1 10.5 Tf 56 126.0 Td (eg a node with 9 yes and 5 no has entropy 0.940 bits. a pure node has entropy 0.) Tj ET
+BT /F1 10.5 Tf 56 111.5 Td (trees overfit easily: fix with pruning, max depth, or a minimum number of samples per) Tj ET
+BT /F1 10.5 Tf 56 97.0 Td (leaf. random forest = many trees on bootstrap samples + random feature subsets, then) Tj ET
+BT /F1 10.5 Tf 56 82.5 Td (vote.) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 2659 >>
+stream
+BT /F2 14.0 Tf 56 758.0 Td (kNN and naive bayes) Tj ET
+BT /F1 10.5 Tf 56 743.5 Td (kNN: lazy learner, no training, stores the data. predicts by majority vote of the k) Tj ET
+BT /F1 10.5 Tf 56 729.0 Td (nearest points. k small -> high variance, k large -> high bias.) Tj ET
+BT /F1 10.5 Tf 56 714.5 Td (needs feature scaling because distance is dominated by big-valued features. slow at) Tj ET
+BT /F1 10.5 Tf 56 700.0 Td (prediction time and bad in high dimensions \(curse of dimensionality\).) Tj ET
+BT /F1 10.5 Tf 56 685.5 Td (naive bayes: assumes features are independent given the class. P\(class | x\) is) Tj ET
+BT /F1 10.5 Tf 56 671.0 Td (proportional to P\(class\) * product of P\(x_i | class\).) Tj ET
+BT /F1 10.5 Tf 56 656.5 Td (laplace smoothing adds 1 to every count so an unseen word does not give probability 0.) Tj ET
+BT /F2 14.0 Tf 56 628.5 Td (Clustering and PCA) Tj ET
+BT /F1 10.5 Tf 56 614.0 Td (k-means: pick k centres, assign every point to the nearest centre, move each centre to) Tj ET
+BT /F1 10.5 Tf 56 599.5 Td (the mean of its points, repeat until nothing changes.) Tj ET
+BT /F1 10.5 Tf 56 585.0 Td (converges but only to a local minimum so run it several times w/ different starts. k) Tj ET
+BT /F1 10.5 Tf 56 570.5 Td (chosen with the elbow method \(plot within-cluster sum of squares vs k\).) Tj ET
+BT /F1 10.5 Tf 56 556.0 Td (PCA: finds the directions of maximum variance \(eigenvectors of the covariance matrix\),) Tj ET
+BT /F1 10.5 Tf 56 541.5 Td (keeps the top few. use to reduce dimensions or to visualise.) Tj ET
+BT /F1 10.5 Tf 56 527.0 Td (always standardise the features before PCA. the first principal component is the) Tj ET
+BT /F1 10.5 Tf 56 512.5 Td (direction with the most variance.) Tj ET
+BT /F2 14.0 Tf 56 484.5 Td (Neural net notes) Tj ET
+BT /F1 10.5 Tf 56 470.0 Td (perceptron can only learn linearly separable problems \(cant do XOR\). one hidden layer) Tj ET
+BT /F1 10.5 Tf 56 455.5 Td (with a nonlinearity fixes that.) Tj ET
+BT /F1 10.5 Tf 56 441.0 Td (activation functions: sigmoid squashes to \(0, 1\) but saturates, tanh to \(-1, 1\), ReLU) Tj ET
+BT /F1 10.5 Tf 56 426.5 Td (= max\(0, x\) is the default for hidden layers.) Tj ET
+BT /F1 10.5 Tf 56 412.0 Td (backprop = chain rule applied layer by layer from the loss back to the weights.) Tj ET
+BT /F1 10.5 Tf 56 397.5 Td (vanishing gradient: with sigmoid in deep nets the gradients shrink toward 0 in early) Tj ET
+BT /F1 10.5 Tf 56 383.0 Td (layers. ReLU and residual connections help.) Tj ET
+BT /F1 10.5 Tf 56 368.5 Td (batch norm normalises each layers inputs over the mini-batch, lets us use bigger) Tj ET
+BT /F1 10.5 Tf 56 354.0 Td (learning rates.) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000218 00000 n 
+0000000320 00000 n 
+0000003987 00000 n 
+0000004123 00000 n 
+0000006834 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+6970
+%%EOF

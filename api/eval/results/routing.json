@@ -1,0 +1,449 @@
+{
+ "ran_at": "2026-10-21T15:12:53+00:00",
+ "limits": {
+  "tpm": 8000,
+  "tpd": 200000,
+  "rpd": {
+   "openai/gpt-oss-20b": 1000
+  }
+ },
+ "table": [
+  {
+   "task": "chat",
+   "tier": "large",
+   "model": "openai/gpt-oss-120b",
+   "max_tokens": 4096,
+   "reply_planning": 800,
+   "on_failure": "small model (logged as a warning)",
+   "day_nearly_spent": "to the small model at 90% of the large model's day",
+   "why": "the answer students read; the small model makes about twice the unsupported claims (eval route_check C)"
+  },
+  {
+   "task": "chat.smalltalk",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 1024,
+   "reply_planning": 150,
+   "on_failure": "large model, unless the large model's day is nearly spent",
+   "day_nearly_spent": "—",
+   "why": "one friendly sentence; nothing to ground"
+  },
+  {
+   "task": "chat.resolve",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 512,
+   "reply_planning": 80,
+   "on_failure": "large model, unless the large model's day is nearly spent",
+   "day_nearly_spent": "—",
+   "why": "rewrites a follow-up into one standalone question (at most 240 characters)"
+  },
+  {
+   "task": "chat.starters",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 768,
+   "reply_planning": 200,
+   "on_failure": "none: its caller has a model-free answer",
+   "day_nearly_spent": "skipped at 90% of its model's day",
+   "why": "four short questions; headings make them without a model"
+  },
+  {
+   "task": "chat.memory",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 768,
+   "reply_planning": 250,
+   "on_failure": "none: its caller has a model-free answer",
+   "day_nearly_spent": "skipped at 90% of its model's day",
+   "why": "a 120-word summary, in the background; retried on the next turn"
+  },
+  {
+   "task": "brief",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 768,
+   "reply_planning": 200,
+   "on_failure": "none: its caller has a model-free answer",
+   "day_nearly_spent": "skipped at 90% of its model's day",
+   "why": "a home-screen line; the page renders without it"
+  },
+  {
+   "task": "quiz.write",
+   "tier": "large",
+   "model": "openai/gpt-oss-120b",
+   "max_tokens": 4096,
+   "reply_planning": 3000,
+   "on_failure": "small model (logged as a warning)",
+   "day_nearly_spent": "—",
+   "why": "up to 15 questions with distractors and explanations (~235 tokens each)"
+  },
+  {
+   "task": "quiz.repair",
+   "tier": "large",
+   "model": "openai/gpt-oss-120b",
+   "max_tokens": 4096,
+   "reply_planning": 1200,
+   "on_failure": "small model (logged as a warning)",
+   "day_nearly_spent": "—",
+   "why": "the questions verification dropped, rewritten"
+  },
+  {
+   "task": "quiz.verify",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 1536,
+   "reply_planning": 400,
+   "on_failure": "large model, unless the large model's day is nearly spent",
+   "day_nearly_spent": "—",
+   "why": "one JSON verdict per question; a wrong 'supported' only drops a question"
+  },
+  {
+   "task": "quiz.reword",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 3072,
+   "reply_planning": 1500,
+   "on_failure": "none: its caller has a model-free answer",
+   "day_nearly_spent": "skipped at 90% of its model's day",
+   "why": "a retake's questions reworded as JSON; without it the retake is reshuffled instead"
+  },
+  {
+   "task": "cards.write",
+   "tier": "large",
+   "model": "openai/gpt-oss-120b",
+   "max_tokens": 4096,
+   "reply_planning": 2500,
+   "on_failure": "small model (logged as a warning)",
+   "day_nearly_spent": "—",
+   "why": "up to 22 cards; backs may be long"
+  },
+  {
+   "task": "notes.write",
+   "tier": "large",
+   "model": "openai/gpt-oss-120b",
+   "max_tokens": 4096,
+   "reply_planning": 2000,
+   "on_failure": "small model (logged as a warning)",
+   "day_nearly_spent": "—",
+   "why": "a whole study note from the sources"
+  },
+  {
+   "task": "notes.edit",
+   "tier": "fast",
+   "model": "openai/gpt-oss-20b",
+   "max_tokens": 4096,
+   "reply_planning": 600,
+   "on_failure": "large model, unless the large model's day is nearly spent",
+   "day_nearly_spent": "—",
+   "why": "shorten, fix or continue a passage the student wrote"
+  },
+  {
+   "task": "ocr.page",
+   "tier": "vision",
+   "model": "qwen/qwen3.8-27b",
+   "max_tokens": 4096,
+   "reply_planning": 1500,
+   "on_failure": "none: only the vision model can see the image",
+   "day_nearly_spent": "—",
+   "why": "a scanned page, transcribed; only the vision model can see it"
+  },
+  {
+   "task": "image.read",
+   "tier": "vision",
+   "model": "qwen/qwen3.8-27b",
+   "max_tokens": 4096,
+   "reply_planning": 800,
+   "on_failure": "none: only the vision model can see the image",
+   "day_nearly_spent": "—",
+   "why": "an uploaded image, read; only the vision model can see it"
+  }
+ ],
+ "call_sites": {
+  "sites": [
+   {
+    "file": "app/routers/me/brief.py",
+    "task": "brief",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": [
+     "cfg"
+    ]
+   },
+   {
+    "file": "app/routers/notes.py",
+    "task": "notes.write",
+    "tiers": [
+     "large"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/routers/notes.py",
+    "task": "notes.edit",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/routers/subspace_chat.py",
+    "task": "chat",
+    "tiers": [],
+    "runtime": [
+     "model_for_turn"
+    ]
+   },
+   {
+    "file": "app/services/card_writer.py",
+    "task": "cards.write",
+    "tiers": [
+     "large"
+    ],
+    "runtime": []
+   },
+   {
+    "file": "app/services/chat_memory.py",
+    "task": "chat.memory",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/services/extract.py",
+    "task": "image.read",
+    "tiers": [
+     "vision"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/services/ocr.py",
+    "task": "ocr.page",
+    "tiers": [
+     "vision"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/services/query_resolver.py",
+    "task": "chat.resolve",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   },
+   {
+    "file": "app/services/quiz_agent.py",
+    "task": "quiz.write",
+    "tiers": [
+     "large"
+    ],
+    "runtime": []
+   },
+   {
+    "file": "app/services/quiz_agent.py",
+    "task": "quiz.verify",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": []
+   },
+   {
+    "file": "app/services/quiz_agent.py",
+    "task": "quiz.repair",
+    "tiers": [
+     "large"
+    ],
+    "runtime": []
+   },
+   {
+    "file": "app/services/quiz_agent.py",
+    "task": "quiz.reword",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": []
+   },
+   {
+    "file": "app/services/starters.py",
+    "task": "chat.starters",
+    "tiers": [
+     "fast"
+    ],
+    "runtime": [
+     "settings"
+    ]
+   }
+  ],
+  "findings": [
+   "route `chat.smalltalk` has no call site tagged with it"
+  ]
+ },
+ "capacity": [
+  {
+   "task": "chat",
+   "case": "plain question, six sources, no history",
+   "prompt_tokens": 2600,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 800,
+   "per_call": 3400,
+   "per_minute": 2.4,
+   "per_day": 58,
+   "prompt_plus_cap": 6696,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "chat",
+   "case": "shaped question, six sources, no history",
+   "prompt_tokens": 3037,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 800,
+   "per_call": 3837,
+   "per_minute": 2.1,
+   "per_day": 52,
+   "prompt_plus_cap": 7133,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "chat",
+   "case": "shaped question, history at the budget ceiling, memory summary",
+   "prompt_tokens": 5377,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 800,
+   "per_call": 6177,
+   "per_minute": 1.3,
+   "per_day": 32,
+   "prompt_plus_cap": 9473,
+   "fits_minute_with_cap": false
+  },
+  {
+   "task": "chat.smalltalk",
+   "case": "a greeting",
+   "prompt_tokens": 718,
+   "model": "openai/gpt-oss-20b",
+   "reply_planning": 150,
+   "per_call": 868,
+   "per_minute": 9.2,
+   "per_day": 230,
+   "prompt_plus_cap": 1742,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "chat.resolve",
+   "case": "largest: previous question 300 chars, answer 500",
+   "prompt_tokens": 290,
+   "model": "openai/gpt-oss-20b",
+   "reply_planning": 80,
+   "per_call": 370,
+   "per_minute": 21.6,
+   "per_day": 540,
+   "prompt_plus_cap": 802,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "chat.starters",
+   "case": "12 headings, 5 excerpts",
+   "prompt_tokens": 557,
+   "model": "openai/gpt-oss-20b",
+   "reply_planning": 200,
+   "per_call": 757,
+   "per_minute": 10.6,
+   "per_day": 264,
+   "prompt_plus_cap": 1325,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "chat.memory",
+   "case": "largest fold: 40 messages at 600 chars, prior summary",
+   "prompt_tokens": 6387,
+   "model": "openai/gpt-oss-20b",
+   "reply_planning": 250,
+   "per_call": 6637,
+   "per_minute": 1.2,
+   "per_day": 30,
+   "prompt_plus_cap": 7155,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "quiz.write",
+   "case": "15 questions from the planner's full budget (8 sources, 6,500 chars), 12 earlier",
+   "prompt_tokens": 2720,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 3000,
+   "per_call": 5720,
+   "per_minute": 1.4,
+   "per_day": 34,
+   "prompt_plus_cap": 6816,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "quiz.repair",
+   "case": "same prompt, fewer questions asked",
+   "prompt_tokens": 2720,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 1200,
+   "per_call": 3920,
+   "per_minute": 2.0,
+   "per_day": 51,
+   "prompt_plus_cap": 6816,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "quiz.verify",
+   "case": "15 questions against the same material",
+   "prompt_tokens": 3024,
+   "model": "openai/gpt-oss-20b",
+   "reply_planning": 400,
+   "per_call": 3424,
+   "per_minute": 2.3,
+   "per_day": 58,
+   "prompt_plus_cap": 4560,
+   "fits_minute_with_cap": true
+  },
+  {
+   "task": "cards.write",
+   "case": "22 cards from the planner's full budget, 15 earlier",
+   "prompt_tokens": 2459,
+   "model": "openai/gpt-oss-120b",
+   "reply_planning": 2500,
+   "per_call": 4959,
+   "per_minute": 1.6,
+   "per_day": 40,
+   "prompt_plus_cap": 6555,
+   "fits_minute_with_cap": true
+  }
+ ],
+ "probe": {
+  "ran": true,
+  "ran_at": "2026-10-21T15:07:48+00:00",
+  "model": "openai/gpt-oss-20b",
+  "max_completion_tokens": 9000,
+  "status": 200,
+  "error": null,
+  "tokens_used": 101,
+  "headers": {
+   "limit-requests": "1000",
+   "limit-tokens": "8000",
+   "remaining-requests": "999",
+   "remaining-tokens": "7699",
+   "reset-requests": "1m26.4s",
+   "reset-tokens": "2.257s"
+  },
+  "cap_counted": false
+ }
+}
