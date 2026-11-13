@@ -25,7 +25,7 @@ from ..config import settings
 from . import question_checks, usage
 from .coverage import Source
 from .llm import extract_title_line
-from .quiz_agent import Complete, _complete, _sources_block, material, parse_items
+from .quiz_agent import GENERAL_LABEL, Complete, _complete, _sources_block, material, parse_items
 from .voice import CARDS_AGENT_VOICE
 
 log = logging.getLogger("space_learn.card_writer")
@@ -68,7 +68,9 @@ def card_problems(card: dict, *, sources: int) -> list[str]:
     return found
 
 
-def write_prompt(*, count: int, topic: str, label: str, items: Sequence[Source], earlier: Sequence[dict]) -> str:
+def write_prompt(
+    *, count: int, topic: str, label: str, items: Sequence[Source], earlier: Sequence[dict], general: bool = False
+) -> str:
     have = [str(c.get("front", "")).strip()[:140] for c in earlier[:SHOW_EARLIER] if c.get("front")]
     have_block = (
         "Cards the student already has on this topic — do not write these again, even reworded:\n"
@@ -77,18 +79,27 @@ def write_prompt(*, count: int, topic: str, label: str, items: Sequence[Source],
         if have
         else ""
     )
+    grounding = (
+        # Asked for by the student, by name: there is no material to cite.
+        "There is no source material for this deck: write from well-established, textbook-level knowledge of "
+        "the subject only — nothing contested, recent or obscure.\n\n"
+        if general
+        else "Write every card from ONE of the numbered sources below and from nothing else, and spread the "
+        "cards across the sources. Keep any math in the notation the source uses.\n\n"
+        f"Sources:\n{_sources_block(items)}\n\n"
+    )
+    item = '{"front": str, "back": str}' if general else '{"front": str, "back": str, "source": int}'
+    source_rule = "" if general else "source is the NUMBER of the source the card was written from. "
     return (
         f"Write {count} flashcards about '{topic}', within the subject '{label}' — resolve any ambiguity in "
-        "the topic name using that subject, not a generic reading of the words. Write every card from ONE of "
-        "the numbered sources below and from nothing else, and spread the cards across the sources.\n\n"
-        f"Sources:\n{_sources_block(items)}\n\n"
+        "the topic name using that subject, not a generic reading of the words. "
+        f"{grounding}"
         f"{have_block}"
         "Before the array, on its own line, write a name for this deck: 'TITLE: ' followed by 3-6 words naming "
         "what it actually covers (e.g. 'TITLE: Loop of Henle Basics') — not a generic label like 'Flashcards'.\n\n"
-        'Then the JSON array — no other prose, no code fences. Each item: {"front": str, "back": str, "source": int}. '
-        "front is a single question. back is a complete but compact answer, 2-3 sentences at most. source is the "
-        "NUMBER of the source the card was written from. Plain sentences only — no markdown, no asterisks, no "
-        "headings, no numbering."
+        f"Then the JSON array — no other prose, no code fences. Each item: {item}. "
+        "front is a single question. back is a complete but compact answer, 2-3 sentences at most. "
+        f"{source_rule}Plain sentences only — no markdown, no asterisks, no headings, no numbering."
     )
 
 
@@ -108,15 +119,23 @@ async def write_deck(
     conversation: str,
     earlier: Sequence[dict],
     student_context: str = "",
+    general: bool = False,
     complete: Complete = _complete,
 ) -> Deck:
-    items = material(sources, conversation)
+    """`general`: written from the model's own knowledge because the student
+    asked for that; each card's source says so (`quiz_agent.GENERAL_LABEL`)."""
+    items = [] if general else material(sources, conversation)
     system = CARDS_AGENT_VOICE + (f"\n\n{student_context}" if student_context else "")
     with usage.task("cards.write"):
         raw = await complete(
             [
                 {"role": "system", "content": system},
-                {"role": "user", "content": write_prompt(count=count + SPARE, topic=topic, label=label, items=items, earlier=earlier)},
+                {
+                    "role": "user",
+                    "content": write_prompt(
+                        count=count + SPARE, topic=topic, label=label, items=items, earlier=earlier, general=general
+                    ),
+                },
             ],
             settings.groq_model,
             0.3,
@@ -129,7 +148,7 @@ async def write_deck(
             Card(
                 front=str(it["front"]).strip()[:FRONT_MAX],
                 back=str(it["back"]).strip()[:BACK_MAX],
-                source=source.label if source else None,
+                source=GENERAL_LABEL if general else (source.label if source else None),
                 source_chunk=(source.chunk_id or None) if source else None,
             )
         )

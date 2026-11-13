@@ -119,6 +119,87 @@ async def repeats_by_meaning(new: Sequence[dict], earlier: Sequence[dict], embed
     return out
 
 
+# ── Rewording ──────────────────────────────────────────────────────────
+#
+# A reworded retake must ask the same thing with the same right answer. The
+# model never decides which choice is right — it rewrites each choice in
+# place and the code reshuffles afterwards — so the one way it can break a
+# question is by changing what a sentence says. These are the changes that
+# flip an answer in practice, and each can be seen without a model: a number
+# or formula that changed, a "not"/"except" that appeared or vanished, a
+# choice that now says what another choice said. A question that trips any
+# of them keeps its stored wording (it is still reshuffled), which is always
+# safe, so a false alarm costs only a little novelty.
+
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+_MATH = re.compile(r"\$\$.+?\$\$|\$[^$\n]+?\$|\\\(.+?\\\)|\\\[.+?\\\]", re.DOTALL)
+_NEGATION = re.compile(
+    r"\b(not|no|never|none|neither|nor|cannot|without|false|incorrect|untrue)\b|n't\b", re.IGNORECASE
+)
+_EXCEPTION = re.compile(r"\b(except|excluding|other than|least)\b", re.IGNORECASE)
+#: How far a reworded choice may grow or shrink, as a share of the original.
+_LENGTH_RATIO = (0.34, 3.0)
+
+
+def _numbers(text: str) -> list[str]:
+    return sorted(n.replace(",", ".") for n in _NUMBER.findall(_MATH.sub(" ", text)))
+
+
+def _math(text: str) -> list[str]:
+    return sorted(re.sub(r"\s+", "", m) for m in _MATH.findall(text))
+
+
+def _same_facts(old: str, new: str) -> bool:
+    """Same numbers, same formulas, same polarity."""
+    return (
+        _numbers(old) == _numbers(new)
+        and _math(old) == _math(new)
+        and bool(_NEGATION.search(old)) == bool(_NEGATION.search(new))
+        and bool(_EXCEPTION.search(old)) == bool(_EXCEPTION.search(new))
+    )
+
+
+def reword_problems(original: dict, reworded: dict) -> list[str]:
+    """Why `reworded` is not a safe rewording of `original`; empty when it is.
+
+    Both are `{"q": str, "choices": [str, ...], "answer_index": int}` with the
+    choices in the SAME order — the rewording is checked before any shuffle.
+    """
+    found: list[str] = []
+    q_old, q_new = str(original.get("q") or ""), str(reworded.get("q") or "").strip()
+    old_choices = [str(c) for c in original.get("choices") or []]
+    new_choices = reworded.get("choices")
+    if len(q_new) < 8:
+        found.append("no question")
+    elif not _same_facts(q_old, q_new):
+        found.append("the question's facts changed")
+    if not isinstance(new_choices, list) or len(new_choices) != len(old_choices):
+        found.append("the choices don't line up")
+        return found
+    new_choices = [str(c).strip() for c in new_choices]
+    if not all(new_choices) or len({c.lower() for c in new_choices}) != len(new_choices):
+        found.append("an empty or repeated choice")
+        return found
+    answer = original.get("answer_index")
+    for i, (old, new) in enumerate(zip(old_choices, new_choices, strict=True)):
+        ratio = len(new) / max(1, len(old))
+        if not _LENGTH_RATIO[0] <= ratio <= _LENGTH_RATIO[1]:
+            found.append(f"choice {i + 1} changed size")
+        elif not _same_facts(old, new):
+            found.append(f"choice {i + 1}'s facts changed")
+        # A choice that now reads like ANOTHER original choice has swapped
+        # meaning — the one way an answer can move without anyone saying so.
+        for j, other in enumerate(old_choices):
+            if j != i and text_similarity(new, other) > max(TEXT_DUPLICATE, text_similarity(new, old)):
+                found.append(f"choice {i + 1} reads like choice {j + 1}")
+                break
+    if isinstance(answer, int) and 0 <= answer < len(new_choices):
+        right = new_choices[answer]
+        if any(text_similarity(right, w) >= 0.9 for k, w in enumerate(new_choices) if k != answer):
+            found.append("the right answer reads like a wrong one")
+    return found
+
+
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = sum(x * x for x in a) ** 0.5

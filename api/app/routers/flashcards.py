@@ -15,12 +15,14 @@ from fastapi import APIRouter, Depends
 
 from ..config import settings
 from ..deps import CurrentUser, get_current_user
-from ..errors import ApiError, NotFound, NothingIndexed, UpstreamUnavailable
+from ..errors import ApiError, NotFound, RateLimited, UpstreamUnavailable, ValidationFailed
 from ..guards import assert_deck, assert_subspace, subspace_label
 from ..schemas import (
+    CardsExtend,
     CardsGenerate,
     DeckCreate,
     DeckOut,
+    DeckUpdate,
     FlashcardCreate,
     FlashcardOut,
     FlashcardUpdate,
@@ -30,10 +32,10 @@ from ..schemas import (
 from ..services import (
     activity,
     card_writer,
-    coverage,
     fsrs,
     locks,
     personalization,
+    quiz_agent,
     rag,
     student_model,
     supabase,
@@ -181,6 +183,41 @@ async def create_deck(
     return DeckOut(id=inserted[0]["id"], name=body.name, total=0, due=0, known_pct=0)
 
 
+@router.patch("/decks/{deck_id}", response_model=DeckOut)
+async def rename_deck(
+    deck_id: str,
+    body: DeckUpdate,
+    user: CurrentUser = Depends(get_current_user),
+) -> DeckOut:
+    deck = await assert_deck(user.id, deck_id)
+    updated, cards = await asyncio.gather(
+        supabase.db_update(
+            "decks",
+            filters={"user_id": f"eq.{user.id}", "id": f"eq.{deck_id}"},
+            patch={"name": body.name},
+        ),
+        supabase.db_select(
+            "flashcards",
+            filters={"user_id": f"eq.{user.id}", "deck_id": f"eq.{deck_id}"},
+            select="id,deck_id,reps,due_at",
+        ),
+    )
+    if not updated:
+        raise NotFound("Deck not found.")
+    # The same three figures the lists carry, so the client can swap the row in.
+    now = datetime.now(UTC)
+    total = len(cards)
+    known = sum(1 for c in cards if int(c.get("reps", 0)) > 0)
+    return DeckOut(
+        id=deck_id,
+        name=updated[0]["name"],
+        total=total,
+        due=sum(1 for c in cards if _to_dt(c["due_at"]) <= now),
+        known_pct=round(known * 100 / total) if total else 0,
+        subspace_id=deck.get("subspace_id"),
+    )
+
+
 @router.delete("/decks/{deck_id}", response_model=OkOut)
 async def delete_deck(
     deck_id: str, user: CurrentUser = Depends(get_current_user)
@@ -300,21 +337,23 @@ async def generate_cards(
     if body.source_text and body.source_text.strip():
         # A deck from the answer the student just read: that answer is the
         # material, and nothing else is searched.
-        sources = [Source(1, "", "The answer you were reading", "", body.source_text.strip())]
-        conversation = ""
+        material = quiz_agent.Material(
+            [Source(1, "", "The answer you were reading", "", body.source_text.strip())], kind="answer"
+        )
     else:
-        sources = await coverage.plan(
+        # Chat counts as material — see the note in quizzes.generate_quiz.
+        material = await quiz_agent.gather_material(
+            user_id=user.id,
             subspace_id=subspace_id,
-            linked_subspace_ids=linked_ids,
+            source=body.source,
+            note_id=body.note_id,
             topic=body.topic,
-            questions=body.count,
+            count=body.count,
             used=used,
             weak_concepts=[c.label for c in snap.concepts_in(subspace_id) if c.is_weak],
+            linked_ids=linked_ids,
+            conversation=format_history(history),
         )
-        # Chat counts as material — see the note in quizzes.generate_quiz.
-        if not sources and not history:
-            raise NothingIndexed()
-        conversation = format_history(history)
 
     generated_title: str | None = None
     cards: list[card_writer.Card] = []
@@ -324,17 +363,21 @@ async def generate_cards(
                 count=body.count,
                 topic=topic,
                 label=label,
-                sources=sources,
-                conversation=conversation,
+                sources=material.sources,
+                conversation=material.conversation,
                 earlier=earlier,
                 student_context=student_context,
+                general=material.general,
             )
         except ApiError:
             raise
         except Exception as e:
             log.exception("card generation failed")
             raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
-        log.info("deck written subspace=%s sources=%d %s", subspace_id, len(sources), deck_draft.trace)
+        log.info(
+            "deck written subspace=%s from=%s sources=%d %s",
+            subspace_id, material.kind, len(material.sources), deck_draft.trace,
+        )
         cards, generated_title = deck_draft.cards, deck_draft.title
 
     if not cards:
@@ -383,6 +426,115 @@ async def generate_cards(
     )
     await activity.touch_subspace(subspace_id)
     return [_to_card(r) for r in rows]
+
+
+#: Decks being added to right now — see `quizzes._extending`.
+_extending: set[str] = set()
+#: Existing cards read to skip what the deck already has.
+DECK_CARDS_READ = 400
+
+
+@router.post(
+    "/decks/{deck_id}/cards/generate",
+    response_model=list[FlashcardOut],
+    status_code=201,
+)
+async def extend_deck(
+    deck_id: str,
+    body: CardsExtend,
+    user: CurrentUser = Depends(get_current_user),
+) -> list[FlashcardOut]:
+    """Write `count` more cards into an existing deck, from its topic's
+    material and on what the deck is about (its name), skipping fronts the
+    deck — or any deck in the topic — already has. Returns only the new cards."""
+    deck = await assert_deck(user.id, deck_id)
+    subspace_id = deck.get("subspace_id")
+    if not subspace_id:
+        raise ValidationFailed("This deck isn't in a topic any more, so there's no material to add from.")
+    subspace = await assert_subspace(user.id, subspace_id)
+
+    key = f"{user.id}:{deck_id}"
+    if key in _extending:
+        raise RateLimited("Already adding cards to this deck — give it a moment.")
+    _extending.add(key)
+    try:
+        cards = await _write_more_cards(user.id, subspace, deck, body)
+        rows = await supabase.db_insert(
+            "flashcards",
+            [
+                {
+                    "user_id": user.id,
+                    "deck_id": deck_id,
+                    "front": c.front,
+                    "back": c.back,
+                    "source": c.source,
+                    "source_chunk": c.source_chunk,
+                }
+                for c in cards
+            ],
+        )
+    finally:
+        _extending.discard(key)
+    await activity.touch_subspace(subspace_id)
+    return [_to_card(r) for r in rows]
+
+
+async def _write_more_cards(user_id: str, subspace: dict, deck: dict, body: CardsExtend) -> list[card_writer.Card]:
+    if not settings.llm_configured:
+        raise UpstreamUnavailable("The AI isn't connected yet, so it can't write cards. Add one yourself.")
+    subspace_id = subspace["id"]
+    # A "Missed: …" deck is about what was missed, not about missing.
+    topic = str(deck.get("name") or "").removeprefix("Missed:").strip() or None
+    linked_ids, (used, earlier), history, snap, have = await asyncio.gather(
+        rag.linked_subspace_ids(user_id, subspace_id),
+        card_writer.ledger(user_id, subspace_id),
+        recent_history(user_id, subspace_id),
+        student_model.snapshot(user_id),
+        supabase.db_select(
+            "flashcards",
+            filters={"user_id": f"eq.{user_id}", "deck_id": f"eq.{deck['id']}"},
+            select="front,back,source_chunk",
+            limit=DECK_CARDS_READ,
+        ),
+    )
+    material = await quiz_agent.gather_material(
+        user_id=user_id,
+        subspace_id=subspace_id,
+        source=body.source,
+        note_id=body.note_id,
+        topic=topic,
+        count=body.count,
+        used=used,
+        weak_concepts=[c.label for c in snap.concepts_in(subspace_id) if c.is_weak],
+        linked_ids=linked_ids,
+        conversation=format_history(history),
+    )
+    # Only now: a source with nothing in it is said for free.
+    await consume_llm_quota(user_id, cost=2, daily=True)
+    try:
+        # This deck's own cards first: they are what the writer is shown as
+        # "the student already has these" (`card_writer.SHOW_EARLIER`).
+        draft = await card_writer.write_deck(
+            count=body.count,
+            topic=topic or "the key concepts in this material",
+            label=subspace_label(subspace),
+            sources=material.sources,
+            conversation=material.conversation,
+            earlier=[*have, *earlier],
+            student_context=personalization.render(snap, "cards", subspace_id=subspace_id),
+            general=material.general,
+        )
+    except ApiError:
+        raise
+    except Exception as e:
+        log.exception("deck extension failed")
+        raise UpstreamUnavailable("Couldn't reach the AI to write cards.") from e
+    log.info("deck extended subspace=%s from=%s %s", subspace_id, material.kind, draft.trace)
+    if not draft.cards:
+        raise UpstreamUnavailable(
+            "Everything this could write was already in your cards. Try another source, or add one yourself."
+        )
+    return draft.cards
 
 
 @router.post("/cards/{card_id}/grade", response_model=FlashcardOut)

@@ -47,11 +47,25 @@ def balance_answer_positions(
     questions: Sequence[QuizQuestion], rng: random.Random | None = None
 ) -> list[QuizQuestion]:
     """Return the questions with correct answers spread across positions."""
+    return [q for q, _ in shuffle_with_order(questions, rng)]
+
+
+def shuffle_with_order(
+    questions: Sequence[QuizQuestion], rng: random.Random | None = None
+) -> list[tuple[QuizQuestion, list[int]]]:
+    """`balance_answer_positions`, also saying where each choice came from.
+
+    Each question comes back with its order: `order[new_position]` is the
+    index the choice had before. A question left alone gets the identity
+    order. A reworded retake needs this to score the student's answer against
+    the stored question (`QuizVariantQuestion.choice_order`).
+    """
     rng = rng or random.Random()
     out = list(questions)
+    orders: list[list[int]] = [list(range(len(q.choices))) for q in out]
     movable = [i for i, q in enumerate(out) if _movable(q)]
     if not movable:
-        return out
+        return list(zip(out, orders, strict=True))
 
     width = min(len(out[i].choices) for i in movable)
     targets = _target_positions(len(movable), width, rng)
@@ -73,4 +87,5 @@ def balance_answer_positions(
                 ),
             }
         )
-    return out
+        orders[idx] = order
+    return list(zip(out, orders, strict=True))

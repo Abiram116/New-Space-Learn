@@ -23,10 +23,18 @@ import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 
 from ..deps import CurrentUser, get_optional_user, require_admin
-from ..errors import Forbidden, NotFound, ValidationFailed
+from ..errors import (
+    ApiError,
+    Forbidden,
+    NotConfigured,
+    NotFound,
+    UpstreamUnavailable,
+    ValidationFailed,
+)
 from ..schemas import (
     FEEDBACK_LONG_MAX,
     FEEDBACK_OPTION_MAX,
@@ -70,12 +78,36 @@ def _clear_form_cache() -> None:
     _form_cache = None
 
 
+_COULD_NOT_LOAD = "We couldn't load the feedback just now. Please try again."
+
+
+async def _read(table: str, **query: Any) -> list[dict[str, Any]]:
+    """A read for an endpoint that only reads.
+
+    `supabase._raise_if_bad` words every failure it has no better sentence for
+    as "We couldn't save that" — true of a write, wrong for these: the admin
+    summary opened with a red "couldn't save" although nothing was being saved.
+    So a failed read here is tried once more (it changes nothing, so repeating
+    it is safe) and, if it fails again, says what actually happened.
+    """
+    for last in (False, True):
+        try:
+            return await supabase.db_select(table, **query)
+        except NotConfigured:
+            raise
+        except UpstreamUnavailable as e:
+            if last:
+                raise UpstreamUnavailable(_COULD_NOT_LOAD) from e
+            log.info("feedback read of %s failed; trying once more", table)
+    raise AssertionError("unreachable")  # pragma: no cover
+
+
 async def _active_questions() -> list[dict[str, Any]]:
     global _form_cache
     now = time.monotonic()
     if _form_cache and _form_cache[0] > now:
         return _form_cache[1]
-    rows = await supabase.db_select(
+    rows = await _read(
         "feedback_questions", filters={"active": "eq.true"}, order="position.asc,created_at.asc"
     )
     _form_cache = (now + _FORM_TTL_S, rows)
@@ -293,7 +325,7 @@ async def unlock(body: AdminUnlockIn, request: Request) -> AdminUnlockOut:
 
 @router.get("/admin/feedback/questions", response_model=list[FeedbackQuestionOut])
 async def list_questions(_: None = Depends(require_admin)) -> list[FeedbackQuestionOut]:
-    rows = await supabase.db_select("feedback_questions", order="position.asc,created_at.asc")
+    rows = await _read("feedback_questions", order="position.asc,created_at.asc")
     return [_to_question(r) for r in rows]
 
 
@@ -371,26 +403,85 @@ async def reorder_questions(body: FeedbackReorder, _: None = Depends(require_adm
     return OkOut()
 
 
-@router.get("/admin/feedback/responses", response_model=list[ProductFeedbackOut])
+class AdminFeedbackOut(ProductFeedbackOut):
+    """A response as the admin page reads it: with who sent it."""
+
+    #: The account's email, for a signed-in sender. None for a visitor, and
+    #: when it could not be looked up (the response is still shown).
+    sender_email: str | None = None
+
+
+# A sender's email is not stored with the response — only their account id.
+# It is asked of the sign-in service when an admin opens the list, and kept in
+# memory for a while so paging back and forth is not a lookup per card.
+_UUID = re.compile(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+_SENDER_TTL_S = 600.0
+_SENDER_CACHE_MAX = 500
+_SENDER_LOOKUPS_AT_ONCE = 5
+_sender_cache: dict[str, tuple[float, str]] = {}
+
+
+async def _lookup_email(user_id: str) -> str | None:
+    """The email an account signs in with, or None. Never raises: a card
+    without a name is better than a list that will not open."""
+    if not _UUID.fullmatch(user_id):
+        return None
+    try:
+        client = await supabase.get_client()
+        r = await client.get(f"/auth/v1/admin/users/{user_id}")
+        if r.status_code != 200:
+            log.info("sender lookup → %s", r.status_code)
+            return None
+        email = r.json().get("email")
+    except (httpx.HTTPError, ValueError, AttributeError, ApiError):
+        return None
+    return email[:254] if isinstance(email, str) and email else None
+
+
+async def _sender_emails(user_ids: set[str]) -> dict[str, str]:
+    now = time.monotonic()
+    found = {u: hit[1] for u in user_ids if (hit := _sender_cache.get(u)) and hit[0] > now}
+    missing = sorted(user_ids - found.keys())
+    if missing:
+        gate = asyncio.Semaphore(_SENDER_LOOKUPS_AT_ONCE)
+
+        async def one(user_id: str) -> str | None:
+            async with gate:
+                return await _lookup_email(user_id)
+
+        if len(_sender_cache) + len(missing) > _SENDER_CACHE_MAX:
+            _sender_cache.clear()
+        for user_id, email in zip(missing, await asyncio.gather(*map(one, missing)), strict=True):
+            if email:
+                found[user_id] = email
+                _sender_cache[user_id] = (now + _SENDER_TTL_S, email)
+    return found
+
+
+@router.get("/admin/feedback/responses", response_model=list[AdminFeedbackOut])
 async def list_responses(
     limit: int = 50, before: str | None = None, _: None = Depends(require_admin)
-) -> list[ProductFeedbackOut]:
-    """Newest first. `before` (an ISO timestamp) pages back through older ones."""
+) -> list[AdminFeedbackOut]:
+    """Newest first. `before` (an ISO timestamp) pages back through older ones.
+    Admin-only, and the one place a sender's email is shown — the privacy page
+    says feedback is linked to the account, and the form says so too."""
     filters: dict[str, str] = {}
     if before and re.fullmatch(r"[0-9T:.+\-Z ]{10,40}", before):
         filters["created_at"] = f"lt.{before}"
-    rows = await supabase.db_select(
+    rows = await _read(
         "product_feedback",
         filters=filters,
         order="created_at.desc",
         limit=max(1, min(limit, 100)),
     )
+    senders = await _sender_emails({str(r["user_id"]) for r in rows if r.get("user_id")})
     return [
-        ProductFeedbackOut(
+        AdminFeedbackOut(
             id=r["id"],
             created_at=r["created_at"],
             source=r["source"],
             signed_in=r.get("user_id") is not None,
+            sender_email=senders.get(str(r.get("user_id"))),
             contact_email=r.get("contact_email"),
             page=r.get("page"),
             answers=r.get("answers") or [],
@@ -423,7 +514,7 @@ async def summary(days: int = 30, _: None = Depends(require_admin)) -> FeedbackS
     filters: dict[str, str] = {}
     if days:
         filters["created_at"] = f"gte.{(now - timedelta(days=days * 2)).strftime('%Y-%m-%dT%H:%M:%SZ')}"
-    rows = await supabase.db_select(
+    rows = await _read(
         "product_feedback", select=_SUMMARY_COLUMNS, filters=filters, order="created_at.desc", limit=_SUMMARY_MAX
     )
     current, previous = rows, None

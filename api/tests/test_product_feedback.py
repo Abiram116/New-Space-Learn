@@ -6,11 +6,13 @@ admin side is closed to everyone who is not on the list."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.config import settings
-from app.errors import Unauthorized, ValidationFailed
+from app.errors import Unauthorized, UpstreamUnavailable, ValidationFailed
 from app.main import create_app
 from app.routers import product_feedback as pf
 from app.services import admin_gate, feedback_summary, ratelimit, supabase
@@ -35,6 +37,8 @@ GOOD = [
 
 
 PASSWORD = "correct horse battery"
+#: account id → email, as the sign-in service would answer.
+SENDERS: dict[str, str] = {}
 
 
 @pytest.fixture
@@ -52,7 +56,7 @@ def world(monkeypatch):
         return rows[:limit] if limit else rows
 
     async def db_insert(table, row):
-        made = {"id": f"{table}-{len(tables[table])}", "created_at": "2026-10-02T10:00:00+00:00", "active": True, **row}
+        made = {"id": f"{table}-{len(tables[table])}", "created_at": datetime.now(UTC).isoformat(), "active": True, **row}
         tables[table].append(made)
         return [made]
 
@@ -73,6 +77,14 @@ def world(monkeypatch):
         return {"sub": OWNER, "email": token[4:]}
 
     monkeypatch.setattr(supabase, "verify_access_token", verify)
+
+    async def lookup_email(user_id):
+        # Never the real sign-in service: who an account is, is seeded per test.
+        return SENDERS.get(user_id)
+
+    monkeypatch.setattr(pf, "_lookup_email", lookup_email)
+    SENDERS.clear()
+    pf._sender_cache.clear()
     monkeypatch.setattr(settings, "admin_password_hash", admin_gate.hash_password(PASSWORD))
     ratelimit.reset()
     pf._clear_form_cache()
@@ -282,14 +294,86 @@ def test_a_choice_question_needs_at_least_two_choices(world):
     assert r.status_code == 422
 
 
-def test_an_admin_reads_responses_without_seeing_who_sent_them_and_can_delete_one(world):
+def test_an_admin_reads_responses_with_the_senders_email_and_can_delete_one(world):
+    SENDERS[OWNER] = "student@x.test"
     _send(_client("student@x.test"))
+    _send(_client(None), contact_email="me@uni.test")
     c = _admin()
-    row = c.get("/api/v1/admin/feedback/responses").json()[0]
-    assert row["signed_in"] is True and "user_id" not in row
+    row, visitor = c.get("/api/v1/admin/feedback/responses").json()
+    assert row["signed_in"] is True and row["sender_email"] == "student@x.test" and "user_id" not in row
+    assert visitor["signed_in"] is False and visitor["sender_email"] is None
+    assert visitor["contact_email"] == "me@uni.test"
+    world["product_feedback"].pop()
     assert row["answers"][0] == {"question_id": "q-rate", "prompt": "Overall?", "kind": "rating", "value": 4}
     assert c.delete(f"/api/v1/admin/feedback/responses/{row['id']}").status_code == 200
     assert world["product_feedback"] == []
+
+
+def test_responses_still_open_when_the_sender_cannot_be_looked_up(world):
+    _send(_client("student@x.test"))  # SENDERS is empty: the lookup finds nobody
+    row = _admin().get("/api/v1/admin/feedback/responses").json()[0]
+    assert row["signed_in"] is True and row["sender_email"] is None
+
+
+def test_one_lookup_per_sender_however_many_responses_they_sent(world, monkeypatch):
+    asked: list[str] = []
+
+    async def lookup(user_id):
+        asked.append(user_id)
+        return "student@x.test"
+
+    monkeypatch.setattr(pf, "_lookup_email", lookup)
+    for _ in range(3):
+        _send(_client("student@x.test"))
+    c = _admin()
+    assert [r["sender_email"] for r in c.get("/api/v1/admin/feedback/responses").json()] == ["student@x.test"] * 3
+    c.get("/api/v1/admin/feedback/responses")
+    assert asked == [OWNER]
+
+
+def _failing_reads(monkeypatch, times: int) -> list[str]:
+    """Make the next `times` reads fail the way an unmapped database error
+    does — with the sentence `supabase._raise_if_bad` uses for everything."""
+    real, calls = supabase.db_select, []
+
+    async def db_select(table, **kw):
+        calls.append(table)
+        if len(calls) <= times:
+            raise UpstreamUnavailable("We couldn't save that just now. Please try again.")
+        return await real(table, **kw)
+
+    monkeypatch.setattr(supabase, "db_select", db_select)
+    return calls
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/api/v1/admin/feedback/summary", "/api/v1/admin/feedback/responses", "/api/v1/admin/feedback/questions"],
+)
+def test_a_read_only_admin_page_never_says_it_could_not_save(world, monkeypatch, path):
+    """The bug: the summary opened with "We couldn't save that just now." —
+    on a page that saves nothing."""
+    c = _admin()
+    _failing_reads(monkeypatch, times=99)
+    r = c.get(path)
+    assert r.status_code == 503
+    message = r.json()["error"]["message"]
+    assert "save" not in message and message == "We couldn't load the feedback just now. Please try again."
+
+
+def test_a_read_that_fails_once_is_tried_again_and_the_summary_still_shows(world, monkeypatch):
+    _send(_client(None))
+    c = _admin()
+    calls = _failing_reads(monkeypatch, times=1)
+    r = c.get("/api/v1/admin/feedback/summary?days=7")
+    assert r.status_code == 200 and r.json()["total"] == 1
+    assert calls == ["product_feedback", "product_feedback"]
+
+
+def test_the_public_form_does_not_say_save_either(world, monkeypatch):
+    _failing_reads(monkeypatch, times=99)
+    r = _client(None).get("/api/v1/feedback-form")
+    assert r.status_code == 503 and "save" not in r.json()["error"]["message"]
 
 
 def test_the_summary_endpoint_reads_what_was_sent(world):
