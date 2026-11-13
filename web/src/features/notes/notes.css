@@ -1,0 +1,65 @@
+/* What marks AI text inside a note, and the live math preview — see
+   aiMarks.ts and mathPreview.ts. Decorations only: none of this is saved. */
+
+/* The "Thinking…" placeholder reads as the AI's, not as typed words. */
+.notes-doc .note-ai-pending {
+  color: var(--color-sky-deep);
+  font-style: italic;
+  animation: noteAiPulse 1.4s ease-in-out infinite;
+}
+.notes-doc .note-ai-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-right: 0.35rem;
+  vertical-align: -0.15rem;
+  border-radius: 999px;
+  background: var(--color-sky-soft);
+  color: var(--color-sky-deep);
+}
+@keyframes noteAiPulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-doc .note-ai-pending {
+    animation: none;
+  }
+}
+
+/* The source line under an AI passage carries the same sparkle as every
+   other AI mark in Notes, so "the AI wrote the part above" reads at a glance. */
+.notes-doc p.note-ai-source {
+  position: relative;
+  padding-left: 1.5rem;
+  color: var(--color-muted);
+  font-size: 0.9em;
+}
+.notes-doc p.note-ai-source::before {
+  content: '';
+  position: absolute;
+  left: 0.15rem;
+  top: 0.35em;
+  width: 0.9rem;
+  height: 0.9rem;
+  /* Masked rather than drawn in a fixed colour, so it takes the theme's sky. */
+  background-color: var(--color-sky-deep);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3.5c.9 4.4 2.2 5.7 6.5 6.5-4.3.8-5.6 2.1-6.5 6.5-.9-4.4-2.2-5.7-6.5-6.5 4.3-.8 5.6-2.1 6.5-6.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3.5c.9 4.4 2.2 5.7 6.5 6.5-4.3.8-5.6 2.1-6.5 6.5-.9-4.4-2.2-5.7-6.5-6.5 4.3-.8 5.6-2.1 6.5-6.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* While the caret is inside a formula its source shows, and this draws what
+   it will look like beside it. */
+.notes-doc .math-live-preview {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px dashed var(--color-line);
+  border-radius: 6px;
+  background: var(--color-well);
+  vertical-align: middle;
+  user-select: none;
+  pointer-events: none;
+}

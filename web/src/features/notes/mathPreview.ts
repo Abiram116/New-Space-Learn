@@ -3,6 +3,8 @@ import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { EditorView } from '@tiptap/pm/view'
 import type Katex from 'katex'
+import { protectMath } from './mathMarkdown'
+import { findMathSpans } from './mathSyntax'
 
 /**
  * Renders `\[ ... \]` (display) and `\( ... \)` (inline) spans as live KaTeX,
@@ -59,14 +61,15 @@ function ensureKatex(view: EditorView) {
 
 type MathMatch = { from: number; to: number; latex: string; display: boolean }
 
-const BLOCK = /\\\[([\s\S]+?)\\\]/g
-const INLINE = /\\\(([\s\S]+?)\\\)/g
+/** Stands in for inline-code text while searching: never part of a formula. */
+const CODE_CHAR = '\u0000'
 
-function findMatches(doc: import('@tiptap/pm/model').Node): MathMatch[] {
+export function findMatches(doc: import('@tiptap/pm/model').Node): MathMatch[] {
   // Flatten the doc to plain text once, remembering each character's real
-  // ProseMirror position, so the regexes can run against ordinary text
+  // ProseMirror position, so the tokenizer can run against ordinary text
   // (including across inline marks) instead of walking nodes by hand. Code
-  // blocks are skipped outright — backslashes in code are code, never math.
+  // blocks are skipped outright — backslashes in code are code, never math —
+  // and inline code is masked out, so `$PATH` in a code span stays code.
   let text = ''
   const pos: number[] = []
   doc.descendants((node, nodePos) => {
@@ -77,8 +80,9 @@ function findMatches(doc: import('@tiptap/pm/model').Node): MathMatch[] {
     }
     if (node.isText) {
       const t = node.text ?? ''
+      const isCode = node.marks.some((m) => m.type.name === 'code')
       for (let i = 0; i < t.length; i++) pos[text.length + i] = nodePos + i
-      text += t
+      text += isCode ? CODE_CHAR.repeat(t.length) : t
     } else if (!node.isInline) {
       pos[text.length] = nodePos
       text += '\n'
@@ -86,21 +90,48 @@ function findMatches(doc: import('@tiptap/pm/model').Node): MathMatch[] {
     return true
   })
 
+  // The same reading of math chat uses — `\( \)`, `\[ \]`, `$ $`, `$$ $$` and
+  // bare environments — so a formula that renders in a chat answer renders
+  // here, and so does one typed the way every other math tool takes it.
   const matches: MathMatch[] = []
-  for (const { re, display } of [
-    { re: BLOCK, display: true },
-    { re: INLINE, display: false },
-  ]) {
-    re.lastIndex = 0
-    let m: RegExpExecArray | null
-    while ((m = re.exec(text))) {
-      const from = pos[m.index]
-      const to = pos[m.index + m[0].length - 1] + 1
-      if (from == null || to == null) continue
-      matches.push({ from, to, latex: m[1], display })
-    }
+  for (const span of findMathSpans(text)) {
+    if (text.slice(span.start, span.end).includes(CODE_CHAR)) continue
+    const from = pos[span.start]
+    const to = pos[span.end - 1] + 1
+    if (from == null || Number.isNaN(to)) continue
+    matches.push({ from, to, latex: span.latex, display: span.display })
   }
   return matches
+}
+
+/**
+ * Pasted HTML with every KaTeX-rendered formula turned back into its source.
+ *
+ * KaTeX keeps the LaTeX it drew in `<annotation encoding="application/x-tex">`,
+ * so nothing has to be reverse-engineered from the glyphs. Display formulas
+ * become their own `\[ … \]` paragraph; inline ones `\( … \)` in the text.
+ * Chat's citation badges go too — a bare "2" in the middle of a sentence is
+ * the raw marker problem in another form.
+ */
+export function katexHtmlToLatex(html: string): string {
+  if (!html.includes('katex') && !html.includes('<button')) return html
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  const texOf = (el: Element) =>
+    el.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim() ?? ''
+  for (const el of Array.from(doc.querySelectorAll('.katex-display'))) {
+    const tex = texOf(el)
+    const p = doc.createElement('p')
+    p.textContent = tex ? `\\[${tex}\\]` : ''
+    el.replaceWith(p)
+  }
+  for (const el of Array.from(doc.querySelectorAll('.katex'))) {
+    el.replaceWith(doc.createTextNode(texOf(el) ? `\\(${texOf(el)}\\)` : ''))
+  }
+  for (const el of Array.from(doc.querySelectorAll('button'))) el.remove()
+  for (const el of Array.from(doc.querySelectorAll('a'))) {
+    if (/^\s*\d{1,3}\s*$/.test(el.textContent ?? '')) el.remove()
+  }
+  return doc.body.innerHTML
 }
 
 /** Text made safe to place inside HTML. */
@@ -158,6 +189,21 @@ export const MathPreview = Extension.create({
           return {}
         },
         props: {
+          // Pasted markdown — an answer copied with chat's Copy button, or
+          // LaTeX from anywhere else — goes through the markdown parser
+          // (`transformPastedText` on the Markdown extension), which ate the
+          // backslash of every `\(` and `\[` exactly as loading a note once
+          // did. Protected the same way. `plain` is a shift-paste or a paste
+          // into code, which skips markdown and so needs nothing.
+          transformPastedText(text, plain) {
+            return plain ? text : protectMath(text)
+          },
+          // A selection copied out of a chat bubble carries KaTeX's rendered
+          // HTML — glyph spans, plus a hidden MathML copy — which pasted as
+          // the formula's text twice over. Swap each one back for its LaTeX.
+          transformPastedHTML(html) {
+            return katexHtmlToLatex(html)
+          },
           decorations(state) {
             const { selection } = state
             const focused = editorView?.hasFocus() ?? false
@@ -165,8 +211,31 @@ export const MathPreview = Extension.create({
             const matches = findMatches(state.doc)
             for (const { from, to, latex, display } of matches) {
               // Caret inside this span — leave the raw source visible and
-              // editable, don't paper over the exact text being typed.
-              if (focused && selection.from <= to && selection.to >= from) continue
+              // editable, don't paper over the exact text being typed. A
+              // live preview rides just after it instead, so writing a
+              // formula isn't blind: you see what `\frac{a}{b}` will look
+              // like on every keystroke, not only after clicking away.
+              if (focused && selection.from <= to && selection.to >= from) {
+                decorations.push(
+                  Decoration.widget(
+                    to,
+                    (view: EditorView) => {
+                      const box = document.createElement('span')
+                      box.className = 'math-live-preview'
+                      box.setAttribute('contenteditable', 'false')
+                      box.setAttribute('aria-hidden', 'true')
+                      ensureKatex(view)
+                      box.innerHTML = renderKatex(latex, false)
+                      return box
+                    },
+                    // Keyed on the formula itself: the preview has to be
+                    // rebuilt whenever the source changes, which a
+                    // position-only key would never do.
+                    { side: 1, ignoreSelection: true, key: `math-live-${latex}-${katexMod ? 'k' : 'r'}` },
+                  ),
+                )
+                continue
+              }
               decorations.push(Decoration.inline(from, to, { class: 'math-source-hidden' }))
               decorations.push(
                 Decoration.widget(

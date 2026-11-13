@@ -8,8 +8,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { labelFor, notePreview, provenanceLabel, relativeTime, type Filter } from './format'
+import { labelFor, noteMatches, notePreview, relativeTime, type Filter } from './format'
 import { NoteEditor } from './NoteEditor'
+import { AuthorBadge, AuthorIcon } from './AuthorBadge'
+import { onNoteChange } from './noteSync'
 import { createNote, deleteNote, generateNote, listAllNotes } from '../../api/notes'
 import type { Note } from '../../api/types'
 import { friendlyMessage } from '../../api/errors'
@@ -31,6 +33,7 @@ import { toneBar } from '../../lib/tone'
 import { NoteBriefDialog } from '../chat/NoteBriefDialog'
 import { isMobileNow, useIsMobile } from '../../lib/useIsMobile'
 import { PhoneNotes } from './PhoneNotes'
+import { MakeFromNote } from '../quizzes/MakeFromNote'
 import { TopicScopeFallback } from '../spaces/TopicScopeFallback'
 import { useSpaces } from '../spaces/SpacesProvider'
 
@@ -121,19 +124,26 @@ function Inner({
     [spaces, notes, subspaceToSpace],
   )
 
+  // The subject picker only exists while notes span more than one subject. A
+  // filter left on a subject whose last note was just deleted would otherwise
+  // hide every remaining note behind a control that is no longer on screen.
+  const activeSubject =
+    subjectOptions.length > 1 && subjectOptions.some((s) => s.id === subjectFilter) ? subjectFilter : 'all'
+
   const visible = useMemo(() => {
     if (!notes) return []
     return notes.filter((n) => {
       if (filter === 'ai' && !n.touched_by_agent) return false
       if (filter === 'mine' && !n.touched_by_user) return false
-      if (subjectFilter !== 'all') {
+      if (activeSubject !== 'all') {
         const space = n.subspace_id ? subspaceToSpace.get(n.subspace_id) : undefined
-        if (space?.id !== subjectFilter) return false
+        if (space?.id !== activeSubject) return false
       }
-      if (search && !n.title.toLowerCase().includes(search.toLowerCase())) return false
+      // Title or body: a note is usually remembered by what it says.
+      if (!noteMatches(n, search)) return false
       return true
     })
-  }, [notes, filter, subjectFilter, subspaceToSpace, search])
+  }, [notes, filter, activeSubject, subspaceToSpace, search])
 
   const current = notes?.find((n) => n.id === selectedId) ?? null
 
@@ -177,7 +187,12 @@ function Inner({
     [setParams, slugForNote],
   )
 
+  // One note per tap: a double-click (or a second tap while the request is
+  // out) used to create two "Untitled note"s.
+  const creating = useRef(false)
   const newBlank = async () => {
+    if (creating.current) return
+    creating.current = true
     try {
       const note = await createNote(subspaceId, {
         title: 'Untitled note',
@@ -188,6 +203,8 @@ function Inner({
       select(note.id)
     } catch (err) {
       showError(err)
+    } finally {
+      creating.current = false
     }
   }
 
@@ -217,7 +234,9 @@ function Inner({
       setNotes((prev) => (prev ? prev.filter((n) => n.id !== confirmDelete) : prev))
       if (selectedId === confirmDelete) {
         const rest = (notes ?? []).filter((n) => n.id !== confirmDelete)
-        select(rest[0]?.id ?? null)
+        // On a phone the list is the landing screen: deleting the note you are
+        // reading goes back to it, not into whichever note happens to be first.
+        select(isMobileNow() ? null : (rest[0]?.id ?? null))
       }
       setConfirmDelete(null)
       show('Note deleted.', 'success')
@@ -231,6 +250,21 @@ function Inner({
   const applyPatch = useCallback((id: string, patch: Partial<Note>) => {
     setNotes((prev) => (prev ? prev.map((n) => (n.id === id ? { ...n, ...patch } : n)) : prev))
   }, [])
+
+  // A reply added from chat (this tab or another) — keep the list's preview,
+  // time and authorship mark current without refetching everything.
+  useEffect(
+    () =>
+      onNoteChange((msg) =>
+        applyPatch(msg.noteId, {
+          body_md: msg.body_md,
+          updated_at: msg.updated_at,
+          touched_by_user: msg.touched_by_user,
+          touched_by_agent: msg.touched_by_agent,
+        }),
+      ),
+    [applyPatch],
+  )
 
   const loading = notes === null && !error
   const totalNotes = notes?.length ?? 0
@@ -280,7 +314,7 @@ function Inner({
             onFilter={setFilter}
             showOriginFilter={showOriginFilter}
             subjects={subjectOptions}
-            subjectFilter={subjectFilter}
+            subjectFilter={activeSubject}
             onSubjectFilter={setSubjectFilter}
             search={search}
             onSearch={setSearch}
@@ -310,6 +344,7 @@ function Inner({
         breadcrumb={false}
         actions={
           <div className="flex shrink-0 gap-2">
+            {current && <MakeFromNote note={current} topicId={noteTopicId} base={noteBase} />}
             {/* "Write with AI" (the fuller label) lives in the empty state
                 below, where there's room. Here it's next to "New" in a
                 header shared with the tab strip, so it stays compact. */}
@@ -383,7 +418,10 @@ function Inner({
                       : 'text-muted hover:bg-line-soft hover:text-ink-3',
                   )}
                 >
-                  {labelFor(f, notes)}
+                  <span className="inline-flex items-center justify-center gap-1.5">
+                    {f !== 'all' && <AuthorIcon who={f === 'ai' ? 'ai' : 'you'} size={15} />}
+                    {labelFor(f, notes)}
+                  </span>
                 </button>
               ))}
             </div>
@@ -393,7 +431,7 @@ function Inner({
               library has nothing for this to narrow down. */}
           {subjectOptions.length > 1 && (
             <Select
-              value={subjectFilter}
+              value={activeSubject}
               onChange={setSubjectFilter}
               ariaLabel="Filter by subject"
               options={[
@@ -441,7 +479,7 @@ function Inner({
           )}
           {!loading && totalNotes > 0 && visible.length === 0 && (
             <p className="px-4 py-6 text-center text-[12.5px] text-muted">
-              Nothing matches “{search}”.
+              {search ? `Nothing matches “${search}”.` : 'No notes in this view.'}
             </p>
           )}
           {/* Deals itself in on load. `Stagger` keys on position, so typing in
@@ -508,32 +546,12 @@ function Inner({
                   )}
                   {/* Provenance is an icon + a tooltip, not a sentence in the
                       row — "CREATED BY AI · EDITED BY YOU" at setcode's
-                      letter-spacing ran wider than the 288px sidebar itself,
-                      wrapping mid-word and clipping. The badge alone still
-                      says "AI was involved"; the exact story (created vs.
-                      edited, by whom) is one hover away via `title`, the
-                      same trade every icon-with-a-title in this app makes. */}
+                      letter-spacing ran wider than the 288px sidebar itself.
+                      Every note gets one now, including your own: "no icon"
+                      used to be the only way a note said it was yours. The
+                      exact story is the tooltip and the accessible name. */}
                   <div className="setcode mt-1.5 flex items-center gap-1.5">
-                    {item.touched_by_agent && (
-                      <span className="flex shrink-0 items-center gap-1" title={provenanceLabel(item)}>
-                        <span className="relative inline-flex shrink-0">
-                          <Icon name="note" size={9} className="text-sky-deep" />
-                          <Icon
-                            name="sparkle"
-                            size={5}
-                            filled
-                            className="absolute -right-0.5 -top-0.5 text-sky-deep"
-                          />
-                        </span>
-                        {/* A second, separate mark for "and a human has
-                            too" — without it, an AI-created note you've
-                            since rewritten looks identical to one nobody
-                            has touched since the AI wrote it. Beside the
-                            badge, not stacked on it — a third icon crammed
-                            onto a 9px glyph stops reading as anything. */}
-                        {item.touched_by_user && <Icon name="userEdit" size={10} className="text-brand-deep" />}
-                      </span>
-                    )}
+                    <AuthorBadge note={item} size={15} />
                     <span className="truncate">{relativeTime(item.updated_at)}</span>
                   </div>
                 </button>

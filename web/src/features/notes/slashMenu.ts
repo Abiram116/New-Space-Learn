@@ -1,6 +1,7 @@
 import type { Editor } from '@tiptap/react'
 import type { IconName } from '../../components/ui/Icon'
 import { BLOCK_ICON } from './toolbar'
+import { insertMath } from './mathCommands'
 
 /**
  * The `/` command set.
@@ -39,7 +40,7 @@ export type SlashGroup = 'ai' | 'insert'
  * "Ask the tutor" header already tells you what kind of thing you're
  * looking at, which is the actual job a section label does here.
  */
-export type SlashSection = 'text' | 'lists' | 'structure' | 'code'
+export type SlashSection = 'text' | 'lists' | 'structure' | 'code' | 'math'
 
 /**
  * What a command needs before it can do anything useful.
@@ -268,6 +269,29 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     needs: 'nothing',
     keywords: ['code', 'snippet', 'pre', 'monospace'],
     run: (e) => e.chain().focus().toggleCodeBlock().run(),
+  },
+  // MATH
+  {
+    id: 'equation',
+    label: 'Equation',
+    hint: 'A formula on its own line, e.g. \\frac{a}{b}',
+    glyph: '∑',
+    group: 'insert',
+    section: 'math',
+    needs: 'nothing',
+    keywords: ['math', 'equation', 'formula', 'latex', 'katex', 'tex', 'block', '$$'],
+    run: (e) => void insertMath(e, true),
+  },
+  {
+    id: 'inlinemath',
+    label: 'Inline math',
+    hint: 'A formula inside a sentence, e.g. x^2 or H_2O',
+    glyph: 'x²',
+    group: 'insert',
+    section: 'math',
+    needs: 'nothing',
+    keywords: ['math', 'inline', 'formula', 'latex', 'superscript', 'subscript', 'power', '$'],
+    run: (e) => void insertMath(e, false),
   },
   // STRUCTURE
   {

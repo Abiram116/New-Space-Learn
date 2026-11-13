@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { labelFor, notePreview, originLabel, provenanceLabel, relativeTime, sourceLine } from './format'
+import { labelFor, noteMatches, notePreview, originLabel, provenanceLabel, relativeTime, sourceLine } from './format'
 import type { Note } from '../../api/types'
 
 const note = (over: Partial<Note> = {}): Note => ({
@@ -174,5 +174,39 @@ describe('sourceLine', () => {
     const out = sourceLine([src()], base)
     expect(out.trim().startsWith('*Source:')).toBe(true)
     expect(out.trim().endsWith('*')).toBe(true)
+  })
+})
+
+describe('noteMatches', () => {
+  const n = note({
+    title: 'Cell biology',
+    body_md: '## Mitosis\n\nThe **spindle** pulls <strong>sister chromatids</strong> apart.\n\n![fig](data:image/png;base64,QUJDREVGRw==)',
+  })
+
+  it('matches the title, ignoring case', () => {
+    expect(noteMatches(n, 'cell BIO')).toBe(true)
+  })
+
+  it('matches words in the body, ignoring case and surrounding spaces', () => {
+    expect(noteMatches(n, '  SPINDLE pulls ')).toBe(true)
+    expect(noteMatches(n, 'sister chromatids apart')).toBe(true)
+  })
+
+  it('does not match markup or image data, only what is read', () => {
+    expect(noteMatches(n, 'strong')).toBe(false)
+    expect(noteMatches(n, 'base64')).toBe(false)
+    expect(noteMatches(n, 'QUJDREVG')).toBe(false)
+  })
+
+  it('an empty search matches everything, and a miss is a miss', () => {
+    expect(noteMatches(n, '   ')).toBe(true)
+    expect(noteMatches(n, 'meiosis')).toBe(false)
+  })
+
+  it('sees an edited body, not the one it read before', () => {
+    const live = note({ title: 'T', body_md: 'first draft' })
+    expect(noteMatches(live, 'second')).toBe(false)
+    live.body_md = 'second draft'
+    expect(noteMatches(live, 'second')).toBe(true)
   })
 })

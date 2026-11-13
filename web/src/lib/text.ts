@@ -15,7 +15,9 @@ export function stripMarkdown(input: string): string {
     .replace(/^\s*[-*+]\s+/gm, '')          // bullets
     .replace(/^\s*\d+\.\s+/gm, '')          // ordered list markers
     .replace(/(\*\*|__)(.*?)\1/g, '$2')     // bold
-    .replace(/(\*|_)(.*?)\1/g, '$2')        // italic
+    // Italic only when the markers hug a word and stand apart from others: `x_1 + x_2`
+    // and `2 * 3 * 4` are maths, not emphasis, and must keep their characters.
+    .replace(/(?<![\w*_])(\*|_)(?=\S)(.+?)(?<=\S)\1(?![\w*_])/g, '$2') // italic
     .replace(/~~(.*?)~~/g, '$1')            // strikethrough
     .replace(/^\s*([-*_]\s*){3,}$/gm, '')   // horizontal rules
     .replace(/\s+/g, ' ')

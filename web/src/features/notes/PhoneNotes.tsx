@@ -17,7 +17,8 @@ import { cn } from '../../lib/cn'
 import { toneBar } from '../../lib/tone'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
 import { ActionSheet, ChipRow, ListRow, PhoneTitle, useRowSheet } from '../quizzes/phoneKit'
-import { labelFor, notePreview, provenanceLabel, relativeTime, type Filter } from './format'
+import { labelFor, notePreview, relativeTime, type Filter } from './format'
+import { AuthorBadge } from './AuthorBadge'
 
 export function PhoneNotes({
   notes,
@@ -195,12 +196,7 @@ export function PhoneNotes({
                     <span className="line-clamp-2 text-[14px] leading-snug text-muted">{preview}</span>
                   )}
                   <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12.5px] text-faint">
-                    {item.touched_by_agent && (
-                      <span className="flex shrink-0 items-center gap-1" title={provenanceLabel(item)}>
-                        <Icon name="sparkle" size={11} className="text-sky-deep" />
-                        <span className="sr-only">{provenanceLabel(item)}</span>
-                      </span>
-                    )}
+                    <AuthorBadge note={item} size={16} />
                     <span
                       aria-hidden
                       className={cn(

@@ -17,6 +17,7 @@ import { Icon } from '../../components/ui/Icon'
 import { cn } from '../../lib/cn'
 import { ActionSheet } from '../quizzes/phoneKit'
 import { BLOCKS, BLOCK_ICON, MARKS, SELECTION_ACTIONS } from './toolbar'
+import { insertMath } from './mathCommands'
 
 /** How far the on-screen keyboard (or any overlay) covers the layout viewport's bottom. */
 export function useKeyboardInset(active: boolean): number {
@@ -112,6 +113,32 @@ export function PhoneFormatBar({
             className={cn(btn(editor.isActive('heading')), 'font-bold')}
           >
             H
+          </button>
+
+          <span className="mx-1 h-5 w-px shrink-0 bg-line" aria-hidden />
+
+          {/* Math without hunting for a backslash on a phone keyboard: the
+              delimiters go in and the caret lands between them (or the
+              selection is wrapped) — see mathCommands.ts. */}
+          <button
+            type="button"
+            aria-label="Inline math"
+            title="Inline math, e.g. x^2 or H_2O"
+            {...KEEP_FOCUS}
+            onClick={() => insertMath(editor, false)}
+            className={cn(btn(false), 'font-serif italic')}
+          >
+            x²
+          </button>
+          <button
+            type="button"
+            aria-label="Equation"
+            title="Equation on its own line"
+            {...KEEP_FOCUS}
+            onClick={() => insertMath(editor, true)}
+            className={btn(false)}
+          >
+            ∑
           </button>
 
           <span className="mx-1 h-5 w-px shrink-0 bg-line" aria-hidden />

@@ -27,6 +27,30 @@ export function notePreview(bodyMd: string, limit = 110): string {
   return `${text.slice(0, limit - 1).trimEnd()}…`
 }
 
+/** What search reads for a note: its title and the words of its body, lower-cased. */
+const searchText = new WeakMap<object, { body: string; text: string }>()
+
+/**
+ * Does this note match what was typed in the search box?
+ *
+ * Title or body, ignoring case. The body is searched as the words a student
+ * sees, not the markup behind them: tags and markdown are stripped first, so
+ * "strong" does not match every bold word and an embedded image's data never
+ * matches anything. Stripping is kept per note until its body changes, since
+ * this runs for every note on every keystroke.
+ */
+export function noteMatches(note: Pick<Note, 'title' | 'body_md'>, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  if (note.title.toLowerCase().includes(q)) return true
+  let hit = searchText.get(note)
+  if (!hit || hit.body !== note.body_md) {
+    hit = { body: note.body_md, text: stripMarkdown(note.body_md.replace(/<[^>]*>/g, ' ')).toLowerCase() }
+    searchText.set(note, hit)
+  }
+  return hit.text.includes(q)
+}
+
 export function labelFor(f: Filter, notes: Note[] | null): string {
   if (!notes) return f === 'all' ? 'All' : f === 'ai' ? 'AI' : 'Mine'
   const all = notes.length
@@ -64,6 +88,31 @@ export function provenanceLabel(note: Pick<Note, 'origin' | 'touched_by_user' | 
     return note.touched_by_user ? 'Created by AI · Edited by you' : 'Created by AI'
   }
   return note.touched_by_agent ? 'Created by you · Edited by AI' : 'Created by you'
+}
+
+/**
+ * Who has written this note, in one word: you, the AI, both, or an uploaded
+ * document. What the authorship icons draw — `provenanceLabel` is the full
+ * sentence behind them (tooltip and screen-reader label).
+ */
+export type Authorship = 'you' | 'ai' | 'both' | 'doc'
+
+export function noteAuthorship(
+  note: Pick<Note, 'origin' | 'touched_by_user' | 'touched_by_agent'>,
+): Authorship {
+  if (note.origin === 'doc') return 'doc'
+  const ai = note.origin === 'agent' || note.touched_by_agent
+  const you = note.origin === 'user' || note.touched_by_user
+  if (ai && you) return 'both'
+  return ai ? 'ai' : 'you'
+}
+
+/** The short visible label beside an authorship icon. */
+export const AUTHORSHIP_LABEL: Record<Authorship, string> = {
+  you: 'You',
+  ai: 'AI',
+  both: 'You + AI',
+  doc: 'Document',
 }
 
 export function relativeTime(iso: string): string {

@@ -12,3 +12,13 @@ describe('stripMarkdown task markers', () => {
     expect(stripMarkdown('- plain')).toBe('plain')
   })
 })
+
+describe('emphasis is not maths', () => {
+  it('keeps underscores and asterisks that are part of an expression', async () => {
+    const mod = await import('./text')
+    const strip = Object.values(mod).find((f) => typeof f === 'function') as (s: string) => string
+    expect(strip('x_1 + x_2')).toBe('x_1 + x_2')
+    expect(strip('2 * 3 * 4')).toBe('2 * 3 * 4')
+    expect(strip('an *important* point and _this_ too')).toBe('an important point and this too')
+  })
+})

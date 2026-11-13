@@ -43,3 +43,26 @@ export function clearAiPlaceholder(
   editor.chain().deleteRange({ from, to: end }).run()
   return true
 }
+
+/**
+ * Where the placeholder actually landed, given where it was inserted.
+ *
+ * Inserting text at a *block* boundary (the typed `/ai …` + Enter path handed
+ * over the paragraph's node range) makes ProseMirror wrap it in a fresh
+ * paragraph, so the text starts one position later than asked. The removal
+ * check then looked one character to the left, never matched, and the
+ * literal "Thinking…" stayed in the note for good — with the answer pasted
+ * in next to it. Looking a couple of positions ahead finds it either way.
+ */
+export function locateAiPlaceholder(
+  editor: Editor,
+  near: number,
+  placeholder: string = AI_PLACEHOLDER,
+): number | null {
+  const size = editor.state.doc.content.size
+  for (let at = near; at <= near + 2; at++) {
+    if (at + placeholder.length > size) break
+    if (editor.state.doc.textBetween(at, at + placeholder.length) === placeholder) return at
+  }
+  return null
+}
