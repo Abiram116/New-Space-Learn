@@ -12,6 +12,7 @@
  */
 
 import { MathText } from '../chat/MarkdownMessage'
+import { hasMath } from '../notes/mathSyntax'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { gradeCard, gradeWillRetry } from '../../api/flashcards'
 import type { Grade } from '../../api/types'
@@ -516,6 +517,7 @@ export function CardFace({
 }) {
   const isBack = side === 'back'
   const plain = stripMarkdown(text)
+  const math = hasMath(plain)
   // At stage size a long face steps down a size rather than overflowing:
   // a 40px display line is for a prompt, not a paragraph.
   const long = plain.length > (isBack ? 260 : 110)
@@ -535,7 +537,7 @@ export function CardFace({
           <p
             className={cn(
               'text-center',
-              isBack ? 'text-[13px] leading-relaxed text-ink-2' : 'nameplate text-[17px] leading-tight text-ink',
+              isBack ? 'text-[13px] leading-relaxed text-ink-2' : cn('nameplate text-[17px] leading-tight text-ink', math && 'has-math'),
             )}
           >
             <MathText content={plain} />
@@ -550,7 +552,7 @@ export function CardFace({
               'm-auto text-center',
               isBack
                 ? cn('max-w-[60ch] leading-relaxed text-ink', long ? 'stage-back-long' : 'stage-back')
-                : cn('nameplate max-w-[30ch] leading-[1.05] text-ink', long ? 'stage-face-long' : 'stage-face'),
+                : cn('nameplate max-w-[30ch] leading-[1.05] text-ink', math && 'has-math max-w-[40ch]', long ? 'stage-face-long' : 'stage-face'),
             )}
           >
             <MathText content={plain} />

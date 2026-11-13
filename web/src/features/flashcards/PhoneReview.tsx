@@ -12,6 +12,7 @@
  */
 
 import { MathText } from '../chat/MarkdownMessage'
+import { hasMath } from '../notes/mathSyntax'
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { Flashcard, Grade } from '../../api/types'
 import { Icon } from '../../components/ui/Icon'
@@ -382,7 +383,7 @@ export function PhoneFace({
             'm-auto w-full',
             isBack
               ? cn('text-ink', size, n > 140 ? 'text-left' : 'text-center')
-              : cn('nameplate text-center text-ink [text-wrap:balance]', size),
+              : cn('nameplate text-center text-ink [text-wrap:balance]', hasMath(plain) && 'has-math', size),
           )}
         >
           <MathText content={plain} />

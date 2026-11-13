@@ -116,3 +116,8 @@ export function findMathSpans(
   }
   return spans
 }
+
+/** True when `content` holds a formula (so it must not be set in caps). */
+export function hasMath(content: string): boolean {
+  return splitMath(content).some((p) => typeof p !== 'string')
+}
