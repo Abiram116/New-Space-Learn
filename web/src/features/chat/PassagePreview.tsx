@@ -16,6 +16,7 @@ import { Icon } from '../../components/ui/Icon'
 import { Modal } from '../../components/ui/Modal'
 import { Skeleton } from '../../components/ui/Skeleton'
 import { useAsync } from '../../lib/useAsync'
+import { reflow } from './reflow'
 
 export function PassagePreview({
   citation,
@@ -30,7 +31,9 @@ export function PassagePreview({
     <Modal
       open={citation !== null}
       onClose={onClose}
-      title={citation ? `${citation.document_name} · ${citation.locator}` : undefined}
+      // The page and section are the title: short, and what the student came to see.
+      // The file name is a quiet line in the body, not a shouting heading.
+      title={citation ? citation.locator : undefined}
       width="lg"
     >
       {citation && <Body citation={citation} base={base} />}
@@ -68,29 +71,59 @@ function Body({ citation, base }: { citation: Citation; base?: string }) {
               Open the file
             </Link>
           </>
-        )}
+        )}{' '}
+        <button type="button" onClick={passage.refresh} className="cursor-pointer font-bold text-ink-2 hover:text-ink">
+          Try again
+        </button>
       </p>
     )
   }
 
   return (
-    <div className="flex max-h-[60dvh] flex-col gap-3 overflow-y-auto pr-1 text-[14px] leading-[1.7] text-ink-2">
-      {passage.data.chunks.map((c) =>
-        c.cited ? (
-          <p
-            key={c.index}
-            ref={cited as React.RefObject<HTMLParagraphElement>}
-            data-cited=""
-            className="whitespace-pre-wrap rounded-lg border-l-[3px] border-brand bg-brand-soft px-3 py-2 text-ink [overflow-wrap:anywhere]"
-          >
-            {c.content}
-          </p>
-        ) : (
-          <p key={c.index} className="whitespace-pre-wrap text-muted [overflow-wrap:anywhere]">
-            {c.content}
-          </p>
-        ),
-      )}
+    <div className="flex flex-col gap-3">
+      <p className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-muted" title={citation.document_name}>
+        <Icon name="doc" size={13} className="shrink-0" />
+        <span className="truncate">{citation.document_name}</span>
+      </p>
+      <div className="flex max-h-[58dvh] flex-col gap-4 overflow-y-auto pr-2 text-[15px] leading-[1.75] text-ink-2">
+        {passage.data.chunks.map((c) => {
+          const blocks = reflow(c.content)
+          if (!c.cited) {
+            return (
+              <div key={c.index} className="flex flex-col gap-2 text-muted [overflow-wrap:anywhere]">
+                {blocks.map((b, i) =>
+                  b.kind === 'heading' ? (
+                    <p key={i} className="font-semibold text-ink-3">
+                      {b.text}
+                    </p>
+                  ) : (
+                    <p key={i}>{b.text}</p>
+                  ),
+                )}
+              </div>
+            )
+          }
+          return (
+            <div
+              key={c.index}
+              ref={cited as React.RefObject<HTMLDivElement>}
+              data-cited=""
+              className="flex flex-col gap-2 rounded-xl border-l-[3px] border-brand bg-brand-soft px-4 py-3 text-ink [overflow-wrap:anywhere]"
+            >
+              <span className="setcode text-brand-deep">What the answer used</span>
+              {blocks.map((b, i) =>
+                b.kind === 'heading' ? (
+                  <p key={i} className="font-bold">
+                    {b.text}
+                  </p>
+                ) : (
+                  <p key={i}>{b.text}</p>
+                ),
+              )}
+            </div>
+          )
+        })}
+      </div>
       {base && (
         <Link
           to={`${base}/docs?d=${citation.document_id}`}

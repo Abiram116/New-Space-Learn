@@ -16,8 +16,15 @@ from fastapi import APIRouter, Depends
 from ..deps import CurrentUser, get_current_user
 from ..errors import NotFound, ValidationFailed
 from ..guards import assert_space, assert_subspace
-from ..schemas import OkOut, SubspaceCreate, SubspaceLinkCreate, SubspaceOut, SubspaceUpdate
-from ..services import purge, supabase
+from ..schemas import (
+    OkOut,
+    StartersOut,
+    SubspaceCreate,
+    SubspaceLinkCreate,
+    SubspaceOut,
+    SubspaceUpdate,
+)
+from ..services import purge, starters, supabase
 
 router = APIRouter()
 
@@ -170,3 +177,19 @@ async def delete_link(
         },
     )
     return OkOut()
+
+
+@router.get("/subspaces/{subspace_id}/starters", response_model=StartersOut)
+async def get_starters(
+    subspace_id: str, user: CurrentUser = Depends(get_current_user)
+) -> StartersOut:
+    """Questions to open this topic's chat with, written from its own files."""
+    row = await assert_subspace(user.id, subspace_id)
+    return StartersOut(
+        questions=await starters.for_subspace(
+            user.id,
+            subspace_id,
+            topic=row.get("name") or "",
+            subject=(row.get("subjects") or {}).get("name") or "",
+        )
+    )

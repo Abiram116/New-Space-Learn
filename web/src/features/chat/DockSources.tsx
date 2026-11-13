@@ -18,6 +18,7 @@ import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../lib/cn'
 import { toneSoft, toneText } from '../../lib/tone'
 import { fileIcon } from '../docs/SourceItem'
+import { uploadProblem } from '../docs/uploadCheck'
 import { DockSectionHead, Spinner } from './dockParts'
 
 /* ── What state the sources are in, in words ────────────────────────────── */
@@ -220,29 +221,45 @@ export const DockSources = forwardRef<
     onSeeAll?: () => void
   }
 >(function DockSources({ subspaceId, docs, loading, error, onChanged, bare = false, pill = true, onManage, compactEmpty = false, listenForAdd = false, limit, onSeeAll }, handle) {
-  const { showError } = useToast()
+  const { show, showError } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // How much of the file being added has been sent, 0 to 100.
+  const [sent, setSent] = useState<number | null>(null)
   const [retrying, setRetrying] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<Document | null>(null)
   const [removing, setRemoving] = useState(false)
 
   const upload = useCallback(
     async (files: FileList | File[]) => {
-      const file = Array.from(files)[0]
-      if (!file) return
+      // Every file, not just the first: several dropped together used to add
+      // one and say nothing about the rest. A file the server would refuse
+      // (wrong type, over 20 MB) is said now rather than after the upload.
+      const list = Array.from(files)
+      if (list.length === 0) return
       setUploading(true)
       try {
-        await uploadDocument(subspaceId, file, () => {})
-        onChanged()
-      } catch (err) {
-        showError(err)
+        for (const file of list) {
+          const problem = uploadProblem(file)
+          if (problem) {
+            show(problem, 'error')
+            continue
+          }
+          try {
+            setSent(0)
+            await uploadDocument(subspaceId, file, setSent)
+            onChanged()
+          } catch (err) {
+            showError(err)
+          }
+        }
       } finally {
         setUploading(false)
+        setSent(null)
       }
     },
-    [subspaceId, onChanged, showError],
+    [subspaceId, onChanged, show, showError],
   )
 
   const retry = useCallback(
@@ -290,6 +307,7 @@ export const DockSources = forwardRef<
     },
   }))
 
+  const percent = sent !== null ? ` ${sent}%` : ''
   const shown = limit ? docs.slice(0, limit) : docs
   const hidden = docs.length - shown.length
 
@@ -339,7 +357,7 @@ export const DockSources = forwardRef<
                 disabled={uploading}
                 className="setcode cursor-pointer transition-colors hover:text-ink disabled:cursor-progress disabled:opacity-60"
               >
-                {uploading ? 'Adding…' : '+ Add'}
+                {uploading ? `Adding…${percent}` : '+ Add'}
               </button>
             )
           }
@@ -389,8 +407,8 @@ export const DockSources = forwardRef<
           >
             {uploading ? <Spinner size={16} /> : <Icon name="upload" size={compactEmpty ? 14 : 19} />}
           </span>
-          <span className={cn('font-bold text-ink', compactEmpty ? 'text-[12.5px]' : 'text-[13px]')}>
-            {uploading ? 'Adding your file…' : compactEmpty ? 'Add a file. The AI answers from it.' : 'Drop your notes or a PDF here'}
+          <span className={cn('min-w-0 font-bold leading-snug text-ink', compactEmpty ? 'text-left text-[12.5px]' : 'text-[13px]')}>
+            {uploading ? `Adding your file…${percent}` : compactEmpty ? 'PDF, slides or a photo · up to 20 MB' : 'Drop your notes or a PDF here'}
           </span>
           {!compactEmpty && <span className="text-[11px] text-faint">PDF, text or photo · up to 20 MB</span>}
         </button>
@@ -417,6 +435,13 @@ export const DockSources = forwardRef<
               See all {docs.length} files <Icon name="arrowRight" size={12} />
             </button>
           )}
+          {/* In the Files panel the button that adds is the panel's own, below
+              this list, and it has no way to say it is working. */}
+          {uploading && !bare && !pill && (
+            <p role="status" className="flex items-center gap-2 px-1 text-[12px] font-semibold text-muted">
+              <Spinner size={12} /> Adding your file…{percent}
+            </p>
+          )}
           {bare && (
             <button
               type="button"
@@ -425,7 +450,7 @@ export const DockSources = forwardRef<
               className="flex min-h-8 w-fit cursor-pointer items-center gap-1.5 rounded-md px-1 text-[12px] font-semibold text-muted transition-colors hover:text-ink disabled:cursor-progress"
             >
               {uploading ? <Spinner size={12} /> : <Icon name="plus" size={13} />}
-              {uploading ? 'Adding…' : 'Add another file'}
+              {uploading ? `Adding…${percent}` : 'Add another file'}
             </button>
           )}
         </>

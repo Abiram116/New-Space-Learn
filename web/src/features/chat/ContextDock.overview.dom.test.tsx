@@ -93,7 +93,7 @@ describe('ContextDock overview', () => {
     expect(await screen.findByText(/Hi, I’m Nova! Add your notes/)).toBeInTheDocument()
     expect(doneCount()).toBe(0)
     expect(screen.getByRole('heading', { name: 'Add a file' }).closest('li')).toHaveAttribute('aria-current', 'step')
-    expect(screen.getByText('Add a file. The AI answers from it.')).toBeInTheDocument()
+    expect(screen.getByText('PDF, slides or a photo · up to 20 MB')).toBeInTheDocument()
     expect(nextButton()).toHaveTextContent('Add a file')
     // Nothing to practise with yet: the crew is shown, but can't be pressed.
     expect(screen.getByRole('button', { name: /Quiz/ })).toBeDisabled()
@@ -287,7 +287,7 @@ describe('ContextDock overview', () => {
     api.listNotes.mockResolvedValue([{ id: 'n1' }])
     renderDock({ questionsAsked: 3 })
     expect(await screen.findByText('No files yet')).toBeInTheDocument()
-    expect(screen.getByText('Add a file. The AI answers from it.')).toBeInTheDocument()
+    expect(screen.getByText('PDF, slides or a photo · up to 20 MB')).toBeInTheDocument()
     expect(nextButton()).toHaveTextContent('Add a file')
   })
 
@@ -368,7 +368,7 @@ describe('ContextDock overview', () => {
     api.listDocuments.mockResolvedValue([])
     const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {})
     renderDock()
-    await screen.findByText('Add a file. The AI answers from it.')
+    await screen.findByText('PDF, slides or a photo · up to 20 MB')
     window.dispatchEvent(new Event('sl:add-file'))
     expect(click).toHaveBeenCalledTimes(1)
     click.mockRestore()

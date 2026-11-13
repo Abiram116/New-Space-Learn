@@ -14,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { LIMITS } from '../../lib/limits'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { ChatReturnState } from '../../lib/fromChat'
-import { listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
+import { getStarters, listMessages, streamChat, type ChatStreamEvent } from '../../api/chat'
 import { listDocuments } from '../../api/documents'
 import { listPreferences, sendFeedback, type Preference } from '../../api/feedback'
 import type { ChatMessage as Message, Citation } from '../../api/types'
@@ -26,6 +26,7 @@ import { PageSpinner } from '../../components/ui/PageSpinner'
 import { useReducedMotion } from '../../components/ui/motion'
 import { useToast } from '../../components/ui/Toast'
 import { useActiveSubspace } from '../../lib/nav'
+import { cn } from '../../lib/cn'
 import { useAsync } from '../../lib/useAsync'
 import { SubspaceMissing } from '../spaces/SubspaceMissing'
 import { ChatOnDesktop } from '../mobile/ChatOnDesktop'
@@ -33,11 +34,14 @@ import { useIsMobile } from '../../lib/useIsMobile'
 import { LG_QUERY, useMediaQuery } from '../../lib/useMediaQuery'
 import { AgentRunCard } from './AgentRunCard'
 import { ChatSections } from './ChatSections'
+import { getStudentModel } from '../../api/me'
+import { STUDENT_MODEL_KEY } from '../onboarding/skippedStyle'
+import { useCachedStudentModel } from '../onboarding/StyleIntakeCard'
+import { modeStarter } from '../../lib/studyMode'
 import { ChatMessage } from './ChatMessage'
 import { Composer } from './Composer'
 import { ActiveAgentsStrip, ActiveSkillStrip, ContextDock } from './ContextDock'
 import type { DockPanel } from './DockPanels'
-import { ADD_FILE_EVENT } from './DockSources'
 import { NoteBriefDialog } from './NoteBriefDialog'
 import {
   askReason,
@@ -48,7 +52,10 @@ import {
   type TurnSignal,
 } from './feedbackPolicy'
 import type { AgentKey } from './agents'
-import { suggestFor } from './suggest'
+import { nextSuggestion, topicStarters } from './suggest'
+import { suggestSwitch } from '../../lib/localSwitch'
+import { setTopicScope, topicScopeNow, useTopicScopeChoice } from '../../lib/topicScope'
+import { getSettings } from '../../api/me'
 import { StreamingMessage } from './StreamingMessage'
 import { StreamPacer } from './streamPacer'
 import { clampTopic, useAgentRuns } from './useAgentRuns'
@@ -86,7 +93,7 @@ type Inner = {
   showError: (e: unknown) => void
 }
 
-function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }: Inner) {
+function ChatViewInner({ subspaceId, subspaceName, spaceName, base, onNavigate, showError }: Inner) {
   // The sidebar exists from `lg:` up; below that its two jobs move to strips above
   // the composer. Mount one set or the other — never both — so a width fetches
   // only the data it shows.
@@ -94,6 +101,29 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
   const history = useAsync(() => listMessages(subspaceId), [subspaceId])
   // Same cache key as the sidebar's file list, so this costs no extra trip once it has loaded.
   const docs = useAsync(() => listDocuments(subspaceId), [subspaceId], `docs:${subspaceId}`)
+  // Starter questions written from this topic's own files. Asked again only
+  // when the set of ready files changes; the server caches them too.
+  const readyKey = (docs.data ?? [])
+    .filter((d) => d.status === 'ready')
+    .map((d) => d.id)
+    .sort()
+    .join(',')
+  // Read here (shared cache key) now that nothing above the composer loads it:
+  // the opening question for interview / exam modes comes from it.
+  useAsync(getStudentModel, [], STUDENT_MODEL_KEY)
+  const studyMode = useCachedStudentModel()?.study_mode ?? null
+  const [tutorBusy, setTutorBusy] = useState(false)
+  const starters = useAsync(
+    () => (readyKey ? getStarters(subspaceId) : Promise.resolve({ questions: [] as string[] })),
+    [subspaceId, readyKey],
+    `starters:${subspaceId}:${readyKey}`,
+  )
+  const suggestOn = suggestSwitch.use()
+  // How strict this topic's tutor is: the student's choice for this topic, or
+  // the account-wide setting until they make one.
+  const scopeChoice = useTopicScopeChoice(subspaceId)
+  const accountSettings = useAsync(() => getSettings(), [], 'settings')
+  const scope = scopeChoice ?? (accountSettings.data?.answer_only_from_docs === false ? 'subject' : 'files')
   /* The live turn. Tokens do NOT flow through React state: they go into
      `pacer`, which reveals them on requestAnimationFrame, and only
      `StreamingMessage` subscribes to it. This component re-renders when a turn
@@ -134,6 +164,12 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
      frame. */
   const stickRef = useRef(true)
   const scrollRafRef = useRef(0)
+  /* The question a reply belongs to, while that reply is the newest. A reply
+     is read from its first line, so instead of chasing the bottom of a long
+     answer the view follows it only until the question reaches the top, then
+     holds still — the start of the answer stays on screen, and the end of it
+     is the reader's to scroll to. Cleared the moment the reader scrolls. */
+  const anchorRef = useRef<string | null>(null)
 
   useEffect(() => {
     const el = scrollRef.current
@@ -142,18 +178,51 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
     const onScroll = () => {
       stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX
     }
+    // Only a person scrolls with a wheel, a finger or a key; the view's own
+    // scrolling fires `scroll` too, so that event can't tell the two apart.
+    const onIntent = () => {
+      anchorRef.current = null
+    }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    el.addEventListener('wheel', onIntent, { passive: true })
+    el.addEventListener('touchmove', onIntent, { passive: true })
+    el.addEventListener('keydown', onIntent)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      el.removeEventListener('wheel', onIntent)
+      el.removeEventListener('touchmove', onIntent)
+      el.removeEventListener('keydown', onIntent)
+    }
   }, [])
 
   const followBottom = useCallback(() => {
     const el = scrollRef.current
-    if (!el || !stickRef.current) return
+    if (!el) return
+    const anchor = anchorRef.current
+    if (anchor) {
+      cancelAnimationFrame(scrollRafRef.current)
+      scrollRafRef.current = requestAnimationFrame(() => {
+        const question = document.getElementById(`msg-${anchor}`)
+        if (!question) return
+        const top =
+          question.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 16
+        const target = Math.min(el.scrollHeight - el.clientHeight, top)
+        // Only ever forward: the answer growing never pulls the view back up.
+        if (target > el.scrollTop) el.scrollTop = target
+      })
+      return
+    }
+    if (!stickRef.current) return
     cancelAnimationFrame(scrollRafRef.current)
     scrollRafRef.current = requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight
     })
   }, [])
+
+  // A different topic's thread opens at its newest message, as before.
+  useEffect(() => {
+    anchorRef.current = null
+  }, [subspaceId])
 
   useEffect(() => {
     followBottom()
@@ -191,19 +260,29 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
   }, [history])
 
   const send = useCallback(
-    async (text: string, opts?: { regenerate?: boolean; images?: string[] }) => {
+    async (text: string, opts?: { regenerate?: boolean; images?: string[] }): Promise<boolean> => {
       const regenerate = opts?.regenerate ?? false
+      // One answer at a time: a second turn started over a live one had both
+      // streams writing to the same bubble.
+      if (abortRef.current && !abortRef.current.signal.aborted) return false
       // Sending (or regenerating) is the one moment that should always jump
       // back down, even if the reader had scrolled up mid-thread — it's their
       // own action putting a new turn at the bottom.
       stickRef.current = true
+      setTutorBusy(false)
       // A regenerate is another attempt at a question already on screen, not
       // a new turn — appending a second identical bubble would show the
       // student's own question twice for one answer that changed. The
       // backend mirrors this: it does not re-store the question either.
+      const optimisticId = `tmp-${Date.now()}`
+      // Pin the question this reply answers: the new one, or for a regenerate
+      // the one already on screen.
+      anchorRef.current = regenerate
+        ? ([...(historyRef.current ?? [])].reverse().find((m) => m.role === 'user')?.id ?? null)
+        : optimisticId
       if (!regenerate) {
         const optimistic: Message = {
-          id: `tmp-${Date.now()}`,
+          id: optimisticId,
           role: 'user',
           content: text,
           created_at: new Date().toISOString(),
@@ -214,6 +293,20 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
         // `repeated_regenerate` on an answer nobody has regenerated yet.
         setRegenerations(0)
       }
+      // A regenerate REPLACES the answer to this question. The old reply comes
+      // off the screen as the new one starts (the server drops it once the new
+      // one is saved), instead of sitting above a second answer to the same
+      // question. If the new attempt fails, it is put back below.
+      let replaced: Message[] = []
+      if (regenerate) {
+        const all = historyRef.current ?? []
+        const lastAsk = all.map((m) => m.role).lastIndexOf('user')
+        replaced = all.slice(lastAsk + 1).filter((m) => m.role === 'assistant')
+        if (replaced.length) {
+          const gone = new Set(replaced.map((m) => m.id))
+          history.setData((prev) => (prev ?? []).filter((m) => !gone.has(m.id)))
+        }
+      }
       const pacer = new StreamPacer({ instant: reducedMotion })
       const turn = ++turnRef.current
       let citations: Citation[] = []
@@ -221,6 +314,9 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
       setStreaming(true)
       const controller = new AbortController()
       abortRef.current = controller
+      let finished = false
+      // Anything at all came back on the stream: the server has the question.
+      let accepted = false
       try {
         for await (const evt of streamChat(
           subspaceId,
@@ -228,7 +324,9 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           controller.signal,
           regenerate,
           opts?.images ?? [],
+          topicScopeNow(subspaceId),
         )) {
+          accepted = true
           if (evt.type === 'token') {
             pacer.push(evt.delta)
           } else if (evt.type === 'citation') {
@@ -254,23 +352,51 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
               content: resolved.text,
               citations: resolved.citations.length ? resolved.citations : null,
               suggestion: evt.suggestion,
+              personal: evt.personal?.length ? evt.personal : null,
+              grounding: evt.grounding ?? null,
               created_at: new Date().toISOString(),
             }
             settledRef.current.add(assistant.id)
             history.setData((prev) => [...(prev ?? []), assistant])
             setStream(null)
+            finished = true
           } else if (evt.type === 'error') {
+            // A busy or limited model is not a dead end: remember it so the
+            // thread can offer what needs no model while the student waits.
+            if (evt.code === 'upstream_unavailable' || evt.code === 'rate_limited') setTutorBusy(true)
             throw new Error(evt.message)
           }
         }
+        // The connection closed with no `done`: without this the thinking
+        // dots stayed on screen for good.
+        if (!finished && !controller.signal.aborted) throw new Error('The answer stopped early. Try again.')
       } catch (err) {
         if (!controller.signal.aborted) showError(err)
         setStream((s) => (s && s.pacer === pacer ? null : s))
+        // The new attempt failed: the answer it was meant to replace is still
+        // the student's best one, so it goes back.
+        if (replaced.length && !finished && !controller.signal.aborted) {
+          history.setData((prev) => [...(prev ?? []), ...replaced])
+        }
+        /* Refused before it began (today's answers used up, offline, a
+           validation error): the server never stored the question, so the
+           bubble would be gone on the next reload anyway and the words with
+           it. Take the bubble back out and hand the text back to the composer
+           (see its `onSend`). */
+        if (!accepted && !regenerate && !controller.signal.aborted) {
+          history.setData((prev) => (prev ?? []).filter((m) => m.id !== optimisticId))
+          return false
+        }
       } finally {
         pacer.dispose()
-        setStreaming(false)
-        abortRef.current = null
+        // Only if this is still the live turn: a stopped turn unwinds a moment
+        // after Stop, and must not switch off the turn that was sent next.
+        if (abortRef.current === controller) {
+          setStreaming(false)
+          abortRef.current = null
+        }
       }
+      return true
     },
     [subspaceId, history, showError, reducedMotion],
   )
@@ -295,7 +421,13 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
     () => lastAssistant(historyRef.current ?? [])?.content,
     [],
   )
-  const agentRuns = useAgentRuns({ subspaceId, base, navigate: onNavigate, getSourceText })
+  // A finished run opens what it made by itself, unless that would take
+  // something away: an answer still arriving, or a question half typed.
+  const stay = useCallback(() => {
+    const draft = document.querySelector<HTMLTextAreaElement>('[data-chat-input]')?.value.trim()
+    return Boolean(draft) || Boolean(abortRef.current && !abortRef.current.signal.aborted)
+  }, [])
+  const agentRuns = useAgentRuns({ subspaceId, base, navigate: onNavigate, getSourceText, stay })
   const { runs, busy, start: startRun, retry: retryRun, dismiss: dismissRun, open: openRun } = agentRuns
 
   useEffect(() => {
@@ -396,6 +528,17 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
     (docs.data ?? []).some((d) => d.status === 'ready') ||
     messages.some((m) => m.role === 'assistant' && (m.citations?.length ?? 0) > 0)
   const userMessagesInOrder = messages.filter((m) => m.role === 'user').map((m) => m.content)
+  // Files were added and none can be answered from yet.
+  const stillReading =
+    !hasReadyFile && (docs.data ?? []).some((d) => d.status === 'processing' || d.status === 'uploading')
+  // The sidebar re-reads the list while a file is being read (same cache
+  // entry). Without it, nothing did, and the line below never went away.
+  const refreshDocs = docs.refresh
+  useEffect(() => {
+    if (!stillReading || hasSidebar) return
+    const t = window.setTimeout(refreshDocs, 4000)
+    return () => window.clearTimeout(t)
+  }, [stillReading, hasSidebar, docs.data, refreshDocs])
 
   /* Built once, used by both `chipsFor` and `askReason`. Calling them with
      independently-assembled inputs is how the row ends up showing chips with
@@ -444,6 +587,17 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
     await send(question, { regenerate: true })
   }, [streaming, lastUserMessage, messages, subspaceId, send])
 
+  /* A question left without an answer: Stop pressed, or the answer broke
+     part-way. The server has the question, so this is another go at it (no
+     second bubble) and, unlike `regenerate`, says nothing about an answer
+     being poor: there was none to judge. */
+  const unanswered =
+    !streaming && !stream && last !== undefined && (last.role === 'user' || last.id.startsWith('srv-stopped-'))
+  const retry = useCallback(() => {
+    const question = lastUserMessage?.content
+    if (question) void send(question, { regenerate: true })
+  }, [lastUserMessage, send])
+
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -466,29 +620,42 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-end gap-5 px-5 pb-2 pt-6">
           {history.loading && <PageSpinner />}
           {history.error && !history.loading && (
-            <div className="rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
-              {history.error}
+            <div className="flex flex-col items-start gap-2 rounded-xl bg-coral-soft px-4 py-3 text-sm text-coral-deep">
+              {/* A topic deleted somewhere else (another tab, another device) answers
+                  "not found": say what happened, not the server's wording. */}
+              <p>{/not found/i.test(history.error) ? 'This topic no longer exists. It may have been deleted.' : history.error}</p>
+              <div className="flex gap-2">
+                {!/not found/i.test(history.error) && (
+                  <Button size="sm" variant="secondary" onClick={() => history.refresh()}>
+                    Try again
+                  </Button>
+                )}
+                <Button size="sm" variant="secondary" onClick={() => onNavigate('/home')}>
+                  Go to Home
+                </Button>
+              </div>
             </div>
           )}
           {isEmpty && (
             <EmptyState
               icon="chat"
               title={`Start learning ${subspaceName}`}
-              description="Add a PDF or notes, then ask a question. Answers cite the pages they came from."
+              description={
+                hasReadyFile
+                  ? 'Your files are ready. Ask a question, or start with one of the ideas below.'
+                  : scope === 'subject'
+                    ? `No files yet. Start with a question below and it is answered from general knowledge in ${spaceName}, marked as not from your files. Add a PDF and answers cite your pages.`
+                    : 'Add a PDF or notes, then ask a question. Answers cite the pages they came from.'
+              }
+              // With the dock on screen it already offers "Add a file" twice (the drop area
+              // and "Next step"), so a third identical button here is only noise. Without
+              // the dock (a narrow window) this is the one way to the next step.
               action={
-                // The next step is the only button on the page. It used to be a
-                // sentence pointing at a tab, which left the one thing a new
-                // student must do as the one thing without a button.
-                <Button
-                  // One orange button per screen: with the sidebar on screen it
-                  // owns the call to action, and this one stays quiet.
-                  variant={hasSidebar ? 'secondary' : 'primary'}
-                  onClick={() =>
-                    hasSidebar ? window.dispatchEvent(new Event(ADD_FILE_EVENT)) : onNavigate(`${base}/docs`)
-                  }
-                >
-                  <Icon name="plus" size={14} /> Add a file
-                </Button>
+                hasReadyFile || hasSidebar ? undefined : (
+                  <Button onClick={() => onNavigate(`${base}/docs`)}>
+                    <Icon name="plus" size={14} /> Add a file
+                  </Button>
+                )
               }
             />
           )}
@@ -526,6 +693,33 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
             />
           ))}
 
+          {unanswered && (
+            <button
+              type="button"
+              onClick={retry}
+              className={cn(
+                '-mt-3 flex min-h-8 w-fit cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-[12.5px] font-semibold text-muted transition-colors hover:text-ink',
+                last?.role === 'user' ? 'self-end' : 'self-start',
+              )}
+            >
+              <Icon name="refresh" size={13} /> Try again
+            </button>
+          )}
+
+          {tutorBusy && !streaming && (
+            <div role="status" className="flex flex-col gap-2 rounded-xl border border-line bg-raised px-4 py-3 text-[13.5px] text-ink-2">
+              <p>The tutor is busy right now. Your question is saved. Try again in a minute. Meanwhile, these don’t need it:</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => onNavigate(`${base}/flashcards?review=due`)}>
+                  Review due cards
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => onNavigate(`${base}/notes`)}>
+                  Read your notes
+                </Button>
+              </div>
+            </div>
+          )}
+
           {stream && (
             <StreamingMessage
               key={stream.turn}
@@ -562,7 +756,32 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
           onCancel={cancel}
           onRunAgent={runAgent}
           streaming={streaming}
-          suggestion={hasReadyFile ? (followUp ?? suggestFor(userMessagesInOrder.length)) : undefined}
+          // An empty chat offers three to pick from instead of the one in the box.
+          suggestion={
+            suggestOn && hasReadyFile && !isEmpty
+              ? (followUp ?? nextSuggestion(starters.data?.questions ?? [], userMessagesInOrder))
+              : undefined
+          }
+          // An empty chat opens with questions about this topic's own files;
+          // the generic ideas only while those are still being written.
+          examples={
+            suggestOn && isEmpty && !hasReadyFile && !stillReading && scope === 'subject'
+              ? withModeStarter(studyMode, topicStarters(subspaceName, spaceName))
+              : suggestOn && isEmpty && hasReadyFile
+              ? withModeStarter(
+                  studyMode,
+                  starters.data?.questions.length
+                    ? starters.data.questions
+                    : starters.loading
+                      ? undefined
+                      : topicStarters(subspaceName, spaceName),
+                )
+              : undefined
+          }
+          notice={stillReading ? 'Your file is still being read. Answers will use it once it’s ready.' : undefined}
+          draftKey={subspaceId}
+          scope={scope}
+          onScope={(next) => setTopicScope(subspaceId, next)}
         />
       </div>
 
@@ -592,6 +811,13 @@ function ChatViewInner({ subspaceId, subspaceName, base, onNavigate, showError }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+/** The mode's own opening move first ("Interview me…"), then the topic's questions. */
+function withModeStarter(mode: string | null, questions: string[] | undefined): string[] | undefined {
+  if (!questions) return questions
+  const first = modeStarter(mode)
+  return first ? [first, ...questions.filter((q) => q !== first)].slice(0, 4) : questions
+}
 
 /**
  * What the finished message actually is, given the `done` event and

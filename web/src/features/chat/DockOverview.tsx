@@ -170,7 +170,7 @@ export function DockOverview({
           onRunAgent={onRunAgent}
         />
       ) : (
-        <Summary {...common} title={files.title} kind={files.kind} counts={counts} />
+        <Summary {...common} title={files.title} kind={files.kind} />
       )}
       <footer className="shrink-0 border-t border-line px-3.5 pb-3.5 pt-3">
         <p className="setcode mb-2">Next step</p>
@@ -287,12 +287,7 @@ function Waiting() {
 
 /* ── A topic in use ─────────────────────────────────────────────────────── */
 
-function Summary({
-  title,
-  kind,
-  counts,
-  ...s
-}: Shared & { title: string; kind: string; counts: DockCounts }) {
+function Summary({ title, kind, ...s }: Shared & { title: string; kind: string }) {
   const dot = kind === 'ready' ? 'bg-mint' : kind === 'failed' ? 'bg-coral' : 'bg-sun'
   return (
     <>
@@ -301,7 +296,6 @@ function Summary({
           <span aria-hidden className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-full', dot, kind === 'reading' && 'animate-pulse')} />
           <div className="min-w-0">
             <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-ink">{title}</p>
-            {kind === 'none' && <p className="text-[11.5px] leading-snug text-muted">Add one to get answers with page numbers.</p>}
           </div>
         </div>
         <HelpButton onClick={() => s.onOpenPanel('help')} />
