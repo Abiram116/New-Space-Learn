@@ -8,7 +8,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { gradeCard } from './flashcards'
+import {
+  gradeCard,
+  onUnsavedGrades,
+  resetUnsavedGradesForTests,
+  retryUnsavedGrades,
+  unsavedGradeCount,
+} from './flashcards'
 
 const ok = (body: unknown = { id: 'c1' }) =>
   new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -24,6 +30,7 @@ let replies: Array<() => Response | Promise<Response>>
 
 beforeEach(() => {
   vi.useFakeTimers()
+  resetUnsavedGradesForTests()
   calls = []
   replies = []
   vi.stubGlobal(
@@ -117,5 +124,126 @@ describe('gradeCard', () => {
     await vi.runAllTimersAsync()
     await done
     expect(calls[0].tz).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone)
+  })
+})
+
+/**
+ * A grade that ran out of attempts is kept, not dropped: it is counted as
+ * unsaved until it gets through, and it goes out again with the same id.
+ */
+describe('grades that could not be sent', () => {
+  const failAll = (n: number) => Array.from({ length: n }, () => netDown)
+
+  it('counts a grade as unsaved from its first failed attempt until it is saved', async () => {
+    const seen: number[] = []
+    const off = onUnsavedGrades(() => seen.push(unsavedGradeCount()))
+    replies = [netDown, () => ok()]
+    const done = gradeCard('c1', 'good')
+    await vi.advanceTimersByTimeAsync(10)
+    expect(unsavedGradeCount()).toBe(1) // retrying, not saved yet
+    await vi.runAllTimersAsync()
+    await done
+    expect(unsavedGradeCount()).toBe(0)
+    expect(seen).toEqual([1, 0])
+    off()
+  })
+
+  it('keeps a grade that ran out of attempts and sends it again on request, same id', async () => {
+    replies = failAll(4)
+    const done = gradeCard('c1', 'good')
+    const settled = expect(done).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await settled
+    expect(unsavedGradeCount()).toBe(1)
+
+    replies = [() => ok()]
+    await expect(retryUnsavedGrades()).resolves.toBe(0)
+    expect(calls).toHaveLength(5)
+    expect(new Set(calls.map((c) => c.body.review_id)).size).toBe(1)
+    expect(unsavedGradeCount()).toBe(0)
+
+    // Nothing left: asking again sends nothing.
+    await expect(retryUnsavedGrades()).resolves.toBe(0)
+    expect(calls).toHaveLength(5)
+  })
+
+  it('stays unsaved when the retry fails too', async () => {
+    replies = failAll(4)
+    const done = gradeCard('c1', 'hard')
+    const settled = expect(done).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await settled
+    replies = [netDown]
+    await expect(retryUnsavedGrades()).resolves.toBe(1)
+    expect(unsavedGradeCount()).toBe(1)
+  })
+
+  it('sends again by itself when the browser comes back online', async () => {
+    replies = failAll(4)
+    const done = gradeCard('c1', 'good')
+    const settled = expect(done).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await settled
+
+    replies = [() => ok()]
+    window.dispatchEvent(new Event('online'))
+    await vi.runAllTimersAsync()
+    expect(unsavedGradeCount()).toBe(0)
+    expect(calls[4].body.review_id).toBe(calls[0].body.review_id)
+  })
+
+  it('a later grade for the same card waits behind the one still unsaved', async () => {
+    replies = failAll(4)
+    const first = gradeCard('c1', 'again')
+    const firstSettled = expect(first).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await firstSettled
+
+    // Still offline: the second grade must not jump the queue, so it waits too.
+    replies = [netDown]
+    const second = gradeCard('c1', 'good')
+    const secondSettled = expect(second).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await secondSettled
+    expect(unsavedGradeCount()).toBe(2)
+    expect(calls.map((c) => c.body.grade)).toEqual(['again', 'again', 'again', 'again', 'again'])
+
+    replies = [() => ok(), () => ok()]
+    await expect(retryUnsavedGrades()).resolves.toBe(0)
+    expect(calls.slice(5).map((c) => c.body.grade)).toEqual(['again', 'good'])
+    expect(calls[5].body.review_id).toBe(calls[0].body.review_id)
+    expect(calls[6].body.review_id).not.toBe(calls[0].body.review_id)
+  })
+
+  it('a grade that gets through takes the waiting ones for other cards with it', async () => {
+    replies = failAll(4)
+    const lost = gradeCard('c1', 'good')
+    const lostSettled = expect(lost).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await lostSettled
+
+    replies = [() => ok({ id: 'c2' }), () => ok()]
+    await expect(gradeCard('c2', 'easy')).resolves.toEqual({ id: 'c2' })
+    await vi.runAllTimersAsync()
+    expect(unsavedGradeCount()).toBe(0)
+    expect(calls.at(-1)?.url).toContain('/cards/c1/grade')
+  })
+
+  it('lets go of a waiting grade the server refuses, and never counts a refusal as unsaved', async () => {
+    replies = failAll(4)
+    const done = gradeCard('c1', 'good')
+    const settled = expect(done).rejects.toBeTruthy()
+    await vi.runAllTimersAsync()
+    await settled
+
+    replies = [() => fail(422)]
+    await expect(retryUnsavedGrades()).resolves.toBe(0)
+
+    replies = [() => fail(422)]
+    const refused = gradeCard('c2', 'good')
+    const refusedSettled = expect(refused).rejects.toMatchObject({ status: 422 })
+    await vi.runAllTimersAsync()
+    await refusedSettled
+    expect(unsavedGradeCount()).toBe(0)
   })
 })

@@ -20,6 +20,7 @@ function decks(addMaterialHref: string | null) {
         loading={false}
         error={null}
         onRetry={noop}
+        onPractice={noop}
         subjects={[]}
         subjectFilter="all"
         onSubjectFilter={noop}
@@ -30,6 +31,7 @@ function decks(addMaterialHref: string | null) {
         onOpen={noop}
         onReview={noop}
         onReviewDue={noop}
+        onRename={noop}
         onDelete={noop}
         onNew={noop}
         onGenerate={vi.fn()}
@@ -53,6 +55,8 @@ function quizzes(addMaterialHref: string | null) {
         generating={false}
         addMaterialHref={addMaterialHref}
         onOpen={noop}
+        onRename={noop}
+        onDelete={noop}
         onGenerate={noop}
       />
     </MemoryRouter>,

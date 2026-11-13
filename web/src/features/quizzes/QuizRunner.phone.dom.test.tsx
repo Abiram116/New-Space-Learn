@@ -19,6 +19,9 @@ vi.mock('../../api/quizzes', () => ({
 import { QuizRunner } from './QuizRunner'
 import { QuizResults } from './QuizResults'
 
+// An unfinished attempt is kept for the tab (see ./draft.ts); not between tests.
+afterEach(() => sessionStorage.clear())
+
 const QUIZ: Quiz = {
   id: 'q1',
   topic: 'Attention',

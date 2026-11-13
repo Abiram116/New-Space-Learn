@@ -67,6 +67,12 @@ const listAllDecks = vi.fn()
 const listCards = vi.fn((deckId: string) => Promise.resolve(CARDS[deckId] ?? []))
 const gradeCard = vi.fn(() => Promise.resolve())
 vi.mock('../../api/flashcards', () => ({
+  // The unsaved-grade outbox (see api/flashcards): nothing waiting in these tests.
+  gradeWillRetry: () => false,
+  onUnsavedGrades: () => () => {},
+  unsavedGradeCount: () => 0,
+  retryUnsavedGrades: () => Promise.resolve(0),
+  renameDeck: vi.fn(),
   listAllDecks: (...a: unknown[]) => listAllDecks(...a),
   listDecks: vi.fn(),
   createDeck: vi.fn(),

@@ -1,14 +1,22 @@
 /**
- * The two dialogs that create decks — by hand, and from a topic's material.
+ * The two dialogs that create decks — by hand, and from a topic's material —
+ * and the one that renames a deck (quizzes use it for their name too).
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { LIMITS } from '../../lib/limits'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
 import { TopicSelect, useTopicName } from '../spaces/TopicSelect'
+import {
+  rememberSource,
+  rememberedSource,
+  SourcePicker,
+  sourceReady,
+  type PickedSource,
+} from '../quizzes/SourcePicker'
 
 export function NewDeckModal({
   open,
@@ -35,7 +43,9 @@ export function NewDeckModal({
   }, [open, defaultTopicId])
 
   const submit = async () => {
-    if (!name.trim()) return
+    // `busy` too: Enter in the field calls this directly, so a second Enter
+    // while the first request was out created the deck twice.
+    if (busy || !name.trim()) return
     setBusy(true)
     try {
       await onCreate(name.trim(), topicId)
@@ -84,13 +94,16 @@ export function GenerateModal({
   /** Whose material the cards are drawn from, unless another topic is picked. */
   defaultTopicId: string
   onClose: () => void
-  onGenerate: (topicId: string, focus: string | undefined, count: number) => Promise<void>
+  onGenerate: (topicId: string, focus: string | undefined, count: number, source: PickedSource) => Promise<void>
 }) {
   const [topicId, setTopicId] = useState(defaultTopicId)
   const topicName = useTopicName(topicId)
   const [topic, setTopic] = useState('')
   const [count, setCount] = useState(8)
+  const [source, setSource] = useState<PickedSource>(rememberedSource)
   const [busy, setBusy] = useState(false)
+  // A second click before `busy` re-renders would write (and pay for) a second deck.
+  const inFlight = useRef(false)
   const { showError } = useToast()
 
   useEffect(() => {
@@ -98,16 +111,21 @@ export function GenerateModal({
       setTopic('')
       setCount(8)
       setTopicId(defaultTopicId)
+      setSource(rememberedSource())
     }
   }, [open, defaultTopicId])
 
   const submit = async () => {
+    if (inFlight.current || !sourceReady(source)) return
+    inFlight.current = true
     setBusy(true)
     try {
-      await onGenerate(topicId, topic.trim() || undefined, count)
+      await onGenerate(topicId, topic.trim() || undefined, count, source)
+      rememberSource(source)
     } catch (err) {
       showError(err)
     } finally {
+      inFlight.current = false
       setBusy(false)
     }
   }
@@ -124,8 +142,9 @@ export function GenerateModal({
           className="pointer-coarse:text-base"
           maxLength={LIMITS.cardsTopic}
           placeholder={topicName}
-          hint="Left blank, it draws on everything indexed in the topic above."
+          hint="Left blank, it covers everything in what you pick below."
         />
+        <SourcePicker topicId={topicId} value={source} onChange={setSource} />
         <div className="flex flex-col gap-1.5">
           <label htmlFor="count" className="setcode">
             How many cards
@@ -153,8 +172,83 @@ export function GenerateModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={busy}>
+          <Button onClick={submit} disabled={busy || !sourceReady(source)}>
             {busy ? 'Writing cards…' : 'Generate'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * One field, the current name in it. Stays open on a failed save, with the
+ * typed name intact, so nothing has to be typed twice.
+ */
+export function RenameModal({
+  open,
+  title,
+  label,
+  current,
+  maxLength,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  /** "Rename deck" / "Rename quiz". */
+  title: string
+  /** The field's label: "Deck name" / "Quiz name". */
+  label: string
+  current: string
+  maxLength: number
+  onClose: () => void
+  onSave: (name: string) => Promise<void>
+}) {
+  const [name, setName] = useState(current)
+  const [busy, setBusy] = useState(false)
+  const { showError } = useToast()
+
+  useEffect(() => {
+    if (open) setName(current)
+  }, [open, current])
+
+  const clean = name.trim()
+  const submit = async () => {
+    if (busy || !clean) return
+    // Unchanged: nothing to send.
+    if (clean === current.trim()) {
+      onClose()
+      return
+    }
+    setBusy(true)
+    try {
+      await onSave(clean)
+    } catch (err) {
+      showError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title={title} width="sm">
+      <div className="flex flex-col gap-3">
+        <Input
+          name="rename"
+          label={label}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          className="pointer-coarse:text-base"
+          maxLength={maxLength}
+          autoFocus
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={busy || !clean}>
+            {busy ? 'Saving…' : 'Save'}
           </Button>
         </div>
       </div>

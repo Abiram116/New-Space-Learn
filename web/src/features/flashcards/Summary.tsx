@@ -18,7 +18,8 @@ import { Reaction, scoreArc } from '../../components/mascot'
 import { cn } from '../../lib/cn'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
-import { GRADES } from './model'
+import { GRADES, PRACTICE_NOTE } from './model'
+import { UnsavedGrades, useUnsavedGrades } from './ReviewNotes'
 
 /** Sessions already celebrated, by identity — a remount mustn't replay it. */
 const celebrated = new WeakSet<Grade[]>()
@@ -32,6 +33,8 @@ export function Summary({
   onReviewNext,
   quizHref,
   keepGoing,
+  onPractice,
+  onGradesSaved,
 }: {
   grades: Grade[]
   deckName: string
@@ -43,7 +46,14 @@ export function Summary({
   quizHref: string
   /** A capped session left due cards behind: offer the next batch, not the lot. */
   keepGoing?: { count: number; onGo: () => void } | null
+  /** Go through this deck once more as practice (no grades). One deck only. */
+  onPractice?: () => void
+  /** Grades that were waiting got through: due counts just changed. */
+  onGradesSaved?: () => void
 }) {
+  // Grades given are not grades saved. While any are still waiting, the
+  // summary says so and does not claim the schedule has moved.
+  const unsaved = useUnsavedGrades()
   const tally = useMemo(() => {
     const counts: Record<Grade, number> = { again: 0, hard: 0, good: 0, easy: 0 }
     for (const g of grades) counts[g] += 1
@@ -95,7 +105,10 @@ export function Summary({
       {!isMobile && <SubspaceHeader title="Session complete" />}
       <div
         className={cn(
-          'relative isolate flex min-h-0 flex-1 items-center justify-center overflow-y-auto',
+          // Centred with `m-auto` on the ledger, not `items-center` here: a
+          // ledger taller than a small phone's screen then scrolls from its
+          // first line (the score) instead of being cut off above the top.
+          'relative isolate flex min-h-0 flex-1 justify-center overflow-y-auto',
           isMobile ? 'p-4' : 'p-6',
         )}
       >
@@ -105,7 +118,7 @@ export function Summary({
             it on a score turned "you got 60%" into something that looked like
             a reward for getting 60%. The card faces you just reviewed stay
             Cards, because those genuinely are objects you own. */}
-        <Ledger className="flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center max-sm:p-5 max-sm:pt-3">
+        <Ledger className="my-auto flex w-full max-w-md flex-col gap-5 p-7 pt-4 text-center max-sm:p-5 max-sm:pt-3">
           <div ref={pctRef}>
             <div className="nameplate text-[64px] leading-none text-brand tabular-nums">{pct}%</div>
             <p className={cn('mt-1', isMobile ? 'text-[13px] text-muted' : 'setcode')}>solid on {deckName}</p>
@@ -134,13 +147,26 @@ export function Summary({
             ))}
           </div>
 
-          <p className={cn('leading-relaxed text-muted', isMobile ? 'text-[15px]' : 'text-[13px]')}>
-            {tally.again > 0
-              ? `${tally.again} card${tally.again === 1 ? '' : 's'} came back short — those return sooner.`
-              : 'Nothing missed. The whole deck moves further out.'}
-          </p>
+          {unsaved > 0 ? (
+            <UnsavedGrades onSaved={onGradesSaved} />
+          ) : (
+            <p className={cn('leading-relaxed text-muted', isMobile ? 'text-[15px]' : 'text-[13px]')}>
+              {tally.again > 0
+                ? `${tally.again} card${tally.again === 1 ? '' : 's'} came back short — those return sooner.`
+                : 'Nothing missed. The whole deck moves further out.'}
+            </p>
+          )}
 
           {!isMobile && <div className="flex gap-2">{actions}</div>}
+
+          {onPractice && (
+            <div className="flex flex-col items-center gap-1">
+              <Button variant="ghost" size="sm" onClick={onPractice}>
+                Review again
+              </Button>
+              <p className={cn('text-muted', isMobile ? 'text-[13px]' : 'text-[12px]')}>{PRACTICE_NOTE}</p>
+            </div>
+          )}
         </Ledger>
       </div>
       {isMobile && <StickyActionBar>{actions}</StickyActionBar>}

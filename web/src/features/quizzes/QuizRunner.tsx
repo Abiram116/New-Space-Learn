@@ -38,6 +38,7 @@ import { anyModalOpen, quizKeyAction, stageKeyGate, type QuizKeyAction } from '.
 import { Kbd, KeyHints, StageCount, type KeyHint } from './StageKit'
 import { useIsMobile } from '../../lib/useIsMobile'
 import { PhoneQuizStage } from './PhoneQuiz'
+import { clearQuizDraft, loadQuizDraft, saveQuizDraft } from './draft'
 import { haptic } from './phoneKit'
 import { useImmersive } from '../../components/layout/immersive'
 
@@ -70,17 +71,42 @@ export type RunnerState = {
   revealed: boolean[]
 }
 
-export function QuizRunner({
-  quiz,
-  compact = false,
-  onFinished,
-  onExit,
-}: {
+type RunnerProps = {
   quiz: Quiz
   compact?: boolean
   onFinished: (result: QuizResult, answers: number[], seconds: number) => void
   onExit: () => void
-}) {
+  /** Where this attempt's answers are kept for the tab (./draft.ts). The quiz
+   *  id unless this is a reworded retake, which keeps its own. */
+  draftKey?: string
+  /** How the answers are scored. A reworded retake maps them back to the
+   *  stored quiz first (./variant.ts); everything else submits as is. */
+  submit?: (answers: number[], seconds: number) => Promise<QuizResult>
+}
+
+/**
+ * A quiz with no questions (a generation that came back empty) has nothing to
+ * run: the stage reads `questions[0]` on its first line and used to crash the
+ * page. Say so and offer the way out instead.
+ */
+export function QuizRunner(props: RunnerProps) {
+  if (props.quiz.questions.length === 0) {
+    return (
+      <div className="mx-auto flex w-full max-w-lg flex-col items-start gap-3 p-6" role="status">
+        <p className="text-[15px] font-semibold text-ink">This quiz has no questions.</p>
+        <p className="text-[13.5px] leading-relaxed text-muted">
+          Nothing was written for it, so there is nothing to answer. Generate a new one from your material.
+        </p>
+        <Button variant="secondary" onClick={props.onExit}>
+          <Icon name="arrowLeft" size={14} /> Back
+        </Button>
+      </div>
+    )
+  }
+  return <Runner {...props} />
+}
+
+function Runner({ quiz, compact = false, onFinished, onExit: leave, draftKey = quiz.id, submit }: RunnerProps) {
   // The composer locks for as long as this is mounted. Every exit path —
   // finishing, backing out, closing the panel, navigating away — unmounts it,
   // so there is no route that forgets to unlock.
@@ -92,12 +118,34 @@ export function QuizRunner({
   useImmersive(phone)
 
   const total = quiz.questions.length
-  const [index, setIndex] = useState(0)
-  const [answers, setAnswers] = useState<number[]>(() => Array(total).fill(-1))
-  const [revealed, setRevealed] = useState<boolean[]>(() => Array(total).fill(false))
+  // Answers given before a reload, for THIS quiz only (see ./draft.ts). Read
+  // once: a retake remounts the runner after the draft has been cleared.
+  const [draft] = useState(() => loadQuizDraft(quiz, draftKey))
+  const [index, setIndex] = useState(draft?.index ?? 0)
+  const [answers, setAnswers] = useState<number[]>(() => draft?.answers ?? Array(total).fill(-1))
+  // A choice locks and reveals in one step, so "answered" is "revealed".
+  const [revealed, setRevealed] = useState<boolean[]>(() =>
+    draft ? draft.answers.map((a) => a >= 0) : Array(total).fill(false),
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const seconds = useElapsed()
+  const seconds = useElapsed(draft?.seconds ?? 0)
+  const secondsRef = useRef(seconds)
+  useLayoutEffect(() => {
+    secondsRef.current = seconds
+  })
+  // Keep the attempt for this tab as it goes. Cleared on submit and on leave.
+  const settled = useRef(false)
+  useEffect(() => {
+    if (settled.current || !answers.some((a) => a >= 0)) return
+    saveQuizDraft(draftKey, { index, answers, seconds: secondsRef.current })
+  }, [draftKey, index, answers])
+  // Leaving on purpose gives the attempt up, so it must not come back later.
+  const onExit = useCallback(() => {
+    settled.current = true
+    clearQuizDraft(draftKey)
+    leave()
+  }, [draftKey, leave])
   // The room: brightens as questions are answered, pulses on a right answer,
   // dims for a breath on a miss. A no-op outside a <StudyAmbience>.
   const ambience = useAmbience()
@@ -169,7 +217,9 @@ export function QuizRunner({
       // the tab is hidden (see useElapsed) — reusing it here instead of a
       // separate Date.now() diff keeps duration_seconds from counting time
       // the student spent on another tab.
-      const result = await submitQuiz(quiz.id, answers, seconds)
+      const result = submit ? await submit(answers, seconds) : await submitQuiz(quiz.id, answers, seconds)
+      settled.current = true
+      clearQuizDraft(draftKey)
       // The quiz average and streak just changed — see clearStatsCache.
       clearStatsCache()
       onFinished(result, answers, seconds)
@@ -179,7 +229,7 @@ export function QuizRunner({
       submitting.current = false
       setBusy(false)
     }
-  }, [quiz.id, answers, seconds, onFinished])
+  }, [quiz.id, answers, seconds, onFinished, submit, draftKey])
 
   /* ── Keyboard (full page only; see ./keys.ts) ───────────────────────── */
 
@@ -1087,8 +1137,8 @@ function StageVerdict({
  * on `visibilitychange` and picks back up when the tab is foregrounded
  * again, so the count only ever reflects time actually on screen.
  */
-function useElapsed(): number {
-  const [seconds, setSeconds] = useState(0)
+function useElapsed(startAt = 0): number {
+  const [seconds, setSeconds] = useState(startAt)
   useEffect(() => {
     let id: number | null = null
     const start = () => {

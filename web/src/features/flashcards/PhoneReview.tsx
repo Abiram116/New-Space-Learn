@@ -20,6 +20,7 @@ import { cn } from '../../lib/cn'
 import { stripMarkdown } from '../../lib/text'
 import { PhoneTopRow, haptic, seenOnce } from '../quizzes/phoneKit'
 import { GRADES } from './model'
+import { unsavedLine } from './ReviewNotes'
 
 const SWIPE_HINT_KEY = 'sl:review-swipe-hint-v1'
 /** Pixels of horizontal travel before a drag counts as a swipe rather than a tap. */
@@ -42,6 +43,8 @@ export function PhoneReview({
   onFlip,
   onGrade,
   onHighlight,
+  unsaved = 0,
+  gradeHelp,
 }: {
   index: number
   total: number
@@ -60,6 +63,10 @@ export function PhoneReview({
   onFlip: () => void
   onGrade: (g: Grade) => void
   onHighlight: (i: number) => void
+  /** Grades that have not reached the server yet; said in the hint line. */
+  unsaved?: number
+  /** What the four grades mean, on a first review (see ReviewNotes). */
+  gradeHelp?: ReactNode
 }) {
   const layerRef = useRef<HTMLDivElement>(null)
   const goodRef = useRef<HTMLSpanElement>(null)
@@ -252,8 +259,17 @@ export function PhoneReview({
 
       {/* Thumb zone. Same footprint before and after the flip. */}
       <div className="shrink-0 px-4 pb-[max(14px,env(safe-area-inset-bottom))] pt-1">
-        <p className="flex h-7 items-center justify-center gap-2 text-[13px] text-muted" aria-live="polite">
-          {showHint ? (
+        {gradeHelp}
+        <p
+          className={cn(
+            'flex h-7 items-center justify-center gap-2 text-[13px]',
+            unsaved > 0 ? 'text-sun-deep' : 'text-muted',
+          )}
+          aria-live="polite"
+        >
+          {unsaved > 0 ? (
+            unsavedLine(unsaved)
+          ) : showHint ? (
             <>
               <Icon name="arrowLeft" size={13} />
               Swipe left for Again, right for Good
@@ -324,7 +340,7 @@ export function PhoneReview({
  * readable at arm's length, a 12px one squeezed to fit is not. What still
  * doesn't fit scrolls inside the face.
  */
-function PhoneFace({
+export function PhoneFace({
   side,
   text,
   source,

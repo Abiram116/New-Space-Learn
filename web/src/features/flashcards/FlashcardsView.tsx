@@ -3,6 +3,7 @@
  *
  * Four states: the binder (deck grid), a deck's contents (where cards are
  * actually authored — the thing that was missing), review, and the summary.
+ * A fifth, practice, goes through a deck with nothing due and sends no grades.
  *
  * Grading is optimistic: we advance immediately and PATCH behind it. SM-2 lite
  * runs identically on the server, so the only cost of optimism is briefly
@@ -18,9 +19,11 @@ import {
   createDeck,
   deleteCard,
   deleteDeck,
+  extendDeck,
   generateCards,
   listAllDecks,
   listCards,
+  renameDeck,
   updateCard,
 } from '../../api/flashcards'
 import type { Deck, Flashcard, Tone } from '../../api/types'
@@ -51,9 +54,12 @@ import { useIsMobile } from '../../lib/useIsMobile'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
 import { ActionSheet, ListRow, PhoneTitle, useRowSheet } from '../quizzes/phoneKit'
 import { PhoneDecks } from './PhoneDecks'
+import { Practice } from './Practice'
 import { Review } from './Review'
 import { Summary } from './Summary'
-import { GenerateModal, NewDeckModal } from './modals'
+import { GenerateModal, NewDeckModal, RenameModal } from './modals'
+import { AddMoreModal } from '../quizzes/AddMoreModal'
+import { sourceBody, type PickedSource } from '../quizzes/SourcePicker'
 import { REVIEW_BATCH, type Mode } from './model'
 
 /** A deck is named by its name; `?deck=` shows that, not the id. */
@@ -87,7 +93,7 @@ function Inner({
   // NotesView. `subspaceId` still decides where a NEW deck is created; it
   // no longer decides what's visible.
   const decks = useAsync(() => listAllDecks(), [], 'decks:all')
-  const { spaces } = useSpaces()
+  const { spaces, refresh: refreshSpaces } = useSpaces()
   const subspaceToSpace = useMemo(() => {
     const map = new Map<string, (typeof spaces)[number]>()
     for (const s of spaces) for (const sub of s.subspaces) map.set(sub.id, s)
@@ -112,9 +118,15 @@ function Inner({
   })
   // Once the list says which deck a readable `?deck=` means, open it. Only from
   // the grid: a deck already open (or in review) must not be pulled out from under you.
+  // A link to another deck while one is open (search, Home, Profile all link
+  // with `?deck=`) switches to it too. A review or practice run in progress
+  // is left alone.
   useEffect(() => {
     const id = deckParam.id
-    if (id) setMode((m) => (m.kind === 'decks' ? { kind: 'deck', deckId: id } : m))
+    if (id)
+      setMode((m) =>
+        m.kind === 'decks' || (m.kind === 'deck' && m.deckId !== id) ? { kind: 'deck', deckId: id } : m,
+      )
   }, [deckParam.id])
   const openDeck = useCallback(
     (deckId: string) => {
@@ -149,6 +161,7 @@ function Inner({
   const [newDeckOpen, setNewDeckOpen] = useState(false)
   const [genOpen, setGenOpen] = useState(false)
   const [deleteDeckId, setDeleteDeckId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const [subjectFilter, setSubjectFilter] = useState<string>('all')
 
   const beginReview = useCallback(
@@ -160,6 +173,26 @@ function Inner({
           return
         }
         setMode({ kind: 'review', deckId, cards, index: 0, flipped: false, grades: [] })
+      } catch (err) {
+        showError(err)
+      }
+    },
+    [show, showError],
+  )
+
+  /**
+   * "Review again": every card in the deck, due or not, as a flip-through.
+   * No grades are sent, so the schedule stays exactly as it was (see Practice).
+   */
+  const beginPractice = useCallback(
+    async (deckId: string) => {
+      try {
+        const cards = await listCards(deckId)
+        if (cards.length === 0) {
+          show('This deck has no cards yet.', 'info')
+          return
+        }
+        setMode({ kind: 'practice', deckId, cards, index: 0, flipped: false })
       } catch (err) {
         showError(err)
       }
@@ -229,6 +262,16 @@ function Inner({
   // `?deck=<id>&review=deck` — the sidebar's "Review" on one deck. Handled once,
   // then cleared so Back doesn't restart it.
   const deckHandled = useRef(false)
+  // Both `?review=` links are handled again when a later link asks again while this page is
+  // still mounted (Home's "Review due" from inside the cards page): once the
+  // param is gone, the next one counts.
+  const reviewParam = params.get('review')
+  useEffect(() => {
+    if (!reviewParam) {
+      dueHandled.current = false
+      deckHandled.current = false
+    }
+  }, [reviewParam])
   const reviewDeckId = deckParam.id
   useEffect(() => {
     if (params.get('review') !== 'deck' || deckHandled.current || !reviewDeckId) return
@@ -252,11 +295,35 @@ function Inner({
     try {
       await deleteDeck(id)
       show('Deck deleted.', 'success')
+      // The topic's card count (the phone hub, the sidebar) just changed.
+      void refreshSpaces?.()
     } catch (err) {
       showError(err)
       decks.refresh()
     }
   }
+
+  const renaming = decks.data?.find((d) => d.id === renamingId) ?? null
+  const renameDialog = (
+    <RenameModal
+      open={renaming !== null}
+      title="Rename deck"
+      label="Deck name"
+      current={renaming?.name ?? ''}
+      maxLength={LIMITS.deckName}
+      onClose={() => setRenamingId(null)}
+      onSave={async (name) => {
+        if (!renaming) return
+        const updated = await renameDeck(renaming.id, name)
+        // Only the name: the list row also carries where the deck lives.
+        decks.setData((prev) =>
+          prev ? prev.map((d) => (d.id === updated.id ? { ...d, name: updated.name } : d)) : prev,
+        )
+        setRenamingId(null)
+        show('Deck renamed.', 'success')
+      }}
+    />
+  )
 
   if (mode.kind === 'review') {
     // Remember what this session covered, for "Keep going" (see above).
@@ -273,11 +340,23 @@ function Inner({
     )
   }
 
+  if (mode.kind === 'practice') {
+    return (
+      <Practice
+        mode={mode}
+        setMode={setMode}
+        onExit={leave}
+        title={decks.data?.find((d) => d.id === mode.deckId)?.name ?? 'Practice'}
+      />
+    )
+  }
+
   if (mode.kind === 'summary') {
     const deck = decks.data?.find((d) => d.id === mode.deckId)
-    // You just emptied this deck, so "review again" would only ever fire the
-    // "nothing due" toast. Offer the next deck that actually has cards ready,
-    // and when nothing does, the other way to use what you just reviewed.
+    // You just emptied this deck, so a second graded review has nothing to
+    // show. Offer the next deck that actually has cards ready, and when
+    // nothing does, the other way to use what you just reviewed. Going through
+    // the same deck again is the quiet link under those (practice, no grades).
     const nextDeck = (decks.data ?? []).find((d) => d.id !== mode.deckId && d.due > 0) ?? null
     const keepGoing =
       mode.limit && mode.pending
@@ -294,9 +373,12 @@ function Inner({
         keepGoing={keepGoing}
         deckName={mode.mixed ? 'your due cards' : (deck?.name ?? 'Deck')}
         onDone={leave}
+        onGradesSaved={decks.refresh}
         doneLabel={fromChat ? 'Back to chat' : undefined}
         nextDeck={nextDeck}
         onReviewNext={beginReview}
+        // A mixed session has no single deck to go back through.
+        onPractice={mode.mixed ? undefined : () => void beginPractice(mode.deckId)}
         quizHref={`${base}/quizzes`}
       />
     )
@@ -305,26 +387,48 @@ function Inner({
   if (mode.kind === 'deck') {
     const deck = decks.data?.find((d) => d.id === mode.deckId)
     return (
-      <DeckDetail
-        deckId={mode.deckId}
-        deckName={deck?.name ?? 'Deck'}
-        onBack={leave}
-        backLabel={fromChat ? 'Back to chat' : undefined}
-        onReview={() => beginReview(mode.deckId)}
-      />
+      <>
+        <DeckDetail
+          deckId={mode.deckId}
+          deckName={deck?.name ?? 'Deck'}
+          onBack={leave}
+          backLabel={fromChat ? 'Back to chat' : undefined}
+          onReview={() => beginReview(mode.deckId)}
+          onPractice={() => void beginPractice(mode.deckId)}
+          // Only once the list knows the deck: its current name fills the field.
+          onRename={deck ? () => setRenamingId(deck.id) : undefined}
+          topicId={deck?.subspace_id ?? null}
+          onCardsAdded={() => void decks.refresh()}
+        />
+        {renameDialog}
+      </>
     )
   }
 
   const all = decks.data ?? []
   const totalDue = all.reduce((n, d) => n + d.due, 0)
   const subjectOptions = spaces.filter((s) => all.some((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === s.id))
+  // The subject picker only shows while decks span more than one subject. A
+  // filter left on a subject whose last deck was just deleted would otherwise
+  // read "No decks yet" over a library that still has decks, with no control
+  // on screen to undo it.
+  const activeSubject =
+    subjectOptions.length > 1 && subjectOptions.some((s) => s.id === subjectFilter) ? subjectFilter : 'all'
   const list =
-    subjectFilter === 'all'
+    activeSubject === 'all'
       ? all
-      : all.filter((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === subjectFilter)
+      : all.filter((d) => d.subspace_id && subspaceToSpace.get(d.subspace_id)?.id === activeSubject)
+
+  // The topic new cards would be drawn from has no file yet: generating can
+  // only fail, so the empty screen sends the student to add one first.
+  const addMaterialHref =
+    spaces.flatMap((sp) => sp.subspaces).find((sub) => sub.id === subspaceId)?.counts?.docs === 0
+      ? `${base}/docs?add=1`
+      : null
 
   const deckDialogs = (
     <>
+      {renameDialog}
       <NewDeckModal
         open={newDeckOpen}
         defaultTopicId={subspaceId}
@@ -341,8 +445,8 @@ function Inner({
         open={genOpen}
         defaultTopicId={subspaceId}
         onClose={() => setGenOpen(false)}
-        onGenerate={async (topicId, topic, count) => {
-          const cards = await generateCards(topicId, { topic, count })
+        onGenerate={async (topicId, topic, count, source) => {
+          const cards = await generateCards(topicId, { topic, count, ...sourceBody(source) })
           setGenOpen(false)
           await decks.refresh()
           show(`Wrote ${cards.length} cards.`, 'success')
@@ -374,19 +478,17 @@ function Inner({
           error={decks.error}
           onRetry={decks.refresh}
           subjects={subjectOptions}
-          subjectFilter={subjectFilter}
+          subjectFilter={activeSubject}
           onSubjectFilter={setSubjectFilter}
           toneOf={(d) => (d.subspace_id ? subspaceToSpace.get(d.subspace_id)?.tone : undefined)}
           totalDue={totalDue}
           subspaceName={subspaceName}
-          addMaterialHref={
-            spaces.flatMap((sp) => sp.subspaces).find((sub) => sub.id === subspaceId)?.counts?.docs === 0
-              ? `${base}/docs?add=1`
-              : null
-          }
+          addMaterialHref={addMaterialHref}
           onOpen={openDeck}
           onReview={(id) => void beginReview(id)}
+          onPractice={(id) => void beginPractice(id)}
           onReviewDue={() => void startDueSession(REVIEW_BATCH, new Set(), totalDue)}
+          onRename={setRenamingId}
           onDelete={setDeleteDeckId}
           onNew={() => setNewDeckOpen(true)}
           onGenerate={() => setGenOpen(true)}
@@ -419,7 +521,7 @@ function Inner({
             library has nothing for this to narrow down. */}
         {subjectOptions.length > 1 && (
           <Select
-            value={subjectFilter}
+            value={activeSubject}
             onChange={setSubjectFilter}
             ariaLabel="Filter by subject"
             className="mb-4 max-w-xs"
@@ -475,15 +577,25 @@ function Inner({
             icon="deck"
             title="No decks yet"
             bot={{ agent: 'cards', say: 'emptyCards' }}
-            description="Write cards yourself, or have them drafted from the material you've added."
+            description={
+              addMaterialHref
+                ? `${subspaceName} has no material yet. Add a file and cards can be drafted from it, or write your own.`
+                : "Write cards yourself, or have them drafted from the material you've added."
+            }
             action={
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setNewDeckOpen(true)}>
                   Start a deck
                 </Button>
-                <Button onClick={() => setGenOpen(true)}>
-                  <Icon name="sparkle" size={14} /> Generate a deck
-                </Button>
+                {addMaterialHref ? (
+                  <Button onClick={() => navigate(addMaterialHref)}>
+                    <Icon name="plus" size={14} /> Add material
+                  </Button>
+                ) : (
+                  <Button onClick={() => setGenOpen(true)}>
+                    <Icon name="sparkle" size={14} /> Generate a deck
+                  </Button>
+                )}
               </div>
             }
           />
@@ -499,6 +611,8 @@ function Inner({
                 tone={deck.subspace_id ? subspaceToSpace.get(deck.subspace_id)?.tone : undefined}
                 onOpen={() => openDeck(deck.id)}
                 onReview={() => beginReview(deck.id)}
+                onPractice={() => void beginPractice(deck.id)}
+                onRename={() => setRenamingId(deck.id)}
                 onDelete={() => setDeleteDeckId(deck.id)}
               />
             ))}
@@ -525,6 +639,8 @@ function DeckTile({
   tone,
   onOpen,
   onReview,
+  onPractice,
+  onRename,
   onDelete,
 }: {
   deck: Deck
@@ -533,9 +649,17 @@ function DeckTile({
   tone?: Tone
   onOpen: () => void
   onReview: () => void
+  /** Go through the deck with nothing due. No grades, so no schedule change. */
+  onPractice: () => void
+  onRename: () => void
   onDelete: () => void
 }) {
   const due = deck.due > 0
+  // Nothing due, but there are cards: "Review" could only say "nothing due".
+  const again = !due && deck.total > 0
+  // No cards at all: "Review" could only answer "come back when it ripens",
+  // which is wrong for a deck with nothing in it. The next step is to add some.
+  const empty = deck.total === 0
   return (
     <Card
       foil={due}
@@ -545,14 +669,24 @@ function DeckTile({
         due && 'ring-1 ring-brand/30',
       )}
     >
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label={`Delete ${deck.name}`}
-        className="absolute right-2.5 top-2.5 z-10 rounded-md p-1 text-faint opacity-0 transition-opacity hover:text-coral focus-visible:opacity-100 group-hover:opacity-100"
-      >
-        <Icon name="trash" size={14} />
-      </button>
+      <div className="absolute right-2.5 top-2.5 z-10 flex gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <button
+          type="button"
+          onClick={onRename}
+          aria-label={`Rename ${deck.name}`}
+          className="rounded-md p-1 text-faint hover:text-ink"
+        >
+          <Icon name="pencil" size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={`Delete ${deck.name}`}
+          className="rounded-md p-1 text-faint hover:text-coral"
+        >
+          <Icon name="trash" size={14} />
+        </button>
+      </div>
 
       <button type="button" onClick={onOpen} className="flex flex-col gap-3 text-left">
         <div className="flex items-baseline gap-2">
@@ -591,8 +725,13 @@ function DeckTile({
       {/* One button. The tile body above already opens the deck, so a "Cards"
           button on the same tile was a second door to the same room. */}
       <div className="mt-auto flex gap-2 pt-1">
-        <Button size="sm" variant={due ? 'primary' : 'secondary'} onClick={onReview} className="flex-1">
-          Review
+        <Button
+          size="sm"
+          variant={due ? 'primary' : 'secondary'}
+          onClick={empty ? onOpen : again ? onPractice : onReview}
+          className="flex-1"
+        >
+          {empty ? 'Add cards' : again ? 'Review again' : 'Review'}
         </Button>
       </div>
     </Card>
@@ -607,12 +746,23 @@ function DeckDetail({
   onBack,
   backLabel = 'All decks',
   onReview,
+  onPractice,
+  onRename,
+  topicId,
+  onCardsAdded,
 }: {
   deckId: string
   deckName: string
   onBack: () => void
   backLabel?: string
   onReview: () => void
+  onPractice: () => void
+  /** Absent until the deck list has this deck (there is no name to edit yet). */
+  onRename?: () => void
+  /** The deck's topic; "Add more cards" is only offered once it is known. */
+  topicId: string | null
+  /** New cards landed: the deck counts in the list are stale. */
+  onCardsAdded: () => void
 }) {
   const { show, showError } = useToast()
   const isMobile = useIsMobile()
@@ -620,6 +770,20 @@ function DeckDetail({
   const cards = useAsync(() => listCards(deckId), [deckId], `cards:${deckId}`)
   const [editing, setEditing] = useState<Flashcard | 'new' | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [addingMore, setAddingMore] = useState(false)
+
+  const addMore = async (count: number, source: PickedSource) => {
+    const added = await extendDeck(deckId, { count, ...sourceBody(source) })
+    cards.setData((prev) => [...(prev ?? []), ...added])
+    setAddingMore(false)
+    onCardsAdded()
+    show(
+      added.length < count
+        ? `Added ${added.length} of ${count} — the rest repeated cards you already have.`
+        : `Added ${added.length} card${added.length === 1 ? '' : 's'}.`,
+      'success',
+    )
+  }
 
   const save = async (front: string, back: string) => {
     try {
@@ -652,6 +816,9 @@ function DeckDetail({
   }
 
   const list = cards.data ?? []
+  const dueNow = list.filter((c) => new Date(c.due_at).getTime() <= Date.now()).length
+  // Cards, but none due: the button becomes a practice run (no grades).
+  const again = list.length > 0 && dueNow === 0
 
   const cardDialogs = (
     <>
@@ -670,16 +837,39 @@ function DeckDetail({
         onCancel={() => setDeleteId(null)}
         onConfirm={remove}
       />
+
+      {topicId && (
+        <AddMoreModal
+          open={addingMore}
+          kind="deck"
+          name={deckName}
+          topicId={topicId}
+          max={15}
+          onClose={() => setAddingMore(false)}
+          onAdd={addMore}
+        />
+      )}
     </>
   )
 
   if (isMobile) {
-    const dueNow = list.filter((c) => new Date(c.due_at).getTime() <= Date.now()).length
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <PhoneTitle
           title={deckName}
           sub={list.length > 0 ? `${list.length} card${list.length === 1 ? '' : 's'}` : undefined}
+          right={
+            onRename && (
+              <button
+                type="button"
+                onClick={onRename}
+                aria-label="Rename deck"
+                className="phone-tap -mr-2 grid size-11 shrink-0 place-items-center rounded-full text-ink-3 active:bg-line-soft"
+              >
+                <Icon name="pencil" size={18} />
+              </button>
+            )
+          }
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {cards.loading && (
@@ -705,7 +895,16 @@ function DeckDetail({
                 icon="deck"
                 title="This deck is empty"
                 description="Add the first question and answer. Cards you write yourself tend to stick best."
-                action={<Button size="lg" onClick={() => setEditing('new')}>Add a card</Button>}
+                action={
+                  <div className="flex w-full flex-col gap-2">
+                    <Button size="lg" onClick={() => setEditing('new')}>Add a card</Button>
+                    {topicId && (
+                      <Button size="lg" variant="secondary" onClick={() => setAddingMore(true)}>
+                        <Icon name="sparkle" size={15} /> Draft cards with AI
+                      </Button>
+                    )}
+                  </div>
+                }
               />
             </div>
           )}
@@ -721,6 +920,17 @@ function DeckDetail({
                   <Icon name="plus" size={18} /> Add a card
                 </button>
               </li>
+              {topicId && (
+                <li className="border-b border-line-soft">
+                  <button
+                    type="button"
+                    onClick={() => setAddingMore(true)}
+                    className="phone-tap flex min-h-14 w-full items-center gap-3 px-4 text-left text-[16px] font-semibold text-brand-deep active:bg-surface"
+                  >
+                    <Icon name="sparkle" size={18} /> Add more with AI
+                  </button>
+                </li>
+              )}
               {list.map((card) => (
                 <ListRow
                   key={card.id}
@@ -741,8 +951,13 @@ function DeckDetail({
 
           {list.length > 0 && (
             <StickyActionBar>
-              <Button size="xl" className="min-h-14 flex-1" onClick={onReview}>
-                {dueNow > 0 ? `Review ${dueNow} due` : 'Review'}
+              <Button
+                size="xl"
+                variant={again ? 'secondary' : 'primary'}
+                className="min-h-14 flex-1"
+                onClick={again ? onPractice : onReview}
+              >
+                {again ? 'Review again' : `Review ${dueNow} due`}
               </Button>
             </StickyActionBar>
           )}
@@ -776,12 +991,28 @@ function DeckDetail({
             <Button variant="ghost" size="sm" onClick={onBack}>
               <Icon name="arrowLeft" size={14} /> {backLabel}
             </Button>
+            {onRename && (
+              <Button variant="ghost" size="sm" onClick={onRename}>
+                <Icon name="pencil" size={14} /> Rename
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={() => setEditing('new')}>
               <Icon name="plus" size={14} /> Add card
             </Button>
-            <Button size="sm" onClick={onReview}>
-              Review
-            </Button>
+            {topicId && (
+              <Button variant="secondary" size="sm" onClick={() => setAddingMore(true)}>
+                <Icon name="sparkle" size={14} /> Add more with AI
+              </Button>
+            )}
+            {again ? (
+              <Button variant="secondary" size="sm" onClick={onPractice}>
+                Review again
+              </Button>
+            ) : (
+              <Button size="sm" onClick={onReview}>
+                Review
+              </Button>
+            )}
           </>
         }
       />

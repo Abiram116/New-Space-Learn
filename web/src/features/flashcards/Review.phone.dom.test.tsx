@@ -14,6 +14,11 @@ import type { Mode } from './model'
 
 const gradeCard = vi.fn((..._args: unknown[]) => Promise.resolve())
 vi.mock('../../api/flashcards', () => ({
+  // The unsaved-grade outbox (see api/flashcards): nothing waiting in these tests.
+  gradeWillRetry: () => false,
+  onUnsavedGrades: () => () => {},
+  unsavedGradeCount: () => 0,
+  retryUnsavedGrades: () => Promise.resolve(0),
   gradeCard: (...args: unknown[]) => gradeCard(...args),
 }))
 vi.mock('../../components/celebrate', () => ({

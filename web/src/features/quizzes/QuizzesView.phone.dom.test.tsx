@@ -44,6 +44,9 @@ vi.mock('../../api/quizzes', () => ({
 
 import { QuizzesView } from './QuizzesView'
 
+// An unfinished attempt is kept for the tab (see ./draft.ts); not between tests.
+afterEach(() => sessionStorage.clear())
+
 let restore: () => void
 beforeEach(() => {
   restore = mockPhone()

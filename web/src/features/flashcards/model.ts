@@ -30,10 +30,14 @@ export const GRADES: {
   { key: 'easy', label: 'Easy', hotkey: '4', text: 'text-mint-deep' },
 ]
 
-/** The four states: the binder, one deck's contents, review, the summary. */
+/**
+ * The states: the binder, one deck's contents, review, the summary — and
+ * practice, a flip-through of a deck with nothing due that records no grades.
+ */
 export type Mode =
   | { kind: 'decks' }
   | { kind: 'deck'; deckId: string }
+  | { kind: 'practice'; deckId: string; cards: Flashcard[]; index: number; flipped: boolean }
   | ({ kind: 'review'; deckId: string; cards: Flashcard[]; index: number; flipped: boolean; grades: Grade[] } & SessionMeta)
   | ({ kind: 'summary'; deckId: string; grades: Grade[] } & SessionMeta)
 
@@ -56,3 +60,6 @@ export const GRADE_PULSE: Record<Grade, Pulse> = {
 /** Cards in one "review what's due" session; the rest are offered as "Keep going". */
 export const REVIEW_BATCH = 20
 
+
+/** Said wherever "Review again" is offered or running: it sends no grades. */
+export const PRACTICE_NOTE = 'Practice only. This does not change when your cards are due.'

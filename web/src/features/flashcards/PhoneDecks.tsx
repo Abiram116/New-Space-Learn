@@ -34,7 +34,9 @@ export function PhoneDecks({
   addMaterialHref,
   onOpen,
   onReview,
+  onPractice,
   onReviewDue,
+  onRename,
   onDelete,
   onNew,
   onGenerate,
@@ -53,8 +55,11 @@ export function PhoneDecks({
   addMaterialHref: string | null
   onOpen: (id: string) => void
   onReview: (id: string) => void
+  /** Go through a deck with nothing due. No grades, so no schedule change. */
+  onPractice: (id: string) => void
   /** Review what is due across every deck (the same capped session as desktop). */
   onReviewDue: () => void
+  onRename: (id: string) => void
   onDelete: (id: string) => void
   onNew: () => void
   onGenerate: () => void
@@ -174,7 +179,7 @@ export function PhoneDecks({
                           due ? 'text-brand-deep' : 'text-faint',
                         )}
                       >
-                        {due ? `${deck.due} due` : 'All done'}
+                        {due ? `${deck.due} due` : deck.total === 0 ? 'Empty' : 'All done'}
                       </span>
                     }
                   >
@@ -217,8 +222,11 @@ export function PhoneDecks({
             ? [
                 ...(sheet.target.due > 0
                   ? [{ label: `Review ${sheet.target.due} due`, icon: 'target' as const, onSelect: () => onReview(sheet.target!.id) }]
-                  : []),
+                  : sheet.target.total > 0
+                    ? [{ label: 'Review again', icon: 'refresh' as const, onSelect: () => onPractice(sheet.target!.id) }]
+                    : []),
                 { label: 'Open deck', icon: 'deck', onSelect: () => onOpen(sheet.target!.id) },
+                { label: 'Rename deck', icon: 'pencil', onSelect: () => onRename(sheet.target!.id) },
                 { label: 'Delete deck', icon: 'trash', danger: true, onSelect: () => onDelete(sheet.target!.id) },
               ]
             : []

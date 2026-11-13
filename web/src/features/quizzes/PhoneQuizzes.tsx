@@ -14,7 +14,8 @@ import { SlowBot } from '../../components/mascot/SlowBot'
 import { cn } from '../../lib/cn'
 import { toneBar } from '../../lib/tone'
 import { StickyActionBar } from '../../components/ui/StickyActionBar'
-import { ChipRow, ListRow, PhoneTitle } from './phoneKit'
+import { ActionSheet, ChipRow, ListRow, PhoneTitle, useRowSheet } from './phoneKit'
+import { RetakeSetting } from './RetakeChoice'
 
 export function PhoneQuizzes({
   quizzes,
@@ -28,7 +29,11 @@ export function PhoneQuizzes({
   generating,
   addMaterialHref,
   onOpen,
+  onRename,
+  onDelete,
+  onAddMore,
   onGenerate,
+  retakeSetting = false,
 }: {
   quizzes: Quiz[] | null
   loading: boolean
@@ -42,9 +47,16 @@ export function PhoneQuizzes({
   /** Set when the topic has no sources yet: where "Add material" goes. */
   addMaterialHref: string | null
   onOpen: (id: string) => void
+  onRename: (id: string) => void
+  onDelete: (id: string) => void
+  /** "Add more questions" to a quiz; left out, the action isn't offered. */
+  onAddMore?: (id: string) => void
   onGenerate: () => void
+  /** Show "On retake: ask / same / reworded" under the list. */
+  retakeSetting?: boolean
 }) {
   const navigate = useNavigate()
+  const sheet = useRowSheet<Quiz>()
   const list = quizzes ?? []
   const empty = !loading && !error && list.length === 0
 
@@ -119,6 +131,8 @@ export function PhoneQuizzes({
               <ListRow
                 key={q.id}
                 onOpen={() => onOpen(q.id)}
+                onMore={() => sheet.open(q)}
+                moreLabel={`More actions for ${q.topic || 'Untitled topic'}`}
                 trailing={
                   q.best_score != null ? (
                     <span className="shrink-0 rounded-full bg-mint-soft px-2.5 py-1 text-[13px] font-bold tabular-nums text-mint-deep">
@@ -148,6 +162,8 @@ export function PhoneQuizzes({
           </ul>
         )}
 
+        {retakeSetting && !loading && list.length > 0 && <RetakeSetting className="px-4 py-4" />}
+
         {!empty && !error && (
           <StickyActionBar>
             <Button size="xl" className="min-h-14 flex-1" onClick={onGenerate} disabled={generating}>
@@ -157,6 +173,28 @@ export function PhoneQuizzes({
           </StickyActionBar>
         )}
       </div>
+
+      <ActionSheet
+        open={sheet.target !== null}
+        title={sheet.target ? sheet.target.topic || 'Untitled topic' : undefined}
+        onClose={sheet.close}
+        actions={
+          sheet.target
+            ? [
+                {
+                  label: sheet.target.best_score != null ? 'Retake quiz' : 'Start quiz',
+                  icon: 'quiz',
+                  onSelect: () => onOpen(sheet.target!.id),
+                },
+                ...(onAddMore && sheet.target.subspace_id && sheet.target.questions.length < 40
+                  ? [{ label: 'Add more questions', icon: 'plus' as const, onSelect: () => onAddMore(sheet.target!.id) }]
+                  : []),
+                { label: 'Rename quiz', icon: 'pencil', onSelect: () => onRename(sheet.target!.id) },
+                { label: 'Delete quiz', icon: 'trash', danger: true, onSelect: () => onDelete(sheet.target!.id) },
+              ]
+            : []
+        }
+      />
     </div>
   )
 }

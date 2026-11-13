@@ -25,6 +25,9 @@ import { QuizRunner } from './QuizRunner'
 import { AssessmentProvider } from '../../lib/assessment'
 import type { Quiz } from '../../api/types'
 
+// An unfinished attempt is kept for the tab (see ./draft.ts); not between tests.
+afterEach(() => sessionStorage.clear())
+
 const submitQuiz = vi.fn()
 
 vi.mock('../../api/quizzes', () => ({

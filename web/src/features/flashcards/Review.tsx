@@ -12,13 +12,12 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { gradeCard } from '../../api/flashcards'
+import { gradeCard, gradeWillRetry } from '../../api/flashcards'
 import type { Grade } from '../../api/types'
 import { SubspaceHeader } from '../../components/layout/SubspaceHeader'
 import { Button } from '../../components/ui/Button'
 import { Icon } from '../../components/ui/Icon'
 import { ProgressBar } from '../../components/ui/Bits'
-import { Tip } from '../../components/ui/Tip'
 import { useReducedMotion } from '../../components/ui/motion'
 import {
   AmbienceField,
@@ -40,6 +39,7 @@ import { PhoneReview } from './PhoneReview'
 import { useCardMotion } from './cardMotion'
 import { DEFAULT_GRADE_HIGHLIGHT, reviewKeyAction, type ReviewKeyAction } from './keys'
 import { GRADES, GRADE_PULSE, type Mode } from './model'
+import { GradeHelp, unsavedLine, useGradeHelp, useUnsavedGrades } from './ReviewNotes'
 
 /** Marks the stage's own controls: Enter/Space on these runs the review keys. */
 const OWN = 'data-review-key'
@@ -135,6 +135,14 @@ export function Review({
     if (e.key === ' ' || e.key === 'Enter') e.preventDefault()
   }, [])
 
+  // What the four grades mean, on a first review; and what is not saved yet.
+  const gradeHelp = useGradeHelp()
+  const gradeHelpRef = useRef(gradeHelp)
+  useLayoutEffect(() => {
+    gradeHelpRef.current = gradeHelp
+  })
+  const unsaved = useUnsavedGrades()
+
   const flip = useCallback(() => {
     const m = stateRef.current.mode
     if (!m.flipped) flippedAt.current = performance.now()
@@ -146,8 +154,14 @@ export function Review({
       const { mode: m, card: c } = stateRef.current
       if (!c || gradedRef.current === m.index) return
       gradedRef.current = m.index
+      gradeHelpRef.current.markSeen()
       const saved = gradeCard(c.id, g)
-      saved.catch(showError)
+      // A grade that could not be sent is kept and sent again later (see
+      // `gradeCard`); the session shows how many are waiting instead of a
+      // toast per card. Only a grade the server refused is an error here.
+      saved.catch((err) => {
+        if (!gradeWillRetry(err)) showError(err)
+      })
       noteCardGraded(saved, { anchor: cardRef, bar: barRef })
       ambience.api.pulse(GRADE_PULSE[g])
       // Due counts and the streak just moved; don't let Home serve the
@@ -193,7 +207,11 @@ export function Review({
     <ConfirmDialog
       open={confirmLeave}
       title="End this session?"
-      description={`You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your grades are saved, and the rest stay due for next time.`}
+      description={
+        unsaved > 0
+          ? `You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. ${unsavedLine(unsaved)} Keep this page open until then. The rest stay due for next time.`
+          : `You've reviewed ${reviewed} card${reviewed === 1 ? '' : 's'}. Your grades are saved, and the rest stay due for next time.`
+      }
       confirmLabel="End session"
       onCancel={() => setConfirmLeave(false)}
       onConfirm={() => {
@@ -273,6 +291,8 @@ export function Review({
         onFlip={flip}
         onGrade={grade}
         onHighlight={(i) => setHl({ index: mode.index, value: i })}
+        unsaved={unsaved}
+        gradeHelp={gradeHelp.show ? <GradeHelp onDismiss={gradeHelp.dismiss} className="mb-1" /> : null}
       />
       {leaveDialog}
       </>
@@ -411,15 +431,15 @@ export function Review({
                   </span>
                 </div>
 
-                {/* The number under each grade is the single least obvious thing
-                    on this screen, and it is the whole mechanic. */}
-                <Tip id="cards-grades-v1" icon="clock">
-                  The number under each grade is when you'll see this card next.
-                  <strong className="font-semibold text-ink-3"> Again</strong> resets
-                  it to one day; <strong className="font-semibold text-ink-3">Easy</strong>{' '}
-                  pushes it furthest out. Answer honestly — the schedule only works
-                  if the grades are true.
-                </Tip>
+                {unsaved > 0 && (
+                  <p role="status" className="stage-label text-center text-sun-deep">
+                    {unsavedLine(unsaved)}
+                  </p>
+                )}
+
+                {/* What each grade means, and the number under it: the whole
+                    mechanic, said once, on a first review on this device. */}
+                {gradeHelp.show && <GradeHelp onDismiss={gradeHelp.dismiss} />}
               </div>
             </div>
 

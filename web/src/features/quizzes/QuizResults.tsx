@@ -29,6 +29,28 @@ import { StickyActionBar } from '../../components/ui/StickyActionBar'
 import { useIsMobile } from '../../lib/useIsMobile'
 import './stage.css'
 
+/** `CardsGenerate.topic` on the server. */
+const FOCUS_MAX = 120
+
+/**
+ * What to ask the card writer for after a quiz: the subtopics of the missed
+ * questions, worst first, as many whole ones as fit. Empty when the missed
+ * questions carry no subtopic (older quizzes), in which case nothing is offered:
+ * without one there is no honest way to say what the cards would be about.
+ */
+export function missedFocus(tags: string[], limit = FOCUS_MAX): string {
+  let out = ''
+  for (const tag of tags) {
+    const next = out ? `${out}, ${tag}` : tag
+    if (next.length > limit) break
+    out = next
+  }
+  return out
+}
+
+/** Two cards per miss, inside what the server accepts (3 to 20). */
+export const missedCardCount = (missed: number): number => Math.min(20, Math.max(3, missed * 2))
+
 /** Results already celebrated, by identity — a remount mustn't replay it. */
 const celebrated = new WeakSet<QuizResult>()
 
@@ -40,6 +62,7 @@ export function QuizResults({
   onBack,
   backLabel = 'Back to quizzes',
   compact = false,
+  missedCards,
 }: {
   quiz: Quiz
   answers: number[]
@@ -49,6 +72,12 @@ export function QuizResults({
   /** What the way out is called — where it goes. */
   backLabel?: string
   compact?: boolean
+  /**
+   * Offer a deck on the subtopics that were missed, drafted from the topic's
+   * own material. `onMake` resolves true once the deck exists; `onOpen` goes to
+   * it. Left out where there is no topic to make it in.
+   */
+  missedCards?: { onMake: (focus: string, count: number) => Promise<boolean>; onOpen: () => void }
 }) {
   const isMobile = useIsMobile() && !compact
   const missed = useMemo(
@@ -95,6 +124,14 @@ export function QuizResults({
   }, [missed])
 
   const [filter, setFilter] = useState<'all' | 'missed'>('all')
+
+  const focus = useMemo(() => missedFocus(weakConcepts.map(([tag]) => tag)), [weakConcepts])
+  const [cards, setCards] = useState<'idle' | 'busy' | 'done'>('idle')
+  const makeCards = async () => {
+    if (!missedCards || cards === 'busy') return
+    setCards('busy')
+    setCards((await missedCards.onMake(focus, missedCardCount(missed.length))) ? 'done' : 'idle')
+  }
 
   if (compact) {
     return (
@@ -310,6 +347,24 @@ export function QuizResults({
                     </span>
                   ))}
                 </div>
+                {/* Cards on exactly these, from the topic's material. Not the
+                    screen's main action (that is Retake), so not orange. */}
+                {missedCards && focus && (
+                  <Button
+                    variant="secondary"
+                    size={isMobile ? 'lg' : 'md'}
+                    className="mt-1 self-start max-md:w-full"
+                    disabled={cards === 'busy'}
+                    onClick={cards === 'done' ? missedCards.onOpen : () => void makeCards()}
+                  >
+                    <Icon name="deck" size={15} />
+                    {cards === 'busy'
+                      ? 'Writing cards…'
+                      : cards === 'done'
+                        ? 'Open the new deck'
+                        : 'Make cards from what I missed'}
+                  </Button>
+                )}
               </div>
             )}
 
