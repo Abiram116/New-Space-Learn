@@ -2,7 +2,6 @@
 
 <img src="docs/assets/readme-banner.svg" alt="Space Learn: a RAG pipeline (read, embed, retrieve, cite) feeding quiz, flashcard and note agents, shown with the app's four companion bots" width="100%" />
 
-# Space Learn
 
 **A study app for a student with a date. It answers only from your own documents,
 shows the page each claim came from, and turns answers into notes, flashcards and
